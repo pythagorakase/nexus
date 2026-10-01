@@ -934,14 +934,15 @@ def test_contextual_library_skewed_character_row_id_uses_entity_id(
         max_latitude=40.9,
     )
     _, place_entity_id = seed_place(dbname, name="Namespace Refuge")
+    story_clock = datetime(2100, 1, 2, tzinfo=timezone.utc)
     seeded_row_id, seeded_entity_id = seed_protagonist(
-        dbname, name="Namespace Protagonist"
+        dbname, name="Namespace Protagonist", base_timestamp=story_clock.isoformat()
     )
     assert place_entity_id == seeded_row_id != seeded_entity_id, (
         f"place entity {place_entity_id}, character row {seeded_row_id}, and "
         f"character entity {seeded_entity_id} must skew the two namespaces"
     )
-    seed_story_clock(dbname, world_time=datetime(2100, 1, 2, tzinfo=timezone.utc))
+    seed_story_clock(dbname, world_time=story_clock)
     seed_entity_tag(dbname, entity_id=seeded_entity_id, tag="kin_protector")
     seed_entity_tag(dbname, entity_id=place_entity_id, tag="haven")
 

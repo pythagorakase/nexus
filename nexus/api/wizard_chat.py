@@ -77,6 +77,7 @@ from nexus.api.wizard_agent import (
     apply_trait_selection_to_state,
     _character_subphase,
 )
+from nexus.config import load_settings
 from nexus.telemetry.usage import record_pydantic_ai_result
 from nexus.prompts.registry import PromptId, load
 
@@ -724,8 +725,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
                     setting = SettingCard(**cache.get_setting_dict())
                     seed = StorySeed(**seed_data)
 
-                    # TEST mode: Use pre-computed location data from mock database
-                    if selected_model == "TEST":
+                    # TEST provider: use pre-computed location data from the
+                    # mock database
+                    if load_settings().is_test_model(selected_model):
                         logger.info(
                             "TEST mode: Using mock location data for slot %s",
                             request.slot,
@@ -1121,8 +1123,9 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                         setting = SettingCard(**cache.get_setting_dict())
                         seed = StorySeed(**seed_data)
 
-                        # TEST mode: Use pre-computed location data from mock database
-                        if selected_model == "TEST":
+                        # TEST provider: use pre-computed location data from the
+                        # mock database
+                        if load_settings().is_test_model(selected_model):
                             logger.info(
                                 "TEST mode (stream): Using mock location data for slot %s",
                                 request.slot,

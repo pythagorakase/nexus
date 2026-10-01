@@ -577,7 +577,11 @@ def test_a_story_without_retrograde_history_records_no_provenance(
     transition_boundaries: SimpleNamespace,
 ) -> None:
     """An overwritten slot cannot keep the previous story's provenance."""
-    transition_boundaries.slot_model = new_story_flow.MOCK_WIZARD_MODEL
+    from nexus.config import load_settings
+
+    transition_boundaries.slot_model = (
+        load_settings().global_.model.api_models["test"].models[0].id
+    )
 
     result = new_story_flow.perform_transition_with_retrograde(
         4,

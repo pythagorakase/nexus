@@ -898,8 +898,21 @@ class RuntimeCliSettings(BaseModel):
         description=(
             "Per-request HTTP timeout of the play and slot commands' short API "
             "requests (slot state reads, wizard setup and confirmation, undo, "
-            "clear, lock, unlock, model changes); generation, wizard chat, and "
-            "transition requests keep their own budgets"
+            "clear, lock, unlock, model changes); wizard chat, trait toggles, "
+            "phase introductions and the turn-scheduling POSTs take "
+            "turn_request_timeout_seconds, the transition takes the Retrograde "
+            "wizard's budget, and the generation wait apex's"
+        ),
+    )
+    turn_request_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Per-request HTTP timeout of the CLI's model-turn requests: wizard "
+            "chat, trait toggles, phase introductions, and the POSTs that "
+            "schedule continue, retry, regenerate and the seed's opening turn; "
+            "a finite number of seconds greater than 0"
         ),
     )
     poll_interval_seconds: float = Field(
@@ -4541,6 +4554,15 @@ class Settings(BaseModel):
             f"Model ID '{model_id}' is not declared in "
             f"[global.model.api_models.*].models"
         )
+
+    def is_test_model(self, model_id: str) -> bool:
+        """Return whether a concrete model ID belongs to the TEST provider.
+
+        TEST identity is the registry provider ``test``, never a model ID, so
+        a renamed TEST entry keeps its identity. An unregistered ID raises
+        ``ValueError`` (from ``provider_for_model``).
+        """
+        return self.provider_for_model(model_id) == "test"
 
     def resolve_model_ref(self, ref: str) -> str:
         """Validate a concrete model ID against the registry and return it."""

@@ -1,5 +1,6 @@
 """Tests for configuration schema validation."""
 
+import ast
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from nexus.config.settings_models import (
     Settings,
     materialize_model_selections,
 )
+from tests.settings_helpers import renamed_test_model_config
 
 
 def _nexus_toml_dict() -> dict:
@@ -780,6 +782,46 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
     )
 
 
+def test_test_identity_follows_the_provider_not_the_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TEST identity is the registry provider, so it survives a renamed entry."""
+    config = renamed_test_model_config(tmp_path, "TEMPTEST")
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+
+    settings = load_settings()
+
+    assert settings.is_test_model("TEMPTEST") is True
+    assert settings.is_test_model(settings.apex.model) is False
+    with pytest.raises(ValueError, match="'TEST' is not declared"):
+        settings.is_test_model("TEST")
+
+
+def _compares_literal_test(node: ast.Compare) -> bool:
+    for operand in [node.left, *node.comparators]:
+        values = (
+            operand.elts
+            if isinstance(operand, (ast.Tuple, ast.List, ast.Set))
+            else [operand]
+        )
+        if any(isinstance(v, ast.Constant) and v.value == "TEST" for v in values):
+            return True
+    return False
+
+
+def test_no_product_code_compares_the_literal_test_id() -> None:
+    """Product code keys TEST identity on the provider, never on the model id."""
+    package = Path(__file__).resolve().parents[2] / "nexus"
+    offenders = [
+        f"{path.relative_to(package.parent)}:{node.lineno}"
+        for path in sorted(package.rglob("*.py"))
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path)))
+        if isinstance(node, ast.Compare) and _compares_literal_test(node)
+    ]
+
+    assert offenders == []
+
+
 @pytest.mark.parametrize(
     "value",
     [float("inf"), float("nan"), 0, -1.0],
@@ -812,6 +854,45 @@ def test_cli_poll_interval_must_be_finite_and_positive(
         load_settings(config)
     assert [error["loc"] for error in loaded.value.errors()] == [loc]
     assert "runtime.cli.poll_interval_seconds" in str(loaded.value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("inf"), float("nan"), 0, -1.0],
+    ids=["inf", "nan", "zero", "negative"],
+)
+def test_cli_turn_request_timeout_must_be_finite_and_positive(
+    value: float, tmp_path: Path
+) -> None:
+    """A nonfinite or nonpositive turn-request budget fails validation by name.
+
+    It bounds the wizard chat, trait toggle and phase introduction POSTs and
+    the POSTs that schedule continue, retry, regenerate and the seed's
+    opening turn; the checkout ships the 120 s those requests once hardcoded.
+    """
+    assert load_settings("nexus.toml").runtime.cli.turn_request_timeout_seconds == (
+        120.0
+    )
+
+    loc = ("runtime", "cli", "turn_request_timeout_seconds")
+    with pytest.raises(ValidationError) as direct:
+        RuntimeCliSettings(turn_request_timeout_seconds=value)
+    assert [error["loc"] for error in direct.value.errors()] == [loc[-1:]]
+
+    raw = _nexus_toml_dict()
+    raw["runtime"]["cli"]["turn_request_timeout_seconds"] = value
+    with pytest.raises(ValidationError) as full:
+        Settings.model_validate(raw)
+    assert [error["loc"] for error in full.value.errors()] == [loc]
+
+    document: Any = tomlkit.parse(Path("nexus.toml").read_text())
+    document["runtime"]["cli"]["turn_request_timeout_seconds"] = value
+    config = tmp_path / "nexus.toml"
+    config.write_text(tomlkit.dumps(document))
+    with pytest.raises(ValidationError) as loaded:
+        load_settings(config)
+    assert [error["loc"] for error in loaded.value.errors()] == [loc]
+    assert "runtime.cli.turn_request_timeout_seconds" in str(loaded.value)
 
 
 def test_gateway_cors_origins_parse_and_accessor_returns_default() -> None:

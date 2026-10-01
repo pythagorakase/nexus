@@ -25,7 +25,7 @@ from .continuous_temporal_search import (
     execute_multi_model_time_aware_search,
     analyze_temporal_intent,
 )
-from .idf_dictionary import IDFDictionary, IDFStateError
+from .idf_dictionary import IDFDictionary
 from .embedding_manager import EmbeddingManager
 from .query_analysis import QueryAnalyzer
 from .results import narrative_metadata, narrative_result, retrograde_summary_result
@@ -98,186 +98,163 @@ class SearchManager:
         if top_k is None:
             top_k = self.retrieval_settings.get("default_top_k", 10)
 
-        try:
-            # Get hybrid search settings
-            hybrid_config = self.settings.get("retrieval", {}).get("hybrid_search", {})
-            if not hybrid_config.get("enabled", False):
-                logger.warning("Hybrid search is disabled in settings")
-                return []
-
-            # Determine query type for weight adjustment using query analyzer
-            query_info = self.query_analyzer.analyze_query(query_text)
-            query_type = query_info.get("type", "general")
-            logger.debug(f"Query classified as type: {query_type}")
-
-            apply_presence_boost = (
-                hybrid_config.get("presence_boost_enabled", False)
-                if presence_boost_enabled is None
-                else presence_boost_enabled
-            )
-            presence_boost_factor = 0.0
-            if apply_presence_boost and present_character_ids:
-                presence_boost_factor = hybrid_config.get(
-                    "presence_boost_factors", {}
-                ).get(
-                    query_type,
-                    hybrid_config.get("presence_boost_factor", 0.15),
-                )
-
-            # Get weights based on query type or use defaults
-            if hybrid_config.get(
-                "use_query_type_weights", False
-            ) and query_type in hybrid_config.get("weights_by_query_type", {}):
-                weights = hybrid_config["weights_by_query_type"][query_type]
-                vector_weight = weights.get("vector", 0.6)
-                text_weight = weights.get("text", 0.4)
-            else:
-                vector_weight = hybrid_config.get("vector_weight_default", 0.6)
-                text_weight = hybrid_config.get("text_weight_default", 0.4)
-
-            # Temporary toggle: allow disabling text leg entirely
-            if hybrid_config.get("disable_text_search", False):
-                vector_weight = 1.0
-                text_weight = 0.0
-
-            # Normalize weights to ensure they sum to 1.0
-            total_weight = vector_weight + text_weight
-            if total_weight != 1.0:
-                vector_weight = vector_weight / total_weight
-                text_weight = text_weight / total_weight
-
-            logger.debug(f"Using weights: vector={vector_weight}, text={text_weight}")
-
-            # Gather all active models and their weights
-            active_models = {}
-            model_weights = {}
-
-            for model_key in self.embedding_manager.get_available_models():
-                if model_key in self.retrieval_settings["model_weights"]:
-                    # Get the weight from the retrieval settings
-                    model_weights[model_key] = self.retrieval_settings["model_weights"][
-                        model_key
-                    ]
-                    active_models[model_key] = True
-
-            if not active_models:
-                logger.error("No active embedding models found.")
-                return []
-
-            # Normalize model weights to sum to 1.0
-            total_model_weight = sum(model_weights.values())
-            if total_model_weight > 0:
-                model_weights = {
-                    k: w / total_model_weight for k, w in model_weights.items()
-                }
-
-            logger.info(
-                f"Using {len(active_models)} active models with weights: {model_weights}"
-            )
-
-            # Generate embeddings for all active models
-            if query_embeddings is None:
-                query_embeddings = {}
-            else:
-                query_embeddings.clear()
-            for model_key in active_models:
-                try:
-                    embedding = self.embedding_manager.generate_embedding(
-                        query_text, model_key
-                    )
-                    if embedding is not None:
-                        query_embeddings[model_key] = embedding
-                except Exception as e:
-                    logger.error(
-                        f"Error generating embedding for model {model_key}: {e}"
-                    )
-
-            if not query_embeddings:
-                logger.error("Failed to generate embeddings for any active model.")
-                return []
-
-            # Analyze the query's temporal intent on a continuous scale
-            query_temporal_intent = analyze_temporal_intent(query_text)
-
-            # Get default temporal boost factor from settings
-            temporal_boost_factor = hybrid_config.get("temporal_boost_factor", 0.3)
-
-            # Check if we should use query-type-specific temporal boost factors
-            use_query_type_temporal_factors = hybrid_config.get(
-                "use_query_type_temporal_factors", False
-            )
-
-            # If enabled, get query-type-specific temporal boost factor
-            if use_query_type_temporal_factors and query_type in hybrid_config.get(
-                "temporal_boost_factors", {}
-            ):
-                query_temporal_factor = hybrid_config["temporal_boost_factors"][
-                    query_type
-                ]
-                logger.debug(
-                    f"Using query-type-specific temporal boost factor for '{query_type}': {query_temporal_factor}"
-                )
-                temporal_boost_factor = query_temporal_factor
-
-            # Determine if this is a temporal query based on how far from neutral (0.5) the intent is
-            is_temporal_query = abs(query_temporal_intent - 0.5) > 0.1
-
-            # Determine if temporal boosting should be applied based on settings and query intent
-            apply_temporal_boosting = temporal_boost_factor > 0.0 and is_temporal_query
-
-            # If query has temporal aspects and boosting is enabled, use multi-model time-aware search
-            if apply_temporal_boosting:
-                logger.info(
-                    f"Using multi-model time-aware search for temporal query (intent: {query_temporal_intent:.2f}, boost factor: {temporal_boost_factor})"
-                )
-
-                # Execute multi-model time-aware search
-                results = execute_multi_model_time_aware_search(
-                    db_url=self.db_url,
-                    query_text=query_text,
-                    query_embeddings=query_embeddings,
-                    model_weights=model_weights,
-                    vector_weight=vector_weight,
-                    text_weight=text_weight,
-                    temporal_boost_factor=temporal_boost_factor,
-                    filters=filters,
-                    top_k=top_k,
-                    idf_dict=self.idf_dictionary,
-                    present_character_ids=present_character_ids,
-                    presence_boost_factor=presence_boost_factor,
-                )
-            else:
-                # Use standard multi-model hybrid search for non-temporal queries
-                logger.debug(
-                    "Using standard multi-model hybrid search for non-temporal query"
-                )
-
-                # Execute multi-model hybrid search
-                results = execute_multi_model_hybrid_search(
-                    db_url=self.db_url,
-                    query_text=query_text,
-                    query_embeddings=query_embeddings,
-                    model_weights=model_weights,
-                    vector_weight=vector_weight,
-                    text_weight=text_weight,
-                    filters=filters,
-                    top_k=top_k,
-                    idf_dict=self.idf_dictionary,
-                    present_character_ids=present_character_ids,
-                    presence_boost_factor=presence_boost_factor,
-                )
-
-            logger.info(f"Multi-model hybrid search returned {len(results)} results")
-            return results
-
-        except IDFStateError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in hybrid search: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
+        # Get hybrid search settings
+        hybrid_config = self.settings.get("retrieval", {}).get("hybrid_search", {})
+        if not hybrid_config.get("enabled", False):
+            logger.warning("Hybrid search is disabled in settings")
             return []
+
+        # Determine query type for weight adjustment using query analyzer
+        query_info = self.query_analyzer.analyze_query(query_text)
+        query_type = query_info.get("type", "general")
+        logger.debug(f"Query classified as type: {query_type}")
+
+        apply_presence_boost = (
+            hybrid_config.get("presence_boost_enabled", False)
+            if presence_boost_enabled is None
+            else presence_boost_enabled
+        )
+        presence_boost_factor = 0.0
+        if apply_presence_boost and present_character_ids:
+            presence_boost_factor = hybrid_config.get("presence_boost_factors", {}).get(
+                query_type,
+                hybrid_config.get("presence_boost_factor", 0.15),
+            )
+
+        # Get weights based on query type or use defaults
+        if hybrid_config.get(
+            "use_query_type_weights", False
+        ) and query_type in hybrid_config.get("weights_by_query_type", {}):
+            weights = hybrid_config["weights_by_query_type"][query_type]
+            vector_weight = weights.get("vector", 0.6)
+            text_weight = weights.get("text", 0.4)
+        else:
+            vector_weight = hybrid_config.get("vector_weight_default", 0.6)
+            text_weight = hybrid_config.get("text_weight_default", 0.4)
+
+        # Temporary toggle: allow disabling text leg entirely
+        if hybrid_config.get("disable_text_search", False):
+            vector_weight = 1.0
+            text_weight = 0.0
+
+        # Normalize weights to ensure they sum to 1.0
+        total_weight = vector_weight + text_weight
+        if total_weight != 1.0:
+            vector_weight = vector_weight / total_weight
+            text_weight = text_weight / total_weight
+
+        logger.debug(f"Using weights: vector={vector_weight}, text={text_weight}")
+
+        # Gather all active models and their weights
+        active_models = {}
+        model_weights = {}
+
+        for model_key in self.embedding_manager.get_available_models():
+            if model_key in self.retrieval_settings["model_weights"]:
+                # Get the weight from the retrieval settings
+                model_weights[model_key] = self.retrieval_settings["model_weights"][
+                    model_key
+                ]
+                active_models[model_key] = True
+
+        if not active_models:
+            raise RuntimeError(
+                "No active embedding models found. Loaded models: "
+                f"{self.embedding_manager.get_available_models()}"
+            )
+
+        # Normalize model weights to sum to 1.0
+        total_model_weight = sum(model_weights.values())
+        if total_model_weight > 0:
+            model_weights = {
+                k: w / total_model_weight for k, w in model_weights.items()
+            }
+
+        logger.info(
+            f"Using {len(active_models)} active models with weights: {model_weights}"
+        )
+
+        # Generate embeddings for all active models
+        if query_embeddings is None:
+            query_embeddings = {}
+        else:
+            query_embeddings.clear()
+        for model_key in active_models:
+            query_embeddings[model_key] = self.embedding_manager.generate_embedding(
+                query_text, model_key
+            )
+
+        # Analyze the query's temporal intent on a continuous scale
+        query_temporal_intent = analyze_temporal_intent(query_text)
+
+        # Get default temporal boost factor from settings
+        temporal_boost_factor = hybrid_config.get("temporal_boost_factor", 0.3)
+
+        # Check if we should use query-type-specific temporal boost factors
+        use_query_type_temporal_factors = hybrid_config.get(
+            "use_query_type_temporal_factors", False
+        )
+
+        # If enabled, get query-type-specific temporal boost factor
+        if use_query_type_temporal_factors and query_type in hybrid_config.get(
+            "temporal_boost_factors", {}
+        ):
+            query_temporal_factor = hybrid_config["temporal_boost_factors"][query_type]
+            logger.debug(
+                f"Using query-type-specific temporal boost factor for '{query_type}': {query_temporal_factor}"
+            )
+            temporal_boost_factor = query_temporal_factor
+
+        # Determine if this is a temporal query based on how far from neutral (0.5) the intent is
+        is_temporal_query = abs(query_temporal_intent - 0.5) > 0.1
+
+        # Determine if temporal boosting should be applied based on settings and query intent
+        apply_temporal_boosting = temporal_boost_factor > 0.0 and is_temporal_query
+
+        # If query has temporal aspects and boosting is enabled, use multi-model time-aware search
+        if apply_temporal_boosting:
+            logger.info(
+                f"Using multi-model time-aware search for temporal query (intent: {query_temporal_intent:.2f}, boost factor: {temporal_boost_factor})"
+            )
+
+            # Execute multi-model time-aware search
+            results = execute_multi_model_time_aware_search(
+                db_url=self.db_url,
+                query_text=query_text,
+                query_embeddings=query_embeddings,
+                model_weights=model_weights,
+                vector_weight=vector_weight,
+                text_weight=text_weight,
+                temporal_boost_factor=temporal_boost_factor,
+                filters=filters,
+                top_k=top_k,
+                idf_dict=self.idf_dictionary,
+                present_character_ids=present_character_ids,
+                presence_boost_factor=presence_boost_factor,
+            )
+        else:
+            # Use standard multi-model hybrid search for non-temporal queries
+            logger.debug(
+                "Using standard multi-model hybrid search for non-temporal query"
+            )
+
+            # Execute multi-model hybrid search
+            results = execute_multi_model_hybrid_search(
+                db_url=self.db_url,
+                query_text=query_text,
+                query_embeddings=query_embeddings,
+                model_weights=model_weights,
+                vector_weight=vector_weight,
+                text_weight=text_weight,
+                filters=filters,
+                top_k=top_k,
+                idf_dict=self.idf_dictionary,
+                present_character_ids=present_character_ids,
+                presence_boost_factor=presence_boost_factor,
+            )
+
+        logger.info(f"Multi-model hybrid search returned {len(results)} results")
+        return results
 
     def query_vector_search(
         self,
@@ -302,74 +279,57 @@ class SearchManager:
         if top_k is None:
             top_k = self.retrieval_settings["default_top_k"]
 
-        try:
-            # Gather all active models and their weights
-            active_models = {}
-            model_weights = {}
+        # Gather all active models and their weights
+        active_models = {}
+        model_weights = {}
 
-            for model_key in self.embedding_manager.get_available_models():
-                if model_key in self.retrieval_settings["model_weights"]:
-                    # Get the weight from the retrieval settings
-                    model_weights[model_key] = self.retrieval_settings["model_weights"][
-                        model_key
-                    ]
-                    active_models[model_key] = True
+        for model_key in self.embedding_manager.get_available_models():
+            if model_key in self.retrieval_settings["model_weights"]:
+                # Get the weight from the retrieval settings
+                model_weights[model_key] = self.retrieval_settings["model_weights"][
+                    model_key
+                ]
+                active_models[model_key] = True
 
-            if not active_models:
-                logger.error("No active embedding models found.")
-                return []
-
-            # Normalize model weights to sum to 1.0
-            total_model_weight = sum(model_weights.values())
-            if total_model_weight > 0:
-                model_weights = {
-                    k: w / total_model_weight for k, w in model_weights.items()
-                }
-
-            logger.info(
-                f"Using {len(active_models)} active models with weights: {model_weights}"
+        if not active_models:
+            raise RuntimeError(
+                "No active embedding models found. Loaded models: "
+                f"{self.embedding_manager.get_available_models()}"
             )
 
-            # Generate embeddings for all active models
-            query_embeddings = {}
-            for model_key in active_models:
-                try:
-                    query_embeddings[model_key] = (
-                        self.embedding_manager.generate_embedding(query_text, model_key)
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error generating embedding for model {model_key}: {e}"
-                    )
+        # Normalize model weights to sum to 1.0
+        total_model_weight = sum(model_weights.values())
+        if total_model_weight > 0:
+            model_weights = {
+                k: w / total_model_weight for k, w in model_weights.items()
+            }
 
-            if not query_embeddings:
-                logger.error("Failed to generate embeddings for any active model.")
-                return []
+        logger.info(
+            f"Using {len(active_models)} active models with weights: {model_weights}"
+        )
 
-            # Use the multi-model hybrid search with 100% vector weight to effectively perform vector-only search
-            results = execute_multi_model_hybrid_search(
-                db_url=self.db_url,
-                query_text=query_text,
-                query_embeddings=query_embeddings,
-                model_weights=model_weights,
-                vector_weight=1.0,  # Use 100% vector weight for pure vector search
-                text_weight=0.0,  # No text search weight
-                filters=filters,
-                top_k=top_k,
-                idf_dict=self.idf_dictionary,
+        # Generate embeddings for all active models
+        query_embeddings = {}
+        for model_key in active_models:
+            query_embeddings[model_key] = self.embedding_manager.generate_embedding(
+                query_text, model_key
             )
 
-            logger.info(f"Multi-model vector search returned {len(results)} results")
-            return results
+        # Use the multi-model hybrid search with 100% vector weight to effectively perform vector-only search
+        results = execute_multi_model_hybrid_search(
+            db_url=self.db_url,
+            query_text=query_text,
+            query_embeddings=query_embeddings,
+            model_weights=model_weights,
+            vector_weight=1.0,  # Use 100% vector weight for pure vector search
+            text_weight=0.0,  # No text search weight
+            filters=filters,
+            top_k=top_k,
+            idf_dict=self.idf_dictionary,
+        )
 
-        except IDFStateError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in vector search: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            return []
+        logger.info(f"Multi-model vector search returned {len(results)} results")
+        return results
 
     def query_text_search(
         self,

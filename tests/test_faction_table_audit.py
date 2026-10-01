@@ -149,10 +149,17 @@ class FactionApplyCursor:
             ]
         elif normalized == "SELECT max(world_time) AS world_time FROM chunk_metadata":
             self._rows = [{"world_time": None}]
-        elif "FROM tags" in normalized and "WHERE tag = %s" in normalized:
+        elif "FROM tags t" in normalized and "WHERE t.tag = %s" in normalized:
             tag, category = params
             row = self.tags.get((str(category), str(tag)))
-            self._rows = [row] if row else []
+            # Registered rows are not deprecated; an unregistered category
+            # joins NULL, as the LEFT JOIN does.
+            registered = str(category) in self.allowed_categories
+            self._rows = (
+                [{**row, "category_deprecated": False if registered else None}]
+                if row
+                else []
+            )
         elif "FROM entities" in normalized:
             entity_id = int(params[0])
             kind = self.entities.get(entity_id)
@@ -1123,6 +1130,33 @@ def test_live_faction_apply_execute_inserts_and_rolls_back(
     finally:
         conn.rollback()
         conn.close()
+
+
+@pytest.mark.requires_postgres
+def test_live_faction_apply_rejects_deprecated_category_tag(
+    routed_faction_db: FactionAuditDatabase,
+) -> None:
+    """A manifest cannot apply a live tag in a category the registry deprecates."""
+
+    dbname = routed_faction_db.dbname
+    conn = connect(dbname)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            manifest = _ready_entity_tag_manifest(
+                entity_id=routed_faction_db.faction_entity_id,
+                category="legitimacy_status",
+                tag="gray_legal",
+            )
+            manifest["source"] = {"slot": ROUTED_SLOT, "dbname": dbname}
+            with pytest.raises(ValueError) as caught:
+                apply_faction_migration_manifest(cur, manifest, dry_run=True)
+    finally:
+        conn.rollback()
+        conn.close()
+    assert str(caught.value) == (
+        "Tag legitimacy_status:gray_legal in manifest is in a category "
+        "tag_category_registry deprecates for faction"
+    )
 
 
 def test_cli_prints_faction_manifest_summary(capsys) -> None:

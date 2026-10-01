@@ -76,6 +76,7 @@ COMMAND_LINE_SCRIPTS = (
     "scripts.qa_shift.historical_passage_limit",
     "scripts.qa_shift.card_identity_probe",
     "scripts.qa_shift.long_absence_probe",
+    "scripts.qa_shift.routine_delta_grammar_probe",
     "scripts.new_story_cli",
 )
 # Prints the root logger's handlers and level before and after importing
@@ -303,10 +304,9 @@ def test_import_leaves_the_root_logger_unconfigured(module: str) -> None:
 def entrypoint_clone() -> Iterator[str]:
     """A seeded disposable template clone serving the routed slot."""
     with disposable_slot_database("qa885_entrypoints") as dbname:
-        seed_protagonist(dbname)
-        seed_story_clock(
-            dbname, world_time=datetime(2100, 1, 1, 1, tzinfo=timezone.utc)
-        )
+        story_clock = datetime(2100, 1, 1, 1, tzinfo=timezone.utc)
+        seed_protagonist(dbname, base_timestamp=story_clock.isoformat())
+        seed_story_clock(dbname, world_time=story_clock)
         yield dbname
 
 

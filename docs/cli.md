@@ -65,7 +65,7 @@ no longer exists.
 | Code | Meaning | JSON `code` values |
 | --- | --- | --- |
 | 0 | Success | — |
-| 1 | Domain failure: the command ran and failed | `domain_failure`, `not_found`, `api_error`, `invalid_response`, `config_error` |
+| 1 | Domain failure: the command ran and failed | `domain_failure`, `not_found`, `api_error`, `invalid_response`, `config_error`, `database_error` |
 | 2 | Usage: unusable arguments, argparse's own rejections included | `usage_error` |
 | 3 | Transport refused under a remote runtime | `transport_refused` |
 | 4 | The NEXUS API could not be reached or did not answer in time | `api_unreachable` |
@@ -76,18 +76,63 @@ checked for every command but `doctor` before it runs. A `NEXUS_API_URL` that
 is not `http://` or `https://`, and a runtime credential that is missing or
 refused, are a `config_error` when the first request is sent. Every HTTP
 command reports these, and an API that refuses or drops the connection or
-does not answer in time (exit 4), the same way. Only a command that already saved work
-(a confirmed artifact, a saved seed, a scheduled turn) reports a later failed
-request itself, with a `partial` that keeps that work and its recovery
-command: as `api_unreachable` (exit 4) when the gateway refused or dropped the
-connection, otherwise as a domain failure. A traceback means a programming
-fault.
+does not answer in time (exit 4), the same way.
+
+The play and slot commands (`load`, `continue`, `retry`, `undo`,
+`regenerate`, `clear`, `lock`, `unlock`, `model --set`/`--clear`) and every
+`inspect` verb classify the API's answers the same way:
+
+- A non-2xx answer is `api_error`.
+- A 401, a 403, or a redirect that is not followed is `config_error`. The
+  gateway itself answers none of them, so an edge in front of it, such as
+  Cloudflare Access, rejected the request. Requests follow redirects unless
+  they carry a runtime credential, so a redirect is reported only when one
+  was sent.
+- When a command's own read rejects the answer, `partial.status_code` carries
+  the HTTP status. A non-2xx answer's error is `API error: <body>` (an
+  `inspect` verb names the URL and the status instead), and an access
+  rejection's error names the URL, the status, a redirect's `Location`, and
+  `[runtime.remote.cloudflare_access]`.
+- The steps that keep their own wording report the same code with their own
+  message and `partial`, and name no Access setting: wizard setup and the
+  transition to narrative (the answer's body, for a 401, a 403, a redirect,
+  or any other answer outside 2xx), the wizard's `--weird` and
+  character-revision requests (the body, with `partial.status_code`), the
+  wizard's artifact confirmations and phase introductions (the body, with a
+  recovery command), the seed transition (the status in
+  `transition_error.status_code`), the opening turn (`bootstrap_error`), and
+  the generation wait (`generation_error`); the last two name the URL and the
+  status in their detail.
+- After trait confirmation, a failed wildcard introduction keeps the saved
+  traits. The command succeeds (exit 0), and `intro_error` gives the detail
+  and the status, with `intro_recovery_command`.
+- The `inspect` verbs report a 404 as `not_found`, before either rule above.
+- Any other failed request, one that got no usable answer (a followed
+  redirect loop, a body whose content encoding is broken), is a domain
+  failure.
+- A handler's read of a 2xx body that is not a JSON object is
+  `invalid_response`; an unusable body during a generation wait, or of the
+  opening turn's schedule answer, stays a domain failure with
+  `generation_error.status` or `bootstrap_error` naming it.
+- `model --slot N` reads the slot database itself; a database it cannot open
+  or query is `database_error`, and a story pin naming a model no longer in
+  the registry is a domain failure whose error names the `--clear` remedy.
+
+Only a command that already saved work (a confirmed artifact, a saved seed, a
+scheduled turn) reports a later failed request itself, with a `partial` that
+keeps that work and its recovery command: as `api_unreachable` (exit 4) when
+the gateway refused or dropped the connection, as `api_error` for a non-2xx
+answer, as `config_error` for an access rejection, otherwise as a domain
+failure. A traceback means a programming fault.
 
 `[runtime.cli].request_timeout_seconds` bounds each short request of `load`,
 `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, and
-`model --set`/`--clear`; generation, wizard chat, and transition requests keep
-their own budgets. Waiting on a generation session is described in Waiting on
-a Generation below.
+`model --set`/`--clear`. `[runtime.cli].turn_request_timeout_seconds` bounds
+each model-turn request: wizard chat, trait toggles, phase introductions, and
+the POSTs that schedule `continue`, `retry`, `regenerate`, and the seed's
+opening turn. The wizard's transition to narrative takes
+`[orrery.retrograde.wizard].transition_timeout_seconds`. Waiting on a
+generation session is described in Waiting on a Generation below.
 
 ### Transports
 
@@ -162,10 +207,13 @@ helper, `nexus.cli.wait_for_session`:
   not bound that load.
 - A session the API reports as failed is a domain failure (exit 1) whose
   `error` is the API's own message.
+- A non-2xx answer to a status read or the state load is `api_error`, or
+  `config_error` for a 401, a 403 or an unfollowed redirect (exit 1), with
+  `generation_error.status` `http_error`.
 - A session still running when the budget ends, a read that times out
-  (before its headers arrive or while its body stalls after them), an HTTP
-  error answer or any other failed request, or an unusable payload is a
-  domain failure (exit 1).
+  (before its headers arrive or while its body stalls after them), any other
+  failed request (too many redirects, for example), or an unusable payload is
+  a domain failure (exit 1).
 - A gateway that refuses or drops the connection mid-wait, a body cut off
   mid-answer included, is `api_unreachable` (exit 4). A failed read is never
   retried.
@@ -283,6 +331,46 @@ candidate ceiling, whether the model cap bounded the recorded spend, the
 ceiling delta, overflow, trimmable memory tokens, feasibility, and freed
 tokens. The JSON payload places `run`, `day`, `config`, and `rows` under the
 `window_replay` key. See `docs/settings_scopes.md` for the field semantics.
+
+### `inspect-turn` — Inspect One Generation Turn
+
+Reads one generation session's durable records from a slot database, addressed
+by its session or by the chunk it produced. The plain read prints those
+records as tables and never touches the ledgers.
+
+```bash
+# Address the turn by its generation session or by its accepted chunk
+poetry run nexus inspect-turn --slot N --session UUID
+poetry run nexus inspect-turn --slot N --chunk N
+
+# Machine-readable JSON, or a concise read of the observation
+poetry run nexus inspect-turn --slot N --session UUID --json
+poetry run nexus inspect-turn --slot N --session UUID --summary
+```
+
+With `--json` the payload carries `observation` beside `turn_inspection`, and
+`--summary` prints a few lines of it. The observation is derived on read from
+the attempt manifests, the prompt-window ledger, the provider usage ledger and
+the job rows; it is never stored. It is schema version 2 and counts tokens
+only: nothing is priced.
+
+Choice readiness is the server's `complete` phase row, which
+`finish_generation` writes in the transaction that stages the draft.
+`choice_ready_at` is its time and `seconds_to_choice_ready` the seconds from
+the first observed phase. Both are null when phases were observed and none is
+`complete`, as for a failed or unfinished session, and `"unknown"` when no
+phase was observed. An attempt's `usage.provider_completed_at` is the time of
+its latest usage event, when the provider's response arrived; it is not
+readiness.
+
+Each attempt's `window` carries `estimated_input_tokens`, the local estimate of
+the whole request, and `reported_input_tokens`, the provider's input for that
+attempt. For the `anthropic_messages` transport the reported figure adds cache
+reads and writes, so it is the per-attempt figure comparable across transports;
+the `usage` section keeps each provider's raw `input_tokens`.
+
+Throughout the observation, `"unknown"` means no source recorded the value, and
+null means the thing has not happened.
 
 ### `load` — View Current State
 

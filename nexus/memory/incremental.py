@@ -70,13 +70,7 @@ class IncrementalRetriever:
                 logger.debug("Skipping previously executed query: %s", query)
                 continue
 
-            try:
-                result = self.memnon.query_memory(query=query, k=5, use_hybrid=True)
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error(
-                    "Incremental retrieval failed for query '%s': %s", query, exc
-                )
-                continue
+            result = self.memnon.query_memory(query=query, k=5, use_hybrid=True)
 
             self.query_memory.record("pass2", query)
 
@@ -126,7 +120,7 @@ class IncrementalRetriever:
         Returns:
             Tuple of (chunks, tokens_used)
         """
-        if not self.memnon or not user_input or budget <= 0:
+        if not self.memnon or not user_input.strip() or budget <= 0:
             return [], 0
 
         collected: List[Dict[str, object]] = []
@@ -146,15 +140,9 @@ class IncrementalRetriever:
             logger.debug("Skipping previously executed raw input query")
             return [], 0
 
-        try:
-            logger.info(
-                "Performing raw user input vector search for enhanced retrieval"
-            )
-            # Send raw input directly to hybrid search (vector + text)
-            result = self.memnon.query_memory(query=query, k=k, use_hybrid=True)
-        except Exception as exc:
-            logger.error("Raw input retrieval failed: %s", exc)
-            return [], 0
+        logger.info("Performing raw user input vector search for enhanced retrieval")
+        # Send raw input directly to hybrid search (vector + text)
+        result = self.memnon.query_memory(query=query, k=k, use_hybrid=True)
 
         # Record this query
         self.query_memory.record("pass2", query)

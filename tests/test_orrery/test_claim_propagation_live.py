@@ -70,7 +70,7 @@ from tests.test_orrery.claim_accounts_test_support import (
 )
 
 
-pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
+pytestmark = pytest.mark.requires_postgres
 
 STORY_CLOCK = datetime(2100, 1, 1, tzinfo=timezone.utc)
 
