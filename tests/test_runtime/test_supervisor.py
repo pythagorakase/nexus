@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import signal
+import subprocess
 import sys
+import time
 from typing import Any, cast
 
 import pytest
@@ -13,13 +16,46 @@ import tomlkit
 
 from nexus import cli
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
-from nexus.runtime.supervisor import _LogFollower, _tail_lines, rotated_segment
+from nexus.runtime.log_capture import wait_for_writer, writer_error_path
+from nexus.runtime.supervisor import (
+    RuntimeError_,
+    _LogFollower,
+    _tail_lines,
+    rotated_segment,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_CONFIG = REPO_ROOT / "nexus.toml"
 LOG_LINE_COUNT_ERROR = "Log line count must be a positive integer"
 UNBOUNDED_READ = 1024 * 1024
+ECHO_COMMAND = [
+    "{python}",
+    "-c",
+    "import os; print('run-' + os.environ['ECHO_RUN'])",
+]
+# The 200-line child: 200 numbered lines padded to 40 bytes (41 with the
+# newline), each flushed as it is written.
+TWO_HUNDRED_LINES = [f"line-{index:03d}".ljust(40, ".") for index in range(1, 201)]
+TWO_HUNDRED_CHILD = [
+    "{python}",
+    "-c",
+    "for index in range(1, 201):\n"
+    "    print(('line-%03d' % index).ljust(40, '.'), flush=True)",
+]
+EMITTED = "".join(f"{line}\n" for line in TWO_HUNDRED_LINES).encode()
+# The holding child: a grandchild in its own session keeps the child's stdout
+# for 30 s after the child has printed the grandchild's pid and exited.
+HOLDING_CHILD = [
+    "{python}",
+    "-c",
+    "import subprocess, sys\n"
+    "grandchild = subprocess.Popen(\n"
+    "    [sys.executable, '-c', 'import time; time.sleep(30)'],\n"
+    "    start_new_session=True,\n"
+    ")\n"
+    "print(grandchild.pid, flush=True)",
+]
 
 
 def _write_config(tmp_path: Path, name: str = "runtime.toml") -> Path:
@@ -148,6 +184,7 @@ def _logging_supervisor(
     backup_count: int,
     command: list[str] | None = None,
     max_tail_bytes: int | None = None,
+    stop_grace_seconds: float | None = None,
 ) -> Supervisor:
     """A real supervisor with an 'echo' service and tiny rotation limits."""
     document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
@@ -157,12 +194,10 @@ def _logging_supervisor(
     runtime["logs"]["backup_count"] = backup_count
     if max_tail_bytes is not None:
         runtime["logs"]["max_tail_bytes"] = max_tail_bytes
+    if stop_grace_seconds is not None:
+        runtime["health"]["stop_grace_seconds"] = stop_grace_seconds
     echo = tomlkit.table()
-    echo["command"] = command or [
-        "{python}",
-        "-c",
-        "import os; print('run-' + os.environ['ECHO_RUN'])",
-    ]
+    echo["command"] = command or ECHO_COMMAND
     echo["port"] = 1
     echo["enabled"] = "never"
     runtime["services"]["echo"] = echo
@@ -174,18 +209,22 @@ def _logging_supervisor(
 
 
 def _spawn_to_exit(supervisor: Supervisor, run: str) -> None:
-    """Spawn the echo service through the real _spawn and reap it."""
+    """Spawn the echo service through the real _spawn and reap it and its writer."""
     service = supervisor.runtime.services["echo"]
     service.env["ECHO_RUN"] = run
-    pid = supervisor._spawn("echo", service, slot=5, detached=True)
-    _, status = os.waitpid(pid, 0)
-    assert os.waitstatus_to_exitcode(status) == 0
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=True)
+    for process in (pid, writer_pid):
+        _, status = os.waitpid(process, 0)
+        assert os.waitstatus_to_exitcode(status) == 0
 
 
 def _segment_texts(supervisor: Supervisor) -> dict[str, str]:
+    """The capture and its rotated segments (not the writer's error file)."""
+    error_file = writer_error_path(supervisor.log_path("echo"))
     return {
         path.name: path.read_text(encoding="utf-8")
         for path in sorted(supervisor.state_dir.glob("echo.log*"))
+        if path != error_file
     }
 
 
@@ -416,3 +455,289 @@ def test_log_follower_holds_fragments_and_picks_up_a_new_capture(
         handle.write("-done\n\nthird\n")
     assert follower.read_lines() == ["second-part-done", "", "third"]
     assert follower.read_lines() == []
+
+
+# ---------------------------------------------------------------------------
+# Live rotation by the log writer (issue #842, slice S2)
+# ---------------------------------------------------------------------------
+
+
+def _capture_files(log_path: Path, backup_count: int) -> list[Path]:
+    """The retained segments oldest first, then the current capture."""
+    rotated = [
+        rotated_segment(log_path, index)
+        for index in range(backup_count, 0, -1)
+        if rotated_segment(log_path, index).exists()
+    ]
+    return rotated + [log_path]
+
+
+def test_writer_rotates_a_live_capture_without_losing_lines(tmp_path: Path) -> None:
+    """One run past max_bytes many times keeps every byte, in bounded segments."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=12, command=TWO_HUNDRED_CHILD
+    )
+    log_path = supervisor.log_path("echo")
+
+    _spawn_to_exit(supervisor, "1")
+
+    files = _capture_files(log_path, 12)
+    assert b"".join(path.read_bytes() for path in files) == EMITTED
+    assert len(files) - 1 >= 8
+    for path in files:
+        data = path.read_bytes()
+        assert len(data) <= 1000, path.name
+        assert data.endswith(b"\n"), path.name
+    assert writer_error_path(log_path).read_bytes() == b""
+
+
+def test_writer_retention_drops_only_the_oldest(tmp_path: Path) -> None:
+    """With backup_count=2 the retained text is a line-aligned suffix."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=2, command=TWO_HUNDRED_CHILD
+    )
+    log_path = supervisor.log_path("echo")
+
+    _spawn_to_exit(supervisor, "1")
+
+    assert not rotated_segment(log_path, 3).exists()
+    retained = b"".join(path.read_bytes() for path in _capture_files(log_path, 2))
+    assert retained and EMITTED.endswith(retained)
+    dropped = EMITTED[: len(EMITTED) - len(retained)]
+    assert dropped == b"" or dropped.endswith(b"\n")
+
+
+def test_writer_keeps_an_overlong_line_whole(tmp_path: Path) -> None:
+    """A line longer than max_bytes fills one segment of its own, unsplit."""
+    long_line = "x" * 3000
+    supervisor = _logging_supervisor(
+        tmp_path,
+        max_bytes=1000,
+        backup_count=5,
+        command=[
+            "{python}",
+            "-c",
+            f"print('short-1'); print('{long_line}'); print('short-2')",
+        ],
+    )
+    log_path = supervisor.log_path("echo")
+
+    _spawn_to_exit(supervisor, "1")
+
+    files = _capture_files(log_path, 5)
+    assert [path.read_bytes() for path in files] == [
+        b"short-1\n",
+        f"{long_line}\n".encode(),
+        b"short-2\n",
+    ]
+
+
+def test_spawn_captured_releases_the_callers_stderr(tmp_path: Path) -> None:
+    """A spawning process that exits leaves no writer holding its pipes."""
+    capture = tmp_path / "logs" / "sleeper.log"
+    script = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from nexus.config.settings_models import RuntimeLogsSettings\n"
+        "from nexus.runtime.log_capture import spawn_captured\n"
+        "captured = spawn_captured(\n"
+        "    [sys.executable, '-c', 'import time; time.sleep(30)'],\n"
+        "    log_path=Path(sys.argv[1]),\n"
+        "    logs=RuntimeLogsSettings(),\n"
+        "    popen_kwargs={'start_new_session': True},\n"
+        ")\n"
+        "print(captured.pid, captured.writer_pid)\n"
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    pids: list[int] = []
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", script, str(capture)],
+            capture_output=True,
+            timeout=10,
+            cwd=REPO_ROOT,
+            env=env,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
+        pids = [int(value) for value in completed.stdout.split()]
+        assert len(pids) == 2
+        assert writer_error_path(capture).exists()
+    finally:
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+def test_follow_crosses_live_rotation(tmp_path: Path) -> None:
+    """A pinned follower reads every line once across eight live rotations."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=12, command=TWO_HUNDRED_CHILD
+    )
+    log_path = supervisor.log_path("echo")
+    _write_lines(log_path, ["seed"])
+    follower = _LogFollower(log_path, backup_count=12)
+
+    _spawn_to_exit(supervisor, "1")
+
+    assert rotated_segment(log_path, 8).exists()
+    assert follower.read_lines() == TWO_HUNDRED_LINES
+
+
+def test_logs_since_mark_crosses_live_rotation(tmp_path: Path) -> None:
+    """logs_since returns exactly the lines after the mark, across rotations."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=12, command=TWO_HUNDRED_CHILD
+    )
+    log_path = supervisor.log_path("echo")
+    _write_lines(log_path, ["before-1", "before-2"])
+    mark = supervisor.log_mark("echo")
+    assert mark.split(":")[:2] == [
+        str(log_path.stat().st_ino),
+        str(log_path.stat().st_size),
+    ]
+
+    _spawn_to_exit(supervisor, "1")
+
+    assert rotated_segment(log_path, 8).exists()
+    assert supervisor.logs_since("echo", mark) == TWO_HUNDRED_LINES
+    assert supervisor.logs_since("echo", supervisor.log_mark("echo")) == []
+
+
+def test_logs_since_refuses_a_mark_out_of_retention(tmp_path: Path) -> None:
+    """A mark whose file left retention, or whose crc differs, is refused."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=2, command=TWO_HUNDRED_CHILD
+    )
+    log_path = supervisor.log_path("echo")
+    _write_lines(log_path, ["before"])
+    mark = supervisor.log_mark("echo")
+
+    _spawn_to_exit(supervisor, "1")
+
+    with pytest.raises(RuntimeError_, match=f"Log mark {mark}: no retained segment"):
+        supervisor.logs_since("echo", mark)
+
+    inode, size, crc = supervisor.log_mark("echo").split(":")
+    forged = f"{inode}:{size}:{(int(crc) + 1) % 2**32}"
+    with pytest.raises(RuntimeError_, match=f"Log mark {forged}: .* inode was reused"):
+        supervisor.logs_since("echo", forged)
+
+
+def test_logs_since_from_no_capture(tmp_path: Path) -> None:
+    """The empty mark reads everything retained, until .backup_count exists."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=12, command=TWO_HUNDRED_CHILD
+    )
+    log_path = supervisor.log_path("echo")
+    mark = supervisor.log_mark("echo")
+    assert mark == "0:0:0"
+    assert supervisor.logs_since("echo", mark) == []
+
+    _spawn_to_exit(supervisor, "1")
+
+    assert supervisor.logs_since("echo", mark) == TWO_HUNDRED_LINES
+    rotated_segment(log_path, 12).write_text("oldest\n", encoding="utf-8")
+    with pytest.raises(RuntimeError_, match="Log mark 0:0:0 names no capture"):
+        supervisor.logs_since("echo", mark)
+
+
+def test_wait_for_writer_ignores_a_pid_that_is_not_the_writer(tmp_path: Path) -> None:
+    """A live pid that is not this file's writer counts as gone, unsignalled."""
+    sleeper = subprocess.Popen(["sleep", "30"])
+    try:
+        started = time.monotonic()
+        assert wait_for_writer(sleeper.pid, tmp_path / "echo.log", 5, 0.1) is True
+        assert time.monotonic() - started < 1
+        assert sleeper.poll() is None
+    finally:
+        sleeper.kill()
+        sleeper.wait()
+
+
+def _spawn_holding_child(supervisor: Supervisor) -> tuple[int, int, int]:
+    """Spawn the holding child, reap it, and return its pid, writer and grandchild."""
+    service = supervisor.runtime.services["echo"]
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=True)
+    _, status = os.waitpid(pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 0
+    log_path = supervisor.log_path("echo")
+    deadline = time.monotonic() + 10
+    while not log_path.exists() or not log_path.read_text(encoding="utf-8"):
+        assert time.monotonic() < deadline, "the holding child never printed"
+        time.sleep(0.05)
+    grandchild = int(log_path.read_text(encoding="utf-8").split()[0])
+    return pid, writer_pid, grandchild
+
+
+def _assert_killed(pid: int) -> None:
+    _, status = os.waitpid(pid, 0)
+    assert os.WIFSIGNALED(status) and os.WTERMSIG(status) == signal.SIGKILL
+
+
+def _kill_quietly(pid: int) -> None:
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def test_stop_raises_when_a_writer_outlives_its_service(tmp_path: Path) -> None:
+    """A writer still held open after the grace is killed and the stop fails."""
+    supervisor = _logging_supervisor(
+        tmp_path,
+        max_bytes=1000,
+        backup_count=2,
+        command=HOLDING_CHILD,
+        stop_grace_seconds=1,
+    )
+    pid, writer_pid, grandchild = _spawn_holding_child(supervisor)
+    try:
+        supervisor._write_pidfile(
+            "echo",
+            {"pid": pid, "service": "echo", "port": 1, "log_writer_pid": writer_pid},
+        )
+
+        with pytest.raises(
+            RuntimeError_, match=f"Log writer for 'echo' \\(pid {writer_pid}\\)"
+        ):
+            supervisor._stop_service("echo")
+
+        _assert_killed(writer_pid)
+    finally:
+        _kill_quietly(grandchild)
+
+
+def test_start_waits_for_a_stale_records_writer(tmp_path: Path) -> None:
+    """up over a stale pidfile waits for its writer before spawning anything."""
+    supervisor = _logging_supervisor(
+        tmp_path,
+        max_bytes=1000,
+        backup_count=2,
+        command=HOLDING_CHILD,
+        stop_grace_seconds=1,
+    )
+    pid, writer_pid, grandchild = _spawn_holding_child(supervisor)
+    try:
+        supervisor._write_pidfile(
+            "echo",
+            {"pid": pid, "service": "echo", "port": 1, "log_writer_pid": writer_pid},
+        )
+        service = supervisor.runtime.services["echo"]
+        service.command = list(ECHO_COMMAND)
+        service.env["ECHO_RUN"] = "late"
+
+        with pytest.raises(
+            RuntimeError_, match=f"Log writer for 'echo' \\(pid {writer_pid}\\)"
+        ):
+            supervisor._start_service("echo", service, slot=5, detached=True)
+
+        assert supervisor._pidfile("echo").exists()
+        log_path = supervisor.log_path("echo")
+        assert "run-late" not in log_path.read_text(encoding="utf-8")
+        _assert_killed(writer_pid)
+    finally:
+        _kill_quietly(grandchild)

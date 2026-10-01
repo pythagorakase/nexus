@@ -217,14 +217,31 @@ in `docs/cli.md`).
 - State lives under `[runtime].state_dir` (default `.nexus/runtime`):
   `<service>.pid.json` records pid/port/slot/start time; `<service>.log`
   captures stdout+stderr. Logs survive `nexus down` for postmortems.
-- The supervisor is the single log-file and rotation owner. At spawn, a
-  `<service>.log` of at least `[runtime.logs].max_bytes` becomes
-  `<service>.log.1` (older segments shift up to `backup_count`, the oldest
-  is dropped) and the service starts on a fresh file; a long-running
-  service's capture grows until its next spawn. `nexus logs -n N` continues
-  into the rotated segments when the current file is shorter than `N`,
-  reading at most `max_tail_bytes` of log text in all, and `-f` follows
-  across a restart's rotation.
+- Each captured stream has one log-writer process
+  (`nexus/runtime/log_capture.py`) that owns its file and its rotation. The
+  supervisor starts the writer first, in a session of its own, and gives
+  the service the writer's pipe as stdout and stderr, so a group signal to
+  the service never reaches the writer. The writer ignores SIGINT and
+  SIGTERM and ends only at end of input, when every process holding the
+  pipe has exited, so it never drops a buffered line.
+- The writer rotates while the service runs. Before a line that would take
+  `<service>.log` past `[runtime.logs].max_bytes`, and at start when the file
+  is already that large, it renames the file to `<service>.log.1` (older
+  segments shift up to `backup_count`, the oldest is dropped) and opens a
+  fresh file. It never splits a line across segments: a line longer than
+  `max_bytes` gets a segment of its own. The writer's own errors go to
+  `<service>.log.writer-error` beside the capture, which stays empty unless
+  the writer fails.
+- `nexus down`, `nexus up` over a stale pidfile, a restart, a failed start
+  (before it prints the last log lines) and the foreground autorestart wait
+  for the writer recorded in the pidfile (`log_writer_pid`), so two writers
+  never hold one file. A writer still alive `[runtime.health].stop_grace_seconds`
+  after its service stopped means another process still holds the output:
+  the writer is killed and the command fails, naming its pid. A recycled pid
+  that is no longer the file's writer is never waited on or signalled.
+- `nexus logs -n N` continues into the rotated segments when the current
+  file is shorter than `N`, reading at most `max_tail_bytes` of log text in
+  all, and `-f` follows across every rotation.
 - `{log_config}` expands to `<state_dir>/logging.json`, a
   `logging.config.dictConfig` document the supervisor writes from
   `[runtime.logs]` before spawning. The gateway and the mock OpenAI server
@@ -264,7 +281,7 @@ nexus up [--slot N] [--foreground] [--config PATH]
 nexus down [service] [--config PATH]
 nexus restart [service] [--slot N] [--config PATH]
 nexus status [--config PATH]
-nexus logs [service] [-n LINES] [-f] [--config PATH]
+nexus logs [service] [-n LINES] [-f] [--mark | --since MARK] [--config PATH]
 nexus doctor [--target owner-host|owner-client|ci-runner] [--config PATH]
 ```
 
@@ -279,6 +296,13 @@ URL. Access credentials are attached only when that override has the same
 origin as `remote.base_url`. A remote profile, or an override naming a
 non-loopback host, refuses the CLI's direct-database and local-operator
 commands; `docs/cli.md` lists each command's transport.
+
+`nexus logs SERVICE --mark` prints a mark of the capture's current end
+(`<inode>:<size>:<crc32 of the first 256 bytes>`, or `0:0:0` before the
+capture exists), and `--since MARK` prints every line written after it, in
+order, across every rotation since; it fails loudly when the marked text has
+left retention. The QA kit (`scripts/qa_shift/mission_prompt.md`) slices its
+gateway-log evidence with them.
 
 ## Readiness Checks
 

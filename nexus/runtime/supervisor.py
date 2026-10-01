@@ -23,9 +23,10 @@ import string
 import subprocess
 import sys
 import time
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, BinaryIO, Dict, Iterator, List, Optional, Set, Tuple
 
 import requests
 
@@ -47,42 +48,26 @@ from nexus.runtime.home import (
     resolve_config_path,
     resolve_runtime_home,
 )
+from nexus.runtime.log_capture import (
+    kill_writer,
+    pid_alive as _pid_alive,
+    rotated_segment,
+    spawn_captured,
+    wait_for_writer,
+)
 from nexus.runtime.logging_config import build_logging_config
 from nexus.runtime.remote_auth import build_runtime_request_auth
 
 LOG_CONFIG_PLACEHOLDER = "log_config"
 LOG_CONFIG_FILENAME = "logging.json"
 _TAIL_BLOCK_BYTES = 64 * 1024
+# A log mark checks the marked file's identity with a crc32 of this prefix.
+MARK_PREFIX_BYTES = 256
+EMPTY_MARK = "0:0:0"
 
 
 class RuntimeError_(Exception):
     """Supervisor-level failure with a user-facing message."""
-
-
-def _pid_alive(pid: int) -> bool:
-    """Cross-platform process liveness check (never signals the process)."""
-    if os.name == "nt":  # pragma: no cover - exercised on Windows hosts only
-        import ctypes
-
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        STILL_ACTIVE = 259
-        kernel32 = ctypes.windll.kernel32
-        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if not handle:
-            return False
-        try:
-            exit_code = ctypes.c_ulong()
-            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
-            return bool(ok) and exit_code.value == STILL_ACTIVE
-        finally:
-            kernel32.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
 
 
 def _signal_pid(pid: int, sig: int) -> None:
@@ -152,32 +137,6 @@ def _template_fields(command: List[str]) -> Set[str]:
         for _, field, _, _ in string.Formatter().parse(part)
         if field
     }
-
-
-def rotated_segment(path: Path, index: int) -> Path:
-    """The ``index``-th rotated segment of a captured log (``<name>.log.N``)."""
-    if index < 1:
-        raise ValueError(f"Rotated segment index must be >= 1, got {index}")
-    return path.with_name(f"{path.name}.{index}")
-
-
-def _rotate_log(path: Path, max_bytes: int, backup_count: int) -> bool:
-    """Rotate a captured log at spawn once it has reached ``max_bytes``.
-
-    Shifts ``.1 .. .backup_count-1`` up by one (replacing, and so dropping,
-    the oldest ``.backup_count``) and renames the current file to ``.1``; the
-    caller then opens a fresh file. Returns True when a rotation happened.
-    Only the supervisor calls this, and only before spawning the service that
-    owns the file, so no live child is writing to it.
-    """
-    if not path.exists() or path.stat().st_size < max_bytes:
-        return False
-    for index in range(backup_count - 1, 0, -1):
-        source = rotated_segment(path, index)
-        if source.exists():
-            source.replace(rotated_segment(path, index + 1))
-    path.replace(rotated_segment(path, 1))
-    return True
 
 
 def _read_last_lines(
@@ -266,10 +225,56 @@ def _terminated(data: bytes) -> bytes:
     return data + b"\n" if data and not data.endswith(b"\n") else data
 
 
+def _parse_mark(mark: str) -> Tuple[int, int, int]:
+    """Split a ``log_mark`` into inode, size and crc, naming a malformed one."""
+    parts = mark.split(":")
+    try:
+        if len(parts) != 3:
+            raise ValueError(mark)
+        inode, size, crc = (int(part) for part in parts)
+    except ValueError:
+        raise RuntimeError_(
+            f"Log mark {mark!r} is not '<inode>:<size>:<crc>' "
+            "(take one with nexus logs SERVICE --mark)."
+        ) from None
+    if min(inode, size, crc) < 0:
+        raise RuntimeError_(f"Log mark {mark!r} holds a negative field.")
+    return inode, size, crc
+
+
+def _open_segments(path: Path, backup_count: int) -> List[BinaryIO]:
+    """Open the current capture and its retained segments, newest first.
+
+    The list stops at the first missing segment. A rotation between two opens
+    would hand back a skewed chain, so the opened identities are checked
+    against the paths afterwards and the snapshot is retaken until they agree.
+    """
+    paths = [path] + [rotated_segment(path, i) for i in range(1, backup_count + 1)]
+    while True:
+        handles: List[BinaryIO] = []
+        for segment in paths:
+            try:
+                handles.append(open(segment, "rb"))
+            except FileNotFoundError:
+                break
+        try:
+            stable = len(handles) == len(paths) or not paths[len(handles)].exists()
+            for segment, handle in zip(paths, handles):
+                stable = stable and (
+                    os.stat(segment).st_ino == os.fstat(handle.fileno()).st_ino
+                )
+        except FileNotFoundError:
+            stable = False
+        if stable:
+            return handles
+        for handle in handles:
+            handle.close()
+
+
 class _LogFollower:
     """Incrementally read complete lines appended to a captured log.
 
-    Spawn-time rotation renames ``<name>.log`` to ``<name>.log.1`` and opens a
+    Rotation renames ``<name>.log`` to ``<name>.log.1`` and opens a
     fresh file. The follower tracks the file identity it was reading; when the
     path names a new file it drains the rest of the renamed segment (and any
     segment rotated after it) first, so a restart neither strands the reader
@@ -317,7 +322,7 @@ class _LogFollower:
     def _drain_rotated(self) -> bytes:
         """Unread bytes of the rotated segment this follower was reading.
 
-        Each respawn past ``max_bytes`` shifts segments up by one, so within
+        Each rotation shifts segments up by one, so within
         one poll the file being read may have moved past ``.1``. Its unread
         tail comes first, then every newer segment in full; each segment is
         closed for good, so its trailing fragment ends a line of its own.
@@ -537,16 +542,11 @@ class Supervisor:
         service: RuntimeServiceSettings,
         slot: int,
         detached: bool,
-    ) -> int:
+    ) -> Tuple[int, int]:
+        """Spawn a service under its log writer; returns (pid, writer pid)."""
         argv = self._service_argv(service)
         if LOG_CONFIG_PLACEHOLDER in _template_fields(service.command):
             self._write_log_config()
-        log_path = self.log_path(name)
-        # The supervisor is the single rotation owner: the previous process
-        # holding this file is gone, so the rename cannot race a live writer.
-        _rotate_log(
-            log_path, self.runtime.logs.max_bytes, self.runtime.logs.backup_count
-        )
         popen_kwargs: Dict[str, Any] = {}
         if detached:
             if os.name == "posix":
@@ -560,17 +560,36 @@ class Supervisor:
             # signal on teardown reaches forked workers without hitting the
             # supervisor itself.
             popen_kwargs["start_new_session"] = True
-        with open(log_path, "ab") as log_handle:
-            process = subprocess.Popen(
-                argv,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                cwd=self.root,
-                env=self._service_env(service, slot),
-                **popen_kwargs,
-            )
-        return process.pid
+        # The service's own log writer owns the file and its rotation
+        # (nexus/runtime/log_capture.py); the previous writer is gone.
+        captured = spawn_captured(
+            argv,
+            log_path=self.log_path(name),
+            logs=self.runtime.logs,
+            env=self._service_env(service, slot),
+            cwd=self.root,
+            popen_kwargs=popen_kwargs,
+        )
+        return captured.pid, captured.writer_pid
+
+    def _await_writer(self, name: str, writer_pid: int) -> None:
+        """Wait for a stopped service's log writer to drain and exit.
+
+        A writer still alive after ``stop_grace_seconds`` means a process
+        still holds the service's output; it is killed and the stop fails.
+        """
+        health = self.runtime.health
+        grace = health.stop_grace_seconds
+        if wait_for_writer(
+            writer_pid, self.log_path(name), grace, health.poll_interval_seconds
+        ):
+            return
+        kill_writer(writer_pid)
+        raise RuntimeError_(
+            f"Log writer for '{name}' (pid {writer_pid}) outlived its service by "
+            f"{grace}s; a process still holds the service's output. Killed the "
+            "writer."
+        )
 
     def _startup_excerpt(self, name: str) -> str:
         """The last lines a service wrote during a failed start (current file)."""
@@ -582,12 +601,20 @@ class Supervisor:
             )
         )
 
-    def _await_healthy(self, name: str, service: RuntimeServiceSettings, pid: int):
+    def _await_healthy(
+        self,
+        name: str,
+        service: RuntimeServiceSettings,
+        pid: int,
+        writer_pid: int,
+    ) -> None:
         health = self.runtime.health
         url = f"http://{service.host}:{service.port}{service.health_path}"
         deadline = time.monotonic() + health.startup_deadline_seconds
         while True:
             if not _pid_alive(pid):
+                # The excerpt holds the last lines only once the writer drained.
+                self._await_writer(name, writer_pid)
                 excerpt = self._startup_excerpt(name)
                 raise RuntimeError_(
                     f"Service '{name}' exited during startup. Last log lines:\n"
@@ -599,8 +626,9 @@ class Supervisor:
             except requests.RequestException:
                 pass
             if time.monotonic() > deadline:
-                excerpt = self._startup_excerpt(name)
                 self._stop_pid(pid)
+                self._await_writer(name, writer_pid)
+                excerpt = self._startup_excerpt(name)
                 raise RuntimeError_(
                     f"Service '{name}' failed to become healthy at {url} within "
                     f"{health.startup_deadline_seconds}s. Last log lines:\n"
@@ -622,7 +650,11 @@ class Supervisor:
                 f"Use 'nexus restart' or 'nexus down' first."
             )
         if existing:
-            self._pidfile(name).unlink()  # stale pidfile from a dead process
+            # A stale pidfile from a dead process: its writer may still be
+            # draining into the file the new writer is about to open.
+            if existing.get("log_writer_pid") is not None:
+                self._await_writer(name, int(existing["log_writer_pid"]))
+            self._pidfile(name).unlink()
         if self._gateway_port_override is not None and name != "gateway":
             # Fixed-port siblings (the mock provider) belong to the default
             # instance. An override instance borrows one only when the
@@ -667,8 +699,8 @@ class Supervisor:
             from nexus.api.choice_recovery import recover_active_slot_choice
 
             recover_active_slot_choice(slot)
-        pid = self._spawn(name, service, slot, detached=detached)
-        self._await_healthy(name, service, pid)
+        pid, writer_pid = self._spawn(name, service, slot, detached=detached)
+        self._await_healthy(name, service, pid, writer_pid)
         record = {
             "pid": pid,
             "service": name,
@@ -678,6 +710,7 @@ class Supervisor:
             "started_at": datetime.now(timezone.utc).isoformat(),
             "command": self._service_argv(service),
             "log": str(self.log_path(name)),
+            "log_writer_pid": writer_pid,
         }
         self._write_pidfile(name, record)
         return record
@@ -824,6 +857,9 @@ class Supervisor:
             return None
         pid = int(record["pid"])
         self._stop_pid(pid)
+        # A record written before the log writer existed has no writer pid.
+        if record.get("log_writer_pid") is not None:
+            self._await_writer(name, int(record["log_writer_pid"]))
         self._pidfile(name).unlink(missing_ok=True)
         return pid
 
@@ -958,7 +994,7 @@ class Supervisor:
 
         The tail reads back through rotated segments when the current capture
         is shorter than ``lines``; ``follow`` tails the current capture and
-        crosses the rotation a respawn performs.
+        crosses every rotation the writer performs.
         """
         if self.runtime.profile != "local":
             raise RuntimeError_(
@@ -993,6 +1029,89 @@ class Supervisor:
                 yield from appended
             else:
                 time.sleep(self.runtime.logs.follow_poll_seconds)
+
+    def _require_local_logs(self) -> None:
+        if self.runtime.profile != "local":
+            raise RuntimeError_(
+                f"'nexus logs' reads captured local logs; profile is "
+                f"'{self.runtime.profile}'."
+            )
+
+    def log_mark(self, service: str) -> str:
+        """A mark of the current end of a service's capture, for ``logs_since``.
+
+        ``"<inode>:<size>:<crc>"`` names the current file, its size, and the
+        ``zlib.crc32`` of its first ``min(size, 256)`` bytes (captures are
+        append-only, so that prefix never changes); ``"0:0:0"`` when no
+        capture exists yet.
+        """
+        self._require_local_logs()
+        try:
+            with open(self.log_path(service), "rb") as handle:
+                stat = os.fstat(handle.fileno())
+                prefix = handle.read(min(stat.st_size, MARK_PREFIX_BYTES))
+        except FileNotFoundError:
+            return EMPTY_MARK
+        return f"{stat.st_ino}:{stat.st_size}:{zlib.crc32(prefix)}"
+
+    def logs_since(self, service: str, mark: str) -> List[str]:
+        """Every line a service's capture received after ``mark``, in order.
+
+        Reads the marked file from the marked offset, then each newer rotated
+        segment and the current capture in full, across every rotation the
+        writer performed meanwhile. Raises when the marked text is no longer
+        retained, or the mark names a file it cannot be checked against.
+        """
+        self._require_local_logs()
+        inode, offset, crc = _parse_mark(mark)
+        log_path = self.log_path(service)
+        segments = _open_segments(log_path, self.runtime.logs.backup_count)
+        try:
+            if mark == EMPTY_MARK:
+                oldest = rotated_segment(log_path, self.runtime.logs.backup_count)
+                if oldest.exists():
+                    raise RuntimeError_(
+                        f"Log mark {mark} names no capture, and {oldest} exists: "
+                        "lines written after the mark may have left retention."
+                    )
+                start, start_offset = len(segments) - 1, 0
+            else:
+                matches = [
+                    index
+                    for index, handle in enumerate(segments)
+                    if os.fstat(handle.fileno()).st_ino == inode
+                ]
+                if not matches:
+                    raise RuntimeError_(
+                        f"Log mark {mark}: no retained segment of {log_path} has "
+                        f"inode {inode}; the marked text left retention."
+                    )
+                start, start_offset = matches[0], offset
+                marked = segments[start]
+                size = os.fstat(marked.fileno()).st_size
+                if offset > size:
+                    raise RuntimeError_(
+                        f"Log mark {mark}: offset {offset} passes the end of "
+                        f"{marked.name} ({size} bytes)."
+                    )
+                marked.seek(0)
+                if zlib.crc32(marked.read(min(offset, MARK_PREFIX_BYTES))) != crc:
+                    raise RuntimeError_(
+                        f"Log mark {mark}: {marked.name} has inode {inode} but "
+                        "not the marked content; the inode was reused."
+                    )
+            pieces: List[bytes] = []
+            # Segments are newest first; read from the marked one forwards.
+            for index in range(start, -1, -1):
+                handle = segments[index]
+                handle.seek(start_offset if index == start else 0)
+                data = handle.read()
+                # A closed segment's trailing fragment ends a line of its own.
+                pieces.append(_terminated(data) if index > 0 else data)
+        finally:
+            for handle in segments:
+                handle.close()
+        return b"".join(pieces).decode("utf-8", errors="replace").splitlines()
 
     # ------------------------------------------------------------------
     # Foreground supervision
@@ -1068,6 +1187,8 @@ class Supervisor:
                     f"[{name}] exited; restarting "
                     f"({restarts[name]}/{service.autorestart_max_retries})"
                 )
+            if record.get("log_writer_pid") is not None:
+                self._await_writer(name, int(record["log_writer_pid"]))
             self._start_service(name, service, slot, detached=False)
         if failures:
             raise RuntimeError_(" ".join(failures))
