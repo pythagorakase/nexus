@@ -393,6 +393,160 @@ FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known
 EXIT STATUS: 1
 ```
 
+## Rebased Final Proof
+
+Rebased cleanly onto `origin/main` at
+`56b7854a1f6b62ccddb0417e0dda8446620ddcbd`. Product and tests at
+`b0cd365d582ba8381b251b0b84808ebfe6095a7c`; the follow-up commit records
+only this refreshed evidence. Import verification again resolved to this
+worktree. All foreground commands completed; the required proof and both
+offline splits were rerun. Commit hooks passed. No new diagnostic appeared.
+
+These final tails supersede the earlier development-stage counts above.
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py tests/test_schema_documentation_pg.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py tests/test_orrery/test_retrograde_constraints_pg.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+```
+
+```text
+tests/test_orrery/test_migrate.py:266: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 108 targets: nexus_m10_fresh_test_57702, nexus_m10_template_test_57702, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_813_case_* x82, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_issue601_* x4, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps
+1 failed, 344 passed in 254.63s (0:04:14)
+EXIT STATUS: 1
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2840 passed, 480 skipped, 8 warnings in 465.61s (0:07:45)
+EXIT STATUS: 0
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_orrery
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps
+1 failed, 1830 passed, 834 skipped, 7 warnings in 34.22s
+EXIT STATUS: 1
+```
+
+Static checks were refreshed against the same origin/main. The main
+versions of the three pre-existing changed Python files were copied using
+`git show origin/main:<path>` into the order scratch, never a checkout edit.
+The 17 flake8 messages agree exactly modulo line shifts and path prefix;
+all are on untouched lines. The new test module has no diagnostic.
+Mypy uses the sanctioned `--explicit-package-bases` invocation.
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_reachability.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+54 passed, 5 warnings in 10.21s
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+4 files would be left unchanged.
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+nexus/agents/logon/apex_schema.py:305:89: E501 line too long (92 > 88 characters)
+nexus/api/new_story_db_mapper.py:12:1: F401 'typing.List' imported but unused
+nexus/api/new_story_db_mapper.py:12:1: F401 'typing.Tuple' imported but unused
+nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.datetime' imported but unused
+nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.timezone' imported but unused
+nexus/api/new_story_db_mapper.py:15:1: F401 'nexus.api.new_story_schemas.SpecificLocation' imported but unused
+nexus/api/new_story_db_mapper.py:107:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:211:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:265:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:315:89: E501 line too long (91 > 88 characters)
+nexus/api/new_story_db_mapper.py:318:89: E501 line too long (102 > 88 characters)
+nexus/api/new_story_db_mapper.py:545:89: E501 line too long (118 > 88 characters)
+nexus/api/new_story_db_mapper.py:552:89: E501 line too long (100 > 88 characters)
+nexus/api/new_story_db_mapper.py:562:89: E501 line too long (93 > 88 characters)
+nexus/api/new_story_db_mapper.py:563:89: E501 line too long (90 > 88 characters)
+nexus/api/new_story_db_mapper.py:566:89: E501 line too long (91 > 88 characters)
+nexus/api/new_story_db_mapper.py:687:89: E501 line too long (91 > 88 characters)
+EXIT STATUS: 1
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/agents/logon/apex_schema.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/agents/logon/apex_enums.py
+```
+
+```text
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/agents/logon/apex_schema.py:305:89: E501 line too long (92 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:12:1: F401 'typing.List' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:12:1: F401 'typing.Tuple' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.datetime' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.timezone' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:15:1: F401 'nexus.api.new_story_schemas.SpecificLocation' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:107:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:211:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:265:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:315:89: E501 line too long (91 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:318:89: E501 line too long (102 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:545:89: E501 line too long (118 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:552:89: E501 line too long (100 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:562:89: E501 line too long (93 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:563:89: E501 line too long (90 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:566:89: E501 line too long (91 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py:689:89: E501 line too long (91 > 88 characters)
+EXIT STATUS: 1
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+Success: no issues found in 4 source files
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/api/new_story_db_mapper.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/agents/logon/apex_schema.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/origin-main/nexus/agents/logon/apex_enums.py
+```
+
+```text
+Success: no issues found in 3 source files
+EXIT STATUS: 0
+```
+
 ## Landing and Open Questions
 
 No owner decision is added or reopened. The six functions wait for #812; 813-Q3
