@@ -76,6 +76,7 @@ COMMAND_LINE_SCRIPTS = (
     "scripts.qa_shift.historical_passage_limit",
     "scripts.qa_shift.card_identity_probe",
     "scripts.qa_shift.long_absence_probe",
+    "scripts.qa_shift.routine_delta_grammar_probe",
     "scripts.new_story_cli",
 )
 # Prints the root logger's handlers and level before and after importing
