@@ -108,6 +108,14 @@ def evidence_dir(tmp_path: Path) -> Path:
     return directory
 
 
+def _decoded_body(raw: bytes) -> Any:
+    """Parse a recorded body as JSON, or keep its text when it is not JSON."""
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return raw.decode(errors="replace")
+
+
 class StrangenessRequestRecorder:
     """An ASGI wrapper that records the strangeness requests it passes through.
 
@@ -115,7 +123,10 @@ class StrangenessRequestRecorder:
     reads the whole request body, hands the same messages to the app, passes
     every response message through unchanged, and then appends ``{"method",
     "path", "request", "status", "response"}`` with both bodies parsed as
-    JSON. Every other scope, lifespan included, reaches the app untouched.
+    JSON. It appends the record even when the app raises (a 500 is sent, then
+    re-raised), keeps a body that is not JSON as text, and records no status
+    when no response started; the app's exception still propagates. Every
+    other scope, lifespan included, reaches the app untouched.
     """
 
     def __init__(self, app: Any) -> None:
@@ -158,16 +169,18 @@ class StrangenessRequestRecorder:
                 response_body.append(message.get("body", b""))
             await send(message)
 
-        await self.app(scope, replay, forward)
-        self.records.append(
-            {
-                "method": scope["method"],
-                "path": scope["path"],
-                "request": json.loads(request_body),
-                "status": status[0],
-                "response": json.loads(b"".join(response_body)),
-            }
-        )
+        try:
+            await self.app(scope, replay, forward)
+        finally:
+            self.records.append(
+                {
+                    "method": scope["method"],
+                    "path": scope["path"],
+                    "request": _decoded_body(request_body),
+                    "status": status[0] if status else None,
+                    "response": _decoded_body(b"".join(response_body)),
+                }
+            )
 
 
 @contextmanager
