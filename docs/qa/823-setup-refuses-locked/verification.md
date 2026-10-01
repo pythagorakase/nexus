@@ -4,7 +4,10 @@ Work order 823-S0. No migration, no paid call, no gateway lane. Nothing in
 this run wrote to any `save_NN` or `NEXUS_template`, and
 `scripts/new_story_setup.py` was never run against a slot.
 
-## What Was Wrong (Cited at `origin/main` a4c2be8d)
+## What Was Wrong (Cited at `origin/main` a4c2be8d; Unchanged at f8dd073c)
+
+The line citations hold at both commits: #1070 (f8dd073c) adds new files and
+edits none of the files cited here.
 
 - `initialize_slot_database` (`scripts/new_story_setup.py:164-286`) terminated
   the target's sessions and ran `dropdb --if-exists` when `force` was set
@@ -56,18 +59,18 @@ save_01|{default_transaction_read_only=on}
 ref_codex_bakeoff_2026_07|{default_transaction_read_only=on}
 ```
 
-## Green Run
+## Green Run (at ab67ce91, After the Rebase Onto f8dd073c)
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_new_story_setup.py tests/test_postgres_tools.py tests/test_api/test_slot_mutation_guard.py tests/test_owner_target_guard.py tests/test_scheduler_helpers_routing.py
 (NEXUS_GATEWAY_PORT, NEXUS_API_URL, NEXUS_SLOT unset)
 ...
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-dbname audit: 16 targets: nexus_m10_fresh_test_32621, nexus_m10_template_test_32621, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_lane_close_*, test_slot_guard_6bece024f684452b881dedd18b28d7fb
+dbname audit: 16 targets: nexus_m10_fresh_test_76344, nexus_m10_template_test_76344, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_lane_close_*, test_slot_guard_983e3e76a587483fbd9460483a7689c1
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-197 passed, 7 warnings in 24.56s
+197 passed, 7 warnings in 22.41s
 ```
 
 `tests/test_postgres_tools.py::test_missing_tools_abort_before_database_changes`
@@ -119,6 +122,10 @@ Both refusal tests fail on the oid assertion: without the refusal, the locked
 target was dropped and recreated (a new oid) even though it was read-only.
 
 ## Offline Suites
+
+These runs predate the rebase onto f8dd073c. #1070 touches none of the files
+they cover; it only adds new files (its two travel-reachability test files were
+not in these runs).
 
 ```
 $ $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
