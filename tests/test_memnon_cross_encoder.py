@@ -294,7 +294,8 @@ def test_rerank_batch_window_scores_match_per_window_scoring():
     assert scores[3] == 0.0
 
 
-def test_rerank_batch_window_batch_failure_matches_per_window_scoring():
+def test_rerank_batch_raises_on_window_batch_error():
+    """A failed window batch propagates; no per-window retry runs (#812)."""
     sentences = [
         "Mara finds a needle there.",
         "The poison vial is broken.",
@@ -304,18 +305,14 @@ def test_rerank_batch_window_batch_failure_matches_per_window_scoring():
     windows = one_sentence_windows(sentences)
     model = WindowBatchFailingCrossEncoderModel()
     reranker = make_reranker(model, max_length=8)
-    reference = make_reranker(WindowBatchFailingCrossEncoderModel(), max_length=8)
 
-    scores = reranker.rerank_batch("query", [passage], batch_size=8)
+    with pytest.raises(RuntimeError, match="predict failed"):
+        reranker.rerank_batch("query", [passage], batch_size=8)
 
-    assert scores == pytest.approx(
-        [reference.score_pair_with_sliding_window("query", passage)]
-    )
-    assert scores == pytest.approx([0.5])
-    assert [call["batch_size"] for call in model.calls] == [8] + [None] * 5
+    assert [call["batch_size"] for call in model.calls] == [8]
     assert [call["pairs"] for call in model.calls] == [
         [("query", window) for window in windows]
-    ] + [[("query", window)] for window in windows]
+    ]
 
 
 def test_rerank_batch_normalizes_raw_logits_like_score_pair():
@@ -332,24 +329,22 @@ def test_rerank_batch_normalizes_raw_logits_like_score_pair():
     assert scores == pytest.approx([1 / (1 + np.exp(2.0)), 0.25])
 
 
-def test_rerank_batch_falls_back_to_per_passage_on_batch_error():
+def test_rerank_batch_raises_on_batch_error():
+    """A failed batch propagates; no per-passage retry runs (#812)."""
     model = BatchFailingCrossEncoderModel()
     reranker = make_reranker(model)
 
-    scores = reranker.rerank_batch(
-        "query",
-        ["aa", "bad", "cccc"],
-        batch_size=3,
-        use_sliding_window=False,
-    )
+    with pytest.raises(RuntimeError, match="batch failed"):
+        reranker.rerank_batch(
+            "query",
+            ["aa", "bad", "cccc"],
+            batch_size=3,
+            use_sliding_window=False,
+        )
 
-    assert scores == pytest.approx([0.2, 0.0, 0.4])
-    assert [call["batch_size"] for call in model.calls] == [3, None, None, None]
+    assert [call["batch_size"] for call in model.calls] == [3]
     assert [call["pairs"] for call in model.calls] == [
         [("query", "aa"), ("query", "bad"), ("query", "cccc")],
-        [("query", "aa")],
-        [("query", "bad")],
-        [("query", "cccc")],
     ]
 
 
