@@ -305,11 +305,77 @@ servers, not on the owner server.)
 
 ## Other Checks
 
+Rerun on commit `95f545a0` (the review fixes below):
+
 ```
 $ PYTHONPATH=$PWD $PY -m pytest -q tests/test_reachability.py
-38 passed, 5 warnings in 10.57s
-$ $PY -m black tests/test_character_relationship_id_types_pg.py   # reformatted once, then committed
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 9.41s
+$ $PY -m black --check tests/test_character_relationship_id_types_pg.py
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
 $ $PY -m flake8 tests/test_character_relationship_id_types_pg.py  # exit 0
 $ PYTHONPATH=$PWD $PY -m mypy tests/test_character_relationship_id_types_pg.py
 Success: no issues found in 1 source file
+$ PYTHONPATH=$PWD $PY scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
 ```
+
+## Review Fixes (Commit `95f545a0`)
+
+Three review findings, applied 2026-09-30.
+
+- `test_migration_139_refuses_drift` now passes
+  `ids=["summary_drift", "unknown_dependent"]`, so the node ids cited in the
+  PR exist and select one case each.
+- The migration header's lock note now names the `ACCESS EXCLUSIVE` lock on
+  `public.characters`. The type change drops and re-creates the two foreign
+  keys to `characters(id)`, and removing and re-adding their RI triggers
+  locks the referenced table until commit (`characters` is not rewritten).
+  Comment only; no SQL changed. Probe on a disposable database
+  (`qa640_836s2_lockprobe`, two bare tables, created and dropped), PostgreSQL
+  17.11, locks held by the session after the `ALTER TABLE ... TYPE bigint`
+  inside an open transaction:
+
+  ```
+           relname         |         mode
+  -------------------------+-----------------------
+   character_relationships | AccessExclusiveLock
+   character_relationships | AccessShareLock
+   character_relationships | ShareLock
+   character_relationships | ShareRowExclusiveLock
+   characters              | AccessExclusiveLock
+   characters              | AccessShareLock
+   characters              | RowShareLock
+   characters              | ShareRowExclusiveLock
+  (8 rows)
+  ```
+
+- The `tests/test_reachability.py` tail above now carries the guard line.
+
+Tails at `95f545a0` (`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT`
+unset):
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit \
+    "tests/test_character_relationship_id_types_pg.py::test_migration_139_refuses_drift[summary_drift]" \
+    "tests/test_character_relationship_id_types_pg.py::test_migration_139_refuses_drift[unknown_dependent]"
+..                                                                       [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 3 targets: postgres, qa640_836s2_summary_drift_*, qa640_836s2_unknown_dependent_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2 passed in 2.41s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_character_relationship_id_types_pg.py
+.....                                                                    [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 6 targets: postgres, qa640_836s2_int8_*, qa640_836s2_rerun_*, qa640_836s2_summary_drift_*, qa640_836s2_unknown_dependent_*, qa640_836s2_widen_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+5 passed in 6.36s
+```
+
+The quick first pass and the full gate above ran before this commit; the
+commit changes a parametrize `ids` argument and SQL comment lines only.
