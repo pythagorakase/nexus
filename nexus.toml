@@ -340,6 +340,9 @@ window_chunks = 30
 hostile_source_enabled = true
 roster_source_enabled = true
 acquaintance_source_enabled = true
+# Same-place introductions one character may join per tick.
+# At 1, each character joins at most one introduction per off-screen beat.
+acquaintance_introductions_per_entity_per_tick = 1
 roster_reach = 2
 
 [orrery.resolver]

@@ -66,7 +66,10 @@ from nexus.agents.orrery.weather import (
     climate_for_seed,
     weather_at,
 )
-from nexus.config.settings_models import OrreryResolverSettings
+from nexus.config.settings_models import (
+    OrreryCompositionSettings,
+    OrreryResolverSettings,
+)
 from nexus.presence.roster import read_roster, read_rosters
 from nexus.prompts.registry import PromptId, load
 
@@ -1593,6 +1596,7 @@ def compose_acquaintance_bindings(
     *,
     anchor_chunk_id: Optional[int],
     actor_ids: Iterable[int],
+    introductions_per_entity: int,
     composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose canonical off-screen stranger pairs sharing one place.
@@ -1600,7 +1604,12 @@ def compose_acquaintance_bindings(
     Same-zone pairs were ruled out as a shared composition source because that
     would widen every package boundary. This is the narrower ruled mechanism:
     same-place pairs feed only templates opting into ``forms_acquaintances``.
+    ``introductions_per_entity`` caps admitted introductions for each endpoint
+    in this tick and must be at least one.
     """
+
+    if introductions_per_entity < 1:
+        raise ValueError("introductions_per_entity must be at least 1")
 
     actor_id_set = set(actor_ids)
     present_actor_ids = _composition_present_actor_ids(
@@ -1642,9 +1651,12 @@ def compose_acquaintance_bindings(
         and int(row["target_entity_id"]) not in present_actor_ids
     }
     pairs: list[tuple[int, int]] = []
-    used_entity_ids: set[int] = set()
+    introduction_counts: dict[int, int] = {}
     for lower_id, higher_id in sorted(candidate_pairs):
-        if lower_id in used_entity_ids or higher_id in used_entity_ids:
+        if (
+            introduction_counts.get(lower_id, 0) >= introductions_per_entity
+            or introduction_counts.get(higher_id, 0) >= introductions_per_entity
+        ):
             continue
         if lower_id in actor_id_set:
             actor_id, target_id = lower_id, higher_id
@@ -1652,10 +1664,9 @@ def compose_acquaintance_bindings(
             actor_id, target_id = higher_id, lower_id
         else:
             continue
-        # Cap fanout at one introduction per entity per tick: besides keeping
-        # pair volume bounded, a character cannot narratively form several
-        # distinct first acquaintances in the same off-screen beat.
-        used_entity_ids.update((actor_id, target_id))
+        # The per-entity introduction cap comes from [orrery.composition].
+        introduction_counts[actor_id] = introduction_counts.get(actor_id, 0) + 1
+        introduction_counts[target_id] = introduction_counts.get(target_id, 0) + 1
         pairs.append((actor_id, target_id))
     return tuple(
         {Slot.ACTOR: actor_id, Slot.TARGET: target_id} for actor_id, target_id in pairs
@@ -1891,6 +1902,21 @@ def _roster_composition_settings(settings: Optional[Any]) -> tuple[bool, int]:
     if not 1 <= reach <= 4:
         raise ValueError("roster_reach must be between 1 and 4")
     return enabled, reach
+
+
+def _acquaintance_introductions_per_entity(settings: Any) -> int:
+    """Read the per-entity introduction cap through the composition model."""
+
+    if isinstance(settings, OrreryCompositionSettings):
+        return settings.acquaintance_introductions_per_entity_per_tick
+    if isinstance(settings, Mapping):
+        return OrreryCompositionSettings.model_validate(
+            dict(settings)
+        ).acquaintance_introductions_per_entity_per_tick
+    raise TypeError(
+        "Orrery composition settings must be OrreryCompositionSettings or a "
+        f"mapping, got {type(settings).__name__}"
+    )
 
 
 def compose_actor_faction_routes(
@@ -2210,6 +2236,9 @@ def compose_actor_target_routes(
             session,
             anchor_chunk_id=anchor_chunk_id,
             actor_ids=actor_id_set,
+            introductions_per_entity=_acquaintance_introductions_per_entity(
+                composition_settings
+            ),
             composition_cache=composition_cache,
         )
         add_routes(acquaintance_bindings, acquaintance_templates)
