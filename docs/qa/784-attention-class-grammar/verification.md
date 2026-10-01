@@ -98,7 +98,7 @@ Read-only SQL over `orrery_prompt_exposures` (kind `resolution`), `orrery_adjudi
 
 ## 781-S1 Comparison
 
-No 781-S1 pull request was open when this one was opened (2026-10-01), so its baseline rows could not be compared with the `head` rows above. The coordinator compares them when that PR exists; the `head` rows should be equal for the same seat and rendering.
+No 781-S1 pull request was open when this one was opened (2026-10-01). It has opened since as #1075 (head `d27baa07`, same base `56c884e7`). Its `docs/qa/781-rearm-grammar/verification.md` reports, with the same model (`gpt-6-astra`) and tokenizer (`o200k_base`) on both seats, these `baseline` rows: Gaia strict 14,427 / 3,260, lenient 13,329 / 2,942, guide 2,372 / 615; single-pass strict 20,136 / 4,536, lenient 18,596 / 4,092, guide 6,773 / 1,492; registry Gaia strict 23,846 / 5,806 at digest `5a2f4f690ad9`. **All seven equal this probe's `head` rows** for the same seat and rendering. The comparison read that file only; nothing was imported from the 781-S1 probe.
 
 ## Test Tails
 
@@ -127,6 +127,43 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 1824 passed, 745 skipped, 7 warnings in 35.60s
 ```
+
+### Review Fix: Card-Block Lines (Commit `9039988f`)
+
+Review found that `test_card_block_arms_on_a_seeded_snapshot` compared only token totals, so a wrong refill position or swapped markers passed (the o200k estimator counts `[0]` and `[5]`, and ` · background` and ` · meaningful`, the same). The probe now factors `card_block_arms` (each `(roster, arm)` pair's cards and rendered lines) out of `card_block_rows`; the JSON rows are unchanged. The test asserts, for all nine arms, that the lines equal the `_orrery_card_line` output it renders itself, that the full `proposal_ids` lists match, and that the tokens equal the estimator on the joined lines.
+
+Mutation check (each mutation applied to the probe, the test run, the probe restored byte for byte):
+
+```text
+refill positions shifted:  AssertionError: ('R1', 'refill')
+  At index 0 diff: '- [1] hide:01hide00 Actor 1: hide branch 1' != '- [0] hide:01hide00 Actor 1: hide branch 1'
+markers swapped:           AssertionError: ('R1', 'head_marked')
+  At index 0 diff: '- [0] stroll:00stroll Actor 0: stroll branch 0 · meaningful' != '- [0] stroll:00stroll Actor 0: stroll branch 0 · background'
+```
+
+Tails on `9039988f` (same environment as above):
+
+```text
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_orrery/test_attention_class_grammar_probe.py tests/test_orrery/test_gaia_registry_schema_pg.py tests/test_skald_wire.py tests/test_owner_target_guard.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa638_*, qa640_784s1_*, qa640_811_gaia_scene_*, qa885_presence_baseline_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+SKIPPED [1] tests/test_orrery/test_gaia_registry_schema_pg.py:347: Set NEXUS_638_ENUM_E2E=1 for the live Gaia enum-schema gate.
+SKIPPED [1] tests/test_skald_wire.py:2110: Set NEXUS_639_PRESENCE_E2E=1 for the live writer presence gate.
+184 passed, 2 skipped, 2 warnings in 9.41s
+
+$ $PY -m pytest -q tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1824 passed, 745 skipped, 7 warnings in 35.66s
+
+$ $PY -m pytest -q tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+54 passed, 5 warnings in 9.81s
+```
+
+Black (`2 files would be left unchanged`), flake8 (clean) and mypy (`Success: no issues found in 2 source files`) on the probe and its test. The probe, rerun on `9039988f` (exit 0), printed JSON equal to the run below in every key except `header.commit`, so the tables above stand.
 
 ## Full Probe JSON
 
