@@ -25,6 +25,8 @@ from nexus.telemetry.attempt_manifest import (
 )
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.turn_observation import (
+    BACKGROUND_SEAT_QUEUES,
+    LEGACY_SESSION_KEYED_CUTOFF,
     SCHEMA_VERSION,
     UNKNOWN,
     derive_turn_observation,
@@ -1322,6 +1324,7 @@ def test_session_keyed_background_usage_joins_as_legacy(
     ledger_clock: _LedgerClock,
 ) -> None:
     """Summary spend recorded under the session before #802 stays visible."""
+    ledger_clock.now = LEGACY_SESSION_KEYED_CUTOFF - timedelta(hours=12)
     session = str(uuid4())
     writer = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
     record_prompt_window(writer)
@@ -1444,10 +1447,80 @@ def test_session_keyed_background_usage_joins_as_legacy(
     )
 
 
+@pytest.mark.parametrize("seat", sorted(BACKGROUND_SEAT_QUEUES))
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "2026-09-26T23:41:17Z",
+        "2026-09-26T23:41:17.000001Z",
+        "2026-09-26T19:41:17-04:00",
+    ],
+)
+def test_session_keyed_background_usage_at_or_after_cutoff_raises(
+    ledger_clock: _LedgerClock, seat: str, timestamp: str
+) -> None:
+    """Every background seat respects the exact, offset-aware convention boundary."""
+    ledger_clock.now = LEGACY_SESSION_KEYED_CUTOFF
+    session = str(uuid4())
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [
+            {"phase": "writer", "recorded_at": "2026-09-26 23:39:17+00"},
+            {"phase": "complete", "recorded_at": "2026-09-26 23:40:17+00"},
+        ],
+        "manifests": [],
+        "jobs": [],
+    }
+    record_usage_event(
+        _event(
+            session,
+            "2026-09-26T23:41:16.999999Z",
+            seat,
+            1,
+            "background-model",
+            outcome="accepted",
+            input_tokens=100,
+            output_tokens=10,
+            total_tokens=110,
+        )
+    )
+    read_at = LEGACY_SESSION_KEYED_CUTOFF + timedelta(minutes=1)
+    observation = observe_turn(inspection, slot=4, read_at=read_at)
+    assert observation["attempts"] == []
+    legacy = observation["usage_totals"]["background"]["legacy_session_keyed"]
+    assert legacy["events"] == 1
+    assert legacy["seats"] == [seat]
+    assert legacy["input_tokens"] == 100
+    assert legacy["output_tokens"] == 10
+    assert observation["jobs"]["entries"] == []
+
+    record_usage_event(
+        _event(
+            session,
+            timestamp,
+            seat,
+            1,
+            "background-model",
+            outcome="accepted",
+            input_tokens=100,
+            output_tokens=10,
+            total_tokens=110,
+        )
+    )
+    with pytest.raises(ValueError) as error:
+        observe_turn(inspection, slot=4, read_at=read_at)
+    assert str(error.value) == (
+        f"Background seat {seat} recorded usage under session run {session} at "
+        f"{timestamp}, on or after 2026-09-26T23:41:17Z, when background workers "
+        "began recording under their job id (#802)"
+    )
+
+
 def test_join_refuses_rows_it_cannot_attribute(ledger_clock: _LedgerClock) -> None:
     """Foreign runs, unread days, naive clocks, drift and stray seats raise."""
     from nexus.telemetry.turn_observation import job_ledger_days, read_job_ledgers
 
+    ledger_clock.now = LEGACY_SESSION_KEYED_CUTOFF + timedelta(days=1)
     inspection, session, other = _two_pass_turn(ledger_clock)
     days = ledger_days(inspection)
     events, windows = read_turn_ledgers(session, days)
@@ -1490,9 +1563,10 @@ def test_join_refuses_rows_it_cannot_attribute(ledger_clock: _LedgerClock) -> No
     rerouted = [*events, accepted.model_copy(update={"provider": "other-provider"})]
     with pytest.raises(ValueError, match="conflicting provider values"):
         derive(rerouted, job_events)
-    # Background work under the session's run id joins as legacy, unguessed.
+    # Post-cutoff background work under the session's run id is a worker defect.
     legacy = accepted.model_copy(update={"seat": "summaries", "attempt": 1})
-    derive([*events, legacy], job_events)
+    with pytest.raises(ValueError, match="recorded usage under session run"):
+        derive([*events, legacy], job_events)
     # A call under a listed job's id and slot must name a seat of some queue.
     stray = job_events[0].model_copy(update={"seat": "skald_writer"})
     with pytest.raises(ValueError, match="seat skald_writer under job run"):

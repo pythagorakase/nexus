@@ -37,7 +37,10 @@ in ``legacy_session_keyed`` (``recorded_before`` names the convention change;
 ``events``, ``seats``, ``ledger_days`` and each token field), which is null when
 the turn has none. No job is guessed for it, so a summary job from before the
 change reads ``"unknown"`` usage and counts in ``jobs_without_usage`` while its
-spend appears in the legacy block.
+spend appears in the legacy block. Background workers record under their job id from
+``LEGACY_SESSION_KEYED_CUTOFF`` (2026-09-26T23:41:17Z, when PR #995 merged), so such an
+event recorded at or after that instant is a worker defect, and the join raises
+instead of filing it as legacy.
 
 Token counts are renderer, local-estimate or provider counts, and each section
 names its ``provenance``; nothing is priced (Decision 9, #858). A window's
@@ -76,7 +79,8 @@ attempt and job names its provider and transport.
 The join refuses, instead of guessing, rows from another session or an unread
 day, conflicting models or providers on one attempt, a timestamp without a UTC
 offset, phases recorded out of order, and an event under a listed job's id and
-slot whose seat no provider-backed queue records.
+slot whose seat no provider-backed queue records. Background-seat events under the
+session run id at or after the convention cutoff are also refused.
 
 Choice readiness is the server's ``complete`` phase row, which
 ``finish_generation`` writes in the transaction that stages the draft:
@@ -130,6 +134,8 @@ LEGACY_SESSION_KEYED = (
     "Recorded under the generation session before background workers recorded "
     "under their job id (#802); not attributable to one job."
 )
+# PR #995's merge commit f6140704 marks the immutable job-id convention boundary.
+LEGACY_SESSION_KEYED_CUTOFF = datetime(2026, 9, 26, 23, 41, 17, tzinfo=timezone.utc)
 
 Count = Union[int, str]
 AttemptKey = tuple[str, int]
@@ -314,8 +320,15 @@ def derive_turn_observation(
                 f"read: {list(ledger_days)}"
             )
         if event.seat in BACKGROUND_SEAT_QUEUES:
-            # Background work keyed by the session, as workers recorded it
-            # before they recorded under their job id; no job is guessed.
+            if _utc(event.ts) >= LEGACY_SESSION_KEYED_CUTOFF:
+                raise ValueError(
+                    f"Background seat {event.seat} recorded usage under session run "
+                    f"{event.run_id} at {event.ts}, on or after "
+                    f"{_iso(LEGACY_SESSION_KEYED_CUTOFF)}, when background workers "
+                    "began recording under their job id (#802)"
+                )
+            # Only pre-cutoff background work keyed by the session is legacy;
+            # no job is guessed for these historical events.
             legacy.append(event)
             continue
         usage.setdefault((event.seat, event.attempt), []).append(event)
