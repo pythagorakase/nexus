@@ -1,8 +1,9 @@
 # 783-S6 Verification Record
 
-Status: **Required Proof Passed; Static Gate Adds No Diagnostics**. The supplemental
-caller-audit probe has three out-of-scope fixture errors, reported below for
-coordinator triage under the common rules. No merge authorized or performed.
+Status: **Amendment 1 Applied; Required Proof Passed; No New Static Diagnostics**.
+The three supplemental caller-audit fixture errors are resolved by the coordinator
+amendment below. The original failed probe is retained as historical evidence.
+No merge authorized or performed.
 
 Inspected rebased implementation: `92118d71`. Final gates ran at `ab598bced1487745ca6cbdb68584e6194d0bde4e`.
 Latest fetched `origin/main`: `36ec0b2601811a0f89972542352e36c272be90c7`. The existing commit sequence was replayed
@@ -114,7 +115,7 @@ unit tests are labeled as such; no new mocks were introduced.
 | `tests/test_api/test_orrery_dev_endpoints.py:247` | `resolve_dry_run` | max playable SQL (:240-246); query can yield None; seeded_story uses seed_played_story (:137) | stored anchor clock | No override; accepted fixture chunks have clocks. If helper is used on an empty/damaged clone, shared refusal |
 | `tests/test_connection_lifecycle.py:136` | `resolve_dry_run` | insert RETURNING id (:106-107); no after successful insert; isolated two-cluster fixture (:1-5) | stored anchor clock | Metadata inserted, then world_time explicitly updated to 2196-07-06T23:00Z (:109-117); stored clock |
 | `tests/test_live_gate_clones_pg.py:115` | `resolve_dry_run` | story.anchor_chunk_id from seed_live_cycle_story (:107; test_live_cycle.py:111,167); no | stored anchor clock | seed_played_story accepted clocks; no override |
-| `tests/test_lore/test_recent_orrery_rulings_pg.py:117` | `resolve_dry_run` | int tick parameter from chunk_ids[1..3] (:234-257), inserted by _insert_accepted_chunk_after_rollback_gap (:44-81); no | stored anchor clock | NO metadata insert in that helper, no override: shared refusal. Confirmed three fixture errors in resume-rulings-probe; deferred to coordinator |
+| `tests/test_lore/test_recent_orrery_rulings_pg.py:119` | `resolve_dry_run` | int tick parameter from chunk_ids[1..3] (:237-260), inserted by _insert_accepted_chunk_after_rollback_gap (:46-84); no | explicit STORY_WORLD_TIME override (:123) | 2042-08-18T08:54Z (:37), also used for base_timestamp (:184). Sparse chunks still omit metadata; Amendment 1 supplies the permitted override through _resolve_then_commit. All three tests pass |
 | `tests/test_orrery/test_ambient.py:168` | `resolve_dry_run` | _resolve int parameter defaults to 100 (:161); all supplied anchors are integers; no | stored anchor clock | AmbientFakeSession inherits FakeSession clock behavior (test_resolver.py:222-226,445-447); present fixture clock, no override |
 | `tests/test_orrery/test_card_identity.py:141` | `resolve_dry_run` | max narrative ID (:138-140) in data-bearing save_04 corpus clone (:114); yes if corpus empty | stored anchor clock; **settings comprehension (:145-160) contains no clock/anchor keys | No override; corpus clocks are not guaranteed by max(id). Shared refusal for absent/NULL metadata |
 | `tests/test_orrery/test_character_experiences_pg.py:245` | `resolve_dry_run` | _resolve_sleep int parent parameter (:238), from _insert_chunk (:151-168); no | stored anchor clock | Helper inserts metadata and explicitly sets 2196-07-06T23:00Z (:165-168); stored clock |
@@ -515,7 +516,7 @@ tests/test_orrery/test_resolver.py:247: note: By default the bodies of untyped f
 Found 26 errors in 4 files (checked 8 source files)
 ```
 
-## Supplemental Caller-Audit Probe: Coordinator Triage
+## Supplemental Caller-Audit Probe: Coordinator Triage (Resolved by Amendment 1)
 
 This is outside the frozen proof set; the probe ran at original HEAD 711b7690.
 The fixture file and resolver behavior are unchanged by the rebase. The caller table exposed an existing
@@ -580,9 +581,9 @@ package, tunable or runtime settings change. Keep issue #783 open.
 The coordinator owns the whole-tree PostgreSQL gate at the final landed commit.
 Push and open a review-ready PR; do not merge or wait for bots.
 
-Coordinator: assign a separate fixture-clock repair for the three recent-rulings
-setup errors before the whole-tree PostgreSQL landing gate. The required proof
-set passes; these errors are explicitly reported under the unrelated-file rule.
+Coordinator Amendment 1 authorizes and completes the recent-rulings fixture-clock
+repair in this PR. The required proof set plus all three recent-rulings tests
+passes. The original probe errors below are retained only as historical evidence.
 The prior static-check question is resolved by the common-rules addition.
 No production story-opening clock gap remains unreported.
 
@@ -623,4 +624,152 @@ by a separate order before 783-S6 resumes?” It is now resolved; no unrelated
 static repair was made. The original stop-report is available in full in the
 retained 711b7690 commit.
 
-Codex — GPT-6 (exact runtime variant not exposed)
+## Coordinator Amendment 1 — 2026-10-01
+
+Amendment input and proof base: `d8128bdede4153bd4744d403ded1b13af07227b8`.
+Fetched `origin/main`: `2e70e9cb2c566f6f48e70ea84874670a719055f9`;
+`git merge-base --is-ancestor origin/main HEAD` exited 0. The branch already
+contains main; no rebase or history rewrite was performed for this amendment.
+Imports were proved to resolve to this worktree's `nexus/__init__.py`.
+
+Adapted test: `tests/test_lore/test_recent_orrery_rulings_pg.py`. The fixture's
+existing base timestamp is now named `STORY_WORLD_TIME` (2042-08-18T08:54Z) and
+supplied as `world_time_override` through `_resolve_then_commit`. The amendment
+explicitly permits this override alternative. The sparse BIGSERIAL chunk IDs,
+rollback gap, fixture prefix, resolve/adjudicate/commit path and all 24 existing
+assertions are unchanged. Module, helper and fixture docstrings describe the
+supplied clock. Production hydration and its missing-clock refusal are unchanged.
+No new database fixture or prefix was introduced; existing suite-owned prefixes
+are retained as required by the common rules. New cases still use qa640_783s6_*.
+
+The three tests named in the original supplemental probe now execute and pass:
+
+- `test_recent_rulings_render_real_outcomes_across_sparse_chunk_ids`
+- `test_recent_rulings_respect_configured_cap`
+- `test_recent_rulings_omit_empty_section`
+
+### PostgreSQL Proof Set Plus Recent Rulings
+
+The exact command below ran in the foreground under `subprocess.run(timeout=590)`;
+the outer harness yielded and was awaited through completion. Exit status: 0.
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 NEXUS_TEST_PROVIDER_ONLY=1 TMPDIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/amendment-proof-tmp tests/test_orrery/test_routine_clock_required_pg.py tests/test_orrery/test_substrate.py tests/test_orrery/test_resolver.py tests/test_orrery/test_composition_sources_live.py tests/test_orrery/test_faction_membership_roles_pg.py tests/test_orrery/test_pair_tag_substrate.py tests/test_orrery/test_evidence.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py tests/test_lore/test_recent_orrery_rulings_pg.py
+```
+
+```text
+........................................................................ [ 16%]
+........................................................................ [ 32%]
+........................................................................ [ 49%]
+........................................................................ [ 65%]
+........................................................................ [ 82%]
+........................................................................ [ 98%]
+......                                                                   [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 20 targets: nexus_test_i685_* x3, postgres, qa640_783s6_* x11, qa640_membership_roles_*, qa640_pair_tag_substrate_*, qa885_composition_sources_*, qa885_evidence_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+438 passed, 5 warnings in 30.49s
+```
+
+### Static Checks and Pre-Existing Diagnostics
+
+Baseline file extracted using `git show origin/main:tests/test_lore/test_recent_orrery_rulings_pg.py`
+into the amendment scratch directory. Mypy uses `--shadow-file` so baseline and
+branch are checked at the same module path and with the same configuration.
+Black and flake8 pass on both versions. Mypy reports the same single diagnostic
+on untouched `_format_gaia_user_prompt` usage (branch :365, main :362):
+`SimpleNamespace` supplied where `SkaldWriterWire` is expected. No new diagnostic;
+no unrelated repair. The earlier static evidence for the other files is retained.
+
+#### black-branch
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check tests/test_lore/test_recent_orrery_rulings_pg.py
+```
+
+Exit status: 0.
+
+```text
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+```
+
+#### black-main
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/amendment-origin-main/tests/test_lore/test_recent_orrery_rulings_pg.py
+```
+
+Exit status: 0.
+
+```text
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+```
+
+#### flake8-branch
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 tests/test_lore/test_recent_orrery_rulings_pg.py
+```
+
+Exit status: 0.
+
+Output: empty (no stdout or stderr).
+
+#### flake8-main
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/amendment-origin-main/tests/test_lore/test_recent_orrery_rulings_pg.py
+```
+
+Exit status: 0.
+
+Output: empty (no stdout or stderr).
+
+#### mypy-branch
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases tests/test_lore/test_recent_orrery_rulings_pg.py
+```
+
+Exit status: 1.
+
+```text
+tests/test_lore/test_recent_orrery_rulings_pg.py:365: error: Argument 2 to "_format_gaia_user_prompt" of "LogonUtility" has incompatible type "SimpleNamespace"; expected "SkaldWriterWire"  [arg-type]
+Found 1 error in 1 file (checked 1 source file)
+```
+
+#### mypy-main
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases --shadow-file tests/test_lore/test_recent_orrery_rulings_pg.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/amendment-origin-main/tests/test_lore/test_recent_orrery_rulings_pg.py tests/test_lore/test_recent_orrery_rulings_pg.py
+```
+
+Exit status: 1.
+
+```text
+tests/test_lore/test_recent_orrery_rulings_pg.py:362: error: Argument 2 to "_format_gaia_user_prompt" of "LogonUtility" has incompatible type "SimpleNamespace"; expected "SkaldWriterWire"  [arg-type]
+Found 1 error in 1 file (checked 1 source file)
+```
+
+All amendment requirements applied. PR #1088 is updated in place; fix commits only.
+No merge. The coordinator still owns the whole-tree PostgreSQL landing gate.
+
+Codex — GPT-6
