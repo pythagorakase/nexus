@@ -139,6 +139,79 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 54 passed, 5 warnings in 9.09s
 ```
 
+## Review Fixes (Commits `b2b4f609` and `df003728`)
+
+Confirmed review findings applied after the gates above:
+
+- `logs_since` and `log_mark` read a half-finished rotation as a complete
+  chain. `_open_segments` now treats a segment that exists past the first
+  missing one as a rotation in progress and retakes the snapshot every
+  `poll_interval_seconds`, raising when the gap outlasts `stop_grace_seconds`;
+  `log_mark` waits the same way when the current file is missing while `.1`
+  exists, and returns `0:0:0` only when `.1` is absent too. The empty mark's
+  `.backup_count` refusal now runs before the snapshot.
+- `wait_for_writer` re-checks the writer's identity on each poll when the
+  writer is not this process's child, so an exited writer that another live
+  parent has not reaped (a zombie) counts as gone instead of timing out into a
+  false "outlived its service" error. The caller's own child is still reaped
+  by the poll's `waitpid`.
+- `test_spawn_captured_releases_the_callers_stderr` records its pids on disk
+  before the script exits, so a timed-out run still kills both processes; the
+  activation test's disk poll treats the writer's rename gap as "not yet".
+- The QA kit paragraph's 109-column line is rewrapped; no words changed.
+
+Red run of the three new tests, with `_open_segments`, `log_mark` and the
+`wait_for_writer` loop planted back to their pre-fix logic (restored by copying
+the saved files back before the commit):
+
+```
+E           AssertionError: assert ['current'] == ['oldest', 'current', 'fresh']
+E       Failed: DID NOT RAISE <class 'nexus.runtime.supervisor.RuntimeError_'>
+E           AssertionError: assert False is True
+E            +  where False = wait_for_writer(59519, PosixPath('<tmp>/logs/brief.log'), 5, 0.1)
+FAILED tests/test_runtime/test_supervisor.py::test_logs_since_waits_out_a_rotation_in_progress
+FAILED tests/test_runtime/test_supervisor.py::test_logs_since_refuses_a_lasting_gap_in_the_chain
+FAILED tests/test_runtime/test_supervisor.py::test_wait_for_writer_returns_for_another_parents_exited_writer
+3 failed, 40 deselected, 5 warnings in 6.93s
+```
+
+The same PostgreSQL gate command as above, on `df003728`, with
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+325 passed, 7 warnings in 121.44s (0:02:01)
+```
+
+(The run of that gate on `b2b4f609` failed
+`test_activate_captures_through_the_writer_under_the_policy` at
+`assert not pid_alive(writer_pid)`: the first version of the identity
+re-check reported the test process's own exited writer gone before reaping
+it. `df003728` limits the re-check to writers this process cannot reap.)
+
+`$PY -m pytest -q tests/test_reachability.py tests/test_prompt_lint.py` on
+`df003728`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+76 passed, 5 warnings in 22.74s
+```
+
+Black on the four changed Python files: `4 files left unchanged.` Flake8 on
+them reports nothing; mypy reports only the 9 pre-existing
+`nexus/runtime/supervisor.py` errors named below.
+
+The branch does not hold the two slice commits the order asked for (842-S2,
+then 842-S3): S2 fixes and the evidence came after the S3 commit, and these
+review fixes add two more. Rebuilding it would rewrite published history,
+which this fix pass may not do; the coordinator decides.
+
+## Static Checks
+
 Black: `10 files would be left unchanged.` Flake8 on the changed files reports
 nothing new: `nexus/cli.py` and `nexus/config/settings_models.py` keep their 9
 and 6 pre-existing E501 lines, the same counts as `origin/main`. Mypy: the
