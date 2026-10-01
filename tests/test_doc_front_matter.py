@@ -119,7 +119,9 @@ def read_front_matter(text: str) -> dict[str, Any] | None:
     raise FrontMatterError("front matter opened on line 1 is never closed")
 
 
-def _path_error(value: Any, paths: frozenset[str], directories: set[str]) -> str:
+def _path_error(
+    value: Any, paths: frozenset[str], directories: set[str], root: Path
+) -> str:
     """Describe why ``value`` is not an existing repository path, or return ''."""
     if not isinstance(value, str) or not value:
         return f"{value!r} is not a non-empty string"
@@ -128,7 +130,9 @@ def _path_error(value: Any, paths: frozenset[str], directories: set[str]) -> str
     parts = PurePosixPath(value.rstrip("/")).parts
     if any(part in {".", ".."} for part in parts) or "//" in value:
         return f"{value!r} is not a normalized repository-relative path"
-    if value.endswith("/") or value in directories:
+    # ``directories`` holds the parents of git-visible files; an existing
+    # directory that holds only ignored files, or none, is on disk only.
+    if value.endswith("/") or value in directories or (root / value).is_dir():
         return f"{value!r} names a directory; sources name files"
     if value not in paths:
         return f"file {value!r} does not exist"
@@ -146,6 +150,7 @@ def _validate_document(
     documents: dict[str, dict[str, Any]],
     paths: frozenset[str],
     directories: set[str],
+    root: Path,
 ) -> list[str]:
     """Check one document's front matter against the documented contract."""
     errors: list[str] = []
@@ -176,7 +181,7 @@ def _validate_document(
             if len(set(sources)) != len(sources):
                 errors.append(f"{path}: sources lists a path more than once")
             for source in sources:
-                problem = _path_error(source, paths, directories)
+                problem = _path_error(source, paths, directories, root)
                 if problem:
                     errors.append(f"{path}: source {problem}")
 
@@ -256,7 +261,9 @@ def classify(root: Path, paths: frozenset[str]) -> Classification:
     }
     for path, front_matter in result.documents.items():
         result.errors.extend(
-            _validate_document(path, front_matter, result.documents, paths, directories)
+            _validate_document(
+                path, front_matter, result.documents, paths, directories, root
+            )
         )
         result.errors.extend(_chain_errors(path, result.documents))
     return result
@@ -309,6 +316,9 @@ def _history_git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = {
         key: value for key, value in os.environ.items() if not key.startswith("GIT_")
     }
+    # Ask git to skip optional index writes. git 2.49 still refreshes the index
+    # after a working-tree `git diff` (its refresh ignores this variable).
+    env["GIT_OPTIONAL_LOCKS"] = "0"
     return subprocess.run(
         ["git", "-C", str(root), *args],
         env=env,
@@ -406,6 +416,16 @@ def _changed_paths(root: Path, merge_base: str) -> list[str]:
     return sorted(changed)
 
 
+def _history_paths(root: Path) -> frozenset[str]:
+    """Git's file view of ``root``, read without any inherited ``GIT_*``."""
+    listing = _history_output(
+        root, "ls-files", "-z", "--cached", "--others", "--exclude-standard"
+    )
+    return frozenset(
+        path for path in _null_separated(listing) if (root / path).is_file()
+    )
+
+
 def _declared_sources(front_matter: dict[str, Any] | None) -> set[str]:
     """The string entries of a front matter block's ``sources`` list."""
     sources = (front_matter or {}).get("sources")
@@ -458,7 +478,8 @@ def freshness_errors(root: Path, base_ref: str = BASE_REF) -> list[str]:
     merge_base = _merge_base(root, base_ref)
     changed = _changed_paths(root, merge_base)
     errors: list[str] = []
-    for path, front_matter in classify(root, repository_paths(root)).documents.items():
+    documents = classify(root, _history_paths(root)).documents
+    for path, front_matter in documents.items():
         base: dict[str, Any] | None = None
         if _history_git(root, "cat-file", "-e", f"{merge_base}:{path}").returncode == 0:
             text = _history_output(root, "show", f"{merge_base}:{path}")
@@ -588,6 +609,19 @@ def test_validator_rejects_contract_violations(
     errors = classify(tmp_path, paths).errors
     assert any(message in error for error in errors), errors
     assert all(error.startswith("docs/a.md: ") for error in errors), errors
+
+
+def test_unlisted_directory_source_is_named_a_directory(tmp_path: Path) -> None:
+    """A directory git does not list (ignored or empty) is not a missing file."""
+    _tree(tmp_path)
+    _write(tmp_path, ".gitignore", "build/\n")
+    _write(tmp_path, "build/out.txt", "")
+    (tmp_path / "empty").mkdir()
+    for value in ("build", "empty"):
+        _write(tmp_path, "docs/a.md", _canonical((value,)))
+        assert classify(tmp_path, repository_paths(tmp_path)).errors == [
+            f"docs/a.md: source {value!r} names a directory; sources name files"
+        ]
 
 
 @pytest.mark.parametrize(
@@ -1084,3 +1118,25 @@ def test_missing_history_fails_loudly(tmp_path: Path) -> None:
     _git(orphan, "checkout", "-q", "main")
     with pytest.raises(FreshnessHistoryError, match="no merge base"):
         freshness_errors(orphan, base_ref="lonely")
+
+
+def test_inherited_git_environment_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hook's GIT_DIR or GIT_WORK_TREE cannot hide documents from the check."""
+    root = tmp_path / "repo"
+    _tree(root)
+    merge_base = _branch(root)
+    _write(root, "src/app.py", "VALUE = 2\n")
+    _commit(root, "edit app")
+    other = tmp_path / "other"
+    other.mkdir()
+    _git(other, "init", "-q")
+    _write(other, ".git/info/exclude", "docs/\n")
+    expected = [_stale("docs/a.md", "src/app.py", merge_base)]
+
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    assert freshness_errors(root, base_ref="main") == expected
+
+    monkeypatch.setenv("GIT_WORK_TREE", str(other))
+    assert freshness_errors(root, base_ref="main") == expected
