@@ -7,7 +7,7 @@ paid call, no gateway lane; every PostgreSQL test ran on disposable clones
 
 ## Item 14: Remaining `except Exception` Handlers
 
-Command, run on the final tree:
+Command, run at `6e415bdd` (the final product commit):
 
 ```
 git grep -n "except Exception" -- nexus/agents/memnon/utils/cross_encoder.py \
@@ -17,9 +17,10 @@ git grep -n "except Exception" -- nexus/agents/memnon/utils/cross_encoder.py \
   nexus/agents/lore/utils/turn_cycle.py nexus/agents/lore/lore.py nexus/memory/incremental.py
 ```
 
-47 hits. Apart from `memnon.py:1553` (see Open Questions), none sits on the
-path from `query_memory`, `rerank_results` or `generate_embedding` to a turn
-and swallows the error:
+46 hits. None sits on the path from `query_memory`, `rerank_results` or
+`generate_embedding` to a turn and swallows the error. (The 47th hit,
+`_get_chunk_by_id` at `memnon.py:1553`, was deleted at `6e415bdd`; see
+Second Review Fixes.)
 
 | Hit | Function | Why it is not a swallow on the turn's retrieval path |
 |---|---|---|
@@ -39,7 +40,6 @@ and swallows the error:
 | `memnon.py:1356` | `_test_hybrid_search` | Legacy diagnostic (order: Out of Scope). |
 | `memnon.py:1419` | `get_chunk_by_id` | Fetches one chunk by id with SQL, no model. Its turn caller is the warm-analysis handler `turn_cycle.py:376` (Out of Scope); `retrieve_context` turns its `None` into a raised `ValueError`. |
 | `memnon.py:1489` | `get_recent_chunks` | Logs and re-raises as `RuntimeError("FATAL: Failed to retrieve recent chunks ...")`. |
-| `memnon.py:1553` | `_get_chunk_by_id` | A direct SQL lookup by id, with no embedder, reranker or search, reached from `query_memory` (`memnon.py:1596`) when the query starts with `chunk_id:`. It logs a SQL error and returns `results: []`. A turn can reach it: Pass 2 sends the raw player input to `query_memory` verbatim (`incremental.py:136`, `145`), so input that starts with `chunk_id:` takes this branch. See Open Questions. |
 | `db_access.py:200` | `check_vector_extension` | Schema setup (`db_schema.py`), not retrieval. |
 | `db_access.py:355` | `execute_vector_search` | No caller under `nexus/` (order: Out of Scope). |
 | `db_access.py:467`, `493`, `540`, `559`, `566`, `576` | `setup_database_indexes` | Index setup (`db_schema.py`), not retrieval (order: expected survivor). |
@@ -56,18 +56,6 @@ and swallows the error:
 | `lore.py:478` | `retrieve_context` | Logs and re-raises (`raise`). |
 | `lore.py:877` | `main` | The module's command-line entry point. |
 | `incremental.py:190` | `expand_warm_slice` | Warm-slice handler, named 202 in the order (Out of Scope). |
-
-## Open Questions
-
-- `_get_chunk_by_id`'s handler (`memnon.py:1553`) is reachable from a turn:
-  `retrieve_from_raw_input` passes the stripped player input to
-  `query_memory` unchanged (`incremental.py:136`, `145`), and `query_memory`
-  routes any query that starts with `chunk_id:` followed by an integer to
-  `_get_chunk_by_id` (`memnon.py:1596-1599`), whose handler logs a SQL error
-  and returns `results: []`. The error it swallows is a SQL error on a lookup
-  by id, not an embedder, reranker or search error, and the order does not
-  name it under Required Changes or Out of Scope. Does 812-Q8 cover it
-  (delete the handler), or does it stay out of scope for this slice?
 
 ## Red Run Against `main`
 
@@ -116,7 +104,10 @@ red test without a "fails today" line in the order is
 `MEMNON.reranker` is new. `test_blank_raw_input_runs_no_query` passes on
 `main` (the swallow hid the blank query there) and pins the new guard.
 
-## Proof Tails (Final Tree)
+## Proof Tails (at `6d66762a`)
+
+These tails ran at `6d66762a`, before the review fixes. The same commands at
+the final product commit are under Proof Tails (at `6e415bdd`).
 
 PostgreSQL proof, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT`
 unset:
@@ -193,11 +184,14 @@ sanitizes to nothing, so a directive of `???` sends no `""` to `query_memory`;
 `test_sql_layer_propagates_a_query_error` asserts the raised error has no
 `__context__`; the artifact tests' fixture (now `isolated_model_caches`)
 isolates both caches and covers `test_score_pair_raises_for_an_over_long_pair`.
-The item-14 table above is unchanged at 47 hits (the `lore.py` fix replaced one
-line with one line).
+The `lore.py` fix replaced one line with one line, so it changed no item-14
+hit.
 
-Red check: the new `test_retrieve_context_skips_a_directive_that_sanitizes_to_nothing`
-against the previous `lore.py` (`6d66762a`):
+The FakeMemnon test below was removed at `6e415bdd` and replaced by
+`test_blank_directive_runs_no_query` on a real LORE (see Second Review
+Fixes). Its red check, kept as the record of this round: the then-new
+`test_retrieve_context_skips_a_directive_that_sanitizes_to_nothing` against
+the previous `lore.py` (`6d66762a`):
 
 ```
 E       AssertionError: assert [''] == []
@@ -239,3 +233,99 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 The four skips are the same four named above. Black reports the four changed
 Python files unchanged; flake8 reports nothing new; mypy reports no new error
 in the changed files.
+
+## Second Review Fixes (at `6e415bdd`)
+
+- `MEMNON._get_chunk_by_id` has no `try`/`except` (812-Q8: every error
+  propagates through every layer). It was reachable from a turn: Pass 2 sends
+  the stripped player input to `query_memory` unchanged (`incremental.py:136`,
+  `145`), and `query_memory` routes a query that starts with `chunk_id:` and an
+  integer to `_get_chunk_by_id` (`memnon.py:1596-1599`). The not-found branch
+  stays: no row is a data state, not a failure. The item-14 grep falls from 47
+  to 46 hits; the open question on this handler is closed.
+- New `test_chunk_id_lookup_propagates_a_query_error` (PostgreSQL, on the
+  clone): `query_memory("chunk_id:<seeded id>")` returns the seeded chunk and
+  an unknown id returns no results; after
+  `ALTER TABLE chunk_metadata RENAME COLUMN world_layer TO world_layer_gone`
+  on the disposable clone, the same query raises
+  `sqlalchemy.exc.ProgrammingError` whose `orig` is
+  `psycopg2.errors.UndefinedColumn`.
+- The FakeMemnon test `test_retrieve_context_skips_a_directive_that_sanitizes_to_nothing`
+  is deleted; `tests/test_lore/test_lore_retrieve_context.py` is back to its
+  base content (`git diff 41783c1d -- tests/test_lore/test_lore_retrieve_context.py`
+  is empty). New `test_blank_directive_runs_no_query(lore_on_clone)` runs
+  `asyncio.run(lore_on_clone.retrieve_context(["???"], chunk_id=None))` on a
+  real LORE on the clone and asserts the directive's `search_progress` is
+  empty.
+
+Red check: the two new tests, with `nexus/agents/memnon/memnon.py` from
+`dfa9fa8f` (the handler present) and `nexus/agents/lore/lore.py` from
+`6d66762a` (no blank-query filter) copied over the tree, then restored:
+
+```
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rfs -p no:cacheprovider -p tests.dbname_audit --tb=line -p no:logging tests/test_memnon_model_failures_pg.py::test_chunk_id_lookup_propagates_a_query_error tests/test_memnon_model_failures_pg.py::test_blank_directive_runs_no_query
+
+tests/test_memnon_model_failures_pg.py:276: Failed: DID NOT RAISE <class 'sqlalchemy.exc.ProgrammingError'>
+nexus/agents/memnon/utils/embedding_manager.py:267: ValueError: Embedding model 'Octen-Embedding-4B' was given empty or non-string text: ''
+dbname audit: owner targets: none
+FAILED tests/test_memnon_model_failures_pg.py::test_chunk_id_lookup_propagates_a_query_error
+FAILED tests/test_memnon_model_failures_pg.py::test_blank_directive_runs_no_query
+2 failed, 1 warning in 7.46s
+```
+
+Static checks: Black reports the three changed Python files unchanged; flake8
+reports nothing on the test file and 66 findings on `memnon.py`, the same 66 as
+at `dfa9fa8f`; mypy reports 33 errors in `memnon.py`, the same 33 as at
+`dfa9fa8f`, and none in the test file.
+
+## Proof Tails (at `6e415bdd`)
+
+Every tail below ran at `6e415bdd`, the final product commit, with
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset.
+
+The order's PostgreSQL proof list:
+
+```
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_memnon_model_failures_pg.py tests/test_memnon_embedding_cache.py tests/test_memnon_runtime_config.py tests/test_presence_boost_pg.py tests/test_orrery/test_recall_disclosure_pg.py tests/test_lore/test_window_coverage_pg.py tests/test_lore/test_scene_order_render.py tests/test_lore/test_runtime_config.py tests/test_lore/test_pass2_baseline_pg.py tests/test_lore/test_baseline_fingerprint_refresh_pg.py tests/test_lore/test_logon_lazy_init.py tests/test_lore/test_pass2_chunk1369.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 46 targets: nexus_test_pass2_* x7, postgres, qa640_908_fingerprint_*, qa640_historical_coverage_* x3, qa640_memnon_config_*, qa640_scene_clock_*, qa640_scene_null_clock_*, qa640_scene_parent_*, qa640_settings_stamp_*, qa640_window_coverage_*, qa683_presence_* x2, qa885_transaction_writer_*, qa_lazy_logon_*, qa_model_cache_* x2, qa_model_failures_* x15, qa_pass2_corpus_*, qa_runtime_config_* x5, qa_wt724_recall_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+245 passed, 23 warnings in 158.98s (0:02:38)
+```
+
+No skips (the log has no `SKIPPED` line). 245 = the 243 above plus the two new
+tests.
+
+Focused offline proof:
+
+```
+$PY -m pytest -q tests/test_memnon_cross_encoder.py tests/test_memnon_cross_encoder_artifact.py tests/test_memnon_cross_encoder_dependencies.py tests/test_api/test_import_side_effects.py tests/test_lore/test_turn_cycle.py tests/test_lore/test_memory_manager.py tests/test_lore/test_lore_retrieve_context.py tests/test_memnon tests/test_doc_front_matter.py
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+176 passed, 4 skipped, 8 warnings in 20.33s
+```
+
+176 = the 177 at `cb34f9d0` less the deleted FakeMemnon test. The four skips
+are the same four named above.
+
+Offline suites and reachability:
+
+```
+$PY -m pytest -q -p no:cacheprovider tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2633 passed, 434 skipped, 8 warnings in 437.11s (0:07:17)
+
+$PY -m pytest -q -p no:cacheprovider tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1816 passed, 742 skipped, 7 warnings in 39.29s
+
+$PY -m pytest -q -p no:cacheprovider tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 10.45s
+```
+
+The two more skips than at `6d66762a` are the two new PostgreSQL tests, which
+need `NEXUS_RUN_POSTGRES=1` and pass in the PostgreSQL proof above.
