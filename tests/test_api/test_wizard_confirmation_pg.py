@@ -365,6 +365,7 @@ async def test_wildcard_with_deprecated_category_tag_gets_model_retry(
             "UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11"
         )
     before = read_cache(saved_character)
+    assert before is not None and before.thread_id is not None
     context = WizardContext(
         slot=4,
         cache=before,
