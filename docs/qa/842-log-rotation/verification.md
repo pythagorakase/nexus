@@ -493,3 +493,118 @@ Flake8 on them reports only `nexus/cli.py`'s 9 pre-existing E501 lines (the
 same count as `origin/main`); mypy reports only the 9 pre-existing
 `nexus/runtime/supervisor.py` errors. `nexus.toml` is unchanged in this pass;
 the commit's `validate-config` hook passed.
+
+## After the Verification Pass (Merge `d7272f23`, Fix `d7881bfc`)
+
+Two verifiers proved two more defects on `e56457da`.
+
+1. **An unanswered local-model ownership probe read as "not ours" (P2).**
+   `_process_is_ours` and `_download_process_is_ours`
+   (`nexus/api/local_inference.py`) caught `OSError` and `SubprocessError`,
+   `TimeoutExpired` included, and returned False. Since this PR that verdict
+   goes to `_release_record` (`_read_active`, `_deactivate_locked`,
+   `cancel_download`) and to the failed branch of `download_status`, which
+   wait for the recorded writer. The live server still holds the pipe, so the
+   wait timed out and `kill_writer` killed the writer of a running server.
+   The ownership probe times out at `[runtime.health].timeout_seconds` (2 s)
+   and the writer wait at `stop_grace_seconds` (10 s), so any `ps` latency
+   between the two got past the item-1 guard. Fix: both functions share
+   `_probe_command`, which raises `LocalInferenceError` ("Cannot tell whether
+   pid N is the managed llama-server" or "... the local-model download
+   worker", then the reason) when `ps` cannot be started, outlasts
+   `timeout_seconds`, or exits non-zero while the pid is alive. A non-zero
+   exit for a pid that has meanwhile gone is the probe's answer (None). Only
+   a probe that ran and whose command line lacks the markers returns False.
+2. **The PostgreSQL proof set was red from branch staleness (P3).**
+   `origin/main` gained migration 139 (`56c884e7`, #1064) after `0594ca0f`,
+   and `NEXUS_template` is stamped 139, so
+   `test_migration_state_compares_stamps_with_this_checkout` saw
+   `unknown=[139]`. Fix: `origin/main` (`56c884e7`) merged as the plain merge
+   commit `d7272f23` without a conflict; `migrations/` now ends at
+   `139_character_relationship_bigint_ids.sql`. No product code changed for
+   this finding.
+
+New tests in `tests/test_api/test_local_inference.py` (the capture config
+gains a `timeout_seconds` keyword; each runs with `timeout_seconds = 1` and
+`stop_grace_seconds = 4`, and each kind of `ps` stands first on `PATH`:
+`slow` sleeps 1.5 s then runs `/bin/ps`, `exits-1` exits 1, `missing` leaves
+no `ps` on `PATH`):
+
+- `test_active_raises_when_the_ownership_probe_goes_unanswered[kind]`:
+  `activate` starts the stub llama-server under a real writer; with the stub
+  in place `active()` raises the probe error in under 4 s, the writer is
+  still a running unreaped child (`waitpid(writer, WNOHANG) == (0, 0)`), the
+  server is alive, and the record is byte-for-byte unchanged. With the real
+  `ps` back, `deactivate()` stops the server and its writer is gone.
+- `test_download_status_raises_when_the_ownership_probe_goes_unanswered[kind]`:
+  a live process whose command line names `nexus.api.local_download_worker`
+  and `qa842/none`, under a real writer, with its record; `download_status()`
+  raises the probe error in under 4 s, the writer still runs, and the record
+  is unchanged. With the real `ps` back, `download_status()` reports
+  `downloading`.
+
+### Red Run
+
+Scratch plant: the old verdict restored, each of the two functions wrapping
+`_probe_command` in `except LocalInferenceError: return False`. Reverted with
+`git checkout -- nexus/api/local_inference.py` before anything else ran.
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q -rf tests/test_api/test_local_inference.py -k unanswered
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_api/test_local_inference.py::test_active_raises_when_the_ownership_probe_goes_unanswered[exits-1]
+FAILED tests/test_api/test_local_inference.py::test_active_raises_when_the_ownership_probe_goes_unanswered[missing]
+FAILED tests/test_api/test_local_inference.py::test_active_raises_when_the_ownership_probe_goes_unanswered[slow]
+FAILED tests/test_api/test_local_inference.py::test_download_status_raises_when_the_ownership_probe_goes_unanswered[exits-1]
+FAILED tests/test_api/test_local_inference.py::test_download_status_raises_when_the_ownership_probe_goes_unanswered[missing]
+FAILED tests/test_api/test_local_inference.py::test_download_status_raises_when_the_ownership_probe_goes_unanswered[slow]
+6 failed, 26 deselected, 7 warnings in 15.45s
+```
+
+The `slow` case reproduces the verifier's finding exactly: the planted
+`active()` raised "Log writer pid 57913 for .../local-model.log outlived its
+process by 4.0s; a process still holds the captured output. Killed the
+writer." while the server lived. In the `exits-1` and `missing` cases the
+planted verdict reached the writer wait, whose own probe (item 1 of the
+previous pass) raised `WriterProbeError`, so the error named the writer, not
+the server. Green on the fix: `6 passed, 26 deselected, 7 warnings in 4.72s`.
+
+### Gates on `d7881bfc`
+
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_runtime tests/test_runtime_home.py tests/test_api/test_local_inference.py tests/test_api/test_local_models_endpoints.py tests/test_owner_target_guard.py`
+(`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT` unset):
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+345 passed, 7 warnings in 136.89s (0:02:16)
+```
+
+Offline `$PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2691 passed, 429 skipped, 8 warnings in 420.88s (0:07:00)
+```
+
+Offline `$PY -m pytest -q tests/test_api tests/test_reachability.py`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+706 passed, 238 skipped, 7 warnings in 43.74s
+```
+
+Offline `$PY -m pytest -q tests/test_orrery`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1179 passed, 505 skipped, 7 warnings in 10.10s
+```
+
+Black on the two changed Python files: `2 files would be left unchanged.`
+Flake8 on them is clean; mypy: `Success: no issues found in 2 source files`.
+`nexus.toml` is unchanged in this pass; the commit's `validate-config` hook
+passed.

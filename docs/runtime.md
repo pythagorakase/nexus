@@ -302,7 +302,12 @@ in `docs/cli.md`).
   a cancelled or failed download, and the next activation or download wait
   for the previous writer the same way the supervisor does. Every removal of
   `local-model.pid.json` or `local-model.download.json`, on failure paths
-  too, waits for the writer the record names first.
+  too, waits for the writer the record names first. A record is released as
+  "no longer ours" only when a `ps` probe of its pid ran and its command line
+  lacks the server's or the worker's markers; a probe that cannot run (no
+  `ps`, a non-zero exit while the pid is alive, or no answer within
+  `[runtime.health].timeout_seconds`) fails the status read or the command
+  and leaves the record and its writer untouched.
 
 ## CLI Surface
 
