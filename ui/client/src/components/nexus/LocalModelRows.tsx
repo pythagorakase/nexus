@@ -433,7 +433,7 @@ export function LocalModelRows({
                               aria-pressed={armed === q.path}
                               data-testid={`lm-trash-${family}-${q.entry.quant}`}
                             >
-                              <Trash2 size={11} />
+                              {armed === q.path ? <AlertTriangle size={11} /> : <Trash2 size={11} />}
                             </button>
                           )}
                           {q.isDownloading && (

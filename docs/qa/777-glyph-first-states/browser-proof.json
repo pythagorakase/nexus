@@ -1,0 +1,300 @@
+{
+  "css": "index-CMIxPpqU.css",
+  "palettes": [
+    {
+      "theme": "veil",
+      "brass": "#b83d7a",
+      "hovered": "hsl(330.2439024390244 60% 70%)"
+    },
+    {
+      "theme": "gilded",
+      "brass": "hsl(43 74% 40%)",
+      "hovered": "hsl(45 75% 60%)"
+    },
+    {
+      "theme": "vector",
+      "brass": "hsl(185 100% 50%)",
+      "hovered": "hsl(190 80% 30%)"
+    }
+  ],
+  "reducedMotion": true,
+  "motion": [
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    }
+  ],
+  "dimensions": [
+    {
+      "state": "lucide lucide-triangle-alert mem-over-glyph",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-trash2",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-triangle-alert",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-circle key-glyph-optional-absent",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-triangle-alert key-glyph-required-missing",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-dot key-glyph-present",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-check key-glyph-verified",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "rest",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "current",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "selected",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "hovered",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "lucide lucide-triangle-alert mem-over-glyph",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-trash2",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-triangle-alert",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-circle key-glyph-optional-absent",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-triangle-alert key-glyph-required-missing",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-dot key-glyph-present",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-check key-glyph-verified",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "rest",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "current",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "selected",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "hovered",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "lucide lucide-triangle-alert mem-over-glyph",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-trash2",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-triangle-alert",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-circle key-glyph-optional-absent",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-triangle-alert key-glyph-required-missing",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-dot key-glyph-present",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-check key-glyph-verified",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "rest",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "current",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "selected",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "hovered",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    }
+  ],
+  "errors": [],
+  "apiRequests": []
+}

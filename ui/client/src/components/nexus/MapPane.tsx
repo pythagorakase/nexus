@@ -86,6 +86,38 @@ interface MapPaneProps {
   slot: number | null;
 }
 
+type MapState = "current" | "selected" | "hovered" | "rest";
+
+/** One static geometry contract for inverse-zoom canvas pins and the index. */
+function MapStateGlyph({ state, color, zoom = 1, x = 0, y = 0, glow = false }: {
+  state: MapState;
+  color: string;
+  zoom?: number;
+  x?: number;
+  y?: number;
+  glow?: boolean;
+}) {
+  const shape = (radius: number, outline: boolean) => {
+    const r = radius / zoom;
+    const props = {
+      "data-map-part": outline ? "outline" : "fill",
+      fill: outline ? "none" : color,
+      style: !outline && glow ? { filter: `drop-shadow(0 0 ${8 / zoom}px ${color})` } : undefined,
+      stroke: outline ? color : undefined,
+      strokeWidth: outline ? 1 / zoom : undefined,
+      opacity: outline ? 0.6 : undefined,
+      className: outline && (state === "selected" || state === "hovered") ? "animate-pulse" : undefined,
+    };
+    if (state === "selected") return <rect {...props} x={x - r} y={y - r} width={2 * r} height={2 * r} />;
+    if (state === "hovered") return <polygon {...props} points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`} />;
+    return <circle {...props} cx={x} cy={y} r={r} />;
+  };
+  return <g data-map-state={state}>
+    {shape(PIN_RADIUS_PX, false)}
+    {state !== "rest" && shape(8, true)}
+  </g>;
+}
+
 /** Approximate label box width in SVG units for the AABB culler. */
 function estimateLabelWidth(name: string, zoom: number): number {
   return (name.length * 11 * 0.75 + 12) / zoom;
@@ -487,12 +519,11 @@ export function MapPane({ slot }: MapPaneProps) {
     return "rest";
   };
 
-  // IRIS adaptation of the spec's pin palette (yellow/cyan are off-system):
-  // current → brass-bright, selected/hovered → brass, rest → bronze.
+  // Both pin surfaces and leaders share the fixed state-token mapping.
   const PIN_COLOR: Record<string, string> = {
     current: "var(--brass-bright)",
     selected: "var(--brass)",
-    hovered: "var(--brass-bright)",
+    hovered: "var(--map-hovered)",
     rest: "var(--bronze)",
   };
 
@@ -541,10 +572,9 @@ export function MapPane({ slot }: MapPaneProps) {
                             onClick={() => selectPlace(place.id, true)}
                             data-testid={`map-place-row-${place.id}`}
                           >
-                            <span
-                              className="map-place-dot"
-                              style={{ background: PIN_COLOR[state] }}
-                            />
+                            <svg className="map-place-dot" width={7} height={7} viewBox="-9 -9 18 18" aria-hidden="true">
+                              <MapStateGlyph state={state} color={PIN_COLOR[state]} />
+                            </svg>
                             <span className="map-place-name">{place.name}</span>
                             {!placeCoordinates.has(place.id) && (
                               <span className="map-place-uncharted">
@@ -659,7 +689,6 @@ export function MapPane({ slot }: MapPaneProps) {
             const labelVisible = labelVisibility.get(place.id) ?? false;
             const fontSize = 11 / zoom;
             const labelWidth = estimateLabelWidth(place.name, zoom);
-            const ringVisible = state !== "rest";
 
             return (
               <g
@@ -674,27 +703,7 @@ export function MapPane({ slot }: MapPaneProps) {
                 }}
                 data-testid={`map-pin-${place.id}`}
               >
-                <circle
-                  cx={coords.x}
-                  cy={coords.y}
-                  r={PIN_RADIUS_PX / zoom}
-                  fill={pinColor}
-                  style={{
-                    filter: `drop-shadow(0 0 ${8 / zoom}px ${pinColor})`,
-                  }}
-                />
-                {ringVisible && (
-                  <circle
-                    cx={coords.x}
-                    cy={coords.y}
-                    r={8 / zoom}
-                    fill="none"
-                    stroke={pinColor}
-                    strokeWidth={1 / zoom}
-                    opacity={0.6}
-                    className={state === "current" ? "" : "animate-pulse"}
-                  />
-                )}
+                <MapStateGlyph state={state} color={pinColor} zoom={zoom} x={coords.x} y={coords.y} glow />
                 {/* Label: kept mounted, toggled via CSS display so zoom
                     changes never thrash React reconciliation (spec §3.3) */}
                 <g style={{ display: labelVisible ? "" : "none" }}>

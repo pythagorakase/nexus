@@ -1,0 +1,8637 @@
+{
+  "theme": "Vector",
+  "sizes": [
+    5,
+    12,
+    15,
+    15,
+    18,
+    15,
+    12
+  ],
+  "count": 43740000,
+  "feasible": 0,
+  "best": 10.191082279599211,
+  "changes": 5,
+  "assignment": {
+    "--brass": "hsl(185 100% 50%)",
+    "--bronze": "hsl(200 100% 40%)",
+    "--brass-bright": "hsl(190 100% 40%)",
+    "--map-hovered": "hsl(190 80% 30%)",
+    "--fg-muted": "hsl(185 40% 50%)",
+    "--fg-dim": "hsl(185 30% 30%)",
+    "--destructive": "hsl(350 80% 55%)"
+  },
+  "maxima": {
+    "memory/fill/normal/over": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-sea/fill/rest/current": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-sea/fill/rest/selected": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-sea/fill/rest/hovered": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/canvas-sea/fill/current/selected": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-sea/fill/current/hovered": {
+      "maximum": 33.23977102083307,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/canvas-sea/fill/selected/hovered": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/canvas-sea/ring/rest/current": {
+      "maximum": 48.48873423203176,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-sea/ring/rest/selected": {
+      "maximum": 42.697836874806335,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-sea/ring/rest/hovered": {
+      "maximum": 48.48873423203176,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/canvas-sea/ring/current/selected": {
+      "maximum": 25.364087346351702,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-sea/ring/current/hovered": {
+      "maximum": 22.97777278815583,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/canvas-sea/ring/selected/hovered": {
+      "maximum": 25.364087346351702,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/canvas-land/fill/rest/current": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-land/fill/rest/selected": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-land/fill/rest/hovered": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/canvas-land/fill/current/selected": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-land/fill/current/hovered": {
+      "maximum": 33.23977102083307,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/canvas-land/fill/selected/hovered": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/canvas-land/ring/rest/current": {
+      "maximum": 44.55024411718085,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-land/ring/rest/selected": {
+      "maximum": 38.90532105354709,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-land/ring/rest/hovered": {
+      "maximum": 44.55024411718085,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/canvas-land/ring/current/selected": {
+      "maximum": 26.866952670357783,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/canvas-land/ring/current/hovered": {
+      "maximum": 24.326568994626317,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/canvas-land/ring/selected/hovered": {
+      "maximum": 26.866952670357783,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/fill/rest/current": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/fill/rest/selected": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/fill/rest/hovered": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/fill/current/selected": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/fill/current/hovered": {
+      "maximum": 33.23977102083307,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/fill/selected/hovered": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/ring/rest/current": {
+      "maximum": 49.12187790780408,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/ring/rest/selected": {
+      "maximum": 40.370161220520494,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/ring/rest/hovered": {
+      "maximum": 49.12187790780408,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/ring/current/selected": {
+      "maximum": 29.523068218265465,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/ring/current/hovered": {
+      "maximum": 22.863894207786082,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0/rest/ring/selected/hovered": {
+      "maximum": 29.523068218265465,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/fill/rest/current": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/fill/rest/selected": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/fill/rest/hovered": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/fill/current/selected": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/fill/current/hovered": {
+      "maximum": 33.23977102083307,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/fill/selected/hovered": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/ring/rest/current": {
+      "maximum": 45.15144105612663,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/ring/rest/selected": {
+      "maximum": 40.370161220520494,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/ring/rest/hovered": {
+      "maximum": 45.15144105612663,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/ring/current/selected": {
+      "maximum": 27.257253182106172,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/ring/current/hovered": {
+      "maximum": 23.54518669061822,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0/hover/ring/selected/hovered": {
+      "maximum": 27.257253182106172,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/fill/rest/current": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/fill/rest/selected": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/fill/rest/hovered": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/fill/current/selected": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/fill/current/hovered": {
+      "maximum": 33.23977102083307,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/fill/selected/hovered": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/ring/rest/current": {
+      "maximum": 46.110548954937634,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/ring/rest/selected": {
+      "maximum": 40.370161220520494,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/ring/rest/hovered": {
+      "maximum": 49.12187790780408,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/ring/current/selected": {
+      "maximum": 26.375449157700526,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/ring/current/hovered": {
+      "maximum": 27.060012809654005,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0/selected-current/ring/selected/hovered": {
+      "maximum": 29.523068218265465,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/fill/rest/current": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/fill/rest/selected": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/fill/rest/hovered": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/fill/current/selected": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/fill/current/hovered": {
+      "maximum": 33.23977102083307,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/fill/selected/hovered": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/ring/rest/current": {
+      "maximum": 48.30786995719363,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/ring/rest/selected": {
+      "maximum": 39.68517660847817,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/ring/rest/hovered": {
+      "maximum": 48.30786995719363,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/ring/current/selected": {
+      "maximum": 29.695069818022375,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/ring/current/hovered": {
+      "maximum": 23.06117925702671,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0.07/rest/ring/selected/hovered": {
+      "maximum": 29.695069818022375,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/fill/rest/current": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/fill/rest/selected": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/fill/rest/hovered": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/fill/current/selected": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/fill/current/hovered": {
+      "maximum": 33.23977102083307,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/fill/selected/hovered": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/ring/rest/current": {
+      "maximum": 44.737121049360695,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/ring/rest/selected": {
+      "maximum": 39.68517660847817,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/ring/rest/hovered": {
+      "maximum": 44.737121049360695,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/ring/current/selected": {
+      "maximum": 27.631622213280973,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/ring/current/hovered": {
+      "maximum": 23.651858497630045,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0.07/hover/ring/selected/hovered": {
+      "maximum": 27.631622213280973,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/fill/rest/current": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/fill/rest/selected": {
+      "maximum": 41.68905520762976,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/fill/rest/hovered": {
+      "maximum": 39.36886922076322,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/fill/current/selected": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/fill/current/hovered": {
+      "maximum": 33.23977102083307,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 100% 70%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/fill/selected/hovered": {
+      "maximum": 35.28699590725341,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/ring/rest/current": {
+      "maximum": 45.389448412499775,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/ring/rest/selected": {
+      "maximum": 39.68517660847817,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/ring/rest/hovered": {
+      "maximum": 48.30786995719363,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/ring/current/selected": {
+      "maximum": 26.579976793805535,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 30%)",
+        "--map-hovered": "hsl(190 80% 60%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/ring/current/hovered": {
+      "maximum": 27.204956992218143,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 100% 70%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "map/sidebar-wash-0.07/selected-current/ring/selected/hovered": {
+      "maximum": 29.695069818022375,
+      "count": 13500,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--brass-bright": "hsl(190 80% 60%)",
+        "--map-hovered": "hsl(190 80% 30%)"
+      }
+    },
+    "key/required/rest/optional-absent/required-missing": {
+      "maximum": 57.62527226087061,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/rest/optional-absent/present": {
+      "maximum": 60.70925202307972,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/rest/optional-absent/verified": {
+      "maximum": 65.7530991551755,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/rest/required-missing/present": {
+      "maximum": 38.71615506719154,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/required/rest/required-missing/verified": {
+      "maximum": 41.68905520762976,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/required/rest/present/verified": {
+      "maximum": 41.03589929204978,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 30%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/required/hover/optional-absent/required-missing": {
+      "maximum": 38.84961170419587,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/hover/optional-absent/present": {
+      "maximum": 39.09495784188482,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/hover/optional-absent/verified": {
+      "maximum": 43.275645948677685,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/hover/required-missing/present": {
+      "maximum": 38.71615506719154,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/required/hover/required-missing/verified": {
+      "maximum": 41.68905520762976,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/required/hover/present/verified": {
+      "maximum": 41.03589929204978,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 30%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/required/focus/optional-absent/required-missing": {
+      "maximum": 38.84961170419587,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/focus/optional-absent/present": {
+      "maximum": 39.09495784188482,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/focus/optional-absent/verified": {
+      "maximum": 43.275645948677685,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/required/focus/required-missing/present": {
+      "maximum": 38.71615506719154,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/required/focus/required-missing/verified": {
+      "maximum": 41.68905520762976,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/required/focus/present/verified": {
+      "maximum": 41.03589929204978,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 30%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/rest/optional-absent/required-missing": {
+      "maximum": 57.62527226087061,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/rest/optional-absent/present": {
+      "maximum": 19.262167567680756,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/rest/optional-absent/verified": {
+      "maximum": 22.924342811299475,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/rest/required-missing/present": {
+      "maximum": 56.76426466446823,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--fg-muted": "hsl(185 40% 30%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/rest/required-missing/verified": {
+      "maximum": 49.666718415509564,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 30%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/rest/present/verified": {
+      "maximum": 22.088263151366373,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 30%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/hover/optional-absent/required-missing": {
+      "maximum": 38.84961170419587,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/hover/optional-absent/present": {
+      "maximum": 39.09495784188482,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/hover/optional-absent/verified": {
+      "maximum": 43.275645948677685,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/hover/required-missing/present": {
+      "maximum": 38.71615506719154,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/hover/required-missing/verified": {
+      "maximum": 41.68905520762976,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/hover/present/verified": {
+      "maximum": 41.03589929204978,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 30%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/focus/optional-absent/required-missing": {
+      "maximum": 38.84961170419587,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 100% 70%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/focus/optional-absent/present": {
+      "maximum": 39.09495784188482,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/focus/optional-absent/verified": {
+      "maximum": 43.275645948677685,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 30%)"
+      }
+    },
+    "key/optional/focus/required-missing/present": {
+      "maximum": 38.71615506719154,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 50%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 60% 70%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/focus/required-missing/verified": {
+      "maximum": 41.68905520762976,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 30%)",
+        "--fg-muted": "hsl(185 40% 55%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "key/optional/focus/present/verified": {
+      "maximum": 41.03589929204978,
+      "count": 16200,
+      "witness": {
+        "--brass": "hsl(185 100% 70%)",
+        "--bronze": "hsl(200 90% 55%)",
+        "--fg-muted": "hsl(185 40% 30%)",
+        "--fg-dim": "hsl(185 30% 40%)"
+      }
+    },
+    "delete/ready/rest/unarmed/armed": {
+      "maximum": 43.68554967492685,
+      "count": 216,
+      "witness": {
+        "--fg-muted": "hsl(185 60% 50%)",
+        "--destructive": "hsl(350 100% 50%)"
+      }
+    },
+    "delete/ready/hover/unarmed/armed": {
+      "maximum": 43.68554967492685,
+      "count": 216,
+      "witness": {
+        "--fg-muted": "hsl(185 60% 50%)",
+        "--destructive": "hsl(350 100% 50%)"
+      }
+    },
+    "delete/ready/focus/unarmed/armed": {
+      "maximum": 43.68554967492685,
+      "count": 216,
+      "witness": {
+        "--fg-muted": "hsl(185 60% 50%)",
+        "--destructive": "hsl(350 100% 50%)"
+      }
+    },
+    "delete/ready-exceeds/rest/unarmed/armed": {
+      "maximum": 23.990292723669455,
+      "count": 216,
+      "witness": {
+        "--fg-muted": "hsl(185 60% 50%)",
+        "--destructive": "hsl(350 100% 50%)"
+      }
+    },
+    "delete/ready-exceeds/hover/unarmed/armed": {
+      "maximum": 23.990292723669455,
+      "count": 216,
+      "witness": {
+        "--fg-muted": "hsl(185 60% 50%)",
+        "--destructive": "hsl(350 100% 50%)"
+      }
+    },
+    "delete/ready-exceeds/focus/unarmed/armed": {
+      "maximum": 23.990292723669455,
+      "count": 216,
+      "witness": {
+        "--fg-muted": "hsl(185 60% 50%)",
+        "--destructive": "hsl(350 100% 50%)"
+      }
+    }
+  },
+  "measurements": [
+    {
+      "theme": "Vector",
+      "surface": "memory",
+      "context": "fill",
+      "states": [
+        "normal",
+        "over"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "meter; warning absent",
+        "meter + AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready/rest",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ],
+        [
+          0.91,
+          0.19000000000000006,
+          0.3100000000000003
+        ]
+      ],
+      "delta": 34.37953115956112,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready/hover",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ],
+        [
+          0.91,
+          0.19000000000000006,
+          0.3100000000000003
+        ]
+      ],
+      "delta": 34.37953115956112,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready/focus",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ],
+        [
+          0.91,
+          0.19000000000000006,
+          0.3100000000000003
+        ]
+      ],
+      "delta": 34.37953115956112,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready-exceeds/rest",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.11864999999999999,
+          0.2586833333333332,
+          0.27035
+        ],
+        [
+          0.33215,
+          0.09185000000000001,
+          0.1338500000000001
+        ]
+      ],
+      "delta": 16.617971914349088,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready-exceeds/hover",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.11864999999999999,
+          0.2586833333333332,
+          0.27035
+        ],
+        [
+          0.33215,
+          0.09185000000000001,
+          0.1338500000000001
+        ]
+      ],
+      "delta": 16.617971914349088,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready-exceeds/focus",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.11864999999999999,
+          0.2586833333333332,
+          0.27035
+        ],
+        [
+          0.33215,
+          0.09185000000000001,
+          0.1338500000000001
+        ]
+      ],
+      "delta": 16.617971914349088,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.11549999999999999,
+          0.20699999999999993,
+          0.2145
+        ],
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ]
+      ],
+      "delta": 32.61282762915505,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.11549999999999999,
+          0.20699999999999993,
+          0.2145
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 39.249474049576584,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.11549999999999999,
+          0.20699999999999993,
+          0.2145
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 63.516490332604576,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 16.175370890491763,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.713085462966294,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ]
+      ],
+      "delta": 21.79871330295108,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 26.390673594260058,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 41.48807053321351,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 16.175370890491763,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.713085462966294,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ]
+      ],
+      "delta": 21.79871330295108,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 26.390673594260058,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 41.48807053321351,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 16.175370890491763,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.713085462966294,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.11549999999999999,
+          0.20699999999999993,
+          0.2145
+        ],
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ]
+      ],
+      "delta": 32.61282762915505,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.11549999999999999,
+          0.20699999999999993,
+          0.2145
+        ],
+        [
+          0.1605,
+          0.3528333333333332,
+          0.3695
+        ]
+      ],
+      "delta": 11.20519917524077,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.11549999999999999,
+          0.20699999999999993,
+          0.2145
+        ],
+        [
+          0.010499999999999999,
+          0.47783333333333305,
+          0.5195
+        ]
+      ],
+      "delta": 21.305693912432318,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.1605,
+          0.3528333333333332,
+          0.3695
+        ]
+      ],
+      "delta": 22.857687246613214,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.010499999999999999,
+          0.47783333333333305,
+          0.5195
+        ]
+      ],
+      "delta": 13.797779302542082,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.1605,
+          0.3528333333333332,
+          0.3695
+        ],
+        [
+          0.010499999999999999,
+          0.47783333333333305,
+          0.5195
+        ]
+      ],
+      "delta": 10.342645137480662,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ]
+      ],
+      "delta": 21.79871330295108,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 26.390673594260058,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 41.48807053321351,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 16.175370890491763,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.713085462966294,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ]
+      ],
+      "delta": 21.79871330295108,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 26.390673594260058,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.21,
+          0.3749999999999999,
+          0.39
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 41.48807053321351,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ]
+      ],
+      "delta": 16.175370890491763,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.3,
+          0.6666666666666664,
+          0.7
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.713085462966294,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ]
+      ],
+      "delta": 10.766655110054554,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 12.46475883563715,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.33312030196306,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 18.515914489242054,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 32.7907370230873,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.011200000000000002,
+          0.4208000000000003,
+          0.5008
+        ]
+      ],
+      "delta": 14.942219201204104,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.011200000000000002,
+          0.5707999999999996,
+          0.6208
+        ]
+      ],
+      "delta": 10.725268640945693,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.0472,
+          0.2968000000000002,
+          0.3448
+        ]
+      ],
+      "delta": 24.576327743184287,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.011200000000000002,
+          0.4208000000000003,
+          0.5008
+        ],
+        [
+          0.011200000000000002,
+          0.5707999999999996,
+          0.6208
+        ]
+      ],
+      "delta": 12.800218219644188,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.011200000000000002,
+          0.4208000000000003,
+          0.5008
+        ],
+        [
+          0.0472,
+          0.2968000000000002,
+          0.3448
+        ]
+      ],
+      "delta": 10.255860725125089,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.011200000000000002,
+          0.5707999999999996,
+          0.6208
+        ],
+        [
+          0.0472,
+          0.2968000000000002,
+          0.3448
+        ]
+      ],
+      "delta": 22.280890198956502,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ]
+      ],
+      "delta": 10.766655110054554,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 12.46475883563715,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.33312030196306,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 18.515914489242054,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 32.7907370230873,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.009408,
+          0.47613866666666693,
+          0.561472
+        ]
+      ],
+      "delta": 11.2337385791659,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.009408,
+          0.6261386666666662,
+          0.681472
+        ]
+      ],
+      "delta": 11.501627331108317,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.045408,
+          0.3521386666666668,
+          0.405472
+        ]
+      ],
+      "delta": 20.71567564084519,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.009408,
+          0.47613866666666693,
+          0.561472
+        ],
+        [
+          0.009408,
+          0.6261386666666662,
+          0.681472
+        ]
+      ],
+      "delta": 12.928976942613831,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.009408,
+          0.47613866666666693,
+          0.561472
+        ],
+        [
+          0.045408,
+          0.3521386666666668,
+          0.405472
+        ]
+      ],
+      "delta": 10.599936455987908,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.009408,
+          0.6261386666666662,
+          0.681472
+        ],
+        [
+          0.045408,
+          0.3521386666666668,
+          0.405472
+        ]
+      ],
+      "delta": 23.52032063983843,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ]
+      ],
+      "delta": 10.766655110054554,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 12.46475883563715,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.33312030196306,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 18.515914489242054,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 32.7907370230873,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.0084,
+          0.4156000000000003,
+          0.4956
+        ]
+      ],
+      "delta": 15.284640049705944,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ]
+      ],
+      "delta": 11.020413627731111,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.044399999999999995,
+          0.2916000000000002,
+          0.3396
+        ]
+      ],
+      "delta": 24.916400427982772,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.0084,
+          0.4156000000000003,
+          0.4956
+        ],
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ]
+      ],
+      "delta": 16.664971854533796,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.0084,
+          0.4156000000000003,
+          0.4956
+        ],
+        [
+          0.044399999999999995,
+          0.2916000000000002,
+          0.3396
+        ]
+      ],
+      "delta": 10.227139384751426,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ],
+        [
+          0.044399999999999995,
+          0.2916000000000002,
+          0.3396
+        ]
+      ],
+      "delta": 26.14550848588385,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ]
+      ],
+      "delta": 10.766655110054554,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 12.46475883563715,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.33312030196306,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 18.515914489242054,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 32.7907370230873,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.0182,
+          0.44746666666666696,
+          0.5298
+        ]
+      ],
+      "delta": 13.112952655644994,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ]
+      ],
+      "delta": 11.020413627731111,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.0542,
+          0.32346666666666685,
+          0.3738
+        ]
+      ],
+      "delta": 22.72323531107391,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.0182,
+          0.44746666666666696,
+          0.5298
+        ],
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ]
+      ],
+      "delta": 13.942622875477882,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.0182,
+          0.44746666666666696,
+          0.5298
+        ],
+        [
+          0.0542,
+          0.32346666666666685,
+          0.3738
+        ]
+      ],
+      "delta": 10.404706975461979,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ],
+        [
+          0.0542,
+          0.32346666666666685,
+          0.3738
+        ]
+      ],
+      "delta": 23.813915762457516,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ]
+      ],
+      "delta": 10.766655110054554,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 12.46475883563715,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.33312030196306,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 18.515914489242054,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 32.7907370230873,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.007392,
+          0.4577280000000003,
+          0.541728
+        ]
+      ],
+      "delta": 12.393880918884403,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ]
+      ],
+      "delta": 11.020413627731111,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.044399999999999995,
+          0.2916000000000002,
+          0.3396
+        ]
+      ],
+      "delta": 24.916400427982772,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.007392,
+          0.4577280000000003,
+          0.541728
+        ],
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ]
+      ],
+      "delta": 13.07269238013569,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.007392,
+          0.4577280000000003,
+          0.541728
+        ],
+        [
+          0.044399999999999995,
+          0.2916000000000002,
+          0.3396
+        ]
+      ],
+      "delta": 13.654501042998376,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.007392,
+          0.6077279999999996,
+          0.661728
+        ],
+        [
+          0.044399999999999995,
+          0.2916000000000002,
+          0.3396
+        ]
+      ],
+      "delta": 26.14550848588385,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ]
+      ],
+      "delta": 10.766655110054554,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 12.46475883563715,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.33312030196306,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 18.515914489242054,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 32.7907370230873,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.025172000000000007,
+          0.4195480000000003,
+          0.5077613333333333
+        ]
+      ],
+      "delta": 14.625351359602886,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ]
+      ],
+      "delta": 10.749553740218175,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.061172000000000004,
+          0.2955480000000002,
+          0.35176133333333337
+        ]
+      ],
+      "delta": 24.251485619575828,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.025172000000000007,
+          0.4195480000000003,
+          0.5077613333333333
+        ],
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ]
+      ],
+      "delta": 16.64036321212006,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.025172000000000007,
+          0.4195480000000003,
+          0.5077613333333333
+        ],
+        [
+          0.061172000000000004,
+          0.2955480000000002,
+          0.35176133333333337
+        ]
+      ],
+      "delta": 10.191082279599211,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ],
+        [
+          0.061172000000000004,
+          0.2955480000000002,
+          0.35176133333333337
+        ]
+      ],
+      "delta": 26.139050345874058,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ]
+      ],
+      "delta": 10.766655110054554,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 12.46475883563715,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.33312030196306,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 18.515914489242054,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 32.7907370230873,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.026586000000000005,
+          0.44944066666666693,
+          0.5358806666666667
+        ]
+      ],
+      "delta": 12.77576128492695,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ]
+      ],
+      "delta": 10.749553740218175,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.062586,
+          0.3254406666666668,
+          0.3798806666666667
+        ]
+      ],
+      "delta": 22.385098845782764,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.026586000000000005,
+          0.44944066666666693,
+          0.5358806666666667
+        ],
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ]
+      ],
+      "delta": 14.092960406991288,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.026586000000000005,
+          0.44944066666666693,
+          0.5358806666666667
+        ],
+        [
+          0.062586,
+          0.3254406666666668,
+          0.3798806666666667
+        ]
+      ],
+      "delta": 10.39004184224066,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ],
+        [
+          0.062586,
+          0.3254406666666668,
+          0.3798806666666667
+        ]
+      ],
+      "delta": 24.050257546660937,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ]
+      ],
+      "delta": 10.766655110054554,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 25.295466866782746,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 12.46475883563715,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 15.33312030196306,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.6666666666666672,
+          0.8
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 18.515914489242054,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.06,
+          0.4600000000000003,
+          0.54
+        ]
+      ],
+      "delta": 32.7907370230873,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.02215136000000001,
+          0.46120224000000026,
+          0.5524299733333333
+        ]
+      ],
+      "delta": 11.801343386414962,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ]
+      ],
+      "delta": 10.749553740218175,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.5333333333333329,
+          0.8
+        ],
+        [
+          0.061172000000000004,
+          0.2955480000000002,
+          0.35176133333333337
+        ]
+      ],
+      "delta": 24.251485619575828,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.02215136000000001,
+          0.46120224000000026,
+          0.5524299733333333
+        ],
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ]
+      ],
+      "delta": 13.038078744521949,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.02215136000000001,
+          0.46120224000000026,
+          0.5524299733333333
+        ],
+        [
+          0.061172000000000004,
+          0.2955480000000002,
+          0.35176133333333337
+        ]
+      ],
+      "delta": 13.559758990404873,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.02215136000000001,
+          0.6112022399999996,
+          0.6724299733333333
+        ],
+        [
+          0.061172000000000004,
+          0.2955480000000002,
+          0.35176133333333337
+        ]
+      ],
+      "delta": 26.139050345874058,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    }
+  ],
+  "before": [
+    {
+      "theme": "Vector",
+      "surface": "memory",
+      "context": "fill",
+      "states": [
+        "normal",
+        "over"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "meter; warning absent",
+        "meter + AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready/rest",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ],
+        [
+          0.91,
+          0.19000000000000006,
+          0.3100000000000003
+        ]
+      ],
+      "delta": 34.19818261757641,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready/hover",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ],
+        [
+          0.91,
+          0.19000000000000006,
+          0.3100000000000003
+        ]
+      ],
+      "delta": 34.19818261757641,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready/focus",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ],
+        [
+          0.91,
+          0.19000000000000006,
+          0.3100000000000003
+        ]
+      ],
+      "delta": 34.19818261757641,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready-exceeds/rest",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.14315,
+          0.2703499999999999,
+          0.28085
+        ],
+        [
+          0.33215,
+          0.09185000000000001,
+          0.1338500000000001
+        ]
+      ],
+      "delta": 16.408197999576796,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready-exceeds/hover",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.14315,
+          0.2703499999999999,
+          0.28085
+        ],
+        [
+          0.33215,
+          0.09185000000000001,
+          0.1338500000000001
+        ]
+      ],
+      "delta": 16.408197999576796,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "delete",
+      "context": "ready-exceeds/focus",
+      "states": [
+        "unarmed",
+        "armed"
+      ],
+      "rgb": [
+        [
+          0.14315,
+          0.2703499999999999,
+          0.28085
+        ],
+        [
+          0.33215,
+          0.09185000000000001,
+          0.1338500000000001
+        ]
+      ],
+      "delta": 16.408197999576796,
+      "signatures": [
+        "Trash2",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.15050000000000002,
+          0.26949999999999996,
+          0.2795
+        ],
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ]
+      ],
+      "delta": 41.3508836007381,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.15050000000000002,
+          0.26949999999999996,
+          0.2795
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 39.08973543617644,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.15050000000000002,
+          0.26949999999999996,
+          0.2795
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 54.864998719819546,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 13.513540821543312,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/rest",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 13.427931019604726,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ]
+      ],
+      "delta": 21.78575194244601,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 16.28884750990673,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 28.837735721157593,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 13.513540821543312,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/hover",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 13.427931019604726,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ]
+      ],
+      "delta": 21.78575194244601,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 16.28884750990673,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 28.837735721157593,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 13.513540821543312,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "required/focus",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 13.427931019604726,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.15050000000000002,
+          0.26949999999999996,
+          0.2795
+        ],
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ]
+      ],
+      "delta": 41.3508836007381,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.15050000000000002,
+          0.26949999999999996,
+          0.2795
+        ],
+        [
+          0.19550000000000003,
+          0.36949999999999994,
+          0.3845
+        ]
+      ],
+      "delta": 7.90901489803421,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.15050000000000002,
+          0.26949999999999996,
+          0.2795
+        ],
+        [
+          0.010499999999999999,
+          0.47783333333333305,
+          0.5195
+        ]
+      ],
+      "delta": 16.70177044513478,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.19550000000000003,
+          0.36949999999999994,
+          0.3845
+        ]
+      ],
+      "delta": 33.47067227577112,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.010499999999999999,
+          0.47783333333333305,
+          0.5195
+        ]
+      ],
+      "delta": 22.928891098979445,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/rest",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.19550000000000003,
+          0.36949999999999994,
+          0.3845
+        ],
+        [
+          0.010499999999999999,
+          0.47783333333333305,
+          0.5195
+        ]
+      ],
+      "delta": 9.18874139605276,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ]
+      ],
+      "delta": 21.78575194244601,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 16.28884750990673,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 28.837735721157593,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 13.513540821543312,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/hover",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 13.427931019604726,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "optional-absent",
+        "required-missing"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ]
+      ],
+      "delta": 21.78575194244601,
+      "signatures": [
+        "Circle",
+        "AlertTriangle"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "optional-absent",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 16.28884750990673,
+      "signatures": [
+        "Circle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "optional-absent",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.28,
+          0.4999999999999999,
+          0.52
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 28.837735721157593,
+      "signatures": [
+        "Circle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "required-missing",
+        "present"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ]
+      ],
+      "delta": 13.513540821543312,
+      "signatures": [
+        "AlertTriangle",
+        "CircleDot"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "required-missing",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "AlertTriangle",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "key",
+      "context": "optional/focus",
+      "states": [
+        "present",
+        "verified"
+      ],
+      "rgb": [
+        [
+          0.37000000000000005,
+          0.6999999999999998,
+          0.73
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 13.427931019604726,
+      "signatures": [
+        "CircleDot",
+        "CircleCheck"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.17919999999999997,
+          0.5088000000000003,
+          0.5728000000000001
+        ]
+      ],
+      "delta": 18.930499550985033,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.011200000000000002,
+          0.5707999999999996,
+          0.6208
+        ]
+      ],
+      "delta": 15.396008028838208,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.17919999999999997,
+          0.5088000000000003,
+          0.5728000000000001
+        ]
+      ],
+      "delta": 18.930499550985033,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.17919999999999997,
+          0.5088000000000003,
+          0.5728000000000001
+        ],
+        [
+          0.011200000000000002,
+          0.5707999999999996,
+          0.6208
+        ]
+      ],
+      "delta": 4.445290058625113,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.17919999999999997,
+          0.5088000000000003,
+          0.5728000000000001
+        ],
+        [
+          0.17919999999999997,
+          0.5088000000000003,
+          0.5728000000000001
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-sea/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.011200000000000002,
+          0.5707999999999996,
+          0.6208
+        ],
+        [
+          0.17919999999999997,
+          0.5088000000000003,
+          0.5728000000000001
+        ]
+      ],
+      "delta": 4.445290058625113,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.17740799999999995,
+          0.5641386666666668,
+          0.633472
+        ]
+      ],
+      "delta": 14.733918447473032,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.009408,
+          0.6261386666666662,
+          0.681472
+        ]
+      ],
+      "delta": 12.011793394387016,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.17740799999999995,
+          0.5641386666666668,
+          0.633472
+        ]
+      ],
+      "delta": 14.733918447473032,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.17740799999999995,
+          0.5641386666666668,
+          0.633472
+        ],
+        [
+          0.009408,
+          0.6261386666666662,
+          0.681472
+        ]
+      ],
+      "delta": 4.220056042499549,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.17740799999999995,
+          0.5641386666666668,
+          0.633472
+        ],
+        [
+          0.17740799999999995,
+          0.5641386666666668,
+          0.633472
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "canvas-land/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.009408,
+          0.6261386666666662,
+          0.681472
+        ],
+        [
+          0.17740799999999995,
+          0.5641386666666668,
+          0.633472
+        ]
+      ],
+      "delta": 4.220056042499549,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/rest/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/hover/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0/selected-current/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/rest/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/hover/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/fill",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "rest",
+        "current"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled circle + circular ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "rest",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 14.40404073730409,
+      "signatures": [
+        "filled circle; no ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "rest",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.14500000000000007,
+          0.6849999999999996,
+          0.9550000000000001
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 10.395684302399912,
+      "signatures": [
+        "filled circle; no ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "current",
+        "selected"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0,
+          0.9166666666666661,
+          1
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled square + square ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "current",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 0,
+      "signatures": [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring"
+      ]
+    },
+    {
+      "theme": "Vector",
+      "surface": "map",
+      "context": "sidebar-wash-0.07/selected-current/ring",
+      "states": [
+        "selected",
+        "hovered"
+      ],
+      "rgb": [
+        [
+          0,
+          0.9166666666666661,
+          1
+        ],
+        [
+          0.2799999999999999,
+          0.8133333333333337,
+          0.92
+        ]
+      ],
+      "delta": 4.965188543168605,
+      "signatures": [
+        "filled square + square ring",
+        "filled diamond + diamond ring"
+      ]
+    }
+  ]
+}

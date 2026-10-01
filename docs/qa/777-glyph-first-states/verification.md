@@ -209,3 +209,23 @@ No rebase/push/PR: the prerequisite before any push is a rebase onto newest orig
 Will the coordinator reissue 777-S2 with jointly satisfiable finite shade constraints or an explicit joint-incompatibility disposition? This is a work-order constraint question. The owner's settled hue-family model, exact Veil anchor and bottom-rail ruling are preserved; no owner decision is reopened.
 
 Prepared by Codex, GPT-6.
+
+## Accepted Amendment and Resumed Implementation — 2026-10-01
+
+The coordinator accepted the stop above and amended item 5 to a **joint, per-theme** exception criterion (`777-S2-amendment.md`). The stop-report and evidence in `a5d63ddf` are retained. The implementation resumes from that commit without rewriting it. Starting shade-domain commit remains `8ccd3008a48bdf8115232667399868e2bdf66f93`.
+
+All seven implementation items are now represented in source: meter/delete glyphs, a shared four-shape map renderer, exported key glyph renderer, motion guard, domain-constrained theme shades, spec sections 3.1/3.2, and resumed evidence. Final gates, swatches and rebase/push receipt are appended below as they complete. No owner's color-model or bottom-rail ruling is reopened.
+
+The prior shadcn check above precedes these new glyph elements. Progress, Alert, Button, Badge and Marker were checked; none supplies the ordered geometry within the existing surfaces. Existing Lucide imports and local SVG are used, with no installed component, dependency, label, legend, tooltip or control.
+
+The full joint search uses exact finite-domain variable elimination, not random sampling: for fixed brass/bronze/fg-muted, the map current/hovered, key fg-dim and delete destructive assignments are independent. Every factor assignment is enumerated; maximizing each conditional minimum and then combining them represents every full Cartesian assignment. The second pass selects the fewest changed roots at the global optimum. The test recomputes from CSS and the fixed domain, not stored JSON. Individual pair/context maxima are retained in the JSON along with full witnesses and factor assignment counts. The previous map-fill-only maxima remain historical context.
+
+The compositing convention samples opaque interiors and static ring strokes with animations disabled; it excludes edge antialiasing and glow halos. Ready-row glyphs are first composited into `--bg-elev-3`, then the whole exceeds-RAM row at .35 into its provider's `--bg`. Required/optional presence and verification are measured at rest/hover/focus. Canvas sea and land rings use .6 opacity. Sidebar backgrounds include the content wash's zero and maximum .07 endpoints, row hover, selected and current-plus-selected backgrounds. Each theme has 139 pair/context measurements, including all 14 base pairs. CSS compositing occurs before linearization and deutan simulation.
+
+| Theme | Root Domain Sizes (brass, bronze, current, hovered, fg-muted, fg-dim, destructive) | Full Assignments | Satisfying | Maximum Minimum ΔE | Roots Changed |
+|---|---|---:|---:|---:|---:|
+| Veil | 1,15,15,15,18,15,12 | 10935000 | 0 | 8.464152824101713 | 5 |
+| Gilded | 18,18,15,15,18,15,12 | 236196000 | 0 | 9.665520083366916 | 7 |
+| Vector | 5,12,15,15,18,15,12 | 43740000 | 0 | 10.191082279599211 | 5 |
+
+Each theme therefore records **one theme exception**, with every shipped shortfall and its distinct geometry signatures in the resumed pair table. The exact Veil `#b83d7a` anchor and linked aliases, other hue families, backgrounds and existing opacity rules are retained.

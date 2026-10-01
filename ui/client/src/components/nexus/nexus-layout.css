@@ -197,6 +197,7 @@
   box-shadow: var(--glow-soft);
   transition: width .35s ease;
 }
+.topbar .mem-over-glyph { color: var(--bronze); flex-shrink: 0; }
 .topbar .mem-fill.over { background: var(--bronze); }
 .topbar .mem-fill.loading { animation: nexus-pulse 1.8s ease-in-out infinite; }
 .topbar .mem-text { letter-spacing: .1em; white-space: nowrap; }
@@ -1178,7 +1179,6 @@
 .map-place-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
   flex-shrink: 0;
 }
 .map-place-name {

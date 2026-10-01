@@ -23,7 +23,7 @@ const read = (...path: string[]) => readFileSync(resolve(here, ...path), "utf-8"
 const REDUCED_MOTION = "prefers-reduced-motion: reduce";
 
 /** The app-wide reduced-motion rule in index.css, selector for selector. */
-const GUARD = '[class*="animate-"]:not(.map-pin *)';
+const GUARD = '[class*="animate-"]';
 
 function isReducedMotion(node: Container | undefined): boolean {
   return (
@@ -242,12 +242,14 @@ describe("reduced motion (app-wide animate-* guard)", () => {
     ]);
   });
 
-  it("reaches every animate-* use under src; only the map pin ring waits for 777-S2", () => {
-    // The map pin ring's pulse is the only cue that tells a hovered pin from
-    // the current one until its glyph shapes land; slice 777-S2 removes this
-    // constant and GUARD's :not(.map-pin *) exclusion together.
-    const HANDLED_BY_777_S2 = ["animate-pulse"];
-
+  it("map_pin_pulses_match_the_app_wide_reduced_motion_guard", () => {
+    const root = postcss.parse(read("index.css"));
+    const guards: Rule[] = [];
+    root.walkRules(rule => {
+      if (within(rule, isReducedMotion) && rule.selector.includes('[class*="animate-"]')) guards.push(rule);
+    });
+    expect(guards.map(rule => rule.selector)).toEqual([GUARD]);
+    expect(guards[0].nodes.some(node => node.type === "decl" && node.prop === "animation" && node.value === "none" && node.important)).toBe(true);
     const uses: { file: string; token: string }[] = [];
     const pinFiles: string[] = [];
     for (const path of sourceFiles(here)) {
@@ -282,7 +284,7 @@ describe("reduced motion (app-wide animate-* guard)", () => {
     const pinTokens = uses
       .filter(({ file }) => file === "components/nexus/MapPane.tsx")
       .map(({ token }) => token);
-    expect(pinTokens).toEqual(HANDLED_BY_777_S2);
+    expect(pinTokens).toEqual(["animate-pulse"]);
 
     const doc = new DOMParser().parseFromString(
       '<svg><g class="map-pin"><circle class="animate-pulse"></circle></g>' +
@@ -290,7 +292,7 @@ describe("reduced motion (app-wide animate-* guard)", () => {
       "text/html",
     );
     const [inner, outer] = Array.from(doc.querySelectorAll("circle"));
-    expect(inner.matches(GUARD)).toBe(false);
+    expect(inner.matches(GUARD)).toBe(true);
     expect(outer.matches(GUARD)).toBe(true);
   });
 
