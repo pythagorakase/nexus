@@ -255,19 +255,30 @@ Other changes:
   `test_seed_committed_chunk_bootstrap_elapses_no_time`, and
   `test_migration_140_refuses_bad_clocks`.
 
-Without migration 140 on disk (file moved aside, clone built at 138), six of
+Without migration 140 on disk (file moved aside, clone built at 139), six of
 the seven contract tests fail; `test_seed_committed_chunk_bootstrap_elapses_no_time`
 passes there because it checks the fixture default, which only the
-migration's bootstrap rule makes necessary:
+migration's bootstrap rule makes necessary. Rerun at head `2f30518a` with
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset:
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit
+tests/test_world_clock_contract_pg.py`, the migration file restored right
+after (`git status` clean). Log: `778-S1a/fix2/without_140.log` in the session
+scratchpad. Raw tail:
 
 ```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 8 targets: postgres, qa640_clock_* x7
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
 FAILED tests/test_world_clock_contract_pg.py::test_world_clock_identity_and_face
 FAILED tests/test_world_clock_contract_pg.py::test_world_layer_edit_restamps_clock
 FAILED tests/test_world_clock_contract_pg.py::test_negative_time_delta_rejected
 FAILED tests/test_world_clock_contract_pg.py::test_bootstrap_delta_must_be_zero
 FAILED tests/test_world_clock_contract_pg.py::test_refresh_writes_only_changed_rows
 FAILED tests/test_world_clock_contract_pg.py::test_migration_140_refuses_bad_clocks
-6 failed, 1 passed in 8.77s
+6 failed, 1 passed in 8.63s
 ```
 
 ## Tails
@@ -276,7 +287,11 @@ All PostgreSQL runs used `NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p
 tests.dbname_audit ...` with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
 `NEXUS_SLOT` unset.
 
-### Named Proof Set (Final Head `c5c593c6`)
+### Named Proof Set (Head `c5c593c6`)
+
+This run predates `a4f64d1c`, which changes comments only and is covered by
+the rerun under Review Fixes (Head `a4f64d1c`); the whole set reran at
+`2f30518a` under Review Fixes (Head `2f30518a`).
 
 Files: `tests/test_world_clock_contract_pg.py tests/test_orrery/test_migrate.py
 tests/test_schema_documentation_pg.py tests/test_new_story_setup.py
@@ -437,7 +452,11 @@ SKIPPED [5] tests/test_orrery/test_stage2a_status_live.py: Set NEXUS_RUN_LIVE_LL
 667 passed, 9 skipped in 71.86s (0:01:11)
 ```
 
-### Offline Suites (Final Head)
+### Offline Suites (Head `c5c593c6`)
+
+The two suite runs below ran at `c5c593c6`. The `tests/test_reachability.py`
+tail was logged seconds before the rebase that produced `c5c593c6`; the rerun
+at `2f30518a` under Review Fixes (Head `2f30518a`) replaces it as evidence.
 
 `$PY -m pytest -q tests/test_api tests/test_orrery`:
 
@@ -500,6 +519,42 @@ created after migration 129 has a comment.` `black --check
 tests/test_idf_dictionary_pg.py`: `1 file would be left unchanged.`
 `flake8 tests/test_idf_dictionary_pg.py`: 7 findings, the same 7 E501 as
 `main`.
+
+### Review Fixes (Head `2f30518a`)
+
+`2f30518a` rewraps two docstrings in `tests/pg_fixtures.py`
+(`_require_need_clock_anchor` and `seed_story_clock`); the words are
+unchanged. Logs are under `778-S1a/fix2/` in the session scratchpad. The
+named proof set reran in full (same files and command as the Head
+`c5c593c6` run above; `named.log`):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 86 targets: ... qa640_clock_* x7, ...
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+466 passed, 7 warnings in 190.84s (0:03:10)
+```
+
+`$PY -m pytest -q tests/test_api tests/test_orrery` (`offline_b.log`):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1820 passed, 743 skipped, 7 warnings in 31.64s
+```
+
+`$PY -m pytest -q tests/test_reachability.py` (`reach.log`):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+54 passed, 5 warnings in 10.10s
+```
+
+`PYTHONPATH=$PWD $PY scripts/check_migration_comments.py`: `OK: every object
+created after migration 129 has a comment.` `black --check
+tests/pg_fixtures.py`: `1 file would be left unchanged.` `flake8
+tests/pg_fixtures.py`: no output.
 
 ### Black, flake8, mypy (Changed Python Files)
 
