@@ -4109,3 +4109,59 @@ post-143 regression proof; final whole-tree PostgreSQL gate. Six vector helpers
 remain deferred to #812, and no owner ruling is added or reopened. Do not merge.
 
 Authored by Codex, running GPT-6.
+
+## After the Fifth Independent Review (Coordinator Fix)
+
+Date 2026-10-01. The fifth pass (Astra, frozen at `e04d966d`) found one P2 and
+nothing else: a routine declared with `SET check_function_bodies = off` carries
+that setting in `proconfig`; applying it inside the validation subtransaction
+overrides the transaction-level `on`, and both language validators honor the
+switch, so the second line would record success without checking the body.
+`CREATE FUNCTION` behaves the same way; this guard is now stricter: after a
+routine's own SET clauses are applied and before its validator runs,
+`check_function_bodies` is re-asserted `on` (`set_config(..., true)`, inside the
+same subtransaction, so the native unwind restores it with everything else).
+The header states this as the one place the guard is stricter than
+`CREATE FUNCTION`.
+
+Regression `test_migration_143_round5_routine_cannot_disable_validation`
+(`case` × `post`): a SQL routine created under `check_function_bodies = off`
+with `SET check_function_bodies = off` and either a broken body
+(`SELECT missing_column FROM public.characters`) or `SELECT 1`. The broken body
+refuses naming the routine with `post-drop` and `missing_column` in the runner
+log, stamps and catalogs unchanged; the healthy body applies with the routine,
+its `proconfig` and comment preserved and the maintenance session's
+`check_function_bodies` still `on` afterwards.
+
+### Red Against the Previous Migration (`e04d966d`)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=$S/old143.sql PYTHONPATH=$PWD:$S /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k "round5"
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round5_routine_cannot_disable_validation[broken-body-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round5_routine_cannot_disable_validation[broken-body-True]
+2 failed, 2 passed, 314 deselected in 21.49s
+```
+
+(`$S` is this order's `after-review-r5` scratch directory holding `old143.sql`
+from `git show e04d966d:migrations/143_drop_dead_schema_strata.sql` and the
+round-4 `old_scanner` swap plugin.)
+
+### Green With the Fix
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k "round5 or round4_validator_scope or drops_only_manifest_on_each_fleet_clone"
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+14 passed, 304 deselected in 95.14s (0:01:35)
+```
+
+`scripts/check_migration_comments.py`: OK. Black and flake8 on the test module:
+clean. The full module and the whole-tree gate run at the final head below.

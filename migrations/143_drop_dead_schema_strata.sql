@@ -42,6 +42,9 @@
 -- in its own subtransaction, aborted by a dedicated success sentinel. Native
 -- unwind restores settings, including role/session_authorization, without
 -- fresh permission-checked assignments under a temporarily changed role.
+-- check_function_bodies is re-asserted on after the routine's own SET clauses,
+-- so a routine declared with SET check_function_bodies=off is still validated
+-- (one place this guard is stricter than CREATE FUNCTION).
 -- That is the check CREATE FUNCTION performs, against the
 -- post-drop catalog, with no DDL: nothing is re-created, so OIDs, ownership, ACLs
 -- and comments are untouched and a named failure rolls the transaction back.
@@ -1115,6 +1118,9 @@ BEGIN
                 parsed_setting := pg_temp.dead143_setting(setting);
                 PERFORM set_config(parsed_setting[1],parsed_setting[2],true);
             END LOOP;
+            -- A routine's own SET check_function_bodies=off would switch the
+            -- validator off; the second line validates every routine regardless.
+            PERFORM set_config('check_function_bodies','on',true);
             CASE f.lanname
                 WHEN 'sql' THEN PERFORM pg_catalog.fmgr_sql_validator(f.oid);
                 WHEN 'plpgsql' THEN PERFORM pg_catalog.plpgsql_validator(f.oid);

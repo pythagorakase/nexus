@@ -1477,3 +1477,54 @@ def test_migration_143_round4_validator_scope(
         finally:
             if created_role:
                 _sql(dbname, f'DROP ROLE "{role}"')
+
+
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize("case", ("broken-body", "healthy-body"))
+def test_migration_143_round5_routine_cannot_disable_validation(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+    post: bool,
+) -> None:
+    """A routine's own SET check_function_bodies=off does not skip the second line."""
+    body = (
+        "SELECT missing_column FROM public.characters"
+        if case == "broken-body"
+        else "SELECT 1"
+    )
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        # check_function_bodies=off at creation lets the broken body in, exactly
+        # as a legacy dump restore would; the routine then carries the setting.
+        _sql(
+            dbname,
+            "SET LOCAL check_function_bodies = off; "
+            "CREATE FUNCTION public.probe813_bodies() RETURNS integer LANGUAGE sql "
+            f"SET check_function_bodies = off AS $$ {body} $$; "
+            "COMMENT ON FUNCTION public.probe813_bodies() IS '813 validator-off probe'",
+        )
+        refuses = case == "broken-body"
+        before = _snapshot(dbname, surviving=not refuses)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT current_setting('check_function_bodies')")
+            assert cur.fetchone() == ("on",)
+            applied = migrate.apply_migration(
+                conn, "143", "drop_dead_schema_strata", MIGRATION
+            )
+            assert applied is not refuses, caplog.text
+            cur.execute("SELECT current_setting('check_function_bodies')")
+            assert cur.fetchone() == ("on",)
+            if not refuses:
+                _post_state(cur)
+                cur.execute("SELECT public.probe813_bodies()")
+                assert cur.fetchone() == (1,)
+        if refuses:
+            assert "probe813_bodies" in caplog.text, caplog.text
+            assert "post-drop" in caplog.text and "missing_column" in caplog.text
+            assert _stamps(dbname) == stamps
+        assert _snapshot(dbname, surviving=not refuses) == before
+        assert _function_catalog(dbname) == functions
