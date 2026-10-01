@@ -23,8 +23,9 @@ sites, dependency violations, and an explicit `route_reachability.status = not_p
 `config/reachability.toml` declares the maintained Python scope: `nexus`, `scripts`,
 `ir_eval`, Python migrations, and top-level Python files. Python test helpers are scanned
 as graph nodes separately, within the configured pytest test paths. Archived tests are
-excluded according to `pytest.ini`. Rust, TypeScript, shell, and skill-local scripts are
-outside this gate.
+excluded according to `pytest.ini`. The import graph covers Python only: Rust,
+TypeScript, shell, and skill-local scripts have no nodes in it. The path classification
+(below) covers every file under `scripts/` and `ir_eval/`, shell and data files included.
 
 Inside a git checkout the scope is git's view of the tree: tracked files plus untracked
 files that the ignore rules do not exclude (`git ls-files --cached --others
@@ -59,8 +60,9 @@ import resolution, not root authority.
 ## Ratchet and baseline maintenance
 
 `config/reachability_baseline.json` records existing unreachable modules and established
-production paths. The initial inventory deliberately leaves legacy modules unclassified;
-their presence in the baseline is neither maintenance approval nor a deletion decision.
+production paths. Their presence in the baseline is neither maintenance approval nor a
+deletion decision; what each path under `scripts/` and `ir_eval/` is for is recorded
+separately in the path classification.
 
 The gate fails for a newly unreachable maintained module or an established production
 module that loses its production path, even when tests still import it. Deleting a module
@@ -81,6 +83,55 @@ Review both baseline lists in the diff. Resolve unexpected lost paths/new orphan
 refreshing; `--write-baseline` is an explicit inventory replacement, not evidence that a
 removal is safe. A reachability failure can call for restoring an import, registering a
 supported executable, or removing genuinely retired code after its separate decision.
+
+## Path Classification
+
+The `[classification]` table in `config/reachability.toml` gives every file under its
+`scope` directories (`scripts/` and `ir_eval/`) exactly one entry: a path, a class, and a
+non-blank reason. Entries are sorted by path. The gate fails for a file in scope without
+an entry, for an entry whose path is not in scope, and for a graph class that disagrees
+with the import graph; a duplicate entry, an unknown class, a blank reason, or an
+unsorted table is a configuration error. In a git checkout the scope is the same view of
+the tree as above, so ignored files such as logs need no entry.
+
+There are five graph classes. For a Python path in the maintained scope the graph decides
+which one is correct:
+
+- **`runtime`:** a production root reaches it.
+- **`operator`:** an operator or migration root reaches it and no production root does
+  (migrations run only through the `scripts/migrate.py` operator and runtime paths).
+  Every `[[operators]]` target is operator-reachable, so it is classed `operator`, or
+  `runtime` when production reaches it.
+- **`test-only`:** only test roots reach it.
+- **`documented`:** no root reaches it, and a tracked file outside `scripts/`, `ir_eval/`,
+  `tests/`, `docs/qa/`, and the reachability configuration names it (or
+  `ir_eval/README.md` does); its reason cites the first naming line.
+- **`dead`:** no root reaches it and no tracked document names it.
+
+The graph check accepts `documented` or `dead` for a path that no root reaches. Non-Python
+files have no graph check; they take a held class or, by review, a graph class. A `dead`
+class is a finding for review, not a deletion decision; removing a path still needs its
+own decision.
+
+A held class, listed in `held_classes`, records a pending owner question
+(`pending-ruling:<question id>`) or a separately recorded decision. There are five held
+classes:
+
+- **`pending-ruling:811-Q1`:** slot-2 manifest and apply tooling.
+- **`pending-ruling:811-Q3`:** unique historical material.
+- **`pending-ruling:811-Q4`:** provider shims that runtime imports.
+- **`pending-ruling:811-Q5`:** ir_eval V1 tooling.
+- **`openrouter-shim`:** `scripts/api_openrouter.py`, kept in `scripts/` under its own
+  class (811-Q12).
+
+A held class is exempt from the graph check, and no held class may reuse a graph class
+name. When the question is ruled, the path moves to the class the ruling implies.
+
+Every change that adds, renames, or deletes a path under `scripts/` or `ir_eval/` updates
+its entry in the same change. The checker prints the three finding lists
+(`unclassified_paths`, `classified_paths_not_in_repository`, `class_graph_mismatches`) and
+`classification_counts` in its summary, and the same block appears under
+`classification` in the `--report` JSON.
 
 ## Dynamic imports and retired names
 
