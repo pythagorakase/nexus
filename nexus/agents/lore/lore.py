@@ -558,7 +558,7 @@ class LORE:
         raw_queries: List[str] = [directive]
         if target_chunk_text:
             raw_queries.append(target_chunk_text[:max_query_text_chars])
-        queries: List[str] = [sanitize_query(q) for q in raw_queries if q and q.strip()]
+        queries: List[str] = [s for s in (sanitize_query(q) for q in raw_queries) if s]
         queries = list(dict.fromkeys(queries))  # Deduplicate
 
         # Execute queries via MEMNON

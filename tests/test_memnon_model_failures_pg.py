@@ -229,7 +229,7 @@ def test_sql_layer_propagates_a_query_error(
 ) -> None:
     """A SQL error reaches the caller instead of becoming an empty result."""
 
-    with pytest.raises(psycopg2.errors.UndefinedColumn):
+    with pytest.raises(psycopg2.errors.UndefinedColumn) as raised:
         search(
             db_url=database_url(clone),
             query_text="needle",
@@ -237,6 +237,10 @@ def test_sql_layer_propagates_a_query_error(
             model_weights={EMBEDDER: 1.0},
             filters={"season": "missing_column"},
         )
+
+    # An error re-raised from a catch-and-retry handler carries the first error
+    # as __context__; none means no fallback search ran (item 9).
+    assert raised.value.__context__ is None
 
 
 @pytest.fixture()

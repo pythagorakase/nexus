@@ -108,3 +108,16 @@ async def test_retrieve_context_without_chunk_uses_only_directive_query() -> Non
         "target_chunk_id": None,
     }
     assert directive["sql_attempts"] == []
+
+
+@pytest.mark.asyncio
+async def test_retrieve_context_skips_a_directive_that_sanitizes_to_nothing() -> None:
+    """A punctuation-only directive must not send an empty query to MEMNON."""
+
+    lore = LORE.__new__(LORE)
+    lore.memnon = FakeMemnon()
+    lore.settings = {}
+
+    await lore.retrieve_context(["???"], chunk_id=None)
+
+    assert lore.memnon.queries == []

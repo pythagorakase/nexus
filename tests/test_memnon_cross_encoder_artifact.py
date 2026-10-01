@@ -29,6 +29,7 @@ from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 from transformers.models.qwen3.modeling_qwen3 import Qwen3ForCausalLM
 
 from nexus.agents.memnon.utils import cross_encoder
+from nexus.agents.memnon.utils import embedding_manager
 from nexus.agents.memnon.utils.artifact_manifest import (
     RERANKER_ROLE,
     production_artifact_specs,
@@ -288,14 +289,15 @@ def test_qwen3_half_copied_folder_raises_with_the_underlying_error(
 
 
 @pytest.fixture()
-def isolated_reranker_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the process-wide reranker cache empty and scoped to one test."""
+def isolated_model_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the process-wide reranker and embedder caches empty for one test."""
 
     monkeypatch.setattr(cross_encoder, "_RERANKER_CACHE", {})
+    monkeypatch.setattr(embedding_manager, "_MODEL_CACHE", {})
 
 
 def test_qwen3_install_command_reaches_the_reranker_from_rerank_results(
-    tmp_path: Path, isolated_reranker_cache: None
+    tmp_path: Path, isolated_model_caches: None
 ) -> None:
     """The repository MEMNON derives reaches the Qwen3 remedy, not only CE's.
 
@@ -324,7 +326,7 @@ def test_qwen3_install_command_reaches_the_reranker_from_rerank_results(
 
 @pytest.mark.parametrize("use_sliding_window", [True, False])
 def test_rerank_results_raises_when_the_cross_encoder_cannot_score(
-    tmp_path: Path, isolated_reranker_cache: None, use_sliding_window: bool
+    tmp_path: Path, isolated_model_caches: None, use_sliding_window: bool
 ) -> None:
     """A real scoring error propagates instead of returning unreranked results."""
 
@@ -341,7 +343,9 @@ def test_rerank_results_raises_when_the_cross_encoder_cannot_score(
         )
 
 
-def test_score_pair_raises_for_an_over_long_pair(tmp_path: Path) -> None:
+def test_score_pair_raises_for_an_over_long_pair(
+    tmp_path: Path, isolated_model_caches: None
+) -> None:
     """score_pair raises the model's error instead of scoring the pair 0.0."""
 
     folder = write_tiny_cross_encoder(tmp_path / "artifacts" / "reranker")
