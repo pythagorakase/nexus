@@ -608,3 +608,184 @@ Black on the two changed Python files: `2 files would be left unchanged.`
 Flake8 on them is clean; mypy: `Success: no issues found in 2 source files`.
 `nexus.toml` is unchanged in this pass; the commit's `validate-config` hook
 passed.
+
+## After the Second Independent Review (Merge `75fbf48f`, Fix `e3a9ed9c`)
+
+`origin/main` (`fedebf92`) merged in first as the plain merge commit
+`75fbf48f`, without a conflict. The second independent pass (frozen at
+`870f4ba5`) found four P2 in the process model; all four are fixed.
+
+1. **An unreaped service exit read as a live service that lost its writer.**
+   In foreground mode the services are children of the supervisor, and an
+   exited child answers `kill(pid, 0)` until it is reaped. `_check_children`
+   took the live branch; when the writer had drained and exited normally,
+   `_writer_alive` reaped it and the branch raised a capture failure instead
+   of reaching `autorestart = "on-failure"`. Fix: the new
+   `log_capture.process_running(pid)` calls `_child_state(pid)` first: an
+   exited own child (False) is reaped and takes the exited path (wait out the
+   writer, unlink, autorestart); a running child (True), or a pid that is not
+   ours and still answers `pid_alive` (None), is live and gets the dead-writer
+   check. `_await_healthy` uses the same check for its "exited during
+   startup" branch, which had the same blind spot: a start that exits at once
+   is now reported at once rather than after `startup_deadline_seconds`.
+2. **A startup failure could leave a live writer with no record.**
+   `_start_service` now writes the pidfile immediately after `_spawn` (the
+   same record; `started_at` taken then). `_await_healthy`'s two failure
+   branches unlink it only after `_await_writer` has returned; when that wait
+   raises, the record stays, so the next `_start_service` finds it stale and
+   waits for that writer (raising again while the probe cannot run) instead
+   of starting a second writer. `up()`'s rollback stops every enabled service
+   that has a pidfile at that moment, not only the names in `started`; each
+   teardown failure is attached to the original exception with
+   `exc.add_note(f"Teardown of '{name}' also failed: {teardown_exc}")` and the
+   original is re-raised. One guard beyond the order's letter: a record that
+   already existed, unchanged, before this `up()` call is not stopped. Without
+   it, `nexus up` over a running stack (refused as "already running") would
+   stop that stack, and a stale record whose writer could not be waited out
+   would be retried in the rollback for a duplicate error.
+3. **A failed child spawn abandoned its writer.** `spawn_captured` takes a
+   required `health: RuntimeHealthSettings` (both callers pass
+   `settings.runtime.health`). When the child's `Popen` raises, it closes
+   `writer.stdin`, calls `wait_for_writer(writer.pid, log_path,
+   stop_grace_seconds, poll_interval_seconds)`, kills and collects the writer
+   when that returns False, and re-raises the original exception; a
+   `WriterProbeError` from the wait is raised `from` the spawn error. The
+   docstring sentence that began "If the child cannot be started" says so.
+4. **A record-write failure left the worker and its writer running.**
+   `local_inference._abandon_spawn(settings, process, log_path)`, used by
+   `activate` and `start_download`: SIGTERM to the process group (a
+   `ProcessLookupError` is fine), wait for the process to exit for
+   `stop_grace_seconds` polling at `poll_interval_seconds` (through
+   `process_running`, so the gateway reaps its own child), SIGKILL the group
+   when it still runs at the deadline, then `wait_for_writer`/`kill_writer` on
+   `process.writer_pid` with the same bounds (a `WriterProbeError`
+   propagates), then the caller re-raises its `LocalInferenceError`.
+
+`docs/runtime.md` states the four rules beside the writer lifecycle and the
+local-model captures.
+
+New tests:
+
+- `tests/test_runtime/test_supervisor.py::test_check_children_restarts_an_unreaped_service_exit`:
+  a foreground-style captured child (`ONE_LINE_CHILD`) prints one line and
+  exits normally; `autorestart = "on-failure"`, one retry. The test waits
+  until both the child and its writer are zombies, probing `ps` through
+  `os.posix_spawn` because every new `subprocess.Popen` first reaps the
+  exited children of discarded `Popen` objects. `_check_children` raises
+  nothing, `restarts == {"echo": 1}`, the new pidfile names a new pid, and
+  the capture reads `one-line` twice.
+- `test_check_children_still_fails_a_live_child_without_its_writer`: the same
+  child with its marker present keeps running (it serves 200 on its port);
+  with its writer killed, `_check_children` raises the ordered capture-failure
+  text exactly.
+- `test_up_leaves_no_record_and_no_writer_when_a_service_exits_at_once`: only
+  `echo` enabled, its command `raise SystemExit(3)`; `up()` raises "'echo'
+  exited during startup", no pidfile remains, and the real `ps` lists no live
+  writer for the capture.
+- `test_failed_start_keeps_the_record_when_the_writer_probe_cannot_run`: the
+  holding child under `up()` with no `ps` on `PATH`. `up()` raises "Cannot
+  tell whether pid W ...", carries the note "Teardown of 'echo' also failed:
+  Cannot tell ...", and leaves the pidfile with its `log_writer_pid`; a
+  second `_start_service` raises the probe error for the same writer before
+  any spawn; with the real `ps` restored exactly one writer runs for the
+  capture (the recorded one) and the record is unchanged.
+- `test_failed_child_spawn_waits_out_its_writer`: `spawn_captured` on a
+  missing executable raises `FileNotFoundError`; afterwards the real `ps`
+  lists no live writer for the capture and `.writer-error` is empty.
+- `tests/test_api/test_local_inference.py::test_activation_abandons_a_spawn_whose_record_cannot_be_written`
+  and `test_download_abandons_a_spawn_whose_record_cannot_be_written`: a real
+  stub llama-server that prints one line and sleeps (and, for the download,
+  the real worker under `HF_HUB_OFFLINE=1`) under a real writer, with the
+  record write failing for real. `activate` / `start_download` raise "Cannot
+  write local model state"; afterwards no child of the test process that the
+  call started remains, running or unreaped (listed through `os.posix_spawn`
+  of `ps`), the real `ps` lists no live writer, and no record exists.
+
+Deviation in the item 4 tests: the order said to replace the state directory
+by a plain file before the call. `logs_dir` equals `state_dir`, and both
+calls read the previous record (and the writer opens the capture) in that
+directory before they spawn, so a plain file there fails the read first and
+never reaches the write. The tests instead make the state directory
+read-only (`0o555`) with the capture and its `.writer-error` file created
+beforehand: the record read finds no file, the writer appends to the
+existing capture, and `tempfile.mkstemp` in `_write_json` fails with
+`PermissionError`, mapped to `LocalInferenceError`. No mock.
+
+### Red Runs
+
+Each plant restored the old behavior in a scratch edit; the file was copied
+back from a saved copy and compared with `cmp` before anything else ran.
+
+Item 1, `_check_children` deciding liveness with `_pid_alive(pid)` again:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_runtime/test_supervisor.py -k unreaped
+E           nexus.runtime.supervisor.RuntimeError_: Log writer for 'echo' (pid 89537) died while the service (pid 89538) was running; its output had nowhere to go. Stopped the service.
+1 failed, 56 deselected, 5 warnings in 2.05s
+```
+
+Item 3, `spawn_captured` re-raising without the writer wait:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q -rf tests/test_runtime/test_supervisor.py -k failed_child_spawn
+E       assert [89612] == []
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_runtime/test_supervisor.py::test_failed_child_spawn_waits_out_its_writer
+1 failed, 56 deselected, 5 warnings in 0.48s
+```
+
+Item 4, `_abandon_spawn` reduced to the old SIGTERM and return:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q -rf tests/test_api/test_local_inference.py -k abandons
+E       AssertionError: activation left children behind: [91108, 91111]
+E       AssertionError: the download left children behind: [91134, 91135]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_api/test_local_inference.py::test_activation_abandons_a_spawn_whose_record_cannot_be_written
+FAILED tests/test_api/test_local_inference.py::test_download_abandons_a_spawn_whose_record_cannot_be_written
+2 failed, 32 deselected, 7 warnings in 0.76s
+```
+
+Green on the fix: `9 passed, 82 deselected, 7 warnings in 6.64s` for the
+seven new tests plus the two earlier probe tests that share their names'
+keywords.
+
+### Gates on `e3a9ed9c`
+
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_runtime tests/test_runtime_home.py tests/test_api/test_local_inference.py tests/test_api/test_local_models_endpoints.py tests/test_owner_target_guard.py`
+(`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT` unset):
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+352 passed, 7 warnings in 138.87s (0:02:18)
+```
+
+Offline `$PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2704 passed, 444 skipped, 8 warnings in 445.00s (0:07:25)
+```
+
+Offline `$PY -m pytest -q tests/test_api tests/test_orrery`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1833 passed, 743 skipped, 7 warnings in 43.22s
+```
+
+Offline `$PY -m pytest -q tests/test_reachability.py tests/test_prompt_lint.py`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+76 passed, 5 warnings in 21.47s
+```
+
+Black on the five changed Python files: `5 files would be left unchanged.`
+Flake8 on them is clean; mypy reports only the 9 pre-existing
+`nexus/runtime/supervisor.py` errors. `nexus.toml` is unchanged in this pass;
+the commit's `validate-config` hook passed.
