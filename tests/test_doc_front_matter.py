@@ -335,7 +335,7 @@ def _null_separated(output: str) -> set[str]:
 
 
 def _merge_base(root: Path, base_ref: str) -> str:
-    """Return the merge base of ``base_ref`` and HEAD, or raise when history lacks it."""
+    """Return the merge base of ``base_ref`` and HEAD; raise when history lacks it."""
     toplevel = _history_git(root, "rev-parse", "--show-toplevel")
     if toplevel.returncode != 0:
         raise FreshnessHistoryError(
