@@ -347,3 +347,37 @@ The graph fixture now gives `scripts/shared.py` a production and an operator roo
 - Testing the test kind before the operator kind in `_expected_graph_class`: `pytest -k graph_classes_follow` gave `8 failed, 2 passed`.
 - Testing the operator kind before production: `pytest -k graph_classes_follow` gave `8 failed, 2 passed`.
 - Reclassing `ir_eval/qrels.json` from `pending-ruling:811-Q5` to `dead` in the TOML: `pytest -k "811_decisions or ratchet"` gave `1 failed, 4 passed` (the decision test fails; the ratchet alone still passes, because a non-Python path has no graph check).
+
+## Second Review Fixes at 16e17270
+
+Commit `16e17270` changes only `tests/test_reachability.py`. The checker and the classification entries do not change, so the counts, the red run and the green run above still hold.
+
+- The graph test gains two `base-tested` cases on the base fixture, where `tests/test_example.py` also imports `scripts.migrate`. Migration and test roots reach the loader, and no production or operator root does. Classed `test-only`, it gives one mismatch with expected `operator`; classed `operator`, it gives none.
+- The duplicate-entry case is now `[paths[0], paths[1], dict(paths[0]), paths[2]]`: a duplicate that also breaks the sort order. It must raise `more than one`.
+
+These tails ran on `16e17270`:
+
+`python -m pytest -q tests/test_reachability.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+54 passed, 5 warnings in 10.25s
+```
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 python -m pytest -q -p tests.dbname_audit tests/test_reachability.py tests/test_owner_target_guard.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+134 passed in 12.60s
+```
+
+`python -S scripts/check_reachability.py` exits 0. Black leaves the test file unchanged, flake8 is clean, and mypy reports no error in the test file.
+
+Two scratch mutations to `scripts/check_reachability.py`, each run on the tree of `16e17270` and reverted with `git checkout -- scripts/check_reachability.py`:
+
+- Testing the test kind before the migration kind in `_expected_graph_class` (operator, then test, then migration): `pytest tests/test_reachability.py` gave `2 failed, 52 passed`, both `base-tested` cases.
+- Running the sorted check before the duplicate check: `pytest tests/test_reachability.py` gave `1 failed, 53 passed` (`test_classification_requires_one_entry_per_scoped_path`).
