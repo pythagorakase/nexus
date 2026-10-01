@@ -1,0 +1,41 @@
+{
+  "database": "qa640_838_cli_5b7c00013925",
+  "reads": [
+    {
+      "label": "after setup",
+      "weird_level": "high",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after step 1",
+      "weird_level": "high",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after step 2",
+      "weird_level": "high",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after step 3",
+      "weird_level": "high",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after step 4",
+      "weird_level": "high",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after transition",
+      "weird_level": "no row",
+      "new_story_creator_rows": 0,
+      "genesis_weird": null
+    }
+  ]
+}
