@@ -17,6 +17,140 @@
       "hovered": "hsl(190 80% 30%)"
     }
   ],
+  "keyOpacityBackdrops": [
+    {
+      "row": "key-row optional",
+      "opacity": "0.5",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(13, 18, 28)"
+    },
+    {
+      "row": "key-row missing",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(13, 18, 28)"
+    },
+    {
+      "row": "key-row ",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(13, 18, 28)"
+    },
+    {
+      "row": "key-row ",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(13, 18, 28)"
+    },
+    {
+      "row": "key-row optional",
+      "opacity": "0.5",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(18, 18, 18)"
+    },
+    {
+      "row": "key-row missing",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(18, 18, 18)"
+    },
+    {
+      "row": "key-row ",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(18, 18, 18)"
+    },
+    {
+      "row": "key-row ",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(18, 18, 18)"
+    },
+    {
+      "row": "key-row optional",
+      "opacity": "0.5",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(9, 17, 17)"
+    },
+    {
+      "row": "key-row missing",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(9, 17, 17)"
+    },
+    {
+      "row": "key-row ",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(9, 17, 17)"
+    },
+    {
+      "row": "key-row ",
+      "opacity": "1",
+      "path": [
+        "key-list",
+        "set-card-body",
+        "set-card-frame"
+      ],
+      "selector": "set-card-frame",
+      "background": "rgb(9, 17, 17)"
+    }
+  ],
   "reducedMotion": true,
   "motion": [
     {
@@ -300,8 +434,8 @@
   "hashes": {
     "ui/client/src/index.css": "609814ed9d00eb4206ce23a5bd445d3ac1e2ce1ca9ca30af179ca16586f01be5",
     "ui/client/src/components/nexus/nexus-layout.css": "b7ef2492e46e46459eaadfe3f95c37a2ca3843cbacdab7c4ab92a46e71d1e0db",
-    "ui/client/src/components/nexus/MapPane.tsx": "3537b2adcca6a95c47e37bf55b84153feddb0acbb2b57cd44d64c2f70c445605",
+    "ui/client/src/components/nexus/MapPane.tsx": "1b21eae3ea9bf1baac308808e62fd7a79037e9c45ffb33d5130944343838505a",
     "ui/dist/public/assets/index-BBCeaPR-.css": "a3c9a06c180ea88f5c3c03dfe2504628753da73b8259d12223921eeee5a69c04",
-    "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/fixture.tsx": "c99cc7dcb03159df66780518531e5171cbb40021a8f46a8e5368542ebff784cf"
+    "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review/fixture.tsx": "a62599a1ea29221163db156cff1c2698ec8d4a1edbc81b2d0bf3616403cf3d1d"
   }
 }
