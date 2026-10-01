@@ -198,3 +198,88 @@ matches only `ALTER TABLE` and decision 819-Q2 covers only `CREATE FOREIGN TABLE
 The script docstring and `docs/database.md` say so, and the point is recorded on
 #819 as a follow-up. `CREATE FOREIGN DATA WRAPPER`, `CREATE SERVER`, and
 `CREATE USER MAPPING` create no table and stay unchecked.
+
+## After the Independent Review
+
+The independent review of `cb5c500c` found three legal PostgreSQL 17 forms
+that create a persistent table and passed silently. Commit `c710a927` closes
+them as the fix order decides:
+
+- **The hint is unanchored.** `_PY_SQL_HINT`'s alternative is now
+  `\bSELECT\b[\s\S]*?\bINTO\b`, so a literal whose `SELECT ... INTO` follows a
+  leading comment (`"-- snapshot\nSELECT 1 INTO t;"`) or another statement
+  (`"BEGIN; SELECT 1 INTO t2; COMMIT;"`) is lexed. A `WITH ... SELECT ... INTO`
+  literal contains both words and still matches.
+- **Leading parentheses.** `_base_depth_tokens` reads the statement at its base
+  depth, the depth after its leading `(` characters (whitespace and comments
+  between them included), and stops at the first token shallower than the
+  base. `(SELECT 1 INTO t);` and `(SELECT 1 INTO t) UNION ALL SELECT 2;` now
+  report `t`; nothing after the closing `)` is read.
+- **CTE names.** `_after_with_list` skips a `WITH` list before the verb search:
+  after each group that closes back to the base depth, `,` continues to the
+  next CTE, `AS` continues after a CTE column list, and any other token starts
+  the main statement. `WITH delete AS (...) SELECT ... INTO snapshot` and
+  `WITH RECURSIVE update (n) AS (...) SELECT ... INTO snapshot2` now report.
+- One depth tracker: `_depth_tokens` yields words, quoted identifiers,
+  brackets and commas with their depth, and replaces `_top_level_words`, whose
+  only caller was this rule.
+
+New test `test_select_into_is_found_past_comments_parentheses_and_cte_names`
+asserts the full findings list: the six positives above at their `INTO` lines,
+and silence for `WITH delete AS (SELECT 1 AS id) DELETE FROM t WHERE id IN
+(SELECT id FROM delete);`, `SELECT 1 FROM (SELECT 2) AS sub;`, and a DO body
+holding the shapes of `migrations/109_extend_expiry_default_durations.sql:41-49`
+and `migrations/077_recruit_ally_projects.sql:24-25`.
+
+On `cb5c500c` (a scratch copy of `git show cb5c500c:scripts/check_migration_comments.py`)
+the new test fails with no finding at all:
+
+```
+AssertionError: assert [] == ['130_hidden.... be verified']
+Right contains 6 more items, first extra item: '130_hidden.sql:2: SELECT INTO public.t declares no column list; its columns cannot be verified'
+1 failed, 36 deselected
+```
+
+Each hunk is needed: with only that hunk reverted in a scratch copy, the test
+fails on exactly its two cases (`-k "select_into or foreign or import"`):
+
+```
+===== hint reverted (anchored alternative)
+Right contains 2 more items, first extra item: '131_hidden.py:2: SELECT INTO public.t declares no column list; its columns cannot be verified'
+1 failed, 4 passed, 32 deselected in 0.05s
+===== leading parentheses reverted (_LEADING_PARENS = r"\s*")
+At index 0 diff: '130_hidden.sql:7: SELECT INTO public.snapshot ...' != '130_hidden.sql:2: SELECT INTO public.t ...'
+1 failed, 4 passed, 32 deselected in 0.05s
+===== WITH-list skip reverted
+At index 2 diff: '131_hidden.py:2: SELECT INTO public.t ...' != '130_hidden.sql:7: SELECT INTO public.snapshot ...'
+1 failed, 4 passed, 32 deselected in 0.05s
+```
+
+A scratch probe also reports `((SELECT 1 INTO t))` after a block comment, a
+quoted CTE name `"delete"`, `MATERIALIZED` and `NOT MATERIALIZED` CTEs, and a
+recursive CTE with a `SEARCH DEPTH FIRST` clause, and stays silent for
+`WITH ... INSERT INTO`, `WITH ... UPDATE`, `(SELECT 1) UNION SELECT 2`, and
+`(SELECT 1 INTO TEMP t)`.
+
+On `c710a927`, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT`
+unset:
+
+```
+$ python -m pytest -q tests/test_migration_comment_lint.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+37 passed, 5 warnings in 0.76s
+$ python scripts/check_migration_comments.py; echo "exit $?"
+OK: every object created after migration 129 has a comment.
+exit 0
+$ cmp hist_before.txt hist_after.txt; echo "cmp exit $?"
+cmp exit 0
+     405 hist_before.txt
+     405 hist_after.txt
+```
+
+`hist_before.txt` is the snapshot taken before the original change; the
+historical run at `cb5c500c` was also byte-identical to it before these edits.
+Black (`2 files left unchanged`), flake8 (exit 0), and mypy
+(`Success: no issues found in 2 source files`) pass on both changed Python
+files. Prose that reads "select ... into" inside a non-executed Python string
+now reaches the scanner by design, as the coordinator accepted.
