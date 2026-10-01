@@ -55,8 +55,9 @@ command assembled at run time; columns a statement does not declare
 or LIKE whose options, applied left to right, do not include COMMENTS);
 IMPORT FOREIGN SCHEMA; and SELECT ... INTO outside PL/pgSQL. SELECT ... INTO
 written as a PL/pgSQL statement in a DO body assigns a variable, creates
-nothing, and is not checked; inside an EXECUTE command it is SQL and is
-checked. A COMMENT that is NULL or blank is reported as removed documentation.
+nothing, and is not checked; one inside an EXECUTE command is still reported
+(PostgreSQL refuses EXECUTE of SELECT ... INTO at run time). A COMMENT that is
+NULL or blank is reported as removed documentation.
 
 Usage
 -----

@@ -857,8 +857,8 @@ def test_select_into_fails_like_ctas(tmp_path: Path) -> None:
 
     In a DO body SELECT INTO assigns a variable, as in migrations 077 and 109,
     so it passes there; a temporary target and INSERT INTO pass everywhere.
-    An EXECUTE command in a DO body is SQL, so its SELECT INTO is checked, and
-    a target built at run time is unresolvable.
+    An EXECUTE command in a DO body is still scanned as SQL, so its SELECT INTO
+    is reported, and a target built at run time is unresolvable.
     """
     _migration(
         tmp_path,
