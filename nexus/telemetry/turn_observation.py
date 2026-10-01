@@ -49,6 +49,10 @@ both in the attempt manifest. A value no source recorded reads ``"unknown"``;
 this includes list-typed fields (``repair_codes``, ``rejection_codes``,
 ``outcomes``, ``seats``, and a ``block_tokens`` or ``influence_tokens``
 mapping), so a JSON consumer must not assume they are always arrays or objects.
+Window ``removed_block_tokens`` and ``removed_tokens_total`` are cached assembly
+removal estimates, including headings, copied from the authoritative source.
+Absent or empty maps read ``"unknown"``; complete zero maps record zero removal.
+Each attempt repeats its seat's snapshot, not additional provider usage.
 ``null`` means the source records that the thing has not happened (no terminal
 outcome yet, no later phase) or was not sent (no reasoning effort on the
 request).
@@ -104,6 +108,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, Union
 
+from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
 from nexus.telemetry.attempt_manifest import PROVIDER_JOB_SEATS, validation_metadata
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.usage import UsageEvent, read_prompt_windows, summarize_usage
@@ -412,11 +417,14 @@ def _window(
                     "block_tokens_total",
                     "block_tokens",
                     "influence_tokens",
+                    "removed_block_tokens",
+                    "removed_tokens_total",
                 ),
                 UNKNOWN,
             ),
         }
     block_tokens = dict(values["block_tokens"])
+    removed = dict(values.get("removed_block_tokens") or {})
     # Records written before influence roles were declared (#744) carry none.
     influence_tokens = values.get("influence_tokens") or UNKNOWN
     return {
@@ -432,6 +440,8 @@ def _window(
         "block_tokens_total": sum(block_tokens.values()),
         "block_tokens": block_tokens,
         "influence_tokens": influence_tokens,
+        "removed_block_tokens": removed or UNKNOWN,
+        "removed_tokens_total": sum(removed.values()) if removed else UNKNOWN,
     }
 
 
@@ -866,6 +876,16 @@ def _attempt_lines(attempt: Mapping[str, Any]) -> list[str]:
                     f"{role} {_tokens(tokens)}" for role, tokens in influence.items()
                 )
             )
+    removed = window["removed_block_tokens"]
+    if isinstance(removed, dict):
+        lines.append(
+            f"  removed {_tokens(window['removed_tokens_total'])} · "
+            + " · ".join(
+                f"{kind} {_tokens(removed.get(kind, 0))}" for kind in TRIMMABLE_BLOCKS
+            )
+        )
+    else:
+        lines.append(f"  removed {UNKNOWN}")
     usage = attempt["usage"]
     lines.append(_usage_line(usage, completed=usage["provider_completed_at"]))
     if validation["provenance"] == UNKNOWN:

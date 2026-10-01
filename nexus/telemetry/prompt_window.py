@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, NonNegativeInt
 
 if TYPE_CHECKING:
     from nexus.config.seat_window import SeatWindow
@@ -200,6 +200,19 @@ class AssemblyRequest:
         )
 
     @property
+    def removed_block_tokens(self) -> dict[str, int]:
+        """Attribute every removed appearance, including headings, by cached size."""
+        from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
+
+        counts: dict[str, int] = dict.fromkeys(TRIMMABLE_BLOCKS, 0)
+        for index in self.removed:
+            kind = self.blocks[index][0]
+            if kind not in counts:
+                raise ValueError(f"Removed non-trimmable block: {kind!r}")
+            counts[kind] += self.sizes[index]
+        return counts
+
+    @property
     def target(self) -> int:
         """Reserve the writer response and configured tokenizer safety margin."""
         return self.budget.input_ceiling - self.reserved_output - self.safety_margin
@@ -238,6 +251,7 @@ class PromptWindowRecord(BaseModel):
     # block_tokens summed per declared influence role (#744); empty on records
     # written before roles were declared.
     influence_tokens: dict[str, int] = Field(default_factory=dict)
+    removed_block_tokens: dict[str, NonNegativeInt] = Field(default_factory=dict)
     input_tokens: int = Field(ge=0)
     effective_ceiling: int = Field(gt=0)
     policy_headroom: int = Field(ge=0)
