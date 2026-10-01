@@ -246,6 +246,11 @@ class TurnCycleManager:
 
         return self.settings.lore.retrieval.max_deep_queries
 
+    def _deep_query_k(self) -> int:
+        """Resolve the configured MEMNON result count for each deep query."""
+
+        return self.settings.lore.retrieval.deep_query_k
+
     def _presence_boost_enabled(self) -> bool:
         """Return the required MEMNON presence-boost feature flag."""
 
@@ -679,6 +684,7 @@ class TurnCycleManager:
         all_results: List[Dict[str, Any]] = []
         query_type_counts: Dict[str, int] = {}
         max_deep_queries = self._max_deep_queries()
+        deep_query_k = self._deep_query_k()
         orrery = self._enabled_orrery()
         collect_query_embeddings = orrery is not None and orrery.knowledge.enabled
 
@@ -689,7 +695,7 @@ class TurnCycleManager:
             # to adjust vector/text weights for optimal results
             search_kwargs: Dict[str, Any] = {
                 "query": query_obj["text"],
-                "k": 15,  # Get more results since we'll deduplicate
+                "k": deep_query_k,
                 "use_hybrid": True,
             }
             query_embeddings: Dict[str, List[float]] | None = None

@@ -69,6 +69,10 @@ graph extract exceeds the cap, NEXUS raises instead of falling through to an
 estimate. Trim the regional extract, split it by `graph_key`, or raise the cap
 deliberately after profiling.
 
+`[orrery.travel.speed_kmh]` and `[orrery.travel.detour_factor]` in `nexus.toml`
+give the speed and detour of the `estimated` route, and the speed of a graph edge
+without a duration.
+
 ## Route Selection
 
 At `travel.start`, Orrery tries routes in this order:
