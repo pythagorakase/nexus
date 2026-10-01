@@ -22,6 +22,7 @@ import requests  # type: ignore[import-untyped]
 
 from nexus.config import get_local_models_settings, load_settings
 from nexus.config.settings_models import Settings
+from nexus.runtime import log_capture
 from nexus.runtime.home import resolve_runtime_home
 from nexus.util.gguf_inspect import inspect_gguf
 
@@ -53,7 +54,15 @@ def _state_dir(settings: Settings) -> Path:
 
 
 def _logs_dir(settings: Settings) -> Path:
-    """Resolve the runtime home's captured-log directory."""
+    """Resolve the default instance's captured-log directory.
+
+    The llama-server port and ``local-model.pid.json`` are one machine-wide
+    endpoint and record, like the fixed-port siblings of the default
+    instance. Their captures (``local-model.log`` and
+    ``local-model.download.log``) stay beside that record in the default
+    instance's logs directory whatever ``NEXUS_GATEWAY_PORT`` says; read them
+    with ``nexus logs local-model`` without that variable.
+    """
     if settings.runtime is None:
         raise LocalInferenceError("[runtime] is required for local model process logs")
     return resolve_runtime_home(settings).logs_dir
@@ -303,6 +312,52 @@ def _download_process_is_ours(settings: Settings, pid: int, repo_id: str) -> boo
     )
 
 
+def _record_writer_pid(record: Any) -> int | None:
+    """The ``log_writer_pid`` of a raw state record, when it has one.
+
+    Records written before captures had a log writer carry none.
+    """
+    if record is None:
+        return None
+    if not isinstance(record, dict):
+        raise LocalInferenceError(f"Malformed local model state record: {record!r}")
+    value = record.get("log_writer_pid")
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise LocalInferenceError(
+            f"Malformed log_writer_pid in local model state: {value!r}"
+        ) from exc
+
+
+def _await_capture_writer(
+    settings: Settings, writer_pid: int | None, log_path: Path
+) -> None:
+    """Wait for a capture's previous log writer, killing one that outlives it.
+
+    A recycled pid that is no longer the file's writer returns at once and is
+    never signalled. A writer still alive after ``stop_grace_seconds`` means a
+    process still holds the captured output: it is killed and this raises.
+    """
+    if writer_pid is None:
+        return
+    if settings.runtime is None:
+        raise LocalInferenceError("[runtime] is required for shutdown settings")
+    health = settings.runtime.health
+    grace = health.stop_grace_seconds
+    if log_capture.wait_for_writer(
+        writer_pid, log_path, grace, health.poll_interval_seconds
+    ):
+        return
+    log_capture.kill_writer(writer_pid)
+    raise LocalInferenceError(
+        f"Log writer pid {writer_pid} for {log_path} outlived its process by "
+        f"{grace}s; a process still holds the captured output. Killed the writer."
+    )
+
+
 def _read_active(settings: Settings) -> dict[str, Any] | None:
     record = _read_json(_state_path(settings))
     if record is None:
@@ -376,6 +431,7 @@ def _signal_process_group(pid: int, sig: int) -> None:
 
 def _deactivate_locked(settings: Settings) -> dict[str, Any]:
     """Stop the recorded process while the lifecycle lock is held."""
+    writer_pid = _record_writer_pid(_read_json(_state_path(settings)))
     current = _read_active(settings)
     if current is None:
         _state_path(settings).unlink(missing_ok=True)
@@ -415,6 +471,7 @@ def _deactivate_locked(settings: Settings) -> dict[str, Any]:
     # and reject with a spurious foreign-occupancy 409.
     host, port, _ = _endpoint(settings)
     _await_port_release(settings, host, port)
+    _await_capture_writer(settings, writer_pid, _logs_dir(settings) / LOG_FILENAME)
     return {"stopped": True, "pid": pid}
 
 
@@ -434,6 +491,8 @@ def activate(gguf_path: str) -> dict[str, Any]:
     with _lifecycle_lock:
         settings = load_settings()
         host, port, alias = _endpoint(settings)
+        # Read before _read_active or a teardown can unlink the record.
+        previous_writer = _record_writer_pid(_read_json(_state_path(settings)))
         current = _read_active(settings)
         if current is not None and current.get("failed") is not True:
             if Path(current["gguf_path"]) == candidate:
@@ -463,19 +522,18 @@ def activate(gguf_path: str) -> dict[str, Any]:
             str(port),
             *extra_flags,
         ]
-        logs_dir = _logs_dir(settings)
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        log_path = logs_dir / LOG_FILENAME
+        log_path = _logs_dir(settings) / LOG_FILENAME
+        # One writer per file: the previous capture's writer must be gone.
+        _await_capture_writer(settings, previous_writer, log_path)
+        if settings.runtime is None:
+            raise LocalInferenceError("[runtime] is required for log capture")
         try:
-            with log_path.open("ab") as log_handle:
-                process = subprocess.Popen(
-                    command,
-                    stdin=subprocess.DEVNULL,
-                    stdout=log_handle,
-                    stderr=subprocess.STDOUT,
-                    close_fds=True,
-                    start_new_session=True,
-                )
+            process = log_capture.spawn_captured(
+                command,
+                log_path=log_path,
+                logs=settings.runtime.logs,
+                popen_kwargs={"close_fds": True, "start_new_session": True},
+            )
         except OSError as exc:
             raise LocalInferenceError(f"Failed to spawn llama-server: {exc}") from exc
 
@@ -485,6 +543,7 @@ def activate(gguf_path: str) -> dict[str, Any]:
             "port": port,
             "started_at": datetime.now(timezone.utc).isoformat(),
             "ready_observed": False,
+            "log_writer_pid": process.writer_pid,
         }
         try:
             _write_json(_state_path(settings), record)
@@ -517,6 +576,8 @@ def _read_download_record(settings: Settings) -> dict[str, Any] | None:
             "files": [str(filename) for filename in record["files"]],
             "total_bytes": int(record["total_bytes"]),
             "started_at": str(record["started_at"]),
+            # Records written before captures had a log writer carry none.
+            "log_writer_pid": _record_writer_pid(record),
         }
     except (KeyError, TypeError, ValueError) as exc:
         raise LocalInferenceError(
@@ -540,6 +601,7 @@ def start_download(
     with _download_lock:
         settings = load_settings()
         existing = _read_download_record(settings)
+        previous_writer = None if existing is None else existing["log_writer_pid"]
         if (
             existing is not None
             and _pid_alive(existing["pid"])
@@ -554,8 +616,7 @@ def start_download(
 
         resolved_dir = Path(local_dir).expanduser().resolve()
         resolved_dir.mkdir(parents=True, exist_ok=True)
-        logs_dir = _logs_dir(settings)
-        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = _logs_dir(settings) / DOWNLOAD_LOG_FILENAME
         command = [
             sys.executable,
             "-m",
@@ -573,17 +634,18 @@ def start_download(
             # classic HTTP path resumes via open("ab") + Range, which is what
             # a cancelled multi-GB pull needs.
             worker_env["HF_HUB_DISABLE_XET"] = "1"
+        # One writer per file: the previous capture's writer must be gone.
+        _await_capture_writer(settings, previous_writer, log_path)
+        if settings.runtime is None:
+            raise LocalInferenceError("[runtime] is required for log capture")
         try:
-            with (logs_dir / DOWNLOAD_LOG_FILENAME).open("ab") as log_handle:
-                process = subprocess.Popen(
-                    command,
-                    stdin=subprocess.DEVNULL,
-                    stdout=log_handle,
-                    stderr=subprocess.STDOUT,
-                    close_fds=True,
-                    start_new_session=True,
-                    env=worker_env,
-                )
+            process = log_capture.spawn_captured(
+                command,
+                log_path=log_path,
+                logs=settings.runtime.logs,
+                env=worker_env,
+                popen_kwargs={"close_fds": True, "start_new_session": True},
+            )
         except OSError as exc:
             raise LocalInferenceError(
                 f"Failed to spawn local-model download worker: {exc}"
@@ -598,6 +660,7 @@ def start_download(
             "files": files,
             "total_bytes": total_bytes,
             "started_at": datetime.now(timezone.utc).isoformat(),
+            "log_writer_pid": process.writer_pid,
         }
         try:
             _write_json(_download_path(settings), record)
@@ -690,6 +753,12 @@ def download_status() -> dict[str, Any] | None:
             payload["state"] = "done"
             return payload
         payload["state"] = "failed"
+        # The last line is on disk only once the writer has drained.
+        _await_capture_writer(
+            settings,
+            record["log_writer_pid"],
+            _logs_dir(settings) / DOWNLOAD_LOG_FILENAME,
+        )
         payload["error"] = _download_error(settings)
         return payload
 
@@ -726,6 +795,11 @@ def cancel_download() -> dict[str, Any]:
                 _signal_process_group(pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+        _await_capture_writer(
+            settings,
+            record["log_writer_pid"],
+            _logs_dir(settings) / DOWNLOAD_LOG_FILENAME,
+        )
         _download_path(settings).unlink(missing_ok=True)
         return {"cancelled": True}
 

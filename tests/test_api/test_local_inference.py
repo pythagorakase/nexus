@@ -3,16 +3,35 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
+import signal
+import socket
+import struct
+import subprocess
+import sys
 import threading
 import time
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
+import tomlkit
 
 from nexus.api import local_download_worker, local_inference
 from nexus.config import load_settings
+from nexus.runtime.log_capture import CapturedProcess, pid_alive, rotated_segment
 from nexus.util.gguf_inspect import GgufInfo
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture()
+def reaped_pid() -> int:
+    """The pid of a process this test started and reaped: never a live writer."""
+    process = subprocess.Popen([sys.executable, "-c", "pass"])
+    process.wait()
+    return process.pid
 
 
 def _settings_with_state_dir(tmp_path: Path):
@@ -45,7 +64,7 @@ def test_active_discards_dead_pid_after_readiness(tmp_path: Path, monkeypatch) -
 
 
 def test_activate_spawns_detached_and_records_state(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, reaped_pid: int
 ) -> None:
     """Activation uses a new session and returns before a health wait."""
     settings = _settings_with_state_dir(tmp_path)
@@ -53,9 +72,9 @@ def test_activate_spawns_detached_and_records_state(
     gguf_path.write_bytes(b"GGUF")
     calls = []
 
-    def fake_popen(command, **kwargs):
-        calls.append((command, kwargs))
-        return SimpleNamespace(pid=43210)
+    def fake_spawn_captured(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return CapturedProcess(pid=43210, writer_pid=reaped_pid)
 
     monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
     monkeypatch.setattr(
@@ -83,7 +102,9 @@ def test_activate_spawns_detached_and_records_state(
         "--custom-flag",
     ]
     monkeypatch.setattr(local_inference.shutil, "which", lambda value: value)
-    monkeypatch.setattr(local_inference.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        local_inference.log_capture, "spawn_captured", fake_spawn_captured
+    )
 
     result = local_inference.activate(str(gguf_path))
 
@@ -93,8 +114,9 @@ def test_activate_spawns_detached_and_records_state(
         "ready": False,
         "failed": False,
     }
-    assert calls[0][1]["start_new_session"] is True
-    assert calls[0][1]["close_fds"] is True
+    assert calls[0][1]["popen_kwargs"]["start_new_session"] is True
+    assert calls[0][1]["popen_kwargs"]["close_fds"] is True
+    assert calls[0][1]["log_path"] == tmp_path / local_inference.LOG_FILENAME
     command = calls[0][0]
     assert command.count("--model") == 1
     assert command.count("--alias") == 1
@@ -103,6 +125,7 @@ def test_activate_spawns_detached_and_records_state(
     assert command[-3:] == ["--ctx-size", "6543", "--custom-flag"]
     record = json.loads((tmp_path / local_inference.STATE_FILENAME).read_text())
     assert record["pid"] == 43210
+    assert record["log_writer_pid"] == reaped_pid
     assert record["gguf_path"] == str(gguf_path)
     assert record["ready_observed"] is False
     assert not list(tmp_path.glob("*.tmp"))
@@ -285,7 +308,7 @@ def test_deactivate_does_not_signal_unverified_reused_pid(
 
 
 def test_concurrent_activate_spawns_only_one_process(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, reaped_pid: int
 ) -> None:
     """The lifecycle lock closes the check-then-spawn race."""
     settings = _settings_with_state_dir(tmp_path)
@@ -294,11 +317,11 @@ def test_concurrent_activate_spawns_only_one_process(
     barrier = threading.Barrier(2)
     spawn_count = 0
 
-    def fake_popen(command, **kwargs):
+    def fake_spawn_captured(argv, **kwargs):
         nonlocal spawn_count
         spawn_count += 1
         time.sleep(0.05)
-        return SimpleNamespace(pid=43210)
+        return CapturedProcess(pid=43210, writer_pid=reaped_pid)
 
     monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
     monkeypatch.setattr(
@@ -319,7 +342,9 @@ def test_concurrent_activate_spawns_only_one_process(
         local_inference, "_health_ok", lambda settings, host, port: False
     )
     monkeypatch.setattr(local_inference.shutil, "which", lambda value: value)
-    monkeypatch.setattr(local_inference.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        local_inference.log_capture, "spawn_captured", fake_spawn_captured
+    )
 
     def run_activate():
         barrier.wait()
@@ -333,18 +358,18 @@ def test_concurrent_activate_spawns_only_one_process(
 
 
 def test_concurrent_download_spawns_only_one_process(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, reaped_pid: int
 ) -> None:
     """The download lock closes the singleton check-then-spawn race."""
     settings = _settings_with_state_dir(tmp_path)
     barrier = threading.Barrier(2)
     spawn_count = 0
 
-    def fake_popen(command, **kwargs):
+    def fake_spawn_captured(argv, **kwargs):
         nonlocal spawn_count
         spawn_count += 1
         time.sleep(0.05)
-        return SimpleNamespace(pid=43210)
+        return CapturedProcess(pid=43210, writer_pid=reaped_pid)
 
     monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
     monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: True)
@@ -355,7 +380,9 @@ def test_concurrent_download_spawns_only_one_process(
         "_download_process_is_ours",
         lambda settings, pid, repo_id: True,
     )
-    monkeypatch.setattr(local_inference.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        local_inference.log_capture, "spawn_captured", fake_spawn_captured
+    )
 
     def run_download():
         barrier.wait()
@@ -386,12 +413,16 @@ def test_concurrent_download_spawns_only_one_process(
 
 
 def test_start_download_ignores_stale_record_with_recycled_pid(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, reaped_pid: int
 ) -> None:
     """A live PID recycled by an unrelated process must not block downloads."""
     settings = _settings_with_state_dir(tmp_path)
     _write_download_state(tmp_path, files=["test.gguf"])
     spawned = []
+
+    def fake_spawn_captured(argv, **kwargs):
+        spawned.append(argv)
+        return CapturedProcess(pid=999, writer_pid=reaped_pid)
 
     monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
     monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: True)
@@ -401,9 +432,7 @@ def test_start_download_ignores_stale_record_with_recycled_pid(
         lambda settings, pid, repo_id: False,
     )
     monkeypatch.setattr(
-        local_inference.subprocess,
-        "Popen",
-        lambda command, **kwargs: spawned.append(command) or SimpleNamespace(pid=999),
+        local_inference.log_capture, "spawn_captured", fake_spawn_captured
     )
 
     record = local_inference.start_download(
@@ -419,19 +448,23 @@ def test_start_download_ignores_stale_record_with_recycled_pid(
     assert record["pid"] == 999
 
 
-def test_start_download_env_controls_xet(tmp_path, monkeypatch) -> None:
+def test_start_download_env_controls_xet(
+    tmp_path, monkeypatch, reaped_pid: int
+) -> None:
     """The worker env carries HF_HUB_DISABLE_XET=1 exactly when configured."""
     from types import SimpleNamespace as NS
 
     settings = _settings_with_state_dir(tmp_path)
     captured = {}
 
-    def fake_popen(command, **kwargs):
+    def fake_spawn_captured(argv, **kwargs):
         captured.update(kwargs)
-        return NS(pid=4242)
+        return CapturedProcess(pid=4242, writer_pid=reaped_pid)
 
     monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
-    monkeypatch.setattr(local_inference.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        local_inference.log_capture, "spawn_captured", fake_spawn_captured
+    )
 
     for disable, expected in ((True, "1"), (False, None)):
         captured.clear()
@@ -449,26 +482,33 @@ def test_start_download_env_controls_xet(tmp_path, monkeypatch) -> None:
             total_bytes=100,
         )
         assert captured["env"].get("HF_HUB_DISABLE_XET") == expected
+        assert captured["popen_kwargs"] == {
+            "close_fds": True,
+            "start_new_session": True,
+        }
         (tmp_path / local_inference.DOWNLOAD_FILENAME).unlink()
 
 
 def _write_download_state(
-    tmp_path: Path, *, files: list[str], total_bytes: int = 100
+    tmp_path: Path,
+    *,
+    files: list[str],
+    total_bytes: int = 100,
+    log_writer_pid: int | None = None,
 ) -> None:
-    (tmp_path / local_inference.DOWNLOAD_FILENAME).write_text(
-        json.dumps(
-            {
-                "pid": 43210,
-                "family": "test",
-                "quant": "Q4_K_M",
-                "repo_id": "example/test",
-                "local_dir": str(tmp_path / "models"),
-                "files": files,
-                "total_bytes": total_bytes,
-                "started_at": "2026-01-01T00:00:00+00:00",
-            }
-        )
-    )
+    record: dict[str, Any] = {
+        "pid": 43210,
+        "family": "test",
+        "quant": "Q4_K_M",
+        "repo_id": "example/test",
+        "local_dir": str(tmp_path / "models"),
+        "files": files,
+        "total_bytes": total_bytes,
+        "started_at": "2026-01-01T00:00:00+00:00",
+    }
+    if log_writer_pid is not None:
+        record["log_writer_pid"] = log_writer_pid
+    (tmp_path / local_inference.DOWNLOAD_FILENAME).write_text(json.dumps(record))
 
 
 def test_download_status_rediscovers_completed_download(
@@ -688,7 +728,7 @@ def test_deactivate_waits_for_port_release(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_swap_proceeds_once_teardown_frees_the_port(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, reaped_pid: int
 ) -> None:
     """A swap spawns after real teardown (with its port wait) completes."""
     settings = _settings_with_state_dir(tmp_path)
@@ -725,9 +765,9 @@ def test_swap_proceeds_once_teardown_frees_the_port(
     monkeypatch.setattr(local_inference.time, "sleep", lambda seconds: None)
     monkeypatch.setattr(local_inference.shutil, "which", lambda value: value)
     monkeypatch.setattr(
-        local_inference.subprocess,
-        "Popen",
-        lambda command, **kwargs: SimpleNamespace(pid=54321),
+        local_inference.log_capture,
+        "spawn_captured",
+        lambda argv, **kwargs: CapturedProcess(pid=54321, writer_pid=reaped_pid),
     )
 
     result = local_inference.activate(str(gguf_path))
@@ -774,3 +814,193 @@ def test_swap_rejects_port_held_by_foreign_process(tmp_path: Path, monkeypatch) 
 
     with pytest.raises(local_inference.LocalInferenceError, match="already in use"):
         local_inference.activate(str(gguf_path))
+
+
+# ---------------------------------------------------------------------------
+# Local-model captures under the rotation policy (issue #842, slice S3)
+# ---------------------------------------------------------------------------
+
+TWO_HUNDRED_LINES = [f"line-{index:03d}".ljust(40, ".") for index in range(1, 201)]
+SEED = b"s" * 999 + b"\n"
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _llama_server_stub(directory: Path) -> Path:
+    """An executable named llama-server that prints 200 lines, then sleeps."""
+    directory.mkdir(parents=True, exist_ok=True)
+    stub = directory / "llama-server"
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        "import time\n"
+        "for index in range(1, 201):\n"
+        "    print(f'line-{index:03d}'.ljust(40, '.'), flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    stub.chmod(0o755)
+    return stub
+
+
+def _llama_gguf(path: Path) -> Path:
+    """A real GGUF v3 header whose general.architecture is llama."""
+    arch = b"llama"
+    key = b"general.architecture"
+    header = b"GGUF" + struct.pack("<I", 3) + struct.pack("<Q", 0)
+    header += struct.pack("<Q", 1)
+    header += struct.pack("<Q", len(key)) + key
+    header += struct.pack("<I", 8) + struct.pack("<Q", len(arch)) + arch
+    path.write_bytes(header)
+    return path
+
+
+@pytest.fixture()
+def capture_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A real runtime config: tiny rotation limits, a stub llama-server."""
+    port = _free_port()
+    document: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    runtime = cast(Any, document["runtime"])
+    runtime["state_dir"] = str(tmp_path / "state")
+    runtime["logs"]["max_bytes"] = 1000
+    runtime["logs"]["backup_count"] = 12
+    document["global"]["model"]["api_models"]["local"][
+        "base_url"
+    ] = f"http://127.0.0.1:{port}/v1"
+    llama = runtime["services"]["llama_server"]
+    llama["port"] = port
+    command = [str(part) for part in llama["command"]]
+    command[0] = str(_llama_server_stub(tmp_path / "bin"))
+    llama["command"] = command
+    config = tmp_path / "nexus.toml"
+    config.write_text(tomlkit.dumps(document))
+    for name in ("NEXUS_HOME", "NEXUS_GATEWAY_PORT", "NEXUS_API_URL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+    (tmp_path / "state").mkdir()
+    return config
+
+
+def _kill_group(pid: int) -> None:
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def test_activate_captures_through_the_writer_under_the_policy(
+    tmp_path: Path, capture_config: Path
+) -> None:
+    """llama-server's capture rotates at start and live, losing no line."""
+    log_path = tmp_path / "state" / local_inference.LOG_FILENAME
+    log_path.write_bytes(SEED)
+    gguf = _llama_gguf(tmp_path / "model.gguf")
+
+    result = local_inference.activate(str(gguf))
+    stopped = False
+    try:
+        record = json.loads(
+            (tmp_path / "state" / local_inference.STATE_FILENAME).read_text()
+        )
+        writer_pid = record["log_writer_pid"]
+        deadline = time.monotonic() + 30
+        while TWO_HUNDRED_LINES[-1] not in log_path.read_text():
+            assert time.monotonic() < deadline, "the 200th line never reached disk"
+            time.sleep(0.1)
+
+        # Rotated once before the spawn, then eight times live (24 lines each).
+        assert rotated_segment(log_path, 9).read_bytes() == SEED
+        assert not rotated_segment(log_path, 10).exists()
+
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(REPO_ROOT)
+        env.pop("NEXUS_SLOT", None)
+        completed = subprocess.run(
+            [sys.executable, "-m", "nexus.cli", "--json", "logs", "local-model"]
+            + ["-n", "200"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=REPO_ROOT,
+            env=env,
+        )
+        assert completed.returncode == 0, completed.stderr
+        assert json.loads(completed.stdout)["lines"] == TWO_HUNDRED_LINES
+
+        stopped = local_inference.deactivate()["stopped"]
+        assert stopped is True
+        assert not pid_alive(writer_pid)
+    finally:
+        if not stopped:
+            _kill_group(result["pid"])
+
+
+def test_download_capture_rotates_under_the_policy(
+    tmp_path: Path, capture_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The download worker's capture rotates at start; the error is its last line."""
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    log_path = tmp_path / "state" / local_inference.DOWNLOAD_LOG_FILENAME
+    log_path.write_bytes(SEED)
+
+    record = local_inference.start_download(
+        family="qa842",
+        quant="Q4_K_M",
+        repo_id="qa842/none",
+        local_dir=str(tmp_path / "models"),
+        files=["none.gguf"],
+        total_bytes=100,
+    )
+    status: dict[str, Any] | None = None
+    try:
+        deadline = time.monotonic() + 60
+        while True:
+            status = local_inference.download_status()
+            assert status is not None
+            if status["state"] == "failed":
+                break
+            assert time.monotonic() < deadline, status
+            time.sleep(0.2)
+
+        assert rotated_segment(log_path, 1).read_bytes() == SEED
+        last_line = next(
+            line.strip()
+            for line in reversed(log_path.read_text().splitlines())
+            if line.strip()
+        )
+        assert status["error"] == last_line
+        assert not pid_alive(record["log_writer_pid"])
+    finally:
+        if status is None or status["state"] != "failed":
+            _kill_group(record["pid"])
+
+
+def test_download_status_ignores_a_reused_writer_pid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A recorded writer pid now naming another process is never waited on."""
+    settings = _settings_with_state_dir(tmp_path)
+    sleeper = subprocess.Popen(["sleep", "30"])
+    try:
+        _write_download_state(
+            tmp_path, files=["missing.gguf"], log_writer_pid=sleeper.pid
+        )
+        (tmp_path / local_inference.DOWNLOAD_LOG_FILENAME).write_text(
+            "repository file not found\n"
+        )
+        monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+        monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: False)
+
+        started = time.monotonic()
+        status = local_inference.download_status()
+
+        assert status is not None
+        assert status["state"] == "failed"
+        assert status["error"] == "repository file not found"
+        assert time.monotonic() - started < 2
+        assert sleeper.poll() is None
+    finally:
+        sleeper.kill()
+        sleeper.wait()

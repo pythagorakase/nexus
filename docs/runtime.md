@@ -273,6 +273,19 @@ in `docs/cli.md`).
   a configured sibling port are rejected at startup. `nexus down` under
   the override stops only the override instance. The desktop shell never
   sets this — its `runtimeOrigin` is pinned to the configured port.
+- The gateway keeps the launch lifecycle of the app-managed local model
+  and its download worker, and captures both through the same log writer
+  under the same `[runtime.logs]` policy: `local-model.log` (llama-server)
+  and `local-model.download.log` (the download worker) are writer-owned
+  captures, each with its `local-model.log.writer-error` or
+  `local-model.download.log.writer-error` file. The llama-server port and
+  `local-model.pid.json` are one machine-wide endpoint and record, like the
+  fixed-port siblings that belong to the default instance, so both captures
+  stay beside that record in the default instance's logs directory whatever
+  `NEXUS_GATEWAY_PORT` says; read them with `nexus logs local-model` (or
+  `local-model.download`) in a shell without that variable. Deactivation,
+  a cancelled or failed download, and the next activation or download wait
+  for the previous writer the same way the supervisor does.
 
 ## CLI Surface
 
