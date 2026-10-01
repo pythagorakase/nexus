@@ -189,6 +189,30 @@ dbname audit: owner targets: none
 `$PY -m black --check tests/test_secret_manager.py` -> 1 file would be left
 unchanged; `$PY -m flake8 tests/test_secret_manager.py` -> exit 0.
 
+### After the Second Review Fix (`6f73a3ab`)
+
+`6f73a3ab` scopes the unreadable-store rule to the macOS Keychain in the
+`manage-api-keys` skill and the `_check_seat_secrets` docstring: only
+`MacOSKeychainBackend.read` raises `SecretStoreAccessError`, and the `keyring`
+backend used elsewhere still reads a `KeyringError` as absent. No code path
+changed. The readiness and secret-manager tests, rerun at `6f73a3ab`:
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_runtime/test_readiness.py tests/test_secret_manager.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+46 passed in 10.99s
+```
+
+`$PY -m black --check nexus/runtime/readiness.py` -> 1 file would be left
+unchanged.
+
 ### Not Run
 
 `tests/test_secret_store_integration.py::test_missing_security_executable_is_an_access_error`
