@@ -1,0 +1,18 @@
+Turn a920061d-243f-4f8d-b306-c207efa45899 (accepted) · read 2026-10-01T04:53:41.051403Z · ledger 2026-10-01 · schema v2
+Wall 11.059s: retrieval 9.163s → assembly 0.946s → writer 0.592s → gaia 0.353s → staging 0.005s → complete · choices ready 11.059s
+gaia #1 TEST · outcome accepted · provider accepted
+  window 5,004 / 71,000 · headroom 65,996 · estimated 8,629 · reported 1,000 [attempt_manifest]
+  roles voice_source 1,063 · authorial_plan 253 · player_language 13 · canonical_evidence 3,675
+  usage in 1,000 · cached unknown · cache write unknown · out 800 · reasoning unknown · effort - · max out 25,000 · completed 2026-10-01T04:53:39.782408Z [provider_usage_ledger ×1]
+  validation repairs 0 · rejections 0 [attempt_manifest]
+skald_writer #1 TEST · outcome accepted · provider accepted
+  window 4,420 / 71,000 · headroom 66,580 · estimated 6,011 · reported 1,000 [attempt_manifest]
+  roles voice_source 3,703 · authorial_plan 115 · player_language 13 · canonical_evidence 589
+  usage in 1,000 · cached unknown · cache write unknown · out 800 · reasoning unknown · effort - · max out 25,000 · completed 2026-10-01T04:53:39.459484Z [provider_usage_ledger ×1]
+  validation repairs 0 · rejections 0 [attempt_manifest]
+Critical path in 2,000 · cached unknown · cache write unknown · out 1,600 · reasoning unknown · events 2 · attempts without usage 0
+correspondence_compaction #4 · queued
+  usage unknown
+Background in unknown · cached unknown · cache write unknown · out unknown · reasoning unknown · events 0 · jobs 1 · open 1 · without usage 0
+Overall in unknown · cached unknown · cache write unknown · out unknown · reasoning unknown · events 2
+Jobs 4 · correspondence_compaction queued 1 · narrative_embedding leased 1, queued 1, succeeded 1

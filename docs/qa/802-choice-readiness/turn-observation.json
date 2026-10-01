@@ -1,0 +1,288 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "generation_session": "a920061d-243f-4f8d-b306-c207efa45899",
+      "model": "TEST",
+      "outcome": "accepted",
+      "provider_outcome": "accepted",
+      "seat": "gaia",
+      "usage": {
+        "cache_creation_tokens": "unknown",
+        "cached_input_tokens": "unknown",
+        "events": 1,
+        "input_tokens": 1000,
+        "max_output_tokens": 25000,
+        "outcomes": [
+          "accepted"
+        ],
+        "output_tokens": 800,
+        "provenance": "provider_usage_ledger",
+        "provider": "test",
+        "provider_completed_at": "2026-10-01T04:53:39.782408Z",
+        "reasoning_effort": null,
+        "reasoning_tokens": "unknown",
+        "transport": "responses"
+      },
+      "validation": {
+        "notes": 0,
+        "provenance": "attempt_manifest",
+        "rejection_codes": [],
+        "rejections": 0,
+        "repair_codes": [],
+        "repairs": 0
+      },
+      "window": {
+        "block_tokens": {
+          "entity dossier": 160,
+          "finished writer output": 164,
+          "gaia closer": 14,
+          "historical context": 8,
+          "intertitle": 46,
+          "orrery imminent activity": 150,
+          "orrery scene pressure": 119,
+          "orrery tag library": 2937,
+          "private storyteller correspondence": 163,
+          "recent narrative": 161,
+          "recent orrery rulings": 180,
+          "request framing": -30,
+          "scene conditions": 17,
+          "system": 902,
+          "user input": 13
+        },
+        "block_tokens_total": 5004,
+        "effective_ceiling": 71000,
+        "estimated_input_tokens": 8629,
+        "headroom": 65996,
+        "influence_tokens": {
+          "authorial_plan": 253,
+          "canonical_evidence": 3675,
+          "player_language": 13,
+          "voice_source": 1063
+        },
+        "input_tokens": 5004,
+        "policy_headroom": 4000,
+        "provenance": "attempt_manifest",
+        "reported_input_tokens": 1000
+      }
+    },
+    {
+      "attempt": 1,
+      "generation_session": "a920061d-243f-4f8d-b306-c207efa45899",
+      "model": "TEST",
+      "outcome": "accepted",
+      "provider_outcome": "accepted",
+      "seat": "skald_writer",
+      "usage": {
+        "cache_creation_tokens": "unknown",
+        "cached_input_tokens": "unknown",
+        "events": 1,
+        "input_tokens": 1000,
+        "max_output_tokens": 25000,
+        "outcomes": [
+          "accepted"
+        ],
+        "output_tokens": 800,
+        "provenance": "provider_usage_ledger",
+        "provider": "test",
+        "provider_completed_at": "2026-10-01T04:53:39.459484Z",
+        "reasoning_effort": null,
+        "reasoning_tokens": "unknown",
+        "transport": "responses"
+      },
+      "validation": {
+        "notes": 0,
+        "provenance": "attempt_manifest",
+        "rejection_codes": [],
+        "rejections": 0,
+        "repair_codes": [],
+        "repairs": 0
+      },
+      "window": {
+        "block_tokens": {
+          "entity dossier": 160,
+          "historical context": 8,
+          "intertitle": 46,
+          "orrery imminent activity": 62,
+          "orrery scene pressure": 66,
+          "private storyteller correspondence": 163,
+          "recent narrative": 161,
+          "recent orrery rulings": 180,
+          "request framing": -26,
+          "scene conditions": 17,
+          "scene roster": 15,
+          "system": 3542,
+          "user input": 13,
+          "writer closer": 13
+        },
+        "block_tokens_total": 4420,
+        "effective_ceiling": 71000,
+        "estimated_input_tokens": 6011,
+        "headroom": 66580,
+        "influence_tokens": {
+          "authorial_plan": 115,
+          "canonical_evidence": 589,
+          "player_language": 13,
+          "voice_source": 3703
+        },
+        "input_tokens": 4420,
+        "policy_headroom": 4000,
+        "provenance": "attempt_manifest",
+        "reported_input_tokens": 1000
+      }
+    }
+  ],
+  "choice_ready_at": "2026-10-01T04:53:39.882869Z",
+  "generation_session": "a920061d-243f-4f8d-b306-c207efa45899",
+  "jobs": {
+    "by_queue": {
+      "correspondence_compaction": {
+        "queued": 1
+      },
+      "narrative_embedding": {
+        "leased": 1,
+        "queued": 1,
+        "succeeded": 1
+      }
+    },
+    "entries": [
+      {
+        "created_at": "2026-10-01T04:53:40.828700Z",
+        "id": 4,
+        "queue": "correspondence_compaction",
+        "state": "queued",
+        "terminal": false,
+        "updated_at": "2026-10-01T04:53:40.828700Z",
+        "usage": {
+          "cache_creation_tokens": "unknown",
+          "cached_input_tokens": "unknown",
+          "events": 0,
+          "input_tokens": "unknown",
+          "ledger_days": [
+            "2026-10-01"
+          ],
+          "max_output_tokens": "unknown",
+          "model": "unknown",
+          "outcomes": "unknown",
+          "output_tokens": "unknown",
+          "provenance": "unknown",
+          "provider": "unknown",
+          "reasoning_effort": "unknown",
+          "reasoning_tokens": "unknown",
+          "run_id": "4",
+          "seats": "unknown",
+          "transport": "unknown"
+        }
+      },
+      {
+        "created_at": "2026-10-01T04:53:28.950355Z",
+        "id": 1,
+        "queue": "narrative_embedding",
+        "state": "succeeded",
+        "terminal": true,
+        "updated_at": "2026-10-01T04:53:40.721820Z"
+      },
+      {
+        "created_at": "2026-10-01T04:53:28.950355Z",
+        "id": 2,
+        "queue": "narrative_embedding",
+        "state": "leased",
+        "terminal": false,
+        "updated_at": "2026-10-01T04:53:40.796268Z"
+      },
+      {
+        "created_at": "2026-10-01T04:53:28.950355Z",
+        "id": 3,
+        "queue": "narrative_embedding",
+        "state": "queued",
+        "terminal": false,
+        "updated_at": "2026-10-01T04:53:28.950355Z"
+      }
+    ],
+    "total": 4
+  },
+  "ledger_days_read": [
+    "2026-10-01"
+  ],
+  "phases": [
+    {
+      "ended_at": "2026-10-01T04:53:37.986827Z",
+      "phase": "retrieval",
+      "seconds": 9.16335,
+      "started_at": "2026-10-01T04:53:28.823477Z"
+    },
+    {
+      "ended_at": "2026-10-01T04:53:38.933033Z",
+      "phase": "assembly",
+      "seconds": 0.946206,
+      "started_at": "2026-10-01T04:53:37.986827Z"
+    },
+    {
+      "ended_at": "2026-10-01T04:53:39.525169Z",
+      "phase": "writer",
+      "seconds": 0.592136,
+      "started_at": "2026-10-01T04:53:38.933033Z"
+    },
+    {
+      "ended_at": "2026-10-01T04:53:39.878320Z",
+      "phase": "gaia",
+      "seconds": 0.353151,
+      "started_at": "2026-10-01T04:53:39.525169Z"
+    },
+    {
+      "ended_at": "2026-10-01T04:53:39.882869Z",
+      "phase": "staging",
+      "seconds": 0.004549,
+      "started_at": "2026-10-01T04:53:39.878320Z"
+    },
+    {
+      "ended_at": null,
+      "phase": "complete",
+      "seconds": "unknown",
+      "started_at": "2026-10-01T04:53:39.882869Z"
+    }
+  ],
+  "read_at": "2026-10-01T04:53:41.015614Z",
+  "schema_version": 2,
+  "seconds_to_choice_ready": 11.059392,
+  "terminal_outcome": "accepted",
+  "usage_totals": {
+    "background": {
+      "cache_creation_tokens": "unknown",
+      "cached_input_tokens": "unknown",
+      "events": 0,
+      "input_tokens": "unknown",
+      "jobs": 1,
+      "jobs_open": 1,
+      "jobs_without_usage": 0,
+      "legacy_session_keyed": null,
+      "output_tokens": "unknown",
+      "provenance": "unknown",
+      "reasoning_tokens": "unknown"
+    },
+    "critical_path": {
+      "attempts_without_usage": 0,
+      "cache_creation_tokens": "unknown",
+      "cached_input_tokens": "unknown",
+      "events": 2,
+      "input_tokens": 2000,
+      "output_tokens": 1600,
+      "provenance": "provider_usage_ledger",
+      "reasoning_tokens": "unknown"
+    },
+    "overall": {
+      "cache_creation_tokens": "unknown",
+      "cached_input_tokens": "unknown",
+      "events": 2,
+      "input_tokens": "unknown",
+      "output_tokens": "unknown",
+      "provenance": "provider_usage_ledger",
+      "reasoning_tokens": "unknown"
+    }
+  },
+  "wall_time": {
+    "ended_at": "2026-10-01T04:53:39.882869Z",
+    "seconds": 11.059392,
+    "started_at": "2026-10-01T04:53:28.823477Z"
+  }
+}
