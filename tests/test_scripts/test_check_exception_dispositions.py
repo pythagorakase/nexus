@@ -115,8 +115,9 @@ def test_new_unmarked_handler_fails(repo: Path, header: str) -> None:
     (handler,) = _handlers(repo)
     expected = f"nexus/example.py:3: missing exception disposition: {handler.identity}"
     assert lint.check_tree(repo, repo / lint.BASELINE_PATH, "HEAD") == [expected]
-    result = _cli(repo)
-    assert (result.returncode, result.stderr) == (1, expected + "\n")
+    for python in _interpreters():
+        result = _cli(repo, python=python)
+        assert (result.returncode, result.stderr) == (1, expected + "\n")
 
 
 @pytest.mark.parametrize(
@@ -434,9 +435,36 @@ def test_baseline_identity_survives_line_shifts_but_not_body_changes(
 
 
 def _interpreters() -> list[str]:
-    paths = [shutil.which(name) for name in PYTHONS]
-    assert all(paths), f"Required interpreters missing: {dict(zip(PYTHONS, paths))}"
-    return [str(path) for path in paths]
+    """Require the full CI matrix, including locally uv-managed interpreters."""
+    paths: list[str] = []
+    uv = shutil.which("uv")
+    for name in PYTHONS:
+        version = name.removeprefix("python")
+        path = None
+        if version == "3.11":
+            path = shutil.which("/Users/pythagor/nexus/.venv/bin/python")
+        if path is None:
+            path = shutil.which(name)
+        if path is None and uv is not None:
+            result = _run(uv, "python", "find", version, cwd=CHECKER.parent)
+            if result.returncode == 0 and result.stdout.strip():
+                path = shutil.which(result.stdout.strip())
+        if path is None:
+            for candidate in sorted(
+                (Path.home() / ".local/share/uv/python").glob(
+                    f"cpython-{version}.*/bin/{name}"
+                )
+            ):
+                path = shutil.which(str(candidate))
+                if path is not None:
+                    break
+        assert path is not None, (
+            f"Required interpreter {name} missing; "
+            f"install it with `uv python install {version}`. "
+            "All three interpreters (3.11, 3.12, 3.13) are required."
+        )
+        paths.append(path)
+    return paths
 
 
 def test_identities_and_baseline_results_match_supported_python_versions(

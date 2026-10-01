@@ -9907,3 +9907,53 @@ The baseline needed no regeneration because its required key set did not change.
 The original landing notes and accepted stop-report are preserved.
 
 Agent: Codex (GPT-6 Astra)
+
+### Interpreter Discovery
+
+The shared `_interpreters()` helper still requires Python 3.11, 3.12, and
+3.13. For each version it checks the owner's project interpreter (3.11 only),
+PATH, `uv python find 3.X`, then `~/.local/share/uv/python/cpython-3.X.*/bin/python3.X`.
+An unresolved version fails with its name and `uv python install 3.X` remedy.
+The unmarked-handler, identity/baseline, and type-parameter proofs use the same
+helper; all existing assertions are retained.
+
+Import provenance was verified under this worktree. With
+`PATH=/opt/homebrew/bin:/usr/bin:/bin`, `which python3.12` returned no output
+(exit 1), while `uv python find 3.12` resolved
+`/Users/pythagor/.local/share/uv/python/cpython-3.12.9-macos-aarch64-none/bin/python3.12`.
+The initially suggested ordering (`/usr/bin:/bin:/opt/homebrew/bin`) selected
+Apple Git and failed fixture setup with the unaccepted Xcode license error
+(1 failed, 2 passed, 91 errors). Putting Homebrew first fixes Git selection
+without exposing python3.12 on PATH.
+
+```sh
+PY=/Users/pythagor/nexus/.venv/bin/python
+env PATH=/opt/homebrew/bin:/usr/bin:/bin "$PY" -m pytest -q tests/test_scripts/test_check_exception_dispositions.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+94 passed, 5 warnings in 29.06s
+```
+
+Normal PATH:
+
+```sh
+"$PY" -m pytest -q tests/test_scripts/test_check_exception_dispositions.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+94 passed, 5 warnings in 29.33s
+```
+
+`$PY -m black --check tests/test_scripts/test_check_exception_dispositions.py`
+passed (1 file unchanged); `$PY -m flake8` on the same file passed with no
+output. `$PY -m mypy --explicit-package-bases` on that file passed with no
+issues. A direct helper invocation with `PATH=/usr/bin:/bin` (no uv) also
+resolved all three interpreters through the project path and uv-install glob.
+No paid calls, schema/configuration changes, or deferred fixes.
+
+Agent: Codex (GPT-6 Astra)
