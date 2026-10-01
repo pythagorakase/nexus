@@ -32,6 +32,7 @@ from tests.pg_fixtures import (
 pytestmark = pytest.mark.requires_postgres
 
 TRAVELER = "Fixture Traveler"
+PROTAGONIST = "Fixture Player"
 EXPECTED_ROWS = [
     {"template_id": "routine_commute", "label": "Commute to the scheduled workplace"},
     {
@@ -105,6 +106,12 @@ def test_probe_reports_anchor_blockers() -> None:
     assert database["rows"] == EXPECTED_ROWS
     traveler = _traveler(report)
     assert traveler["in_roster"] is True
+    protagonists = [
+        actor for actor in database["actors"] if actor["name"] == PROTAGONIST
+    ]
+    assert len(protagonists) == 1, database["actors"]
+    assert protagonists[0]["in_roster"] is False
+    assert database["substrate"]["roster_size"] == 1
     commute_work = _row(
         traveler, "routine_commute", "Commute to the scheduled workplace"
     )
