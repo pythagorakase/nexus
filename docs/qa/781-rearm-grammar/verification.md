@@ -1,7 +1,7 @@
 # 781-S1 Verification: Rearm Grammar Weight
 
 - Date: 2026-10-01 (America/Chicago).
-- Base commit: `56c884e7` (`origin/main`); the script and tests are the ones committed on `claude/781-rearm-grammar-measure` beside this file.
+- Measured commit: `2cd380d5` (script and tests) on base `56c884e7` (`origin/main`). Every table and tail below ran on `2cd380d5`; later commits on the branch change only this file.
 - Interpreter: the shared `/Users/pythagor/nexus/.venv/bin/python`, run from the worktree root with `PYTHONPATH=$PWD`; `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset.
 - Token counts are local estimates from the configured models' registered counters (`estimator_for`), not billed counts. Read deltas, not absolutes.
 
@@ -108,6 +108,22 @@ PYTHONPATH=$PWD "$PY" scripts/qa_shift/rearm_grammar_weight.py --registry-dbname
 | gaia_registry | strict | package_default | 24,019 | 5,857 | +173 | +51 | +0.73% |
 
 The registry baseline equals the coordinator's 23,846 bytes / 5,806 tokens at digest `5a2f4f690ad9`.
+
+## 784-S1 Comparison
+
+The companion probe 784-S1 (PR #1074, open; its evidence commit `fdeba95f`, branch head `b465063e`, same base `56c884e7`) reports its `head` rows in `docs/qa/784-attention-class-grammar/verification.md` lines 19-46, with the same model (`gpt-6-astra`) and tokenizer (`o200k_base`) on both seats. Those rows are unchanged from `fdeba95f` to `b465063e`. **All seven equal this report's `baseline` rows** for the same seat and surface:
+
+| seat | surface | 781-S1 `baseline` | 784-S1 `head` |
+|---|---|---:|---:|
+| gaia | strict | 14,427 / 3,260 | 14,427 / 3,260 |
+| gaia | lenient | 13,329 / 2,942 | 13,329 / 2,942 |
+| gaia | guide | 2,372 / 615 | 2,372 / 615 |
+| single_pass | strict | 20,136 / 4,536 | 20,136 / 4,536 |
+| single_pass | lenient | 18,596 / 4,092 | 18,596 / 4,092 |
+| single_pass | guide | 6,773 / 1,492 | 6,773 / 1,492 |
+| gaia_registry (`save_04`) | strict | 23,846 / 5,806 | 23,846 / 5,806 |
+
+Both report registry digest `5a2f4f690ad9` (784-S1 JSON `registry_digest`, its line 179). The comparison read #1074's evidence file only; nothing was imported from the 784-S1 probe.
 
 ## Tests
 
