@@ -73,12 +73,20 @@ earlier migration created: `narrative_chunks_text_idx`,
 `idx_chunk_metadata_scene`, and `idx_chunk_metadata_season_episode_scene`. It
 refuses, by name, a same-named index with another definition and a `scene`
 column of another type. Constructing the MEMNON `DatabaseManager` creates no
-table: it no longer calls `Base.metadata.create_all`, and an offline test
-fails on any `create_all` call under `nexus/`. Its index setup
-(`setup_database_indexes`) still runs `CREATE INDEX IF NOT EXISTS`
-statements, and the legacy scripts `scripts/extract_scene_numbers.py`,
-`scripts/update_scene_numbers.py`, and `scripts/import_narratives.py` still
-carry their own DDL; moving those into migrations is later work on #810.
+schema object and refuses a missing vector extension, owned by migration 022.
+Migration 138 owns the fixed indexes and scene column. Migration 022 documents
+lazy dimension-table ownership by `ensure_embedding_table`,
+`ensure_retrograde_summary_embedding_table`, and
+`ensure_character_experience_embedding_table` for narrative chunks, Retrograde
+summaries, and actor-owned character experiences. These helpers validate the
+catalog contract before modifying existing objects, write full table, column,
+primary-key index and model-index comments, and fail loudly on incompatibility
+or database errors. Transactions belong to their callers. ANN creation remains
+behind the explicit 2560d candidate gate; #812 owns legacy 1024d/1536d tables
+and L2 HNSW indexes on `save_01`/`save_02`. The legacy scripts
+`scripts/extract_scene_numbers.py`, `scripts/update_scene_numbers.py`, and
+`scripts/import_narratives.py` still carry their own DDL; moving those into
+migrations is later work on #810.
 
 ## IDF Rebuild After a PostgreSQL Update
 
