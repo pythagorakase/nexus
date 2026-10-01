@@ -41,6 +41,12 @@ ReapplicationPolicy: TypeAlias = Literal["new_row", "extend_expiry", "replace"]
 
 
 @dataclass(frozen=True)
+class _RegisteredCategory:
+    deprecated: bool
+    replacement_categories: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class _TagApplication:
     tag_id: int
     reapplication_policy: Optional[ReapplicationPolicy]
@@ -71,6 +77,8 @@ def apply_tag_bestowal(
     Requires migration 037's ``tag_category_registry`` rows for the target
     ``entity_kind``; missing registry data is treated as a slot-migration error.
     Unknown, deprecated, or entity-kind-incompatible tags raise ``ValueError``.
+    A tag in a category that ``tag_category_registry`` deprecates is rejected
+    for application and accepted for clearing.
     ``duration_override`` sets ``entity_tags.expires_at_world_time`` for
     duration-bearing applications and drives ``extend_expiry`` reapplications.
     Without an override, time-cleared ``extend_expiry`` tags use the registry
@@ -97,8 +105,8 @@ def apply_tag_bestowal(
             f"{sorted(VALID_ENTITY_KINDS)}"
         )
 
-    allowed = _lookup_allowed_categories(cur, entity_kind)
-    if not allowed:
+    registry = _lookup_category_registry(cur, entity_kind)
+    if not registry:
         raise ValueError(
             f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
         )
@@ -116,9 +124,9 @@ def apply_tag_bestowal(
     for tag_name in bestowal.applied_tags:
         canonical_name, tag_row = _lookup_canonical_tag(cur, tag_name)
         category = _row_value(tag_row, "category", 1)
-        _validate_allowed_category(
+        _validate_application_category(
             category=category,
-            allowed=allowed,
+            registry=registry,
             tag_name=canonical_name,
             entity_kind=entity_kind,
         )
@@ -135,9 +143,9 @@ def apply_tag_bestowal(
     for clear_name in bestowal.tags_to_clear:
         canonical_clear, tag_row = _lookup_canonical_tag(cur, clear_name)
         category = _row_value(tag_row, "category", 1)
-        _validate_allowed_category(
+        _validate_clear_category(
             category=category,
-            allowed=allowed,
+            registry=registry,
             tag_name=canonical_clear,
             entity_kind=entity_kind,
         )
@@ -184,9 +192,10 @@ def validate_tag_bestowal(
     """Validate a bestowal against the live registry without writing.
 
     Returns issue strings for unknown, deprecated, or entity-kind-incompatible
-    tag names. Used by wizard tools to reject bad bestowals at submission time
-    (via ModelRetry) instead of exploding later inside the transition
-    transaction.
+    tag names. A tag in a category that ``tag_category_registry`` deprecates is
+    rejected for application and accepted for clearing. Used by wizard tools
+    to reject bad bestowals at submission time (via ModelRetry) instead of
+    exploding later inside the transition transaction.
     """
 
     if bestowal is None:
@@ -197,20 +206,23 @@ def validate_tag_bestowal(
             f"{sorted(VALID_ENTITY_KINDS)}"
         )
 
-    allowed = _lookup_allowed_categories(cur, entity_kind)
-    if not allowed:
+    registry = _lookup_category_registry(cur, entity_kind)
+    if not registry:
         raise ValueError(
             f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
         )
 
     issues: list[str] = []
-    for field_name in ("applied_tags", "tags_to_clear"):
+    for field_name, validate_category in (
+        ("applied_tags", _validate_application_category),
+        ("tags_to_clear", _validate_clear_category),
+    ):
         for tag_name in getattr(bestowal, field_name):
             try:
                 canonical_name, tag_row = _lookup_canonical_tag(cur, tag_name)
-                _validate_allowed_category(
+                validate_category(
                     category=_row_value(tag_row, "category", 1),
-                    allowed=allowed,
+                    registry=registry,
                     tag_name=canonical_name,
                     entity_kind=entity_kind,
                 )
@@ -250,17 +262,17 @@ def apply_exclusive_tag_bestowal(
             f"{sorted(VALID_ENTITY_KINDS)}"
         )
 
-    allowed = _lookup_allowed_categories(cur, entity_kind)
-    if not allowed:
+    registry = _lookup_category_registry(cur, entity_kind)
+    if not registry:
         raise ValueError(
             f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
         )
 
     canonical_name, tag_row = _lookup_canonical_tag(cur, tag)
     category = _row_value(tag_row, "category", 1)
-    _validate_allowed_category(
+    _validate_application_category(
         category=category,
-        allowed=allowed,
+        registry=registry,
         tag_name=canonical_name,
         entity_kind=entity_kind,
     )
@@ -321,17 +333,17 @@ async def apply_exclusive_tag_bestowal_async(
             f"{sorted(VALID_ENTITY_KINDS)}"
         )
 
-    allowed = await _lookup_allowed_categories_async(conn, entity_kind)
-    if not allowed:
+    registry = await _lookup_category_registry_async(conn, entity_kind)
+    if not registry:
         raise ValueError(
             f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
         )
 
     canonical_name, tag_row = await _lookup_canonical_tag_async(conn, tag)
     category = _row_value(tag_row, "category", 1)
-    _validate_allowed_category(
+    _validate_application_category(
         category=category,
-        allowed=allowed,
+        registry=registry,
         tag_name=canonical_name,
         entity_kind=entity_kind,
     )
@@ -386,28 +398,45 @@ async def apply_exclusive_tag_bestowal_async(
     )
 
 
-def _lookup_allowed_categories(cur: Any, entity_kind: str) -> set[str]:
+def _lookup_category_registry(
+    cur: Any, entity_kind: str
+) -> dict[str, _RegisteredCategory]:
     cur.execute(
         """
-        SELECT category
+        SELECT category, deprecated, replacement_categories
         FROM tag_category_registry
         WHERE entity_kind = %s::entity_kind
         """,
         (entity_kind,),
     )
-    return {_row_value(row, "category", 0) for row in cur.fetchall()}
+    return _category_registry_from_rows(cur.fetchall())
 
 
-async def _lookup_allowed_categories_async(conn: Any, entity_kind: str) -> set[str]:
+async def _lookup_category_registry_async(
+    conn: Any, entity_kind: str
+) -> dict[str, _RegisteredCategory]:
     rows = await conn.fetch(
         """
-        SELECT category
+        SELECT category, deprecated, replacement_categories
         FROM tag_category_registry
         WHERE entity_kind = $1::entity_kind
         """,
         entity_kind,
     )
-    return {_row_value(row, "category", 0) for row in rows}
+    return _category_registry_from_rows(rows)
+
+
+def _category_registry_from_rows(
+    rows: Any,
+) -> dict[str, _RegisteredCategory]:
+    registry: dict[str, _RegisteredCategory] = {}
+    for row in rows:
+        replacements = _row_value(row, "replacement_categories", 2)
+        registry[_row_value(row, "category", 0)] = _RegisteredCategory(
+            deprecated=bool(_row_value(row, "deprecated", 1)),
+            replacement_categories=tuple(replacements or ()),
+        )
+    return registry
 
 
 def _lookup_tag(cur: Any, tag_name: str) -> Optional[Any]:
@@ -471,18 +500,60 @@ async def _lookup_canonical_tag_async(conn: Any, tag_name: str) -> tuple[str, An
     return canonical_name, tag_row
 
 
-def _validate_allowed_category(
+def _validate_application_category(
     *,
     category: str,
-    allowed: set[str],
+    registry: dict[str, _RegisteredCategory],
     tag_name: str,
     entity_kind: str,
 ) -> None:
-    if category not in allowed:
+    registered = _require_registered_category(
+        category=category,
+        registry=registry,
+        tag_name=tag_name,
+        entity_kind=entity_kind,
+    )
+    if registered.deprecated:
+        message = (
+            f"Orrery tag {tag_name!r} has category {category!r}, which "
+            f"tag_category_registry deprecates for entity_kind={entity_kind!r}; "
+            "bestowal uses the live library only"
+        )
+        replacements = registered.replacement_categories
+        if replacements:
+            message += f" (replacement categories: {', '.join(replacements)})"
+        raise ValueError(message)
+
+
+def _validate_clear_category(
+    *,
+    category: str,
+    registry: dict[str, _RegisteredCategory],
+    tag_name: str,
+    entity_kind: str,
+) -> None:
+    _require_registered_category(
+        category=category,
+        registry=registry,
+        tag_name=tag_name,
+        entity_kind=entity_kind,
+    )
+
+
+def _require_registered_category(
+    *,
+    category: str,
+    registry: dict[str, _RegisteredCategory],
+    tag_name: str,
+    entity_kind: str,
+) -> _RegisteredCategory:
+    registered = registry.get(category)
+    if registered is None:
         raise ValueError(
             f"Orrery tag {tag_name!r} has category {category!r}, which is not "
             f"registered for entity_kind={entity_kind!r}"
         )
+    return registered
 
 
 def _validate_source_kind(source_kind: str) -> None:
