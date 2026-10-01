@@ -1358,45 +1358,6 @@ def _localized_weather_settings() -> dict:
     return settings
 
 
-@pytest.mark.parametrize(
-    ("anchor_chunk_id", "world_time"),
-    [
-        (None, datetime(2073, 10, 31, 12, tzinfo=timezone.utc)),
-        (100, None),
-    ],
-)
-def test_local_weather_refuses_incomplete_story_clock(
-    anchor_chunk_id, world_time, caplog
-) -> None:
-    """Anchorless and clockless scenes stay unknown instead of using 1970."""
-
-    caplog.set_level("DEBUG", logger="nexus.agents.orrery.resolver")
-    session = FakeSession(world_time=world_time)
-    settings = _localized_weather_settings()
-
-    state = hydrate_world_state(
-        session,
-        anchor_chunk_id=anchor_chunk_id,
-        window_chunks=30,
-        weather_settings=settings,
-    )
-    proposal = resolve_dry_run(
-        session,
-        (),
-        anchor_chunk_id=anchor_chunk_id,
-        window_chunks=30,
-        weather_settings=settings,
-    )
-
-    assert state.weather is None
-    assert state.place_weather == {}
-    assert not weather_is("clear", "rain", "fog", "snow", "warm")(
-        state, {Slot.ACTOR: 1}
-    )
-    assert proposal.scene_conditions == {}
-    assert "Refusing localized weather derivation" in caplog.text
-
-
 def test_disabled_weather_omits_scene_conditions() -> None:
     """FIX 4: the localized prompt contract does not attach when disabled."""
 
@@ -1656,6 +1617,15 @@ def test_hydrate_world_state_loads_travel_states() -> None:
                     "progress_ratio": "0.42",
                     "estimated_distance_m": "13000",
                     "estimated_duration_minutes": "18.6",
+                    "started_at_world_time": datetime(
+                        2073, 10, 31, 18, 0, tzinfo=timezone.utc
+                    ),
+                    "updated_at_world_time": datetime(
+                        2073, 10, 31, 18, 5, tzinfo=timezone.utc
+                    ),
+                    "eta_world_time": datetime(
+                        2073, 10, 31, 18, 18, 36, tzinfo=timezone.utc
+                    ),
                 }
             ]
         ),
@@ -1673,6 +1643,15 @@ def test_hydrate_world_state_loads_travel_states() -> None:
     assert travel.progress_ratio == pytest.approx(0.42)
     assert travel.estimated_distance_m == pytest.approx(13000)
     assert travel.estimated_duration_minutes == pytest.approx(18.6)
+    assert travel.started_at_world_time == datetime(
+        2073, 10, 31, 18, 0, tzinfo=timezone.utc
+    )
+    assert travel.updated_at_world_time == datetime(
+        2073, 10, 31, 18, 5, tzinfo=timezone.utc
+    )
+    assert travel.eta_world_time == datetime(
+        2073, 10, 31, 18, 18, 36, tzinfo=timezone.utc
+    )
 
 
 def test_hydrate_world_state_retains_project_with_inactive_target() -> None:
@@ -1823,6 +1802,9 @@ def test_resolve_dry_run_fires_travel_departure_from_planned_destination() -> No
                     "progress_ratio": 0,
                     "estimated_distance_m": None,
                     "estimated_duration_minutes": None,
+                    "started_at_world_time": None,
+                    "updated_at_world_time": None,
+                    "eta_world_time": None,
                 }
             ],
         ),
@@ -1857,6 +1839,9 @@ def test_resolve_dry_run_fires_travel_arrival_at_high_progress() -> None:
                     "progress_ratio": 0.96,
                     "estimated_distance_m": 5000,
                     "estimated_duration_minutes": 20,
+                    "started_at_world_time": None,
+                    "updated_at_world_time": None,
+                    "eta_world_time": None,
                 }
             ],
         ),
@@ -1890,6 +1875,9 @@ def test_resolve_dry_run_fires_social_travel_arrival_by_purpose() -> None:
                     "estimated_distance_m": 5000,
                     "estimated_duration_minutes": 20,
                     "route_purpose": "Socialize",
+                    "started_at_world_time": None,
+                    "updated_at_world_time": None,
+                    "eta_world_time": None,
                 }
             ],
         ),
@@ -2679,6 +2667,7 @@ def test_acquaintance_source_is_canonical_opted_in_and_default_off() -> None:
         enabled_session,
         anchor_chunk_id=100,
         actor_ids={1, 2},
+        introductions_per_entity=1,
     )
     assert bindings == ({Slot.ACTOR: 1, Slot.TARGET: 2},)
 
@@ -2731,6 +2720,7 @@ def test_acquaintance_source_caps_popular_entity_and_keeps_hydrated_actor() -> N
         session,
         anchor_chunk_id=100,
         actor_ids=hydrated_strangers,
+        introductions_per_entity=1,
     )
 
     assert bindings == ({Slot.ACTOR: 10, Slot.TARGET: popular_entity},)

@@ -1,5 +1,6 @@
 """Faction membership follows the configured roles (issue #1033).
 
+Anchorless hydration supplies ``STORY_WORLD_TIME`` explicitly.
 One disposable clone holds one faction and one character per
 ``faction_member_role`` label. Hydration must make ``faction_member`` true for
 exactly the roles in ``[orrery.resolver] membership_roles``: a character the
@@ -130,6 +131,7 @@ def test_faction_member_is_true_for_exactly_the_configured_roles(
     state = hydrate_world_state(
         membership_session,
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=30,
     )
 
@@ -144,6 +146,7 @@ def test_faction_member_is_true_for_exactly_the_configured_roles(
     swapped = hydrate_world_state(
         membership_session,
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=30,
     )
 
@@ -162,6 +165,7 @@ def test_narrowed_membership_roles_change_hydrated_membership(
     typed = hydrate_world_state(
         membership_session,
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=30,
         resolver_settings=settings.orrery.resolver,
     )
@@ -169,6 +173,7 @@ def test_narrowed_membership_roles_change_hydrated_membership(
     dumped = hydrate_world_state(
         membership_session,
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=30,
         resolver_settings=settings.orrery.model_dump(by_alias=True)["resolver"],
     )
@@ -235,6 +240,7 @@ def test_dry_run_entry_points_forward_resolver_settings(
             membership_session,
             BUILTIN_TEMPLATES,
             anchor_chunk_id=None,
+            world_time_override=STORY_WORLD_TIME,
             window_chunks=30,
             ambient_settings=settings.orrery.model_dump(by_alias=True)["ambient"],
             ambient_pacing_allowed=False,
@@ -246,6 +252,7 @@ def test_dry_run_entry_points_forward_resolver_settings(
             membership_session,
             BUILTIN_TEMPLATES,
             anchor_chunk_id=None,
+            world_time_override=STORY_WORLD_TIME,
             window_chunks=30,
             **sections,
         )

@@ -603,3 +603,31 @@ def test_shipped_retrograde_projects_are_enabled() -> None:
     assert settings.orrery is not None
     assert settings.orrery.retrograde.projects.enabled is True
     assert settings.orrery.retrograde.projects.max_seeded_projects == 3
+
+
+def test_acquaintance_cap_defaults_to_one_and_rejects_invalid_settings_load(
+    tmp_path: Path,
+) -> None:
+    """The real loader rejects nonpositive/fractional caps and defaults omissions."""
+
+    key = "acquaintance_introductions_per_entity_per_tick"
+    assert (
+        OrreryCompositionSettings().acquaintance_introductions_per_entity_per_tick == 1
+    )
+    shipped = Path("nexus.toml").read_text(encoding="utf-8")
+    line = f"{key} = 1\n"
+    assert shipped.count(line) == 1
+    config = tmp_path / "nexus.toml"
+    for invalid in (0, -1, 1.5):
+        config.write_text(
+            shipped.replace(line, f"{key} = {invalid}\n"), encoding="utf-8"
+        )
+        with pytest.raises(ValidationError) as exc_info:
+            load_settings(config)
+        assert ("orrery", "composition", key) in {
+            error["loc"] for error in exc_info.value.errors()
+        }
+    config.write_text(shipped.replace(line, ""), encoding="utf-8")
+    orrery = load_settings(config).orrery
+    assert orrery is not None
+    assert orrery.composition.acquaintance_introductions_per_entity_per_tick == 1

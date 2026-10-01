@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -116,6 +116,7 @@ from tests.pg_fixtures import (
     seed_entity_tag,
     seed_pair_tag,
     seed_protagonist,
+    seed_story_clock,
     seed_routine_anchor,
 )
 
@@ -158,6 +159,9 @@ RICH_STATE = WorldState(
             progress_ratio=0.6,
             route_purpose="socialize",
             risk="low",
+            started_at_world_time=datetime(2073, 5, 3, 10, 0, tzinfo=timezone.utc),
+            updated_at_world_time=datetime(2073, 5, 3, 11, 0, tzinfo=timezone.utc),
+            eta_world_time=datetime(2073, 5, 3, 12, 15, tzinfo=timezone.utc),
         ),
         4: TravelState(status="in_transit"),
     },
@@ -362,6 +366,17 @@ def test_observed_values_surface_for_thresholds() -> None:
     assert cooldown["observed"]["elapsed_ticks"] == 5
     assert cooldown["result"] is True
 
+    progress = resolve_evidence(
+        travel_progress_at_or_above(0.5).__name__, RICH_STATE, BINDINGS
+    )
+    assert progress["observed"] == {
+        "progress_ratio": 0.6,
+        "started_at_world_time": "2073-05-03T10:00:00+00:00",
+        "updated_at_world_time": "2073-05-03T11:00:00+00:00",
+        "eta_world_time": "2073-05-03T12:15:00+00:00",
+    }
+    assert progress["result"] is True
+
 
 def test_inbound_pair_tag_evidence_names_the_subjects() -> None:
     evidence = resolve_evidence(
@@ -442,7 +457,8 @@ def test_slot_backed_explain_carries_evidence_end_to_end(
 ) -> None:
     """Evidence must survive the full audit payload path on a seeded slot.
 
-    With no anchor chunk, the resolver binds off-screen actors from three
+    With no anchor chunk and an explicit seeded clock, the resolver binds
+    off-screen actors from three
     anchor-less sources (``compose_actor_bindings``): a current ephemeral tag,
     an inbound ``hunting`` pair tag, and a routine anchor whose mobility policy
     is neither ``none`` nor ``nomadic``. The clone seeds one actor through each
@@ -461,7 +477,11 @@ def test_slot_backed_explain_carries_evidence_end_to_end(
     with disposable_slot_database("qa885_evidence") as dbname:
         route_slot_to_disposable(monkeypatch.setattr, slot=ROUTED_SLOT, dbname=dbname)
         monkeypatch.setenv("NEXUS_SLOT", str(ROUTED_SLOT))
-        _, hunter_entity = seed_protagonist(dbname, name="Evidence Hunter")
+        STORY_WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
+        seed_story_clock(dbname, world_time=STORY_WORLD_TIME)
+        _, hunter_entity = seed_protagonist(
+            dbname, name="Evidence Hunter", base_timestamp=STORY_WORLD_TIME.isoformat()
+        )
         _, grieving_entity = seed_character(dbname, name="Evidence Mourner")
         _, hunted_entity = seed_character(dbname, name="Evidence Quarry")
         _, anchored_entity = seed_character(dbname, name="Evidence Homebody")
@@ -507,6 +527,7 @@ def test_slot_backed_explain_carries_evidence_end_to_end(
                     session,
                     BUILTIN_TEMPLATES,
                     anchor_chunk_id=None,
+                    world_time_override=STORY_WORLD_TIME,
                     window_chunks=int(orrery["binding"]["window_chunks"]),
                     sunhelm_settings=orrery.get("sunhelm"),
                 )

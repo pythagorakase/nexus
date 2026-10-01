@@ -188,7 +188,11 @@ _MOOD_PREDICATE_NAME_PREFIXES: Tuple[str, ...] = ("mood_is(",)
 
 @dataclass(frozen=True, slots=True)
 class TravelState:
-    """Read-side travel state for one character entity."""
+    """Read-side travel state for one character entity.
+
+    The three world-time values are hydrated from ``character_travel_states``
+    and nothing reads them for progress yet.
+    """
 
     status: str = "at_place"
     anchor_place_id: Optional[int] = None
@@ -201,6 +205,9 @@ class TravelState:
     estimated_distance_m: Optional[float] = None
     estimated_duration_minutes: Optional[float] = None
     route_purpose: Optional[str] = None
+    started_at_world_time: Optional[datetime] = None
+    updated_at_world_time: Optional[datetime] = None
+    eta_world_time: Optional[datetime] = None
 
     @property
     def is_in_transit(self) -> bool:
@@ -1804,7 +1811,9 @@ def _routine_schedule_due(
     schedule: Mapping[str, Any],
     world_time: Optional[datetime],
 ) -> bool:
-    if world_time is None or not schedule:
+    if world_time is None:
+        raise ValueError("Cannot evaluate routine schedule due-ness without world_time")
+    if not schedule:
         return True
     weekdays = schedule.get("weekdays")
     if weekdays is not None and world_time.weekday() not in {
