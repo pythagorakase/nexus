@@ -356,6 +356,8 @@ def corpus_report(dbname: str) -> dict[str, Any]:
                 "all-layer contamination; "
                 "its reference-cadence equivalents retain that contamination. "
                 "Slots are already repaired (migration 140). "
+                "Reference equivalents require remeasurement after the "
+                "primary-layer trigger repair in 778-S1b reaches that corpus. "
                 "Never reconstruct or subtract from stored clocks. "
                 "Primary-only duration sums differ conceptually from "
                 "stored-clock span and cadence. "
