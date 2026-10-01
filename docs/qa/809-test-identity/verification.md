@@ -184,14 +184,47 @@ Black, flake8 and mypy on the ten changed Python files:
 black --check: 10 files would be left unchanged.
 flake8 (violations, base -> branch):
   nexus/config/settings_models.py 6 -> 6
-  nexus/api/wizard_chat.py 18 -> 20   (the two new E501 lines are the order's
-                                       verbatim comment at :728 and :1125)
+  nexus/api/wizard_chat.py 18 -> 18   (at b7481fda; the ordered comment now
+                                       wraps onto two lines at :728-729 and
+                                       :1126-1127, words unchanged)
   nexus/api/new_story_flow.py 4 -> 4
   scripts/new_story_setup.py 7 -> 7
   every other changed file 0 -> 0
 mypy --explicit-package-bases --follow-imports=silent --ignore-missing-imports, per file:
   nexus/config/settings_models.py: 7 errors, lines 130 131 138 4382 (none on a changed line)
-  nexus/api/wizard_chat.py: 33 errors (none on a changed line: 80, 728-729, 1125-1126)
+  nexus/api/wizard_chat.py: 33 errors (at b7481fda; none on a changed line: 80, 728-730, 1126-1128)
   nexus/api/new_story_flow.py: 1 error, line 738 (unchanged)
   the other seven files: no issues
+```
+
+## Review Fixes at b7481fda
+
+Two review findings (P3) were applied at `b7481fda`. The ordered comment
+`# TEST provider: use pre-computed location data from the mock database` wraps
+onto two comment lines at both wizard-chat branches with its words unchanged,
+which removes the two E501 violations (flake8 on `nexus/api/wizard_chat.py`:
+base 18, branch 18). The two new tests in `tests/config/test_settings_models.py`
+carry parameter and return annotations. The wrap moves each wizard-chat `if`
+down one line (`:730` and `:1128` at `b7481fda`); the plant tails above ran
+before the wrap and name `:729` and `:1126`.
+
+Tails at `b7481fda`:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/config/test_settings_models.py tests/test_new_story_setup_config.py tests/test_api/test_wizard_weird_level.py tests/test_api/test_wizard_confirmation.py tests/test_wizard_agent.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+206 passed, 5 warnings in 4.32s
+
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/config/test_settings_models.py -k "test_identity_follows or literal_test_id"
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2 passed, 85 deselected, 5 warnings in 1.26s
+
+$ $PY -m black nexus/api/wizard_chat.py tests/config/test_settings_models.py
+2 files left unchanged.
+$ $PY -m flake8 nexus/api/wizard_chat.py | wc -l
+18
+$ $PY -m flake8 tests/config/test_settings_models.py
+(no output)
+$ $PY -m mypy --explicit-package-bases --follow-imports=silent --ignore-missing-imports tests/config/test_settings_models.py
+Success: no issues found in 1 source file
 ```
