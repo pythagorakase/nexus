@@ -17,6 +17,8 @@ class Response:
         self.status_code = status
         self.ok = 200 <= status < 400
         self.text = str(data)
+        self.url = "http://127.0.0.1:8002/api"
+        self.headers: dict[str, str] = {}
 
     def json(self) -> Any:
         return self.data
@@ -250,8 +252,16 @@ def test_pending_character_text_enters_revision_before_chat(monkeypatch):
 )
 def test_revision_start_failure_never_sends_player_text(monkeypatch, failure):
     calls = gateway(monkeypatch, artifact("character"), [failure])
-    result = cli.run_continue(arguments(user_text="Revise the character."))
-    assert result["success"] is False
+    if failure.status_code == 200:
+        # The wrong thread is a domain failure the handler returns.
+        result = cli.run_continue(arguments(user_text="Revise the character."))
+        assert result["success"] is False
+    else:
+        # A non-2xx answer reaches main() as api_error.
+        with pytest.raises(cli.ApiAnswerFailure) as caught:
+            cli.run_continue(arguments(user_text="Revise the character."))
+        assert caught.value.code == "api_error"
+        assert caught.value.status_code == failure.status_code
     assert len(calls) == 1
     assert calls[0][0] == "story/new/setup/character/revise"
 
