@@ -747,6 +747,201 @@ COMMENT ON TABLE mood_full IS 'Copies source comments.';
     ]
 
 
+def test_foreign_tables_follow_create_table_rules(tmp_path: Path) -> None:
+    """A foreign table needs COMMENT ON FOREIGN TABLE and every column comment.
+
+    PostgreSQL rejects COMMENT ON TABLE for a foreign table ("is not a
+    table"), so that form documents nothing. PARTITION OF and LIKE behave as
+    they do for a plain table, under the CREATE FOREIGN TABLE label.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_remote.sql",
+        """
+CREATE FOREIGN TABLE remote_moods (
+    id int OPTIONS (column_name 'mood_id') NOT NULL,
+    mood text
+) SERVER mood_server OPTIONS (table_name 'moods');
+COMMENT ON FOREIGN TABLE remote_moods IS 'Moods kept on another server.';
+COMMENT ON COLUMN remote_moods.id IS 'Remote row key.';
+COMMENT ON COLUMN remote_moods.mood IS 'Remote mood.';
+CREATE FOREIGN TABLE IF NOT EXISTS remote_notes (id int, note text) SERVER s;
+COMMENT ON TABLE remote_notes IS 'PostgreSQL rejects this for a foreign table.';
+COMMENT ON COLUMN remote_notes.id IS 'Remote row key.';
+CREATE FOREIGN TABLE remote_calm PARTITION OF scene_moods
+    FOR VALUES IN ('calm') SERVER mood_server;
+COMMENT ON FOREIGN TABLE remote_calm IS 'Remote partition.';
+CREATE FOREIGN TABLE remote_like (LIKE scene_moods) SERVER mood_server;
+COMMENT ON FOREIGN TABLE remote_like IS 'Copied shape.';
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_remote.sql:8: column public.remote_notes.note has no COMMENT ON "
+        "COLUMN",
+        f"{NEXT}_remote.sql:8: foreign table public.remote_notes has no COMMENT ON "
+        "FOREIGN TABLE",
+        f"{NEXT}_remote.sql:11: CREATE FOREIGN TABLE public.remote_calm declares no "
+        "column list; its columns cannot be verified",
+        f"{NEXT}_remote.sql:14: CREATE FOREIGN TABLE public.remote_like copies "
+        "columns with LIKE but without INCLUDING COMMENTS; they cannot be verified",
+    ]
+
+
+def test_run_time_foreign_kind_fails(tmp_path: Path) -> None:
+    """FOREIGN is a CREATE modifier, so a kind filled in after it is reported."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_remote_kinds.sql",
+        """
+DO $$
+BEGIN
+    EXECUTE 'CREATE FOREIGN ' || v_kind || ' t (id int) SERVER s';
+    EXECUTE 'CREATE FOREIGN TABLE ' || v_name || ' (id int) SERVER s';
+END
+$$;
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_remote_kinds.sql:3: CREATE object kind '{{}}' is filled in at run "
+        "time; its schema changes cannot be verified",
+        f"{NEXT}_remote_kinds.sql:4: CREATE FOREIGN TABLE names '{{}}', which is not "
+        "a literal identifier; name the object literally so its COMMENT can be "
+        "verified",
+    ]
+
+
+def test_import_foreign_schema_fails_as_unsupported(tmp_path: Path) -> None:
+    """IMPORT FOREIGN SCHEMA creates tables it does not name, wherever it runs."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_import.sql",
+        """
+IMPORT FOREIGN SCHEMA remote FROM SERVER mood_server INTO public;
+DO $$
+BEGIN
+    IMPORT FOREIGN SCHEMA remote LIMIT TO (moods)
+        FROM SERVER mood_server INTO public;
+END
+$$;
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_import.py",
+        """
+IMPORT = "IMPORT FOREIGN SCHEMA remote FROM SERVER mood_server INTO public"
+
+
+def run(cur) -> None:
+    cur.execute("IMPORT FOREIGN SCHEMA archive FROM SERVER mood_server INTO public")
+    cur.execute(IMPORT)
+""",
+    )
+
+    unsupported = (
+        "IMPORT FOREIGN SCHEMA creates foreign tables it does not name; their "
+        "columns cannot be verified"
+    )
+    assert _findings(tmp_path) == [
+        f"{NEXT}_import.sql:1: {unsupported}",
+        f"{NEXT}_import.sql:4: {unsupported}",
+        f"{WATERMARK + 2:03d}_import.py:1: {unsupported}",
+        f"{WATERMARK + 2:03d}_import.py:5: {unsupported}",
+    ]
+
+
+def test_select_into_fails_like_ctas(tmp_path: Path) -> None:
+    """SELECT INTO creates a table without a column list, outside PL/pgSQL.
+
+    In a DO body SELECT INTO assigns a variable, as in migrations 077 and 109,
+    so it passes there; a temporary target and INSERT INTO pass everywhere.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_snapshots.sql",
+        """
+SELECT id, mood
+INTO mood_snapshot
+FROM scene_moods;
+WITH recent AS (SELECT id, mood FROM scene_moods WHERE id > 10)
+SELECT id, mood
+INTO recent_moods
+FROM recent;
+SELECT id
+INTO UNLOGGED TABLE mood_ids
+FROM scene_moods;
+SELECT id INTO TEMP mood_scratch FROM scene_moods;
+SELECT id INTO LOCAL TEMP mood_scratch_local FROM scene_moods;
+INSERT INTO mood_archive SELECT id, mood FROM scene_moods;
+DO $migration$
+DECLARE
+    invalid_tags text;
+    completed_target_constraints text[];
+BEGIN
+    WITH expected(tag) AS (
+        VALUES
+            ('intoxicated:stimulant'),
+            ('intoxicated:depressant')
+    )
+    SELECT string_agg(expected.tag, ', ' ORDER BY expected.tag)
+    INTO invalid_tags
+    FROM expected
+    LEFT JOIN tags AS registry USING (tag)
+    WHERE registry.id IS NULL;
+    SELECT array_agg(conname ORDER BY conname)
+    INTO completed_target_constraints
+    FROM pg_constraint
+    WHERE conrelid = 'character_project_states'::regclass
+      AND contype = 'c';
+END
+$migration$;
+COMMENT ON TABLE mood_snapshot IS 'Snapshot.';
+COMMENT ON TABLE recent_moods IS 'Recent moods.';
+COMMENT ON TABLE mood_ids IS 'Mood ids.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_snapshots.py",
+        '''
+SNAPSHOT = """
+SELECT id, mood
+INTO py_snapshot
+FROM scene_moods
+"""
+RECENT = """
+WITH recent AS (SELECT id FROM scene_moods)
+SELECT id
+INTO py_recent
+FROM recent
+"""
+DOCS = """
+COMMENT ON TABLE py_snapshot IS 'Snapshot.';
+COMMENT ON TABLE py_recent IS 'Recent.';
+"""
+
+
+def run(cur) -> None:
+    cur.execute(SNAPSHOT)
+    cur.execute(RECENT)
+    cur.execute(DOCS)
+''',
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_snapshots.sql:2: SELECT INTO public.mood_snapshot {no_columns}",
+        f"{NEXT}_snapshots.sql:6: SELECT INTO public.recent_moods {no_columns}",
+        f"{NEXT}_snapshots.sql:9: SELECT INTO public.mood_ids {no_columns}",
+        f"{WATERMARK + 2:03d}_snapshots.py:3: SELECT INTO public.py_snapshot "
+        f"{no_columns}",
+        f"{WATERMARK + 2:03d}_snapshots.py:9: SELECT INTO public.py_recent "
+        f"{no_columns}",
+    ]
+
+
 def test_watermark_is_pinned() -> None:
     """Raising the watermark exempts new migrations, so it must change in review."""
     assert WATERMARK == 129
@@ -775,6 +970,14 @@ def test_every_historical_migration_parses() -> None:
         "public.character_experience_basis has no COMMENT ON TYPE"
     ) in findings
     assert not [line for line in findings if line.startswith("migrations/114_")]
+    # PL/pgSQL SELECT INTO in DO bodies (077, 100, 109) assigns a variable.
+    assert not [
+        line
+        for line in findings
+        if "SELECT INTO" in line
+        or "IMPORT FOREIGN SCHEMA" in line
+        or "foreign table" in line
+    ]
 
 
 def test_command_line_reports_findings(tmp_path: Path) -> None:

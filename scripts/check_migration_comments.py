@@ -9,7 +9,8 @@ runs offline at commit time and covers every object kind a migration adds.
 For each migrations/NNN_*.sql file, and each SQL string literal in an
 NNN_*.py migration, numbered above WATERMARK, the lint finds:
 
-* CREATE TABLE: the table and every column declared in its body;
+* CREATE TABLE and CREATE FOREIGN TABLE: the table and every column declared
+  in its body;
 * ALTER TABLE ... ADD [COLUMN]: each added column;
 * CREATE TYPE ... AS ENUM;
 * CREATE [OR REPLACE] FUNCTION and PROCEDURE, one per argument signature;
@@ -17,16 +18,18 @@ NNN_*.py migration, numbered above WATERMARK, the lint finds:
 
 including DDL inside DO blocks and EXECUTE commands (``||`` operands are
 joined, with ``{}`` standing for each operand that is not a literal), and
-requires a non-blank COMMENT ON TABLE/COLUMN/TYPE/FUNCTION/PROCEDURE/VIEW/
-MATERIALIZED VIEW for each in the same file (COMMENT ON ROUTINE documents a
-function or a procedure). Unqualified names resolve to ``public``, or to the
-schema a CREATE SCHEMA statement creates for its own elements; unquoted
-identifiers fold to lower case, quoted identifiers keep their exact spelling.
-Temporary tables and views are exempt because they end with the migration
-session. Not seen: SQL a Python migration does not spell as a string literal in
-its own file (an imported constant such as ``from nexus.x import DDL;
-cur.execute(DDL)``, names joined only at run time such as
-``cur.execute(A + B)``, a file it reads, or a bytes literal).
+requires a non-blank COMMENT ON TABLE/FOREIGN TABLE/COLUMN/TYPE/FUNCTION/
+PROCEDURE/VIEW/MATERIALIZED VIEW for each in the same file (COMMENT ON ROUTINE
+documents a function or a procedure; a foreign table is documented only by
+COMMENT ON FOREIGN TABLE, which is the one form PostgreSQL accepts for it).
+ALTER FOREIGN TABLE ... ADD COLUMN is not checked. Unqualified names resolve
+to ``public``, or to the schema a CREATE SCHEMA statement creates for its own
+elements; unquoted identifiers fold to lower case, quoted identifiers keep
+their exact spelling. Temporary tables and views are exempt because they end
+with the migration session. Not seen: SQL a Python migration does not spell as
+a string literal in its own file (an imported constant such as
+``from nexus.x import DDL; cur.execute(DDL)``, names joined only at run time
+such as ``cur.execute(A + B)``, a file it reads, or a bytes literal).
 
 A routine comment documents the overload PostgreSQL resolves it to. Argument
 types compare after parameter names, modes, and DEFAULT clauses are dropped,
@@ -49,7 +52,9 @@ with literal text, such as EXECUTE of a variable; a CREATE, ALTER, or ALTER
 TABLE that names no object kind or action, which can only be a fragment of a
 command assembled at run time; and columns a statement does not declare
 (CREATE TABLE ... AS without a column list, PARTITION OF, OF type, INHERITS,
-LIKE whose options, applied left to right, do not include COMMENTS). A
+LIKE whose options, applied left to right, do not include COMMENTS,
+IMPORT FOREIGN SCHEMA, and SELECT ... INTO outside PL/pgSQL). SELECT ... INTO
+in a DO body assigns a variable, creates nothing, and is not checked. A
 COMMENT that is NULL or blank is reported as removed documentation.
 
 Usage
@@ -88,13 +93,25 @@ _RAW_TOKEN = re.compile(r'(?:"(?:[^"]|"")*"|%\(\w+\)[sIL]|[^\s(),;"])+')
 _NAME_END = frozenset(" \t\r\n\f\v(),;*")
 _PLAIN_NAME = re.compile(r"[a-z_][a-z0-9_$]*")
 _IDENT_CHAR = re.compile(r"[A-Za-z0-9_$]")
+_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 _DOLLAR_TAG = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
 
 _CREATE_TABLE = re.compile(
-    r"\bCREATE\s+(?:(?:GLOBAL|LOCAL)\s+)?(?:(?P<temp>TEMP|TEMPORARY)\s+|UNLOGGED\s+)?"
+    r"\bCREATE\s+(?:(?:GLOBAL|LOCAL)\s+)?"
+    r"(?:(?P<temp>TEMP|TEMPORARY)\s+|UNLOGGED\s+|(?P<foreign>FOREIGN)\s+)?"
     r"TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?",
     _I,
 )
+# What follows the INTO of a SELECT INTO, as CREATE TABLE spells it.
+_SELECT_INTO_TARGET = re.compile(
+    r"\s*(?:(?:GLOBAL|LOCAL)\s+)?(?:(?P<temp>TEMP|TEMPORARY)\s+|UNLOGGED\s+)?"
+    r"(?:TABLE\s+)?",
+    _I,
+)
+# Words that decide whether a statement is a SELECT INTO: the first of them at
+# parenthesis depth 0 names the command, and a later depth-0 INTO its target.
+_DML_VERBS = frozenset({"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"})
+_IMPORT_FOREIGN_SCHEMA = re.compile(r"\bIMPORT\s+FOREIGN\s+SCHEMA\b", _I)
 _ALTER_TABLE = re.compile(
     r"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(?!ALL\s+IN\b)", _I
 )
@@ -115,8 +132,8 @@ _CREATE_MATVIEW = re.compile(
     r"\bCREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?", _I
 )
 _COMMENT_ON = re.compile(
-    r"\bCOMMENT\s+ON\s+(?P<kind>MATERIALIZED\s+VIEW|TABLE|COLUMN|TYPE|FUNCTION"
-    r"|PROCEDURE|ROUTINE|VIEW)\s+",
+    r"\bCOMMENT\s+ON\s+(?P<kind>MATERIALIZED\s+VIEW|FOREIGN\s+TABLE|TABLE|COLUMN"
+    r"|TYPE|FUNCTION|PROCEDURE|ROUTINE|VIEW)\s+",
     _I,
 )
 _IS = re.compile(r"\s*IS\b", _I)
@@ -147,6 +164,7 @@ _CREATE_MODIFIERS = {
     "TEMP",
     "TEMPORARY",
     "UNLOGGED",
+    "FOREIGN",
     "RECURSIVE",
     "MATERIALIZED",
     "UNIQUE",
@@ -175,7 +193,9 @@ _PY_SQL_HINT = re.compile(
     rf"|\b(?:CREATE|ALTER)\s+(?:\w+\s+){{0,3}}{_PLACEHOLDER_SOURCE}"
     r"|\bALTER\s+TABLE\b|\bADD\s+COLUMN\b|\bCOMMENT\s+ON\b"
     r"|\bDO\s+(?:LANGUAGE\s+\w+\s+)?(?:\$|E?')"
-    r"|\bEXECUTE\s+(?:format\s*\(\s*)?(?:\$|E?')",
+    r"|\bEXECUTE\s+(?:format\s*\(\s*)?(?:\$|E?')"
+    r"|\bIMPORT\s+FOREIGN\s+SCHEMA\b"
+    r"|\A\s*(?:WITH\b[\s\S]*\bSELECT|SELECT)\b[\s\S]*\bINTO\b",
     _I,
 )
 # A placeholder before DDL words ("{} TABLE t") marks SQL only alongside a DDL
@@ -199,6 +219,7 @@ def _looks_like_sql(rendered: str) -> bool:
 # Obligation kind -> the COMMENT ON object type that documents it.
 _COMMENT_KINDS = {
     "table": "TABLE",
+    "foreign table": "FOREIGN TABLE",
     "column": "COLUMN",
     "enum": "TYPE",
     "function": "FUNCTION",
@@ -662,6 +683,30 @@ def _quoted_end(text: str, index: int) -> int:
         close += 2
 
 
+def _top_level_words(text: str) -> Iterator[tuple[int, str]]:
+    """Yield (offset, upper-cased word) for each unquoted word at depth 0.
+
+    Words inside parentheses or brackets and quoted identifiers are skipped.
+    """
+    depth, index = 0, 0
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            index = _quoted_end(text, index)
+            continue
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        elif depth == 0 and (index == 0 or not _IDENT_CHAR.match(text[index - 1])):
+            word = _WORD.match(text, index)
+            if word:
+                yield index, word.group().upper()
+                index = word.end()
+                continue
+        index += 1
+
+
 def _argument_words(text: str) -> list[str]:
     """Split one argument into words, stopping at its DEFAULT or ``=`` clause.
 
@@ -794,12 +839,19 @@ def _routine_arguments(
 
 
 class _SqlScanner:
-    """Scan one SQL source: a file, a Python literal, or a DO/EXECUTE body."""
+    """Scan one SQL source: a file, a Python literal, or a DO/EXECUTE body.
 
-    def __init__(self, sql: str, first_line: int, scan: _Scan) -> None:
+    ``plpgsql`` marks a DO body, where SELECT INTO assigns a variable instead
+    of creating a table.
+    """
+
+    def __init__(
+        self, sql: str, first_line: int, scan: _Scan, *, plpgsql: bool = False
+    ) -> None:
         self.sql = sql
         self.first_line = first_line
         self.scan = scan
+        self.plpgsql = plpgsql
         self.masked, self.literals = _lex(sql)
         self.schema = "public"
 
@@ -835,6 +887,8 @@ class _SqlScanner:
             self._create_table(statement, start)
             self._alter_table(statement, start)
             self._create_named(statement, start)
+            self._import_foreign_schema(statement, start)
+            self._select_into(statement, start)
             self._comments(statement, start)
             for match in _DO.finditer(statement):
                 literal = self._literal_at(start + match.end())
@@ -843,6 +897,7 @@ class _SqlScanner:
                         literal.text(self.sql),
                         self.line_at(literal.content_start),
                         self.scan,
+                        plpgsql=True,
                     )
             for match in _EXECUTE.finditer(statement):
                 self._execute(statement, start, match)
@@ -966,14 +1021,18 @@ class _SqlScanner:
         for match in _CREATE_TABLE.finditer(statement):
             if match.group("temp"):
                 continue
+            # PostgreSQL documents a foreign table only with COMMENT ON FOREIGN
+            # TABLE; COMMENT ON TABLE rejects it as "not a table".
+            kind = "foreign table" if match.group("foreign") else "table"
+            statement_label = f"CREATE {kind.upper()}"
             offset = start + match.start()
             raw, parts, pos = _read_name(statement, match.end())
             table = _qualify(parts, 1, self.schema)
             if table is None:
-                self.unresolvable(offset, "CREATE TABLE", raw)
+                self.unresolvable(offset, statement_label, raw)
                 continue
-            self.require("table", table, offset)
-            label = f"CREATE TABLE {_display(table)}"
+            self.require(kind, table, offset)
+            label = f"{statement_label} {_display(table)}"
             while pos < len(statement) and statement[pos].isspace():
                 pos += 1
             close = (
@@ -1010,6 +1069,54 @@ class _SqlScanner:
                 self.finding(
                     offset, f"{label} INHERITS columns that cannot be verified"
                 )
+
+    def _import_foreign_schema(self, statement: str, start: int) -> None:
+        """IMPORT FOREIGN SCHEMA creates tables whose names the migration omits."""
+        for match in _IMPORT_FOREIGN_SCHEMA.finditer(statement):
+            self.finding(
+                start + match.start(),
+                "IMPORT FOREIGN SCHEMA creates foreign tables it does not name; "
+                "their columns cannot be verified",
+            )
+
+    def _select_into(self, statement: str, start: int) -> None:
+        """Report SELECT INTO, which creates a table without a column list.
+
+        A statement is a SELECT INTO when the first SELECT, INSERT, UPDATE,
+        DELETE, or MERGE at parenthesis depth 0 is SELECT and a later depth-0
+        INTO follows it. A temporary target is exempt, as CREATE TEMP TABLE
+        is. In a DO body (``plpgsql``) SELECT INTO assigns a variable and
+        creates nothing, so the rule does not apply there.
+        """
+        if self.plpgsql:
+            return
+        words = _top_level_words(statement)
+        for _, word in words:
+            if word in _DML_VERBS:
+                if word != "SELECT":
+                    return
+                break
+        else:
+            return
+        into = next((offset for offset, word in words if word == "INTO"), None)
+        if into is None:
+            return
+        target = _SELECT_INTO_TARGET.match(statement, into + len("INTO"))
+        assert target is not None  # every part of the pattern is optional
+        if target.group("temp"):
+            return
+        offset = start + into
+        raw, parts, _ = _read_name(statement, target.end())
+        table = _qualify(parts, 1, self.schema)
+        if table is None:
+            self.unresolvable(offset, "SELECT INTO", raw)
+            return
+        self.require("table", table, offset)
+        self.finding(
+            offset,
+            f"SELECT INTO {_display(table)} declares no column list; its columns "
+            "cannot be verified",
+        )
 
     def _alter_table(self, statement: str, start: int) -> None:
         for match in _ALTER_TABLE.finditer(statement):
@@ -1137,10 +1244,13 @@ class _SqlScanner:
                 self.scan.comments.add((_DOCUMENTED_KINDS[label], key))
 
 
-def _scan_sql(sql: str, first_line: int, scan: _Scan) -> None:
-    """Scan one SQL source whose first character is on first_line."""
+def _scan_sql(sql: str, first_line: int, scan: _Scan, *, plpgsql: bool = False) -> None:
+    """Scan one SQL source whose first character is on first_line.
+
+    ``plpgsql`` is true only for a DO body (see _SqlScanner).
+    """
     try:
-        scanner = _SqlScanner(sql, first_line, scan)
+        scanner = _SqlScanner(sql, first_line, scan, plpgsql=plpgsql)
     except _LexError as error:
         line = first_line + sql.count("\n", 0, error.offset)
         scan.findings.append((line, f"cannot parse SQL: {error.message}"))

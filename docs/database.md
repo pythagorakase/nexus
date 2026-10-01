@@ -159,8 +159,9 @@ column, enum, function, and view comments.
 
 New migrations are also checked offline, before any database exists.
 `scripts/check_migration_comments.py` (pre-commit hook `check-migration-comments`
-and the `migration-comment-check.yml` CI workflow) requires every table, column,
-enum, function, procedure, view, and materialized view that a migration numbered
+and the `migration-comment-check.yml` CI workflow) requires every table, foreign
+table (documented with `COMMENT ON FOREIGN TABLE`), column, enum, function,
+procedure, view, and materialized view that a migration numbered
 above its watermark (129) creates or replaces, including DDL in DO blocks, `EXECUTE`
 commands, and Python migration strings, to have a non-blank `COMMENT ON` in the
 same file. `CREATE OR REPLACE` counts as a change, so the migration restates the
@@ -179,8 +180,10 @@ run time (f-strings, `+` or `||` with a non-literal operand, `{}` and `%I`
 placeholders), an `EXECUTE` of a variable or of anything not starting with literal
 text, and columns a statement does not list (`AS` without a column list,
 `PARTITION OF`, `INHERITS`, or `LIKE` unless its options, applied left to right,
-include `COMMENTS`). Not covered: domains, composite types, triggers, indexes,
-sequences, DDL inside a function body, even when the migration calls
+include `COMMENTS`), `IMPORT FOREIGN SCHEMA`, and `SELECT ... INTO` outside a DO
+body (in a DO body it assigns a variable). Not covered: domains, composite types,
+triggers, indexes, sequences, `ALTER FOREIGN TABLE ... ADD COLUMN`, DDL inside a
+function body, even when the migration calls
 that function, and SQL a Python migration does not spell as a string literal in
 its own file (an imported constant such as `from nexus.x import DDL;
 cur.execute(DDL)`, names joined only at run time such as `cur.execute(A + B)`, a
