@@ -426,8 +426,9 @@ change opened no database.
   finding, although a plain `EXPLAIN` creates nothing: the lint does not model
   which `EXPLAIN` forms execute, and no migration should `EXPLAIN`. The module
   docstring and `docs/database.md` say so.
-  `EXPLAIN (SELECT 1 INTO t)` is read as an option list, as PostgreSQL's
-  grammar reads it, and passes (unchanged).
+  `EXPLAIN (SELECT 1 INTO t)` is read as an option list and passes
+  (unchanged; PostgreSQL reads it as a parenthesized statement, see "After the
+  Fourth Review").
 
 `test_select_into_is_found_past_search_cycle_and_explain_analyze` is renamed
 `test_select_into_is_found_past_search_cycle_and_explain`. Its plain
@@ -513,3 +514,78 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 `hist_before.txt` was taken at `cad24cfb` before these edits and is
 byte-identical to the round-2 snapshot (and so to the one taken before the
 original change).
+
+## After the Fourth Review
+
+One P3, a wording defect: `_after_explain` reads any `(` right after `EXPLAIN`
+as an option list, so `EXPLAIN (SELECT 1 INTO t);` is stripped to nothing and
+passes, but the module docstring, the `_after_explain` docstring, and
+`docs/database.md` said that every `EXPLAIN` of a `SELECT ... INTO` is
+reported, and the test docstring said PostgreSQL's grammar reads the form as an
+option list. PostgreSQL reads it as a parenthesized statement: the reviewer's
+`psql -d postgres -Atc "EXPLAIN (SELECT 1 INTO t)"` returned
+`Result  (cost=0.00..0.01 rows=1 width=4)`, and `EXPLAIN ((SELECT 1 INTO t))`
+behaves the same way. No table escapes the lint: without `ANALYZE` an
+`EXPLAIN` does not execute its statement, and both executing spellings are
+reported.
+
+The code is unchanged. The fix is wording only:
+
+- Module docstring: `EXPLAIN (` is always read as an option list, so an
+  `EXPLAIN` whose statement opens with a parenthesis passes; it cannot execute,
+  because no `ANALYZE` precedes the statement.
+- `_after_explain` docstring: the grammar claim is removed; it says PostgreSQL
+  also accepts a parenthesized statement after `EXPLAIN`, that the lint reads
+  it as an option list and passes it, and why that is safe.
+- `docs/database.md`: the same exception, in the "fails" list.
+- `test_select_into_is_found_past_search_cycle_and_explain` docstring: the
+  true reason replaces "as PostgreSQL's grammar reads it". Its assertions are
+  unchanged.
+- The "After the Third Review" text above now says the same.
+
+The code is identical to `af03db94` apart from docstrings: the two files'
+ASTs, with every module, class, and function docstring blanked, compare equal.
+
+A probe (`130_explain_paren.sql`, each table documented with
+`COMMENT ON TABLE`) gives the same findings on a scratch copy of `af03db94` and
+on the new head:
+
+```
+EXPLAIN (SELECT 1 INTO plain_paren);                 -- passes
+EXPLAIN ((SELECT 1 INTO double_paren));              -- passes
+EXPLAIN ANALYZE (SELECT 1 INTO analyzed_paren);      -- reported
+EXPLAIN (ANALYZE) (SELECT 1 INTO option_then_paren); -- reported
+
+Found 2 schema documentation finding(s):
+  130_explain_paren.sql:3: SELECT INTO public.analyzed_paren declares no column list; its columns cannot be verified
+  130_explain_paren.sql:4: SELECT INTO public.option_then_paren declares no column list; its columns cannot be verified
+```
+
+With `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT` unset:
+
+```
+$ cmp hist_before.txt hist_after.txt
+exit=0
+     405
+     405
+$ black --check
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+exit=0
+$ flake8
+exit=0
+$ mypy
+Success: no issues found in 2 source files
+$ pytest lint
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+39 passed, 5 warnings in 0.99s
+$ real tree
+OK: every object created after migration 129 has a comment.
+exit=0
+$ reachability
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 10.12s
+```
+
+`hist_before.txt` was rendered from a scratch copy of `af03db94` against the
+worktree's `migrations/`, with paths relative to the worktree root.

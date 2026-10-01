@@ -184,7 +184,10 @@ include `COMMENTS`), `IMPORT FOREIGN SCHEMA`, and `SELECT ... INTO` outside a DO
 body (as a PL/pgSQL statement in a DO body it assigns a variable; an `EXECUTE`
 command is still checked; `EXPLAIN` of it, with or without `ANALYZE`, is
 reported although a plain `EXPLAIN` creates nothing, because the lint does not
-model which `EXPLAIN` forms execute and no migration should `EXPLAIN`; and
+model which `EXPLAIN` forms execute and no migration should `EXPLAIN`, except
+that `EXPLAIN (` is always read as an option list, so an `EXPLAIN` whose
+statement opens with a parenthesis passes, since without `ANALYZE` it cannot
+execute; and
 `PREPARE` of it is reported because a later `EXECUTE` runs it). Not covered: domains, composite types,
 triggers, indexes, sequences, `ALTER FOREIGN TABLE ... ADD COLUMN`, DDL inside a
 function body, even when the migration calls

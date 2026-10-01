@@ -60,7 +60,10 @@ checked; one inside an EXECUTE command is still reported (PostgreSQL refuses
 EXECUTE of SELECT ... INTO at run time). EXPLAIN of a SELECT ... INTO, with or
 without ANALYZE, is reported although a plain EXPLAIN creates nothing: the lint
 strips EXPLAIN and its options without reading them, does not model which
-EXPLAIN forms execute, and no migration should EXPLAIN. PREPARE ... AS
+EXPLAIN forms execute, and no migration should EXPLAIN. ``EXPLAIN (`` is
+always read as an option list, so an EXPLAIN whose statement opens with a
+parenthesis, such as ``EXPLAIN (SELECT 1 INTO t)``, passes; it cannot execute,
+because no ANALYZE precedes the statement. PREPARE ... AS
 SELECT ... INTO is reported although it creates nothing by itself, because an
 EXECUTE of the prepared statement runs it. A COMMENT that is NULL or blank is
 reported as removed documentation.
@@ -818,10 +821,13 @@ def _after_explain(tokens: list[tuple[int, str]]) -> int | None:
 
     tokens are base-depth tokens that start with EXPLAIN. The prefix is
     EXPLAIN with either one parenthesized option list or the keywords
-    ``ANALYZE`` (or ``ANALYSE``) and ``VERBOSE``, as PostgreSQL's grammar
-    spells it. The options are stripped, never read: the lint does not model
-    which EXPLAIN forms execute their statement, so a SELECT INTO behind any
-    EXPLAIN is reported.
+    ``ANALYZE`` (or ``ANALYSE``) and ``VERBOSE``. The options are stripped,
+    never read: the lint does not model which EXPLAIN forms execute their
+    statement, so a SELECT INTO behind EXPLAIN is reported. A ``(`` right
+    after EXPLAIN is always read as an option list, although PostgreSQL also
+    accepts a parenthesized statement there; so ``EXPLAIN (SELECT 1 INTO t)``
+    is stripped to nothing and passes. That form cannot execute, because no
+    ANALYZE precedes the statement.
     """
     index = 1
     if index < len(tokens) and tokens[index][1] == "(":

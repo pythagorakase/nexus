@@ -1054,11 +1054,13 @@ def test_select_into_is_found_past_search_cycle_and_explain(tmp_path: Path) -> N
     A recursive CTE's SEARCH or CYCLE clause may name a column ``update`` or
     ``delete``, and a CTE named ``delete`` may follow it. EXPLAIN and its
     options are stripped without being read, so a plain, parenthesized, or
-    CTE-led SELECT INTO behind any EXPLAIN is reported, whether or not that
+    CTE-led SELECT INTO behind EXPLAIN is reported, whether or not that
     EXPLAIN executes it: plain EXPLAIN, EXPLAIN VERBOSE, ANALYZE false, and
-    quoted or repeated options included. ``EXPLAIN (SELECT ...)`` is read as an
-    option list, as PostgreSQL's grammar reads it, and passes. PREPARE is
-    reported, because an EXECUTE of the prepared statement creates the table.
+    quoted or repeated options included. ``EXPLAIN (SELECT ...)`` passes: the
+    lint always reads ``EXPLAIN (`` as an option list (PostgreSQL reads it as a
+    parenthesized statement), and with no ANALYZE that form cannot execute.
+    PREPARE is reported, because an EXECUTE of the prepared statement creates
+    the table.
     A real DELETE after SEARCH and CYCLE stays silent.
     """
     _migration(
