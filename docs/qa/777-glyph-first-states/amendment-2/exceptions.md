@@ -1,6 +1,6 @@
 # Joint Exceptions
 
-One exception per theme, decided only by the exhaustive joint maximum. Complete maximizing assignments and per-pair maxima/witnesses are in each joint JSON. No pair or opacity context is omitted. All listed shortfalls have distinct static signatures.
+Regenerated after the independent review: optional-key group opacity composites onto the production `.set-card-frame` background (`--bg-elev-2`). One exception per theme, decided only by the exhaustive joint maximum. Complete maximizing assignments and per-pair maxima/witnesses are in each joint JSON. No pair or opacity context is omitted. All listed shortfalls have distinct static signatures.
 
 ## Veil
 
@@ -16,8 +16,8 @@ Joint maximum: 9.913464335675082; full candidate count: 258280326000000; satisfy
 | key/required/hover/required-missing/present | 12.729354582154402 | AlertTriangle | CircleDot |
 | key/required/focus/optional-absent/required-missing | 10.828932806147856 | Circle | AlertTriangle |
 | key/required/focus/required-missing/present | 12.729354582154402 | AlertTriangle | CircleDot |
-| key/optional/rest/optional-absent/present | 10.87802426264397 | Circle | CircleDot |
-| key/optional/rest/optional-absent/verified | 13.741295960893453 | Circle | CircleCheck |
+| key/optional/rest/optional-absent/present | 10.982788739552134 | Circle | CircleDot |
+| key/optional/rest/optional-absent/verified | 13.945677679528746 | Circle | CircleCheck |
 | key/optional/hover/optional-absent/required-missing | 10.828932806147856 | Circle | AlertTriangle |
 | key/optional/hover/required-missing/present | 12.729354582154402 | AlertTriangle | CircleDot |
 | key/optional/focus/optional-absent/required-missing | 10.828932806147856 | Circle | AlertTriangle |
@@ -55,7 +55,7 @@ Joint maximum: 11.515866170801722; full candidate count: 446308403328000; satisf
 | key/required/hover/present/verified | 14.889609692629227 | CircleDot | CircleCheck |
 | key/required/focus/required-missing/verified | 14.337990382173535 | AlertTriangle | CircleCheck |
 | key/required/focus/present/verified | 14.889609692629227 | CircleDot | CircleCheck |
-| key/optional/rest/present/verified | 12.046424121385503 | CircleDot | CircleCheck |
+| key/optional/rest/present/verified | 12.158313227019862 | CircleDot | CircleCheck |
 | key/optional/hover/required-missing/verified | 14.337990382173535 | AlertTriangle | CircleCheck |
 | key/optional/hover/present/verified | 14.889609692629227 | CircleDot | CircleCheck |
 | key/optional/focus/required-missing/verified | 14.337990382173535 | AlertTriangle | CircleCheck |
@@ -104,8 +104,8 @@ Joint maximum: 10.191082279599211; full candidate count: 2834352000000; satisfyi
 | key/required/hover/present/verified | 14.846818606019937 | CircleDot | CircleCheck |
 | key/required/focus/required-missing/present | 13.513540821543312 | AlertTriangle | CircleDot |
 | key/required/focus/present/verified | 14.846818606019937 | CircleDot | CircleCheck |
-| key/optional/rest/optional-absent/present | 12.672203866904772 | Circle | CircleDot |
-| key/optional/rest/present/verified | 10.452122097547305 | CircleDot | CircleCheck |
+| key/optional/rest/optional-absent/present | 12.76143545154035 | Circle | CircleDot |
+| key/optional/rest/present/verified | 10.571462802144106 | CircleDot | CircleCheck |
 | key/optional/hover/required-missing/present | 13.513540821543312 | AlertTriangle | CircleDot |
 | key/optional/hover/present/verified | 14.846818606019937 | CircleDot | CircleCheck |
 | key/optional/focus/required-missing/present | 13.513540821543312 | AlertTriangle | CircleDot |
@@ -155,4 +155,3 @@ Joint maximum: 10.191082279599211; full candidate count: 2834352000000; satisfyi
 | map/sidebar-wash-0.07/selected-current/ring/rest/selected | 10.749553740218175 | filled circle; no ring | filled square + square ring |
 | map/sidebar-wash-0.07/selected-current/ring/current/selected | 13.038078744521949 | filled circle + circular ring | filled square + square ring |
 | map/sidebar-wash-0.07/selected-current/ring/current/hovered | 13.559758990404873 | filled circle + circular ring | filled diamond + diamond ring |
-

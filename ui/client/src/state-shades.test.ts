@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import postcss from "postcss";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { ciede2000, composite, deutanLab, hslRgb, type Triple } from "./state-shades-measurement";
 // Typed from Sharma, Wu, Dalal's published supplementary table, not our helper.
@@ -149,6 +150,89 @@ function background(value: string, p: Palette, under?: Triple): Triple {
   if (root) return p[root];
   return rgb(value);
 }
+// Trace real JSX ancestors, including SettingsCard's children slot. This is
+// source inspection only: it cannot mount the key card or read the secret store.
+const settingsSource = readFileSync(resolve(import.meta.dirname, "components/nexus/SettingsPane.tsx"), "utf8");
+const localSource = readFileSync(resolve(import.meta.dirname, "components/nexus/LocalModelRows.tsx"), "utf8");
+function jsxAncestors(source: string, marker: string, tag = false): string[][] {
+  const ast = ts.createSourceFile("surface.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let target: ts.Node | undefined;
+  function classes(node: ts.Node): string[] {
+    if (!ts.isJsxElement(node) && !ts.isJsxSelfClosingElement(node)) return [];
+    const opening = ts.isJsxElement(node) ? node.openingElement : node;
+    const attr = opening.attributes.properties.find(a => ts.isJsxAttribute(a) && a.name.getText(ast) === "className");
+    if (!attr || !ts.isJsxAttribute(attr) || !attr.initializer) return [];
+    const init = attr.initializer;
+    // The first literal is the unconditional class prefix in the shipped JSX.
+    const value = ts.isStringLiteral(init) ? init.text : init.getText(ast).match(/[`"]([^`"$]+)[`"$]/)?.[1];
+    return value?.trim().split(/\s+/) ?? [];
+  }
+  function visit(node: ts.Node) {
+    const opening = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : undefined;
+    if ((tag && opening?.tagName.getText(ast) === marker) || (!tag && classes(node).includes(marker))) {
+      if (target) throw new Error(`Ambiguous production element ${marker}`);
+      target = node;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  if (!target) throw new Error(`Missing production element ${marker}`);
+  const result: string[][] = [];
+  for (let node: ts.Node | undefined = target.parent; node; node = node.parent) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "SettingsCard") {
+      // Find the real insertion point rather than copying the wrapper classes.
+      const slot = settingsSource.indexOf("{children}");
+      const slotAst = ts.createSourceFile("card.tsx", settingsSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      let child: ts.Node | undefined;
+      function find(n: ts.Node) {
+        if (ts.isJsxExpression(n) && n.getStart(slotAst) === slot) child = n;
+        ts.forEachChild(n, find);
+      }
+      find(slotAst);
+      if (!child) throw new Error("SettingsCard children slot changed");
+      for (let n: ts.Node | undefined = child.parent; n; n = n.parent) {
+        const names = classes(n);
+        if (names.length) result.push(names);
+      }
+    } else {
+      const names = classes(node);
+      if (names.length) result.push(names);
+    }
+  }
+  return result;
+}
+function paintedAncestor(ancestors: string[][]): { selector: string; value: string } {
+  // DOM matching handles compound/descendant selectors and CSS specificity.
+  let parent = document.createElement("div");
+  const nodes: HTMLElement[] = [];
+  for (const classes of [...ancestors].reverse()) {
+    const node = document.createElement("div");
+    node.className = classes.join(" "); parent.appendChild(node); parent = node; nodes.unshift(node);
+  }
+  for (const node of nodes) {
+    let paint: { selector: string; value: string; specificity: number; important: boolean } | undefined;
+    postcss.parse(layoutCss).walkRules(rule => {
+      // These ancestor scopes have no interaction/media-dependent backgrounds.
+      if (rule.parent?.type !== "root") return;
+      if (!rule.nodes.some(n => n.type === "decl" && ["background", "background-color"].includes(n.prop))) return;
+      for (const selector of rule.selectors) {
+        // Pseudo-elements paint separate boxes, never the ancestor itself.
+        if (selector.includes("::") || !node.matches(selector)) continue;
+        const specificity = (selector.match(/[.#:[\]]/g) ?? []).length;
+        rule.walkDecls(decl => {
+          if (!["background", "background-color"].includes(decl.prop)) return;
+          if (!paint || (decl.important && !paint.important) ||
+            (Boolean(decl.important) === paint.important && specificity >= paint.specificity))
+            paint = { selector, value: decl.value, specificity, important: Boolean(decl.important) };
+        });
+      }
+    });
+    if (paint && !["none", "transparent"].includes(paint.value)) return { selector: paint.selector, value: paint.value };
+  }
+  throw new Error("No production ancestor paints below opacity group");
+}
+const keyBackdrop = paintedAncestor(jsxAncestors(settingsSource, "key-row"));
+const deleteBackdrop = paintedAncestor([...jsxAncestors(localSource, "lm-quant"), ...jsxAncestors(settingsSource, "LocalModelRows", true)]);
 const opacity = (selector: string) => Number(declaration(selector, "opacity"));
 const ringOpacity = Number(mapSource.match(/opacity: outline \? ([\d.]+)/)?.[1]);
 if (!Number.isFinite(ringOpacity)) throw new Error("Missing production ring opacity");
@@ -163,7 +247,7 @@ function contexts(): Context[] {
       result.push({ surface: "delete", name: `${row}/${interaction}`, render: (s, p, b) => {
         const rowBg = background(declaration(".lm-quant.ready", "background"), p);
         const glyph = composite(pigment("delete", s, p, b), rowBg, 1);
-        return composite(glyph, background(declaration(".model-provider", "background"), p), row === "ready-exceeds" ? opacity(".lm-quant.exceeds") : 1);
+        return composite(glyph, background(deleteBackdrop.value, p), row === "ready-exceeds" ? opacity(".lm-quant.exceeds") : 1);
       } });
     }
   // Include required and optional presence/verification rows at rest and
@@ -173,7 +257,7 @@ function contexts(): Context[] {
       result.push({ surface: "key", name: `${requiredness}/${interaction}`, render: (s, p, b) => {
         const optional = s === "optional-absent" || (requiredness === "optional" && s !== "required-missing");
         const alpha = optional ? opacity(interaction === "rest" ? ".key-row.optional" : `.key-row.optional:${interaction === "hover" ? "hover" : "focus-within"}`) : 1;
-        return composite(pigment("key", s, p, b), background(declaration(".key-row", "background"), p), alpha);
+        return composite(pigment("key", s, p, b), background(keyBackdrop.value, p), alpha);
       } });
     }
   for (const terrain of ["sea", "land"])
@@ -318,6 +402,46 @@ describe("777-S2 state shades", () => {
       for (const ctx of CONTEXTS) expect(values.filter(v => v.context === ctx.name && v.surface === ctx.surface)).toHaveLength(STATE_PAIRS[ctx.surface].length);
     }
   });
+  it("opacity_backdrops_follow_the_production_painting_ancestors", () => {
+    expect(keyBackdrop).toEqual({ selector: ".set-card-frame", value: declaration(".set-card-frame", "background") });
+    expect(deleteBackdrop).toEqual({ selector: ".model-provider", value: declaration(".model-provider", "background") });
+    expect(jsxAncestors(settingsSource, "key-row")).toEqual([["key-list"], ["set-card-body"], ["set-card-frame"], ["set-card"]]);
+    // Assert every opacity context against an independently assembled production
+    // layer path. A context addition must extend this inventory, not pick a color.
+    const p = palette(shippedCss, "Vector");
+    const content = declaration(".nexus-content", "background");
+    const wash = content.match(/hsl\(([^/]+) \/ ([\d.]+)\)/)!;
+    for (const ctx of CONTEXTS) for (const state of Object.keys(MAPPINGS[ctx.surface])) {
+      const pigment = p[MAPPINGS[ctx.surface][state]];
+      let expected: Triple;
+      if (ctx.surface === "memory") expected = pigment;
+      else if (ctx.surface === "key") {
+        const [need, interaction] = ctx.name.split("/");
+        const optional = state === "optional-absent" || (need === "optional" && state !== "required-missing");
+        const alpha = optional ? opacity(interaction === "rest" ? ".key-row.optional" : `.key-row.optional:${interaction === "hover" ? "hover" : "focus-within"}`) : 1;
+        expected = composite(pigment, background(paintedAncestor(jsxAncestors(settingsSource, "key-row")).value, p), alpha);
+      } else if (ctx.surface === "delete") {
+        const row = composite(pigment, background(declaration(".lm-quant.ready", "background"), p), 1);
+        expected = composite(row, background(paintedAncestor([...jsxAncestors(localSource, "lm-quant"), ...jsxAncestors(settingsSource, "LocalModelRows", true)]).value, p), ctx.name.startsWith("ready-exceeds/") ? opacity(".lm-quant.exceeds") : 1);
+      } else {
+        const alpha = ctx.name.endsWith("/ring") && state !== "rest" ? ringOpacity : 1;
+        if (ctx.name.startsWith("canvas-")) {
+          // SVG terrain is painted beneath the glyph, not an HTML background.
+          expect(mapSource).toContain('fill="var(--map-sea)"');
+          expect(mapSource).toContain('fill="var(--map-land)"');
+          const terrain = ctx.name.split("/")[0].slice("canvas-".length);
+          expected = composite(pigment, background(declaration(".mappane-canvas", `--map-${terrain}`), p), alpha);
+        } else {
+          expect(jsxAncestors(mapSource, "map-place-dot")[0]).toContain("map-place-row");
+          const [, washAlpha, interaction] = ctx.name.match(/^sidebar-wash-([\d.]+)\/(.*?)\//)!;
+          const parent = composite(rgb(wash[1].trim()), p[rootOf(content)], Number(washAlpha));
+          const on = state === "selected" || (interaction === "selected-current" && state === "current");
+          expected = composite(pigment, background(declaration(on ? ".map-place-row.on" : interaction === "hover" ? ".map-place-row:hover" : ".map-place-row", "background"), p, parent), alpha);
+        }
+      }
+      expect(ctx.render(state, p, false), `${ctx.surface}/${ctx.name}/${state}`).toEqual(expected);
+    }
+  });
   it("reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures", () => {
     expect(MAPPINGS).toEqual({
       memory: { normal: "--state-mem-normal", over: "--state-mem-over" },
@@ -370,63 +494,70 @@ describe("777-S2 state shades", () => {
     }
   });
   it("state_surfaces_read_only_state_tokens", () => {
-    const allowed: Record<string, string[]> = {
-      ".topbar .mem-fill": ["--state-mem-normal"],
-      ".topbar .mem-fill.over": ["--state-mem-over"],
-      ".topbar .mem-over-glyph": ["--state-mem-over"],
-      ".lm-trash": ["--state-delete-unarmed"],
-      ".lm-trash.armed": ["--state-delete-armed"],
-      ".key-status": ["--state-key-absent"],
-      ".key-row.missing .key-status": ["--state-key-missing"],
-      ".key-status.present": ["--state-key-present"],
-      ".key-status.verified": ["--state-key-verified"],
-    };
-    for (const theme of ["gilded", "vector"]) for (const ancestor of [`.dark.theme-${theme}`, `.theme-${theme} .dark`]) {
-      allowed[`${ancestor} .topbar .mem-fill`] = ["--state-mem-normal"];
-      allowed[`${ancestor} .topbar .mem-fill.over`] = ["--state-mem-over"];
-    }
-    // Sweep every production CSS/TSX file, so a new consumer outside the
-    // state surfaces cannot quietly adopt one of the dedicated pigments.
+    // Closure by class identity, not by an exact selector allowlist. Pin
+    // fill/ring classes occur on both surfaces; leaders have their own class.
+    const surfaces = new Set(["map-pin", "map-state-glyph", "map-state-fill", "map-state-ring", "map-pin-leader", "map-place-dot", "key-status", "key-glyph-optional-absent", "key-glyph-required-missing", "key-glyph-present", "key-glyph-verified", "mem-fill", "mem-over-glyph", "lm-trash"]);
+    const mentionsSurface = (selector: string) => [...selector.matchAll(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g)].some(m => surfaces.has(m[1]));
+    const colorProperty = (prop: string) => /^(?:color|fill|stroke|background(?:$|-)|border(?:$|-.*color$)|outline(?:$|-color$)|box-shadow|text-shadow|filter$)/.test(prop);
+    const files: { path: string; source: string }[] = [];
     function sweep(dir: string): void {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const path = resolve(dir, entry.name);
         if (entry.isDirectory()) { sweep(path); continue; }
-        if (!/\.(css|tsx?)$/.test(path) || path.includes(".test.")) continue;
-        const source = readFileSync(path, "utf8");
-        if (path.endsWith(".css")) postcss.parse(source).walkDecls(decl => {
-          const refs = [...decl.value.matchAll(/var\((--state-[a-z-]+)\)/g)].map(m => m[1]);
-          if (!refs.length) return;
-          expect(path).toBe(resolve(import.meta.dirname, "components/nexus/nexus-layout.css"));
-          const rule = decl.parent;
-          if (rule?.type !== "rule") throw new Error("State pigment outside a surface rule");
-          for (const selector of rule.selectors) for (const ref of refs) expect(allowed[selector], selector).toContain(ref);
-        });
-        else if (source.includes("--state-")) {
-          expect(path).toBe(resolve(import.meta.dirname, "components/nexus/MapPane.tsx"));
-          const refs = [...source.matchAll(/var\((--state-[a-z-]+)\)/g)].map(m => m[1]);
-          expect(refs.sort()).toEqual(Object.values(MAPPINGS.map).sort());
-        }
+        if (/\.(css|tsx?)$/.test(path) && !path.includes(".test.")) files.push({ path, source: readFileSync(path, "utf8") });
       }
     }
     sweep(import.meta.dirname);
+    const css = files.filter(f => f.path.endsWith(".css")).map(f => ({ ...f, ast: postcss.parse(f.source) }));
+    // Discover custom properties consumed by the closure, including transitive
+    // dependencies. Definitions on ancestors are checked as well as overrides.
+    const consumed = new Set<string>();
+    const refs = (value: string) => [...value.matchAll(/var\(\s*(--[a-z0-9-]+)/g)].map(m => m[1]);
+    for (const f of css) f.ast.walkRules(rule => {
+      if (rule.selectors.some(mentionsSurface)) rule.walkDecls(decl => {
+        if (colorProperty(decl.prop)) refs(decl.value).forEach(r => consumed.add(r));
+      });
+    });
+    let size = -1;
+    while (size !== consumed.size) {
+      size = consumed.size;
+      for (const f of css) f.ast.walkDecls(decl => {
+        if (consumed.has(decl.prop)) refs(decl.value).forEach(r => consumed.add(r));
+      });
+    }
+    function stateOnly(value: string, label: string): void {
+      for (const ref of refs(value)) expect(ROOTS, `${label}: global dependency ${ref}`).toContain(ref);
+      // After removing state references, only neutral colors and the numeric
+      // syntax of shadow/color-mix expressions may remain. Literal pigments,
+      // global var fallbacks and RGB/HSL functions fail this grammar.
+      const neutral = value.replace(/var\(\s*--state-[a-z-]+\s*\)/g, "currentColor")
+        .replace(/\b(?:currentColor|transparent|inherit|none|color-mix|in|srgb|drop-shadow)\b/g, "")
+        .replace(/-?(?:\d*\.)?\d+(?:px|rem|em|%)?/g, "")
+        .replace(/[\s(),/]+/g, "");
+      expect(neutral, `${label}: non-state color ${value}`).toBe("");
+    }
+    for (const f of css) f.ast.walkRules(rule => {
+      const members = rule.selectors.map(mentionsSurface);
+      rule.walkDecls(decl => {
+        const stateRefs = refs(decl.value).filter(r => r.startsWith("--state-"));
+        // Theme declarations define pigments; they do not consume them.
+        if (stateRefs.length) expect(members.every(Boolean), `${f.path}: ${rule.selector} outside state surfaces`).toBe(true);
+        if ((members.some(Boolean) && colorProperty(decl.prop)) ||
+          (decl.prop.startsWith("--") && consumed.has(decl.prop) && !ROOTS.includes(decl.prop)))
+          stateOnly(decl.value, `${rule.selector} ${decl.prop}`);
+      });
+    });
+    for (const { path, source } of files.filter(f => !f.path.endsWith(".css") && f.source.includes("--state-"))) {
+      expect(path).toBe(resolve(import.meta.dirname, "components/nexus/MapPane.tsx"));
+      expect(refs(source).filter(r => r.startsWith("--state-")).sort()).toEqual(Object.values(MAPPINGS.map).sort());
+    }
     for (const theme of THEMES) for (const root of ROOTS) {
       const value = tokens(shippedCss, theme)[root];
       expect(value, root).not.toContain("var(");
       expect(() => rgb(value)).not.toThrow();
     }
-    for (const [selector, refs] of Object.entries(allowed)) {
-      if (!selector.startsWith(".dark.") && !selector.startsWith(".theme-")) {
-        const color = declaration(selector, selector.includes("mem-fill") ? "background" : "color");
-        expect(rootOf(color), selector).toBe(refs[0]);
-      }
-      postcss.parse(layoutCss).walkRules(rule => {
-        if (!rule.selectors.includes(selector)) return;
-        rule.walkDecls(decl => {
-          if (["color", "background", "box-shadow", "filter"].includes(decl.prop))
-            for (const match of decl.value.matchAll(/var\((--[a-z-]+)\)/g)) expect(refs, `${selector} ${decl.prop}`).toContain(match[1]);
-        });
-      });
-    }
+    for (const cls of ["map-state-glyph", "map-state-fill", "map-state-ring", "map-pin-leader"])
+      expect(mapSource).toContain(cls);
     const topbar = readFileSync(resolve(import.meta.dirname, "components/nexus/TopBar.tsx"), "utf8");
     const local = readFileSync(resolve(import.meta.dirname, "components/nexus/LocalModelRows.tsx"), "utf8");
     const keys = readFileSync(resolve(import.meta.dirname, "components/nexus/SettingsPane.tsx"), "utf8");

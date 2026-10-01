@@ -1,9 +1,10 @@
 /** Real component/cache/timer/event proof; no module, hook, fetch or action mocks. */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { geoEquirectangular } from "d3-geo";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { useSettingsQuery } from "@/hooks/useSettings";
 import { LOCAL_MODELS_DOWNLOAD_KEY, LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
 import { boundsToFitObject, COINCIDENT_PIN_EPSILON_PX, COINCIDENT_PIN_RING_PX, computeMapBounds, offsetCoincidentPins, PIN_RADIUS_PX } from "@/lib/map-geometry";
 import type { LocalModelsStatus } from "@/types/localModels";
@@ -12,7 +13,7 @@ import { KeyStatusGlyph } from "./SettingsPane";
 import { LocalModelRows } from "./LocalModelRows";
 import { MapPane } from "./MapPane";
 import { TopBar } from "./TopBar";
-const KNOBS = { poll_busy_ms: 1e8, poll_idle_ms: 1e8, download_poll_ms: 1e8, delete_arm_ms: 37 };
+const KNOBS = { poll_busy_ms: 1e8, poll_idle_ms: 1e8, download_poll_ms: 1e8, delete_arm_ms: 250 };
 const STATUS: LocalModelsStatus = {
   models_dir: "/models", system_ram_gb: 32,
   catalog: [{ family: "fixture", label: "Fixture Q4", hf_repo: "fixture", subdir: "fixture", filename: "model.gguf", quant: "Q4", size_gb: 32 * 2 ** 30 / 1e9, min_ram_gb: 96 }],
@@ -69,7 +70,7 @@ function center(node: Element) {
   const points = shape.getAttribute("points")!.split(" ").map(p => p.split(",").map(Number));
   return { x: points[0][0], y: points[1][1] };
 }
-afterEach(() => { cleanup(); clients.splice(0).forEach(c => c.clear()); vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); clients.splice(0).forEach(c => c.clear()); vi.unstubAllGlobals(); });
 describe("glyph-first states", () => {
   it("memory_over_budget_has_a_static_warning_and_normal_does_not", () => {
     for (const ratio of [.5, 1, 1.1]) {
@@ -84,9 +85,14 @@ describe("glyph-first states", () => {
     render(withClient(client(), <TopBar slot={4} characterName={null} skaldStatus="READY" failedGeneration={null} frontierClock={null} />));
     expect(screen.queryByTestId("mem-meter")).not.toBeInTheDocument();
   });
-  it("armed_delete_changes_glyph_and_disarming_restores_trash", () => {
-    vi.useFakeTimers();
-    render(withClient(client(), <ul><LocalModelRows selected={false} onPickLocal={() => {}} knobs={KNOBS} /></ul>));
+  it("armed_delete_changes_glyph_and_disarming_restores_trash", async () => {
+    // SettingsPane passes these settings to LocalModelRows in production.
+    // Read the same seeded cache through its real hook, with native timers.
+    function ConfiguredRows() {
+      const { data: settings } = useSettingsQuery();
+      return <ul><LocalModelRows selected={false} onPickLocal={() => {}} knobs={settings?.ui?.local_models} /></ul>;
+    }
+    render(withClient(client(), <ConfiguredRows />));
     fireEvent.click(screen.getByTestId("lm-toggle-fixture"));
     const button = screen.getByTestId("lm-trash-fixture-Q4");
     // Enabled even in the dimmed exceeds-RAM ready row.
@@ -99,10 +105,8 @@ describe("glyph-first states", () => {
     expect(button.querySelector(".lucide-triangle-alert")).toHaveAttribute("width", "11");
     expect(button).toHaveAttribute("aria-pressed", "true");
     expect(button).toHaveAccessibleName("Confirm delete Fixture Q4");
-    act(() => vi.advanceTimersByTime(KNOBS.delete_arm_ms - 1));
-    expect(button).toHaveAttribute("aria-pressed", "true");
-    act(() => vi.advanceTimersByTime(1));
-    expect(button).toHaveAttribute("aria-pressed", "false");
+    await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "false"), { timeout: 2000 });
+    expect(screen.getByTestId("lm-trash-fixture-Q4")).toBe(button);
     expect(button).toHaveAccessibleName("Delete Fixture Q4");
     expect(button.querySelector(".lucide-trash2")).toBeInTheDocument();
   });

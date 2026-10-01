@@ -118,8 +118,8 @@ function MapStateGlyph({
       opacity: outline ? 0.6 : undefined,
       className:
         outline && (state === "selected" || state === "hovered")
-          ? "animate-pulse"
-          : undefined,
+          ? "map-state-ring animate-pulse"
+          : outline ? "map-state-ring" : "map-state-fill",
     };
     if (state === "selected") {
       return (
@@ -137,7 +137,7 @@ function MapStateGlyph({
     return <circle {...props} cx={x} cy={y} r={r} />;
   };
   return (
-    <g data-map-state={state}>
+    <g className="map-state-glyph" data-map-state={state}>
       {shape(PIN_RADIUS_PX, false)}
       {state !== "rest" && shape(8, true)}
     </g>
@@ -705,6 +705,7 @@ export function MapPane({ slot }: MapPaneProps) {
                   stroke={PIN_COLOR[pinState(place)]}
                   strokeWidth={0.75 / zoom}
                   opacity={0.5}
+                  className="map-pin-leader"
                   data-testid={`map-pin-leader-${place.id}`}
                 />
               );
