@@ -789,3 +789,344 @@ Black on the five changed Python files: `5 files would be left unchanged.`
 Flake8 on them is clean; mypy reports only the 9 pre-existing
 `nexus/runtime/supervisor.py` errors. `nexus.toml` is unchanged in this pass;
 the commit's `validate-config` hook passed.
+
+## After the Third Independent Review
+
+Round 3 implements all three P2 findings in `review-1065c.out.md` under
+work order `1065-astra-fix-r3.md`. Fix commit `605c0e6c9939d80513d0b0a84856b0c761968992`. `origin/main`
+`d05481d8` was merged first in `6f124613996d31c2617944f4ea4d2827d0b84e78`;
+when main advanced during validation, `5d99c5b2` was merged in `91e5fa9ba7bcc6ceda1c14aab6b5b56670766c30`
+without conflicts or history rewriting. The later merge only adds the #782
+probe, its test, reachability entries and documentation; its added test and
+reachability/prompt lint were validated separately (85 passed).
+
+- **Abandon on a failed record write.** `_start_service` owns its spawned
+  service and writer until its pidfile exists. Any pidfile-write exception
+  calls `_abandon_service(name, pid, writer_pid)` (`_stop_pid`, then
+  `_await_writer`), then re-raises the original exception. A cleanup error
+  propagates from that write exception, retaining both causes. The waits
+  use the existing health bounds; `_stop_pid` is unchanged.
+- **Rollback by spawned pid, never by pidfile comparison.** `up()` records
+  only the `(name, pid, log_writer_pid)` triples returned by this invocation's
+  successful starts. On failure it stops those pids and waits for those
+  writers, then unlinks only a record still naming the stopped service pid.
+  Refused, attached and skipped starts are never owned. The earlier snapshot
+  logic is deleted; teardown errors still attach notes to the original error.
+- **Recheck the service before classifying a dead writer.**
+  `_child_capture_state` reaps/checks the service first, checks its writer,
+  and checks the service again if the writer is dead. A normal exit between
+  checks reaches the existing wait/unlink/autorestart path. A still-running
+  service with a dead writer retains the ordered capture-failure text.
+
+
+The round-2 departure (a), preservation based on an unchanged pre-call
+record, is superseded by invocation ownership. A record that changed during
+this call does not establish ownership either. The earlier failed-start
+probe test now expects no rollback retry/note: the failing start never
+returned a successful record to `up()`, and its retained writer record is
+still tested as unchanged and blocks a second spawn.
+
+Five new cases use real children, real capture writers and isolated state
+under `tmp_path`. All new live-service ports come from the imported
+`ephemeral_ports` fixture in `tests/test_runtime/test_supervisor_live.py`:
+
+- `test_up_abandons_a_service_whose_pidfile_cannot_be_written`: existing
+  capture and writer-error files, then `chmod(0o555)` on the state directory.
+  `up()` raises `PermissionError`; neither pid is running, both are reaped,
+  and no pidfile exists. A wrapper observes real `_spawn` pids; it does not
+  replace spawning or writing. The test reaps an exited service when checking
+  it, consistent with the deferred `_stop_pid` zombie observation below.
+- `test_refused_up_preserves_another_invocations_stack[existing/concurrent]`:
+  another `Supervisor` really starts on the same isolated state directory.
+  The concurrent case starts it at the first supervisor's `_start_service`
+  boundary (after the old snapshot point). The refusal leaves its exact
+  record, service, writer and health endpoint intact.
+- `test_up_rolls_back_only_its_successfully_started_pids`: a real healthy
+  first service and a second child that exits during startup. The second
+  cleans itself up; rollback stops the first pid and its writer; no records
+  remain.
+- `test_check_children_restarts_a_service_that_exits_during_the_writer_check`:
+  the real child waits on its own release file; the writer probe releases it,
+  waits for both zombies without reaping via `os.posix_spawn` of `/bin/ps`,
+  then performs the real writer check. The next child serves real HTTP health;
+  `restarts` is 1 and both `one-line` outputs are captured. The existing
+  killed-writer case still asserts the exact ordered capture-failure text.
+
+### Commands and Verbatim Tails
+
+Every command ran from this worktree with `PYTHONPATH=$PWD` and
+`PY=/Users/pythagor/nexus/.venv/bin/python`; the import proof printed
+`/Users/pythagor/nexus/.claude/worktrees/842-log-rotation/nexus/__init__.py`.
+For all full gates, `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT`,
+`NEXUS_RUN_LIVE_LLM` and `NEXUS_RUN_SECRET_STORE` were unset; offline gates
+also unset `NEXUS_RUN_POSTGRES`. Commands below were run through
+`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix3/run_gate.py`, which runs each command in the foreground with
+`subprocess.run(..., timeout=590)`, saves the exact argv, exit code and log,
+and was waited for to completion. No timeout, owner target, paid call or
+PostgreSQL permission-dialog error occurred. No owner service was signalled.
+
+The two offline non-API/non-Orrery commands partition the earlier ordered
+suite by directories (2750 passed, 449 skipped combined). Root also covers
+`tests/test_config`, `tests/test_ir_eval_v2` and `tests/proofs`; the ignored
+`tests/golden` and `tests/test_agents` paths do not exist. No tests were
+omitted. API and Orrery run separately. PostgreSQL proof ran with its flag
+set and zero skips.
+
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rf -p tests.dbname_audit tests/test_runtime tests/test_runtime_home.py tests/test_api/test_local_inference.py tests/test_api/test_local_models_endpoints.py tests/test_owner_target_guard.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+357 passed, 7 warnings in 147.44s (0:02:27)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+`$PY -m pytest -q -rf -p tests.dbname_audit tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/golden --ignore=tests/test_agents --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_util`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2006 passed, 378 skipped, 8 warnings in 390.52s (0:06:30)
+```
+
+`$PY -m pytest -q -rf -p tests.dbname_audit tests/config tests/test_lore tests/test_memnon tests/test_runtime tests/test_util`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+744 passed, 71 skipped, 7 warnings in 83.63s (0:01:23)
+```
+
+`$PY -m pytest -q -rf -p tests.dbname_audit tests/test_api`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+654 passed, 238 skipped, 7 warnings in 34.80s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+`$PY -m pytest -q -rf -p tests.dbname_audit tests/test_orrery`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1188 passed, 508 skipped, 2 warnings in 9.50s
+```
+
+`$PY -m pytest -q -rf -p tests.dbname_audit tests/test_reachability.py tests/test_prompt_lint.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+76 passed in 22.05s
+```
+
+`$PY -m pytest -q -rf -p tests.dbname_audit tests/test_intention_revision_weight.py tests/test_reachability.py tests/test_prompt_lint.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+85 passed in 22.28s
+```
+
+
+### Red Runs
+
+The plants saved the green source under this scratch directory, restored
+it in `finally` and compared bytes after each run. Test finalizers cleaned
+up the real children even on assertion failure. No stash was used.
+
+`$PY -m pytest -q -rf -p tests.dbname_audit tests/test_runtime/test_supervisor.py -k pidfile_cannot`:
+
+```text
+E           AssertionError: service pid 58476 is still running
+E           assert not True
+E            +  where True = process_running(58476)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_supervisor.py::test_up_abandons_a_service_whose_pidfile_cannot_be_written
+1 failed, 61 deselected in 0.23s
+```
+
+`$PY -m pytest -q -rf -p tests.dbname_audit tests/test_runtime/test_supervisor.py -k during_the_writer_check`:
+
+```text
+E           nexus.runtime.supervisor.RuntimeError_: Log writer for 'echo' (pid 58494) died while the service (pid 58495) was running; its output had nowhere to go. Stopped the service.
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_supervisor.py::test_check_children_restarts_a_service_that_exits_during_the_writer_check
+1 failed, 61 deselected in 1.79s
+```
+
+The first plant restores the bare `_write_pidfile` call; the test detects a
+still-running service after the write raises. The second restores the
+pre-fix dead-writer classification without rechecking the service; the test
+raises the ordered capture failure on its ordinary exit instead of restarting.
+
+Initial test-development runs used the same focused selector below:
+
+`PYTHONPATH=$PWD $PY -m pytest -q -rf -p tests.dbname_audit tests/test_runtime/test_supervisor.py -k 'pidfile_cannot or another_invocations or successfully_started or during_the_writer_check or failed_start_keeps or still_fails_a_live'`:
+
+focused:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_supervisor.py::test_refused_up_preserves_another_invocations_stack[existing]
+FAILED tests/test_runtime/test_supervisor.py::test_refused_up_preserves_another_invocations_stack[concurrent]
+FAILED tests/test_runtime/test_supervisor.py::test_check_children_restarts_a_service_that_exits_during_the_writer_check
+3 failed, 4 passed, 55 deselected in 7.52s
+```
+
+focused-green:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_supervisor.py::test_check_children_restarts_a_service_that_exits_during_the_writer_check
+1 failed, 6 passed, 55 deselected in 10.04s
+```
+
+focused-green-final:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+7 passed, 55 deselected in 10.62s
+```
+
+The first run exposed test defects: the second supervisor reloaded default
+service settings instead of the test's isolated service selection, so it
+refused the already occupied owner gateway port before spawning anything;
+and the log API is a generator. Its service selection was corrected before
+the subsequent run, which then exposed the need to wait for the restarted
+writer's buffered line. That test now polls with the configured health
+bounds; the final focused run and both full gates containing it passed.
+
+### Python Checks
+
+`$PY -m black --check nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py`:
+
+```text
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+```
+
+`$PY -m flake8 nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py`:
+
+```text
+(no output; exit 0)
+```
+
+`$PY -m mypy nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py`:
+
+```text
+nexus/runtime/supervisor.py:31: error: Library stubs not installed for "requests"  [import-untyped]
+nexus/runtime/supervisor.py:31: note: Hint: "python3 -m pip install types-requests"
+nexus/runtime/supervisor.py:31: note: (or run "mypy --install-types" to install all missing stub packages)
+nexus/runtime/supervisor.py:31: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+tests/test_runtime/__init__.py: error: Source file found twice under different module names: "test_runtime" and "tests.test_runtime"
+Found 2 errors in 2 files (errors prevented further checking)
+```
+
+`$PY -m mypy --explicit-package-bases nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py`:
+
+```text
+nexus/runtime/supervisor.py:31: error: Library stubs not installed for "requests"  [import-untyped]
+nexus/runtime/supervisor.py:31: note: Hint: "python3 -m pip install types-requests"
+nexus/runtime/supervisor.py:31: note: (or run "mypy --install-types" to install all missing stub packages)
+nexus/runtime/supervisor.py:31: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+nexus/runtime/supervisor.py:580: error: Module has no attribute "CREATE_NEW_PROCESS_GROUP"  [attr-defined]
+nexus/runtime/supervisor.py:580: error: Module has no attribute "DETACHED_PROCESS"  [attr-defined]
+nexus/runtime/supervisor.py:902: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:903: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:904: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:921: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+nexus/runtime/supervisor.py:1044: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:1046: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+Found 9 errors in 1 file (checked 2 source files)
+```
+
+`$PY -m mypy --explicit-package-bases nexus/runtime/supervisor.py`:
+
+```text
+nexus/runtime/supervisor.py:31: error: Library stubs not installed for "requests"  [import-untyped]
+nexus/runtime/supervisor.py:31: note: Hint: "python3 -m pip install types-requests"
+nexus/runtime/supervisor.py:31: note: (or run "mypy --install-types" to install all missing stub packages)
+nexus/runtime/supervisor.py:31: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+nexus/runtime/supervisor.py:580: error: Module has no attribute "CREATE_NEW_PROCESS_GROUP"  [attr-defined]
+nexus/runtime/supervisor.py:580: error: Module has no attribute "DETACHED_PROCESS"  [attr-defined]
+nexus/runtime/supervisor.py:890: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:891: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:892: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:909: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+nexus/runtime/supervisor.py:1032: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:1034: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+Found 9 errors in 1 file (checked 1 source file)
+```
+
+The default mypy invocation stops on a module-name collision introduced by
+importing the shared test fixture. With `--explicit-package-bases`, the
+changed test file has no errors and the supervisor reports nine. A scratch
+plant of the pre-round supervisor at the same path reports exactly the
+same nine diagnostics after normalizing line numbers; the source was
+restored and byte-compared. These pre-existing diagnostics are not fixed in
+this scoped order. No package installation or error-code suppression was
+used. The fix commit's pre-commit hooks reported:
+
+```text
+Regenerate Orrery package catalog........................................Passed
+Validate NEXUS config and model-ID drift.................................Passed
+Require COMMENT ON for new migration objects.........(no files to check)Skipped
+```
+
+### Deferred
+
+P3 for #842: the reviewer's `_stop_pid` zombie observation remains. An
+exited foreground child answers `_pid_alive` until reaped, so `_stop_pid`
+waits the full grace before SIGKILL. Round 3 explicitly forbids changing
+`_stop_pid`. The nine pre-existing mypy diagnostics above also remain.
+No round-3 P2 was left unfixed. No new tunable, migration, paid call or
+owner database write. Landing notes remain restart-by-name, writer status,
+no client change and no UI rebuild.
