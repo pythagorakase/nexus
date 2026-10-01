@@ -54,7 +54,11 @@ command assembled at run time; columns a statement does not declare
 (CREATE TABLE ... AS without a column list, PARTITION OF, OF type, INHERITS,
 or LIKE whose options, applied left to right, do not include COMMENTS);
 IMPORT FOREIGN SCHEMA; and SELECT ... INTO outside PL/pgSQL, including one in
-parentheses, after a WITH list, or behind EXPLAIN. SELECT ... INTO written as a
+parentheses, after up to 64 nested WITH lists (more is reported as SQL the lint
+cannot parse), or behind EXPLAIN. An ``into`` after ``.`` or AS is a column or
+alias name, not the clause, and a TEMP, TEMPORARY, UNLOGGED, GLOBAL, or LOCAL
+after INTO is the target's name unless a name follows it, so
+``SELECT 1 INTO temp FROM ...`` is reported. SELECT ... INTO written as a
 PL/pgSQL statement in a DO body assigns a variable, creates nothing, and is not
 checked; one inside an EXECUTE command is still reported (PostgreSQL refuses
 EXECUTE of SELECT ... INTO at run time). EXPLAIN of a SELECT ... INTO, with or
@@ -113,12 +117,25 @@ _CREATE_TABLE = re.compile(
     r"TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?",
     _I,
 )
-# What follows the INTO of a SELECT INTO, as CREATE TABLE spells it.
-_SELECT_INTO_TARGET = re.compile(
-    r"\s*(?:(?:GLOBAL|LOCAL)\s+)?(?:(?P<temp>TEMP|TEMPORARY)\s+|UNLOGGED\s+)?"
-    r"(?:TABLE\s+)?",
-    _I,
+# PostgreSQL 17's reserved key words (Appendix C). None of them can name a
+# table without quotes, so one that follows a SELECT INTO's TEMP, UNLOGGED,
+# GLOBAL, or LOCAL shows that word to be the target's name.
+_RESERVED_WORDS = frozenset(
+    """
+    ALL ANALYSE ANALYZE AND ANY ARRAY AS ASC ASYMMETRIC BOTH CASE CAST CHECK
+    COLLATE COLUMN CONSTRAINT CREATE CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE
+    CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER DEFAULT DEFERRABLE DESC DISTINCT
+    DO ELSE END EXCEPT FALSE FETCH FOR FOREIGN FROM GRANT GROUP HAVING IN
+    INITIALLY INTERSECT INTO LATERAL LEADING LIMIT LOCALTIME LOCALTIMESTAMP NOT
+    NULL OFFSET ON ONLY OR ORDER PLACING PRIMARY REFERENCES RETURNING SELECT
+    SESSION_USER SOME SYMMETRIC SYSTEM_USER TABLE THEN TO TRAILING TRUE UNION
+    UNIQUE USER USING VARIADIC WHEN WHERE WINDOW WITH
+    """.split()
 )
+# How many nested WITH lists (each but the last followed by a parenthesized
+# main statement) the SELECT INTO rule reads through before it reports the
+# statement as SQL it cannot parse.
+_WITH_NESTING_LIMIT = 64
 # Words that decide whether a statement is a SELECT INTO: the first of them at
 # the statement's base depth (after its leading parentheses and any WITH list)
 # names the command, and a later INTO at that depth names its target.
@@ -845,19 +862,20 @@ def _after_explain(tokens: list[tuple[int, str]]) -> int | None:
     return tokens[index][0] if index < len(tokens) else None
 
 
-def _query_tokens(statement: str) -> list[tuple[int, str]]:
+def _query_tokens(statement: str) -> list[tuple[int, str]] | None:
     """Return the base-depth tokens of the command a statement runs.
 
-    One bounded pass, with no recursion: strip at most one EXPLAIN prefix
-    (_after_explain), read the rest past its leading parentheses
-    (_base_depth_tokens), and skip at most one WITH list (_after_with_list).
-    A main statement that opens with a parenthesis, as in ``WITH a AS (...)
-    (SELECT 1 INTO t)``, is read once more past its own leading parentheses
-    and at most one more WITH list; a further parenthesized main statement
-    and a WITH list with no main command yield nothing. A statement whose
-    brackets do not balance, which PostgreSQL rejects, is read by its tokens
-    at depth 0, as the rule read every statement before it looked past
-    parentheses.
+    A bounded loop, with no recursion: strip at most one EXPLAIN prefix
+    (_after_explain) and read the rest past its leading parentheses
+    (_base_depth_tokens). Then, while the tokens open with WITH, skip that
+    WITH list with its SEARCH and CYCLE clauses (_after_with_list); a main
+    statement that opens with a parenthesis, as in ``WITH a AS (...)
+    (SELECT 1 INTO t)``, is read again past its own leading parentheses, and
+    any other main statement ends the loop. A WITH list with no main command
+    yields nothing. More than _WITH_NESTING_LIMIT WITH lists yield None, which
+    the caller reports as SQL it cannot parse. A statement whose brackets do
+    not balance, which PostgreSQL rejects, is read by its tokens at depth 0,
+    as the rule read every statement before it looked past parentheses.
     """
     if not _balanced(statement):
         return [
@@ -871,20 +889,82 @@ def _query_tokens(statement: str) -> list[tuple[int, str]]:
         if begin is None:
             return []
         tokens = _base_depth_tokens(statement, begin)
-    if not tokens or tokens[0][1] != "WITH":
-        return tokens
-    main = _after_with_list(tokens)
-    if main is None:
-        return []
-    if tokens[main][1] != "(":
-        return tokens[main:]
-    tokens = _base_depth_tokens(statement, tokens[main][0])
-    if not tokens or tokens[0][1] != "WITH":
-        return tokens
-    main = _after_with_list(tokens)
-    if main is None or tokens[main][1] == "(":
-        return []
-    return tokens[main:]
+    skipped = 0
+    while tokens and tokens[0][1] == "WITH":
+        if skipped == _WITH_NESTING_LIMIT:
+            return None
+        skipped += 1
+        main = _after_with_list(tokens)
+        if main is None:
+            return []
+        if tokens[main][1] != "(":
+            return tokens[main:]
+        tokens = _base_depth_tokens(statement, tokens[main][0])
+    return tokens
+
+
+def _is_into_clause(statement: str, tokens: list[tuple[int, str]], index: int) -> bool:
+    """Whether the base-depth INTO at tokens[index] starts a SELECT INTO clause.
+
+    ``into`` is a key word PostgreSQL also accepts as a qualified attribute
+    name after ``.`` (``src.into``) and as an output alias after AS
+    (``SELECT 1 AS into``); neither is the clause. A ``.`` that ends a
+    numeric literal, as in ``SELECT 1. INTO t``, is not a qualifier.
+    """
+    if index > 0 and tokens[index - 1][1] == "AS":
+        return False
+    before = tokens[index][0] - 1
+    while before >= 0 and statement[before].isspace():
+        before -= 1
+    if before < 0 or statement[before] != ".":
+        return True
+    run = before
+    while run > 0 and _IDENT_CHAR.match(statement[run - 1]):
+        run -= 1
+    return statement[run:before].isdigit()
+
+
+def _names_target(statement: str, pos: int) -> bool:
+    """Whether a table name, or TABLE and a name, starts at or after pos.
+
+    A name is a quoted identifier, a placeholder (``%s``, ``%(name)s``, or
+    the ``{}`` an interpolated value renders as), or a word that is not
+    reserved (_RESERVED_WORDS); ``FROM``, ``;``, ``)``, and the end of the
+    statement are not names.
+    """
+    offset, raw = _next_token(statement, pos)
+    if _is_keyword(raw, {"TABLE"}):
+        _, raw = _next_token(statement, offset + len(raw))
+    if raw[:1] in ('"', "%", "{"):
+        return True
+    word = _WORD.match(raw)
+    return word is not None and word.group().upper() not in _RESERVED_WORDS
+
+
+def _select_into_target(statement: str, pos: int) -> tuple[int, bool]:
+    """Read what follows a SELECT INTO's INTO, as CREATE TABLE spells it.
+
+    Return the offset of the target's name and whether the target is
+    temporary. ``GLOBAL`` or ``LOCAL``, then ``TEMP``, ``TEMPORARY``, or
+    ``UNLOGGED``, then ``TABLE`` are skipped, but each of the first five
+    words is a modifier only when a name follows it (_names_target);
+    otherwise it is the name, as in ``SELECT 1 INTO temp FROM ...``, which
+    creates a table named ``temp``.
+    """
+    temporary = False
+    offset, raw = _next_token(statement, pos)
+    if _is_keyword(raw, {"GLOBAL", "LOCAL"}) and _names_target(
+        statement, offset + len(raw)
+    ):
+        offset, raw = _next_token(statement, offset + len(raw))
+    if _is_keyword(raw, {"TEMP", "TEMPORARY", "UNLOGGED"}) and _names_target(
+        statement, offset + len(raw)
+    ):
+        temporary = raw.upper() != "UNLOGGED"
+        offset, raw = _next_token(statement, offset + len(raw))
+    if _is_keyword(raw, {"TABLE"}):
+        offset, _ = _next_token(statement, offset + len(raw))
+    return offset, temporary
 
 
 def _argument_words(text: str) -> list[str]:
@@ -1265,35 +1345,48 @@ class _SqlScanner:
         A statement is a SELECT INTO when the first SELECT, INSERT, UPDATE,
         DELETE, or MERGE at the base depth of the command it runs
         (_query_tokens: past an EXPLAIN prefix, leading parentheses, and any
-        WITH list) is SELECT and a later INTO at that depth follows it. A
-        temporary target is exempt, as CREATE TEMP TABLE is. In a DO body
+        WITH list) is SELECT and a later INTO at that depth follows it, other
+        than an ``into`` after ``.`` or AS (_is_into_clause). A temporary
+        target is exempt, as CREATE TEMP TABLE is; TEMP is a modifier only
+        when a name follows it (_select_into_target). In a DO body
         (``plpgsql``) SELECT INTO assigns a variable and creates nothing, so the
         rule does not apply there. ``PREPARE p AS SELECT ... INTO t`` creates
-        nothing by itself but is reported, because an EXECUTE of p runs it.
+        nothing by itself but is reported, because an EXECUTE of p runs it. A
+        statement nested past _WITH_NESTING_LIMIT WITH lists is reported as
+        SQL the lint cannot parse.
         """
         if self.plpgsql:
             return
-        words = (
-            (offset, token)
-            for offset, token in _query_tokens(statement)
-            if _WORD.match(token)
-        )
-        for _, word in words:
-            if word in _DML_VERBS:
-                if word != "SELECT":
-                    return
-                break
-        else:
+        tokens = _query_tokens(statement)
+        if tokens is None:
+            self.finding(
+                start + len(statement) - len(statement.lstrip()),
+                "cannot parse SQL: a statement nests more than "
+                f"{_WITH_NESTING_LIMIT} WITH lists",
+            )
             return
-        into = next((offset for offset, word in words if word == "INTO"), None)
+        verb = next(
+            (index for index, (_, token) in enumerate(tokens) if token in _DML_VERBS),
+            None,
+        )
+        if verb is None or tokens[verb][1] != "SELECT":
+            return
+        into = next(
+            (
+                tokens[index][0]
+                for index in range(verb + 1, len(tokens))
+                if tokens[index][1] == "INTO"
+                and _is_into_clause(statement, tokens, index)
+            ),
+            None,
+        )
         if into is None:
             return
-        target = _SELECT_INTO_TARGET.match(statement, into + len("INTO"))
-        assert target is not None  # every part of the pattern is optional
-        if target.group("temp"):
+        name, temporary = _select_into_target(statement, into + len("INTO"))
+        if temporary:
             return
         offset = start + into
-        raw, parts, _ = _read_name(statement, target.end())
+        raw, parts, _ = _read_name(statement, name)
         table = _qualify(parts, 1, self.schema)
         if table is None:
             self.unresolvable(offset, "SELECT INTO", raw)

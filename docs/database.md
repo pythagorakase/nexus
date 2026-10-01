@@ -181,7 +181,11 @@ placeholders), an `EXECUTE` of a variable or of anything not starting with liter
 text, columns a statement does not list (`AS` without a column list,
 `PARTITION OF`, `INHERITS`, or `LIKE` unless its options, applied left to right,
 include `COMMENTS`), `IMPORT FOREIGN SCHEMA`, and `SELECT ... INTO` outside a DO
-body (as a PL/pgSQL statement in a DO body it assigns a variable; an `EXECUTE`
+body (an `into` after `.` or `AS` is a column or alias name, and `TEMP`,
+`TEMPORARY`, `UNLOGGED`, `GLOBAL`, or `LOCAL` after `INTO` is the target's name
+unless a name follows it, so `SELECT 1 INTO temp FROM ...` is reported; more
+than 64 nested `WITH` lists are reported as SQL the lint cannot parse; as a
+PL/pgSQL statement in a DO body it assigns a variable; an `EXECUTE`
 command is still checked; `EXPLAIN` of it, with or without `ANALYZE`, is
 reported although a plain `EXPLAIN` creates nothing, because the lint does not
 model which `EXPLAIN` forms execute and no migration should `EXPLAIN`, except

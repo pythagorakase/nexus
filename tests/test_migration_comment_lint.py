@@ -1136,13 +1136,17 @@ def test_select_into_reading_is_bounded(tmp_path: Path) -> None:
     A long chain of EXPLAIN ANALYZE prefixes that never closes its parenthesis,
     a bare parenthesis, and an empty statement are malformed and pass, as they
     did before the rule looked past parentheses. A SELECT INTO under 1,100
-    parentheses is found. The rule reads at most two WITH lists, so one
-    wrapped in 1,100 WITH lists is not read and passes.
+    parentheses is found. The rule reads through up to 64 WITH lists whose
+    main statements open with a parenthesis, so a SELECT INTO behind two
+    nested set operations or 64 WITH lists is found; one wrapped in 70 or
+    1,100 WITH lists is reported as SQL the lint cannot parse, never passed.
     """
     depth = 1100
     explains = "EXPLAIN ANALYZE " * depth + "("
     nest = "(" * depth + "SELECT 1 INTO deep" + ")" * depth
     wrapped = "WITH a AS (SELECT 1) (" * depth + "SELECT 1 INTO wrapped" + ")" * depth
+    at_limit = "(WITH x AS (SELECT 1) " * 64 + "SELECT 1 INTO at_limit" + ")" * 64
+    past_limit = "(WITH x AS (SELECT 1) " * 70 + "SELECT 1 INTO past_limit" + ")" * 70
     _migration(
         tmp_path,
         f"{NEXT}_bounded.sql",
@@ -1152,13 +1156,101 @@ def test_select_into_reading_is_bounded(tmp_path: Path) -> None:
 (;
 ;
 {wrapped};
+WITH a AS (SELECT 1) (WITH b AS (SELECT 2) (SELECT 1 INTO escaped)
+UNION ALL SELECT 2) UNION ALL SELECT 3;
+{at_limit};
+{past_limit};
 COMMENT ON TABLE deep IS 'Under many parentheses.';
+COMMENT ON TABLE escaped IS 'Behind two nested set operations.';
+COMMENT ON TABLE at_limit IS 'Behind 64 WITH lists.';
 """,
     )
 
+    no_columns = "declares no column list; its columns cannot be verified"
+    unparsed = "cannot parse SQL: a statement nests more than 64 WITH lists"
     assert _findings(tmp_path) == [
-        f"{NEXT}_bounded.sql:2: SELECT INTO public.deep declares no column list; "
-        "its columns cannot be verified",
+        f"{NEXT}_bounded.sql:2: SELECT INTO public.deep {no_columns}",
+        f"{NEXT}_bounded.sql:5: {unparsed}",
+        f"{NEXT}_bounded.sql:6: SELECT INTO public.escaped {no_columns}",
+        f"{NEXT}_bounded.sql:8: SELECT INTO public.at_limit {no_columns}",
+        f"{NEXT}_bounded.sql:9: {unparsed}",
+    ]
+
+
+def test_into_after_a_dot_or_as_is_a_name(tmp_path: Path) -> None:
+    """``into`` after ``.`` is an attribute and after AS an output alias.
+
+    Neither starts the SELECT INTO clause, so the INTO after them is found and
+    a statement with no other INTO creates nothing. A ``.`` that ends a
+    numeric literal does not make the next INTO a name.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_into_names.sql",
+        """
+SELECT src.into temp INTO escaped FROM (VALUES (1)) AS src("into");
+SELECT src.into FROM (VALUES (1)) AS src("into");
+SELECT 1 AS into;
+SELECT src . into AS into INTO spaced FROM (VALUES (1)) AS src("into");
+SELECT 1. INTO numbered;
+COMMENT ON TABLE escaped IS 'Past an attribute named into.';
+COMMENT ON TABLE spaced IS 'Past a spaced attribute and an alias named into.';
+COMMENT ON TABLE numbered IS 'After a numeric literal ending in a dot.';
+""",
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_into_names.sql:1: SELECT INTO public.escaped {no_columns}",
+        f"{NEXT}_into_names.sql:4: SELECT INTO public.spaced {no_columns}",
+        f"{NEXT}_into_names.sql:5: SELECT INTO public.numbered {no_columns}",
+    ]
+
+
+def test_select_into_target_named_temp(tmp_path: Path) -> None:
+    """TEMP, TEMPORARY, UNLOGGED, GLOBAL, and LOCAL name the target unless a name
+    follows them.
+
+    ``SELECT 1 INTO temp FROM ...`` creates a persistent table named ``temp``,
+    and so does ``INTO TABLE temp``; ``INTO TEMP t`` and ``INTO LOCAL TEMP t``
+    create temporary tables and pass, inside parentheses as well. An
+    interpolated name after TEMP is still a name.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_temp_names.sql",
+        """
+SELECT 1 INTO temp FROM (VALUES (1)) AS v(n);
+SELECT 1 INTO temporary FROM (VALUES (1)) AS v(n);
+SELECT 1 INTO TABLE temp FROM (VALUES (1)) AS v(n);
+SELECT 1 INTO unlogged;
+(SELECT 1 INTO temp);
+SELECT 1 INTO TEMP t;
+SELECT 1 INTO LOCAL TEMP t;
+(SELECT 1 INTO TEMP t);
+SELECT 1 INTO TEMP TABLE t WHERE true;
+SELECT 1 INTO GLOBAL TEMPORARY "t" FROM (VALUES (1)) AS v(n);
+COMMENT ON TABLE temp IS 'A persistent table named temp.';
+COMMENT ON TABLE temporary IS 'A persistent table named temporary.';
+COMMENT ON TABLE unlogged IS 'A persistent table named unlogged.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_temp_names.py",
+        """
+def run(cur, name) -> None:
+    cur.execute(f"SELECT 1 INTO TEMP {name} FROM (VALUES (1)) AS v(n)")
+""",
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_temp_names.sql:1: SELECT INTO public.temp {no_columns}",
+        f"{NEXT}_temp_names.sql:2: SELECT INTO public.temporary {no_columns}",
+        f"{NEXT}_temp_names.sql:3: SELECT INTO public.temp {no_columns}",
+        f"{NEXT}_temp_names.sql:4: SELECT INTO public.unlogged {no_columns}",
+        f"{NEXT}_temp_names.sql:5: SELECT INTO public.temp {no_columns}",
     ]
 
 
