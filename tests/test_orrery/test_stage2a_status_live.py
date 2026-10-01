@@ -49,7 +49,7 @@ from tests.pg_fixtures import (
 )
 
 
-pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
+pytestmark = pytest.mark.requires_postgres
 
 # The slot label the clone is routed under for the whole module.
 ROUTED_SLOT = 5

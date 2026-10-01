@@ -124,8 +124,16 @@ class FakeCursor:
             and "WHERE ENTITY_KIND" in sql_upper
         ):
             (entity_kind,) = params
+            # Registry rows are not deprecated by default.
             rows = [
-                _FakeRow({"category": category}, ["category"])
+                _FakeRow(
+                    {
+                        "category": category,
+                        "deprecated": False,
+                        "replacement_categories": None,
+                    },
+                    ["category", "deprecated", "replacement_categories"],
+                )
                 for category, kinds in self.category_registry.items()
                 if entity_kind in kinds
             ]

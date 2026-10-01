@@ -152,8 +152,10 @@ class FakeRegistryCursor:
             self._one = self._result[0] if self._result else None
         elif "tag_category_registry" in sql:
             kind = params[0]
+            # Registry rows are not deprecated by default.
             self._result = [
-                (category,) for category in sorted(self.categories_by_kind[kind])
+                (category, False, None)
+                for category in sorted(self.categories_by_kind[kind])
             ]
             self._one = None
         elif "FROM tags" in sql:

@@ -1602,3 +1602,417 @@ def test_pending_check_exit_code_contract(
 
     assert qa_shift.main(["check", str(tmp_path)]) == qa_shift.PENDING_EXIT_CODE == 3
     assert json.loads(capsys.readouterr().out) == {"status": "pending"}
+
+
+# 778-S4a: all PostgreSQL state belongs to qa640_778s4a_* clones. Requires
+# global_variables, narrative_chunks, chunk_metadata, orrery_resolutions, and
+# the production commit path's event/adjudication tables. Clones are dropped.
+def test_cooldown_inventory_covers_every_tick_gate() -> None:
+    """An independent whole-file AST census checks every occurrence and argument."""
+    import ast
+    from collections import Counter
+
+    from scripts.qa_shift import cooldown_calibration as calibration
+
+    rows = calibration.inventory()
+    kinds = {
+        "since_last_event_at_least",
+        "count_recent_events_at_least",
+        "knows_recent_event",
+        "recent_event",
+    }
+    tree = ast.parse(calibration.SOURCE.read_text())
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in kinds
+    ]
+    assert Counter((r["predicate"], r["source_line"]) for r in rows) == Counter(
+        (cast(ast.Name, node.func).id, node.lineno) for node in calls
+    )
+    indexed = {r["source_line"]: r for r in rows}
+    for node in calls:
+        row = indexed[node.lineno]
+        keyword = {kw.arg: kw.value for kw in node.keywords}
+        assert row["event_type"] == ast.literal_eval(node.args[0])
+        tick_key = (
+            "minimum_ticks"
+            if row["predicate"] == "since_last_event_at_least"
+            else "within_ticks"
+        )
+        tick_node = keyword.get(tick_key)
+        if tick_node is None and len(node.args) > 1:
+            tick_node = node.args[1]
+        assert row["tick_parameter"] == tick_key
+        assert row["ticks"] == (ast.literal_eval(tick_node) if tick_node else 5)
+        assert row["minimum_count"] == (
+            ast.literal_eval(keyword["min_count"]) if "min_count" in keyword else None
+        )
+        for scope in ("actor", "target"):
+            scope_node = keyword.get(scope + "_slot")
+            expected = (
+                "actor"
+                if scope == "actor"
+                and row["predicate"]
+                in {"since_last_event_at_least", "count_recent_events_at_least"}
+                else None
+            )
+            if scope_node is not None:
+                assert isinstance(scope_node, ast.Attribute)
+                expected = scope_node.attr.lower()
+            assert row[scope + "_scope"] == expected
+    assert len({row["gate_name"] for row in rows}) == len(calls)
+
+
+def test_cooldown_gate_names_preserve_scope_and_classification() -> None:
+    """Named policies preserve branch, NOT/OR paths, target scope, and purpose."""
+    from scripts.qa_shift.cooldown_calibration import inventory
+
+    rows = inventory()
+    indexed = {r["gate_name"]: r for r in rows}
+    assert indexed["mourn_loss/branches[0].conditions/root"]["predicate"] == (
+        "count_recent_events_at_least"
+    )
+    assert indexed["mourn_loss/package_gate/2"]["event_type"] == "mourning_completed"
+    assert (
+        indexed["start_relocation_plan/package_gate/5/0"]["event_type"] == "upkeep_done"
+    )
+    hunt = [r for r in rows if r["event_type"] == "hunt_declared"]
+    intel = [r for r in rows if r["event_type"] == "intel_acquired"]
+    assert len(hunt) == len(intel) == 2
+    assert len({r["gate_name"] for r in hunt + intel}) == 4
+    assert {r["scope"] for r in hunt} == {"package_gate", "branches[0].conditions"}
+    assert {r["scope"] for r in intel} == {"package_gate", "branches[0].conditions"}
+    assert {r["target_scope"] for r in hunt} == {None, "target"}
+    assert {r["target_scope"] for r in intel} == {"target"}
+    paced = {
+        "train/package_gate/3",
+        "run_errands/package_gate/2",
+        "stroll/package_gate/1",
+        "upkeep/package_gate/1",
+        "recreate/package_gate/2",
+        "mourn_loss/package_gate/2",
+    }
+    assert {
+        r["gate_name"] for r in rows if r["classification"] == "turn-cadenced"
+    } == paced
+    assert all(
+        r["classification"] == "diegetic" for r in rows if r["gate_name"] not in paced
+    )
+    assert all(r["purpose"] and r["evidence"] for r in rows)
+    assert "pacing comment" in indexed["mourn_loss/package_gate/2"]["purpose"]
+
+
+def test_cooldown_calibration_sql_is_select_only() -> None:
+    """Every issued statement is literal SELECT SQL with explicit protection checks."""
+    import ast
+    import inspect
+
+    from scripts.qa_shift import cooldown_calibration as calibration
+
+    tree = ast.parse(inspect.getsource(calibration))
+    statements = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        assert node.func.attr not in {
+            "executemany",
+            "callproc",
+            "copy_expert",
+            "copy_from",
+        }
+        if node.func.attr == "execute":
+            statement = ast.literal_eval(node.args[0])
+            assert statement.strip().upper().startswith("SELECT ")
+            assert ";" not in statement
+            statements.append(statement)
+    assert len(statements) == 6
+    sql = "\n".join(statements)
+    assert "current_database()" in sql
+    assert "current_setting('transaction_read_only')" in sql
+    assert "current_setting('transaction_isolation')" in sql
+    assert "narrative_view" not in sql
+    assert "set_config" not in sql
+
+
+@pytest.fixture()
+def cooldown_db() -> Any:
+    """Seed clocks before chunks and use the production metadata writer on a clone."""
+    from contextlib import closing
+
+    from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
+    from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+
+    with disposable_slot_database("qa640_778s4a_tests") as dbname:
+        _, actor = seed_protagonist(dbname, base_timestamp=NOW.isoformat())
+        ids = []
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("INSERT INTO seasons (id) VALUES (1)")
+            cur.execute("INSERT INTO episodes (season, episode) VALUES (1, 1)")
+            for scene, (layer, minutes) in enumerate(
+                [("primary", 0), ("primary", None), ("flashback", 7), ("primary", 2)],
+                1,
+            ):
+                cur.execute(
+                    "INSERT INTO narrative_chunks (raw_text) VALUES (%s) RETURNING id",
+                    (f"Cooldown evidence {scene}",),
+                )
+                chunk = cur.fetchone()[0]
+                ids.append(chunk)
+                insert_chunk_metadata_sync(
+                    cur,
+                    chunk_id=chunk,
+                    season=1,
+                    episode=1,
+                    scene=scene,
+                    world_layer=layer,
+                    time_delta=(
+                        timedelta(minutes=minutes) if minutes is not None else None
+                    ),
+                    generation_date=NOW,
+                    slug=f"S01E01_{scene:03d}",
+                    generation_model=None,
+                    scene_weather=None,
+                )
+        yield dbname, ids, actor
+
+
+@pytest.mark.requires_postgres
+def test_cooldown_connection_rejects_writes(
+    cooldown_db: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real read-only transactions reject INSERT even with hostile ambient options."""
+    import psycopg2.errors
+
+    from scripts.qa_shift.cooldown_calibration import readonly_connection
+
+    dbname, _, _ = cooldown_db
+    monkeypatch.setenv(
+        "PGOPTIONS",
+        "-c default_transaction_read_only=off"
+        " -c default_transaction_isolation=read\\ committed -c statement_timeout=12345",
+    )
+    with readonly_connection(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT current_database() AS db, "
+            "current_setting('transaction_read_only') AS ro, "
+            "current_setting('transaction_isolation') AS isolation, "
+            "current_setting('statement_timeout') AS timeout"
+        )
+        assert dict(cur.fetchone()) == {
+            "db": dbname,
+            "ro": "on",
+            "isolation": "repeatable read",
+            "timeout": "12345ms",
+        }
+        with pytest.raises(psycopg2.errors.ReadOnlySqlTransaction):
+            cur.execute("INSERT INTO narrative_chunks (raw_text) VALUES ('Forbidden')")
+
+
+@pytest.mark.requires_postgres
+def test_cooldown_report_uses_metadata_and_tick_gaps(cooldown_db: Any) -> None:
+    """Stored clocks win over a disagreeing view and retain inherited time."""
+    from contextlib import closing
+
+    from scripts.qa_shift.cooldown_calibration import corpus_report
+    from tests.pg_fixtures import connect
+
+    dbname, ids, _ = cooldown_db
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        # This clone alone models migration-114 stored-clock contamination.
+        # A world_time-only edit does not fire migration 140's refresh trigger.
+        cur.execute(
+            "UPDATE chunk_metadata SET world_time = world_time + interval '7 minutes' "
+            "WHERE chunk_id = %s",
+            (ids[-1],),
+        )
+        cur.execute("ALTER VIEW narrative_view RENAME TO calibration_original_view")
+        cur.execute(
+            "CREATE VIEW narrative_view AS SELECT chunk_id AS id, "
+            "world_time + interval '90 days' AS world_time FROM chunk_metadata"
+        )
+        cur.execute(
+            "SELECT count(*), sum(time_delta), "
+            "count(*) FILTER (WHERE time_delta IS NULL) "
+            "FROM chunk_metadata WHERE world_layer = 'primary'"
+        )
+        count, duration, nulls = cur.fetchone()
+        cur.execute(
+            "WITH pairs AS (SELECT chunk_id - "
+            "lag(chunk_id) OVER (ORDER BY chunk_id) AS gap, "
+            "extract(epoch FROM world_time - lag(world_time) OVER (ORDER BY chunk_id)) "
+            "/ 3600.0 AS hours FROM chunk_metadata WHERE world_layer = 'primary') "
+            "SELECT sum(hours)/sum(gap), "
+            "percentile_cont(0.5) WITHIN GROUP (ORDER BY hours/gap), "
+            "avg(hours), percentile_cont(0.5) WITHIN GROUP (ORDER BY hours), "
+            "count(*) FILTER (WHERE hours = 0) FROM pairs WHERE gap IS NOT NULL"
+        )
+        weighted, median, mean_delta, median_delta, zeros = cur.fetchone()
+    report = corpus_report(dbname)
+    cadence = report["cadence"]
+    assert cadence["primary_chunks"] == count == 3
+    assert (
+        cadence["primary_duration_hours"] == duration.total_seconds() / 3600 == 2 / 60
+    )
+    assert cadence["null_primary_durations"] == nulls == 1
+    assert cadence["world_clock_span_hours"] == 9 / 60
+    assert cadence["zero_deltas"] == zeros == 1
+    assert [p["tick_gap"] for p in cadence["pairs"]] == [1, 2]
+    assert cadence["weighted_hours_per_tick"] == pytest.approx(float(weighted))
+    assert cadence["median_pair_hours_per_tick"] == pytest.approx(float(median))
+    assert cadence["mean_pair_hours"] == pytest.approx(float(mean_delta))
+    assert cadence["median_pair_hours"] == pytest.approx(float(median_delta))
+    for row in report["gates"]:
+        assert row["weighted_equivalent_hours"] == pytest.approx(
+            row["ticks"] * float(weighted)
+        )
+        assert row["median_equivalent_hours"] == pytest.approx(
+            row["ticks"] * float(median)
+        )
+
+
+@pytest.mark.requires_postgres
+def test_cooldown_firing_counts_and_formats(cooldown_db: Any) -> None:
+    """Commit resolutions, retain zeros/history, and round-trip Markdown fields."""
+    from contextlib import closing
+    import sys
+
+    from nexus.agents.orrery.events import commit_orrery_tick_sync
+    from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
+    from scripts.qa_shift.cooldown_calibration import corpus_report, markdown
+    from tests.pg_fixtures import connect
+
+    dbname, ids, actor = cooldown_db
+    with closing(connect(dbname)) as conn, conn:
+        for tick, package_ids in (
+            (ids[0], ["hide", "hide", "historical_calibration"]),
+            (ids[-1], ["hide"]),
+            (ids[2], ["historical_calibration"]),
+        ):
+            drafts = tuple(
+                OrreryResolutionDraft(
+                    template_id=package,
+                    priority=40,
+                    binding_hash=f"calibration-{tick}-{i}",
+                    bindings={"actor": actor},
+                    branch_label="Calibration",
+                    narrative_stub="{actor} waits.",
+                    magnitude=0.1,
+                )
+                for i, package in enumerate(package_ids)
+            )
+            result = commit_orrery_tick_sync(
+                conn,
+                OrreryTickProposal(
+                    anchor_chunk_id=tick, actor_count=1, resolutions=drafts
+                ),
+                tick_chunk_id=tick,
+            )
+            assert result.resolution_count == len(package_ids)
+    report = corpus_report(dbname)
+    firings = report["firings"]
+    assert (
+        firings["rows"],
+        firings["ticks"],
+        firings["rows_without_primary_metadata"],
+    ) == (5, 3, 1)
+    packages = {row["template_id"]: row for row in firings["current_packages"]}
+    assert packages["hide"] == {"template_id": "hide", "rows": 3, "ticks": 2}
+    assert packages["mourn_loss"]["rows"] == packages["mourn_loss"]["ticks"] == 0
+    assert firings["unknown_historical_packages"] == [
+        {"template_id": "historical_calibration", "rows": 2, "ticks": 2}
+    ]
+    assert list(packages) == sorted(packages)
+    root = Path(__file__).resolve().parents[1]
+    command = [
+        sys.executable,
+        str(root / "scripts/qa_shift/cooldown_calibration.py"),
+        "--dbname",
+        dbname,
+        "--format",
+    ]
+    env = {**os.environ, "PYTHONPATH": str(root)}
+    outputs = [
+        subprocess.run(
+            command + ["json"], env=env, check=True, capture_output=True, text=True
+        ).stdout
+        for _ in range(2)
+    ]
+    assert outputs[0] == outputs[1]
+    assert json.loads(outputs[0]) == report
+    rendered = subprocess.run(
+        command + ["markdown"], env=env, check=True, capture_output=True, text=True
+    ).stdout
+    assert rendered == markdown(report)
+    # Decode Markdown tables without calling the renderer: all four sections,
+    # including nested pair/firing tables, must retain exactly the JSON values.
+    tables: dict[str, list[list[str]]] = {}
+    section = ""
+    for line in rendered.splitlines():
+        if line.startswith("## "):
+            section = line[3:]
+            tables[section] = []
+        elif line.startswith("| "):
+            tables[section].append(
+                [cell.strip() for cell in line.strip("| ").split(" | ")]
+            )
+    for name, value in report.items():
+        if isinstance(value, dict):
+            scalars = {
+                key: item for key, item in value.items() if not isinstance(item, list)
+            }
+            assert {
+                row[0]: json.loads(row[1].replace("&#124;", "|"))
+                for row in tables[name][2:]
+            } == scalars
+            children = {
+                key: item for key, item in value.items() if isinstance(item, list)
+            }
+        else:
+            children = {name: value}
+        for key, rows in children.items():
+            table = tables[key]
+            assert [
+                dict(
+                    zip(
+                        table[0],
+                        [json.loads(cell.replace("&#124;", "|")) for cell in row],
+                    )
+                )
+                for row in table[2:]
+            ] == rows
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize("invalid", ["null", "reversed", "insufficient"])
+def test_cooldown_invalid_clock_and_target_fail_loudly(
+    cooldown_db: Any, invalid: str
+) -> None:
+    """Bad stored clocks fail; slot 2 rejection precedes any database attempt."""
+    from contextlib import closing
+
+    from scripts.qa_shift.cooldown_calibration import corpus_report
+    from tests.pg_fixtures import connect
+
+    dbname, ids, _ = cooldown_db
+    # dbname_audit would record an owner target even if its refusal were caught.
+    for target in ("save_02", "NEXUS_template", "postgres", "unapproved", "qa640_"):
+        with pytest.raises(ValueError, match="Unapproved"):
+            corpus_report(target)
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        if invalid == "null":
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = NULL WHERE chunk_id = %s",
+                (ids[-1],),
+            )
+        elif invalid == "reversed":
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+                (NOW - timedelta(days=1), ids[-1]),
+            )
+        else:
+            cur.execute("DELETE FROM chunk_metadata WHERE chunk_id <> %s", (ids[0],))
+    with pytest.raises(ValueError, match="NULL|reversed|Fewer than two"):
+        corpus_report(dbname)
