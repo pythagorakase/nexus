@@ -19,7 +19,7 @@ clone.
 | Insert writes `world_time, world_time, eta` | `events.py:5153-5155` (sync), `events.py:5174`, `:5261-5263` (async) |
 | Hover audit emits `asdict(travel)` beside its own `_iso` clock | `audit.py:2577`, `audit.py:2585`, `_iso` at `audit.py:1203-1204` |
 | Travel evidence observes only `progress_ratio` | `evidence.py:951-968` |
-| Module literals | `TRAVEL_MODE_DETOUR_FACTOR` `events.py:224-232`, `TRAVEL_MODE_SPEED_KMH` `events.py:233-241` |
+| Module literals (the detour-factor and speed dicts) | `events.py:224-232`, `events.py:233-241` |
 | Literal read sites | `events.py:4999` (`_travel_mode`), `:7377` (sync graph), `:7424` (async graph), `:7846-7847` (estimate) |
 | Existing route-graph config only | `nexus.toml:614-615` |
 | `travel.advance` delta (unchanged, out of scope) | `events.py:5278` |
