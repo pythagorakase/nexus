@@ -1,21 +1,8 @@
-"""Ordering and failure semantics of the shared source-embedding orchestrator.
-
-Only the true external boundaries are replaced: the pooled PostgreSQL
-connection (a recording stand-in that keeps ``get_connection``'s commit-or-
-rollback contract and answers the orchestrator's queries from in-memory rows)
-and the sentence-transformer embedder. Configuration flows through the real
-``load_settings`` seam with an explicit model registry, and the real
-dimension-table DDL helpers run against the recording cursor.
-
-The public wrappers are exercised through seams the pre-#848 modules also
-used, so the ordering and failure tests hold for both implementations. The
-real upsert/stamp atomicity is proven against PostgreSQL in
-``tests/test_orrery/test_retrograde_embedding_pg.py``.
-"""
+"""Real write-path proofs plus unchanged pre-write rejection contract tests."""
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterator, Literal, Optional
 
@@ -24,7 +11,7 @@ import pytest
 from nexus.agents.memnon.utils import source_embeddings
 from nexus.agents.memnon.utils.source_embeddings import (
     RETROGRADE_SUMMARY_SOURCE,
-    EmbeddingSource,
+    CHARACTER_EXPERIENCE_SOURCE,
     embed_source_rows,
     generate_source_vectors,
     upsert_source_vectors,
@@ -34,6 +21,42 @@ from nexus.agents.orrery.experience_embedding import embed_character_experiences
 from nexus.agents.orrery.retrograde_embedding import embed_retrograde_summaries
 from nexus.config import load_settings
 from nexus.config.settings_models import EmbeddingModelConfig
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+)
+from tests.test_embedding_table_ownership_pg import (
+    CHUNK_SOURCE,
+    seed_source,
+    assert_corpus_contract,
+)
+from psycopg2.extras import RealDictCursor
+
+
+@pytest.fixture
+def source_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Route all slot-dependent paths to one TEST-pinned disposable clone."""
+    with disposable_slot_database("qa640_810s2_source") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        yield dbname
+
+
+def _assert_vectors(
+    dbname: str, spec: Any, ids: list[int], dimensions: dict[str, int]
+) -> None:
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        for model, dimension in dimensions.items():
+            table = spec.table_name_for_dimensions(dimension)
+            assert_corpus_contract(cur, spec, dimension)
+            cur.execute(
+                f"SELECT {spec.embedding_fk_column}, vector_dims(embedding) FROM {table} "
+                f"WHERE {spec.embedding_fk_column} = ANY(%s) AND model = %s "
+                f"ORDER BY {spec.embedding_fk_column}",
+                (ids, model),
+            )
+            assert cur.fetchall() == [(row_id, dimension) for row_id in sorted(ids)]
+
 
 STAMP = datetime(2196, 1, 1, tzinfo=timezone.utc)
 REGISTRY = {
@@ -199,76 +222,102 @@ def _experiences(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> _Database:
     return database
 
 
+@pytest.mark.requires_postgres
 def test_summaries_generate_every_vector_before_one_write_transaction(
-    monkeypatch: pytest.MonkeyPatch,
+    source_db: str,
 ) -> None:
-    """Read, then embed everything, then DDL, upserts and stamp atomically."""
-    database = _summaries(monkeypatch)
-
-    results = embed_retrograde_summaries("save_05", [22, 11, 22])
-
-    small = "retrograde_summary_embeddings_0003d"
-    large = "retrograde_summary_embeddings_0005d"
-    assert database.trace == [
-        "open save_05",
-        "load",
-        "commit",
-        "load models",
-        "embed 22/alpha",
-        "embed 22/beta",
-        "embed 11/alpha",
-        "embed 11/beta",
-        "open save_05",
-        f"create {small}",
-        f"insert {small} 22 alpha",
-        f"create {large}",
-        f"insert {large} 22 beta",
-        f"insert {small} 11 alpha",
-        f"insert {large} 11 beta",
-        "stamp",
-        "commit",
+    """Callback generation finishes before real DDL, vectors and atomic stamps."""
+    spec = RETROGRADE_SUMMARY_SOURCE
+    ids = [
+        seed_source(source_db, spec, text)
+        for text in ["The courier hid the ledger.", "The archive inherited a debt."]
     ]
-    assert results == [
-        {
-            "summary_id": 22,
-            "models": ["alpha", "beta"],
-            "dimensions": [3, 5],
-            "embedding_generated_at": STAMP.isoformat(),
-        },
-        {
-            "summary_id": 11,
-            "models": ["alpha", "beta"],
-            "dimensions": [3, 5],
-            "embedding_generated_at": STAMP.isoformat(),
-        },
-    ]
-    inserts = [params for sql, params in database.statements if "INSERT" in sql]
-    assert inserts[0] == (22, "alpha", "[27.0,0.5,0.5]")
-
-
-def test_experiences_load_and_stamp_only_valid_rendered_rows(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The validity predicate guards both the read and the ironman stamp."""
-    database = _experiences(monkeypatch)
-
-    results = embed_character_experiences("save_05", [42, 41])
-
-    assert [row["experience_id"] for row in results] == [42, 41]
-    load_sql, stamp_sql = (
-        sql
-        for sql, _params in database.statements
-        if sql.startswith(("SELECT", "UPDATE"))
+    texts = dict(
+        zip(ids, ["The courier hid the ledger.", "The archive inherited a debt."])
     )
-    assert "invalidation_status = 'valid'" in load_sql
-    assert "invalidation_status = 'valid'" in stamp_sql
-    assert "experience_text IS NOT NULL" in stamp_sql
-    assert [line for line in database.trace if line.startswith("insert")] == [
-        "insert character_experience_embeddings_0003d 42 alpha",
-        "insert character_experience_embeddings_0005d 42 beta",
-        "insert character_experience_embeddings_0003d 41 alpha",
-        "insert character_experience_embeddings_0005d 41 beta",
+    calls = []
+
+    def embed(text: str, model: str) -> list[float]:
+        with closing(connect(source_db)) as conn, conn.cursor() as cur:
+            for dimension in [3, 5]:
+                cur.execute(
+                    "SELECT to_regclass(%s)",
+                    (spec.table_name_for_dimensions(dimension),),
+                )
+                assert cur.fetchone() == (None,)
+            cur.execute(
+                "SELECT embedding_generated_at FROM retrograde_summaries WHERE id = ANY(%s)",
+                (ids,),
+            )
+            assert cur.fetchall() == [(None,), (None,)]
+        calls.append((text, model))
+        return [float(len(text))] + [0.5] * ((3 if model == "alpha" else 5) - 1)
+
+    generated = generate_source_vectors(spec, texts, ["alpha", "beta"], embed)
+    assert calls == [
+        (text, model) for text in texts.values() for model in ["alpha", "beta"]
     ]
+    with (
+        closing(connect(source_db, cursor_factory=RealDictCursor)) as conn,
+        conn,
+        conn.cursor() as cur,
+    ):
+        upsert_source_vectors(cur, spec, generated)
+        stamps = source_embeddings._stamp_embedded_rows(cur, spec, ids)
+        assert set(stamps) == set(ids)
+        assert len(set(stamps.values())) == 1
+    _assert_vectors(source_db, spec, ids, {"alpha": 3, "beta": 5})
+    with closing(connect(source_db)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT embedding::text FROM retrograde_summary_embeddings_0003d WHERE summary_id=%s AND model='alpha'",
+            (ids[0],),
+        )
+        assert cur.fetchone() == ("[27,0.5,0.5]",)
+        cur.execute(
+            "SELECT embedding_generated_at FROM retrograde_summaries WHERE id = ANY(%s)",
+            (ids,),
+        )
+        assert all(row[0] == stamps[ids[0]] for row in cur.fetchall())
+
+
+@pytest.mark.requires_postgres
+def test_experiences_load_and_stamp_only_valid_rendered_rows(source_db: str) -> None:
+    """Real loaded rows, configured local vectors and validity-filtered stamps."""
+    spec = CHARACTER_EXPERIENCE_SOURCE
+    ids = [
+        seed_source(source_db, spec, f"I remembered the ledger {i}.") for i in range(4)
+    ]
+    with closing(connect(source_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE character_experiences SET experience_text=NULL, render_model=NULL, renderer_version=NULL, render_generation_id=NULL WHERE id=%s",
+            (ids[2],),
+        )
+        cur.execute(
+            "UPDATE character_experiences SET invalidation_status='invalidated', invalidated_at=now() WHERE id=%s",
+            (ids[3],),
+        )
+    results = embed_character_experiences(source_db, [ids[1], ids[0]])
+    assert [row["experience_id"] for row in results] == [ids[1], ids[0]]
+    _assert_vectors(
+        source_db,
+        spec,
+        ids[:2],
+        source_embeddings.active_memnon_embedding_model_dimensions(),
+    )
+    with (
+        closing(connect(source_db, cursor_factory=RealDictCursor)) as conn,
+        conn.cursor() as cur,
+    ):
+        loaded = source_embeddings._load_source_rows(cur, spec, ids)
+        assert set(loaded) == set(ids[:3]) and loaded[ids[2]] is None
+    with closing(connect(source_db)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, embedding_generated_at FROM character_experiences WHERE id=ANY(%s) ORDER BY id",
+            (ids,),
+        )
+        rows = cur.fetchall()
+        assert all(row[1] is not None for row in rows[:2])
+        assert rows[2:] == [(ids[2], None), (ids[3], None)]
 
 
 def test_missing_summary_raises_before_any_model_loads(
@@ -330,25 +379,45 @@ def test_generation_failure_leaves_every_row_unwritten(
     assert not any(line.startswith("insert") for line in database.trace)
 
 
-def test_stamp_shortfall_rolls_back_the_upserted_vectors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A row invalidated mid-batch aborts the write transaction as a whole."""
-    database = _experiences(monkeypatch)
-
-    def invalidate_42(db: _Database) -> None:
-        db.rows[42]["valid"] = False
-
-    database.after_load = invalidate_42
-
-    with pytest.raises(RuntimeError, match=r"stamp count did not match.*1 of 2"):
-        embed_character_experiences("save_05", [41, 42])
-
-    assert database.trace[-3:] == [
-        "insert character_experience_embeddings_0005d 42 beta",
-        "stamp",
-        "rollback",
+@pytest.mark.requires_postgres
+def test_stamp_shortfall_rolls_back_the_upserted_vectors(source_db: str) -> None:
+    """Concurrent invalidation makes the real stamp reject and roll back vectors."""
+    spec = CHARACTER_EXPERIENCE_SOURCE
+    ids = [
+        seed_source(source_db, spec, f"I remembered the flood {i}.") for i in range(2)
     ]
+    with (
+        closing(connect(source_db, cursor_factory=RealDictCursor)) as conn,
+        conn.cursor() as cur,
+    ):
+        rows = source_embeddings._load_source_rows(cur, spec, ids)
+    generated = generate_source_vectors(
+        spec,
+        rows,
+        ["alpha", "beta"],
+        lambda _text, model: [0.5] * (3 if model == "alpha" else 5),
+    )
+    with closing(connect(source_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE character_experiences SET invalidation_status='invalidated', invalidated_at=now() WHERE id=%s",
+            (ids[1],),
+        )
+    with closing(connect(source_db, cursor_factory=RealDictCursor)) as conn:
+        with pytest.raises(RuntimeError, match=r"stamp count did not match.*1 of 2"):
+            with conn, conn.cursor() as cur:
+                upsert_source_vectors(cur, spec, generated)
+                source_embeddings._stamp_embedded_rows(cur, spec, ids)
+    with closing(connect(source_db)) as conn, conn.cursor() as cur:
+        for dimension in [3, 5]:
+            cur.execute(
+                "SELECT to_regclass(%s)", (spec.table_name_for_dimensions(dimension),)
+            )
+            assert cur.fetchone() == (None,)
+        cur.execute(
+            "SELECT embedding_generated_at FROM character_experiences WHERE id=ANY(%s)",
+            (ids,),
+        )
+        assert cur.fetchall() == [(None,), (None,)]
 
 
 @pytest.mark.parametrize(
@@ -367,23 +436,30 @@ def test_invalid_or_empty_ids_never_connect(
     assert database.trace == []
 
 
-def test_wrappers_are_the_shared_orchestrator(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The summary wrapper and re-export add nothing to the shared path."""
-    _summaries(monkeypatch)
-
+@pytest.mark.requires_postgres
+def test_wrappers_are_the_shared_orchestrator(source_db: str) -> None:
+    """Public wrapper and shared orchestrator use the real configured embedder."""
     assert (
         retrograde_embedding.active_memnon_embedding_model_dimensions
         is source_embeddings.active_memnon_embedding_model_dimensions
     )
-    assert source_embeddings.active_memnon_embedding_model_dimensions() == {
-        "alpha": 3,
-        "beta": 5,
-    }
-    assert embed_source_rows(
-        "save_05", RETROGRADE_SUMMARY_SOURCE, [11]
-    ) == embed_retrograde_summaries("save_05", [11])
+    row_id = seed_source(source_db, RETROGRADE_SUMMARY_SOURCE)
+    shared = embed_source_rows(source_db, RETROGRADE_SUMMARY_SOURCE, [row_id])
+    wrapped = embed_retrograde_summaries(source_db, [row_id])
+    assert [
+        {k: v for k, v in row.items() if k != "embedding_generated_at"}
+        for row in shared
+    ] == [
+        {k: v for k, v in row.items() if k != "embedding_generated_at"}
+        for row in wrapped
+    ]
+    assert all(row["embedding_generated_at"] for row in shared + wrapped)
+    _assert_vectors(
+        source_db,
+        RETROGRADE_SUMMARY_SOURCE,
+        [row_id],
+        source_embeddings.active_memnon_embedding_model_dimensions(),
+    )
 
 
 def test_active_dimensions_read_the_real_registry() -> None:
@@ -394,42 +470,27 @@ def test_active_dimensions_read_the_real_registry() -> None:
     assert all(value > 0 for value in dimensions.values())
 
 
-def test_shared_helpers_serve_a_caller_supplied_embedder() -> None:
-    """The job path's own encoder errors propagate unwrapped; DDL runs once."""
-    ddl: list[int] = []
-
-    def ensure_chunk_table(_cursor: Any, dimensions: int) -> str:
-        ddl.append(dimensions)
-        return f"chunks_{dimensions}"
-
-    chunks = EmbeddingSource(
-        label="narrative chunk",
-        plural_label="Narrative chunks",
-        table="narrative_chunks",
-        id_column="id",
-        text_column="raw_text",
-        embedding_fk_column="chunk_id",
-        ensure_table=ensure_chunk_table,
-        table_name_for_dimensions=lambda dimensions: f"chunks_{dimensions}",
-    )
+@pytest.mark.requires_postgres
+def test_shared_helpers_serve_a_caller_supplied_embedder(source_db: str) -> None:
+    """Public callback errors propagate, and real chunk upserts preserve identities."""
+    ids = [seed_source(source_db, CHUNK_SOURCE, text) for text in ["a", "b"]]
+    texts = dict(zip(ids, ["a", "b"]))
 
     def mismatched(_text: str, model: str) -> list[float]:
         raise ValueError(f"Embedding dimension mismatch for {model}")
 
     with pytest.raises(ValueError, match="dimension mismatch for alpha"):
-        generate_source_vectors(chunks, {7: "text"}, ["alpha"], mismatched)
-
+        generate_source_vectors(CHUNK_SOURCE, texts, ["alpha"], mismatched)
     generated = generate_source_vectors(
-        chunks, {7: "a", 8: "b"}, ["alpha"], lambda text, _model: [1.0, 2.0]
+        CHUNK_SOURCE, texts, ["alpha"], lambda _text, _model: [1.0, 2.0]
     )
-    database = _Database("narrative_chunks", "raw_text", {})
-    with database.connect("save_05", dict_cursor=True) as conn:
-        with conn.cursor() as cursor:
-            assert upsert_source_vectors(cursor, chunks, generated) == {2: "chunks_2"}
-
-    assert ddl == [2]
-    assert [params for _sql, params in database.statements] == [
-        (7, "alpha", "[1.0,2.0]"),
-        (8, "alpha", "[1.0,2.0]"),
-    ]
-    assert "ON CONFLICT (chunk_id, model)" in database.statements[0][0]
+    with closing(connect(source_db)) as conn, conn, conn.cursor() as cur:
+        assert upsert_source_vectors(cur, CHUNK_SOURCE, generated) == {
+            2: "chunk_embeddings_0002d"
+        }
+        upsert_source_vectors(cur, CHUNK_SOURCE, generated)
+        cur.execute(
+            "SELECT chunk_id, model, embedding::text FROM chunk_embeddings_0002d ORDER BY chunk_id"
+        )
+        assert cur.fetchall() == [(row_id, "alpha", "[1,2]") for row_id in ids]
+        assert_corpus_contract(cur, CHUNK_SOURCE, 2)

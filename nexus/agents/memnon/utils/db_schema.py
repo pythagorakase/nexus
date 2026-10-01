@@ -125,33 +125,13 @@ class DatabaseManager:
             connection.close()
 
             # Check for vector extension
-            from .db_access import check_vector_extension, setup_database_indexes
+            from .db_access import check_vector_extension
 
-            if check_vector_extension(self.db_url):
-                logger.info("Vector extension available")
-
-                # Set up necessary database indexes for efficient search
-                if setup_database_indexes(self.db_url):
-                    logger.info("Database indexes setup complete")
-                else:
-                    logger.warning(
-                        "Database indexes setup failed - vector search may not work correctly"
-                    )
-
-                # Set up hybrid search if enabled in settings
-                hybrid_search_enabled = (
-                    self.settings.get("retrieval", {})
-                    .get("hybrid_search", {})
-                    .get("enabled", False)
+            if not check_vector_extension(self.db_url):
+                raise ConnectionError(
+                    "Missing vector extension; migration 022 owns this prerequisite"
                 )
-                if hybrid_search_enabled:
-                    logger.info("Setting up hybrid search capabilities")
-                    self._setup_hybrid_search(engine)
-            else:
-                logger.warning(
-                    "Vector extension not found - vector search will not work"
-                )
-                logger.warning("Please run scripts/install_pgvector_custom.sh first")
+            logger.info("Vector extension available")
 
             logger.info("Successfully connected to the configured database")
             return engine
@@ -159,34 +139,6 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")
             raise ConnectionError(f"Database connection failed: {e}")
-
-    def _setup_hybrid_search(self, engine):
-        """
-        Set up the database for hybrid search capabilities.
-        Creates a GIN index for text search and a hybrid_search SQL function.
-
-        Args:
-            engine: SQLAlchemy engine
-        """
-        try:
-            # Use our database access utilities to set up necessary indexes and functions
-            from .db_access import setup_database_indexes
-
-            logger.info("Setting up hybrid search capabilities using db_access utility")
-            if setup_database_indexes(self.db_url):
-                logger.info("Hybrid search database setup completed successfully")
-                return True
-            else:
-                logger.warning("Hybrid search setup failed")
-                return False
-
-        except Exception as e:
-            logger.error(f"Error setting up hybrid search: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            logger.warning("Disabling hybrid search due to setup failure")
-            return False
 
     def create_session(self) -> Session:
         """

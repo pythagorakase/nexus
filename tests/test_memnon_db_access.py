@@ -1,75 +1,29 @@
-"""Unit tests for MEMNON database setup helpers."""
+"""Offline removal proof for constructor schema setup."""
 
-from nexus.agents.memnon.utils import db_access
-from nexus.database import database_url
-
-
-class FakeCursor:
-    """Small cursor stand-in that records SQL issued by setup_database_indexes."""
-
-    def __init__(self):
-        self.statements = []
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_args):
-        return False
-
-    def execute(self, statement, *_args, **_kwargs):
-        self.statements.append(str(statement))
-
-    def fetchone(self):
-        return (1,)
+import ast
+from pathlib import Path
 
 
-class FakeConnection:
-    """Connection stand-in for setup_database_indexes."""
-
-    def __init__(self, cursor):
-        self.cursor_instance = cursor
-        self.autocommit = False
-        self.closed = False
-
-    def cursor(self):
-        return self.cursor_instance
-
-    def close(self):
-        self.closed = True
-
-
-def test_setup_database_indexes_skips_ann_indexes_for_high_dimensions(monkeypatch):
-    """2560d tables should keep model indexes without attempting unsupported ANN."""
-    cursor = FakeCursor()
-    connection = FakeConnection(cursor)
-
-    monkeypatch.setattr(db_access.psycopg2, "connect", lambda **_kwargs: connection)
-    monkeypatch.setattr(
-        db_access,
-        "_list_existing_embedding_tables",
-        lambda _cursor: ["chunk_embeddings_2560d"],
-    )
-
-    assert db_access.setup_database_indexes(database_url("save_04"))
-
-    statements = "\n".join(cursor.statements).lower()
-    assert "chunk_embeddings_2560d_model_idx" in statements
-    assert "using hnsw" not in statements
-    assert "using ivfflat" not in statements
-    assert connection.closed
-
-
-def test_setup_database_indexes_fails_on_unparseable_embedding_table(monkeypatch):
-    """Malformed embedding table names should not fall through to ANN creation."""
-    cursor = FakeCursor()
-    connection = FakeConnection(cursor)
-
-    monkeypatch.setattr(db_access.psycopg2, "connect", lambda **_kwargs: connection)
-    monkeypatch.setattr(
-        db_access,
-        "_list_existing_embedding_tables",
-        lambda _cursor: ["chunk_embeddings_bad"],
-    )
-
-    assert not db_access.setup_database_indexes(database_url("save_04"))
-    assert connection.closed
+def test_setup_database_indexes_is_absent() -> None:
+    """Reject the removed function, imports, calls and hybrid setup method."""
+    root = Path(__file__).resolve().parents[1]
+    found = []
+    for directory in ["nexus", "scripts", "ir_eval"]:
+        for path in sorted((root / directory).rglob("*.py")):
+            for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+                names = []
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    names.append(node.name)
+                elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                    names.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Name):
+                        names.append(node.func.id)
+                    elif isinstance(node.func, ast.Attribute):
+                        names.append(node.func.attr)
+                if any(
+                    name in {"setup_database_indexes", "_setup_hybrid_search"}
+                    for name in names
+                ):
+                    found.append(f"{path.relative_to(root)}:{node.lineno}")
+    assert found == []

@@ -10,17 +10,13 @@ from nexus.database import url_connection_kwargs, verify_database_url
 import logging
 import psycopg2
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
-from urllib.parse import urlparse
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.presence.roster import read_rosters
 
 from .embedding_tables import (
-    PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
-    parse_embedding_table_dimensions,
     retrograde_summary_table_name_for_dimensions,
     resolve_dimension_table,
-    supports_pgvector_ann_index,
 )
 
 from .idf_dictionary import IDFDictionary
@@ -199,7 +195,7 @@ def check_vector_extension(db_url: str) -> bool:
 
     except Exception as e:
         logger.error(f"Error checking pgvector extension: {e}")
-        return False
+        raise
     finally:
         if "conn" in locals():
             conn.close()
@@ -433,149 +429,6 @@ def execute_hybrid_search(
     for result in results:
         result["source"] = "hybrid_search"
     return results
-
-
-def setup_database_indexes(db_url: str) -> bool:
-    """
-    Set up necessary database indexes for efficient search.
-
-    Args:
-        db_url: PostgreSQL database URL
-
-    Returns:
-        Boolean indicating success
-    """
-    db_url = verify_database_url(db_url)
-    try:
-
-        # Connect to the database
-        conn = psycopg2.connect(**url_connection_kwargs(db_url))
-
-        conn.autocommit = True
-
-        try:
-            with conn.cursor() as cursor:
-                # Check if vector extension is installed
-                cursor.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
-                has_vector_extension = cursor.fetchone() is not None
-
-                if not has_vector_extension:
-                    logger.info("Creating vector extension...")
-                    try:
-                        cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
-                        logger.info("Vector extension created successfully")
-                    except Exception as e:
-                        logger.error(f"Failed to create vector extension: {e}")
-                        logger.error(
-                            "Please run scripts/install_pgvector_custom.sh first"
-                        )
-                        return False
-
-                # Create GIN index for text search if it doesn't exist
-                logger.info("Creating GIN index for text search...")
-                cursor.execute(
-                    """
-                CREATE INDEX IF NOT EXISTS narrative_chunks_text_idx 
-                ON narrative_chunks USING GIN (to_tsvector('english', raw_text))
-                """
-                )
-
-                # Create indexes on existing dimension-specific tables only.
-                for dim_table in _list_existing_embedding_tables(cursor):
-                    try:
-                        logger.info(f"Creating model index on {dim_table}...")
-                        cursor.execute(
-                            f"""
-                        CREATE INDEX IF NOT EXISTS {dim_table}_model_idx 
-                        ON {dim_table} (model)
-                        """
-                        )
-                    except Exception as e:
-                        logger.warning(f"Error creating index on {dim_table}: {e}")
-                        continue
-
-                # Create vector indexes for existing dimension-specific tables only.
-                for dim_table in _list_existing_embedding_tables(cursor):
-                    dimensions = parse_embedding_table_dimensions(dim_table)
-                    if dimensions is None:
-                        raise ValueError(
-                            f"Cannot parse dimensions from table name: {dim_table!r}"
-                        )
-                    try:
-                        if not supports_pgvector_ann_index(dimensions):
-                            logger.info(
-                                "Skipping ANN vector index for %s: pgvector "
-                                "supports HNSW/IVFFlat indexes up to %sd "
-                                "locally, and exact search remains available",
-                                dim_table,
-                                PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
-                            )
-                            continue
-
-                        # Check for existing HNSW index
-                        cursor.execute(
-                            f"""
-                        SELECT exists (
-                            SELECT 1 FROM pg_indexes 
-                            WHERE indexname = '{dim_table}_hnsw_idx'
-                        )
-                        """
-                        )
-                        has_hnsw_index = cursor.fetchone()[0]
-
-                        if not has_hnsw_index:
-                            logger.info(f"Creating HNSW index on {dim_table}...")
-                            # Try to create an HNSW index with ivfflat fallback
-                            try:
-                                cursor.execute(
-                                    f"""
-                                CREATE INDEX {dim_table}_hnsw_idx ON {dim_table} 
-                                USING hnsw (embedding vector_l2_ops) 
-                                WITH (m = 16, ef_construction = 64)
-                                """
-                                )
-                                logger.info(
-                                    f"HNSW index created successfully for {dim_table}"
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to create HNSW index for {dim_table}: {e}"
-                                )
-                                logger.info(
-                                    f"Trying to create IVFFlat index for {dim_table} as fallback..."
-                                )
-
-                                try:
-                                    cursor.execute(
-                                        f"""
-                                    CREATE INDEX {dim_table}_ivfflat_idx ON {dim_table} 
-                                    USING ivfflat (embedding vector_l2_ops) 
-                                    WITH (lists = 100)
-                                    """
-                                    )
-                                    logger.info(
-                                        f"IVFFlat index created successfully for {dim_table}"
-                                    )
-                                except Exception as e2:
-                                    logger.error(
-                                        f"Failed to create IVFFlat index for {dim_table}: {e2}"
-                                    )
-                                    logger.info(f"Using default index for {dim_table}")
-                        else:
-                            logger.info(f"HNSW index already exists for {dim_table}")
-                    except Exception as e:
-                        logger.error(f"Error setting up indexes for {dim_table}: {e}")
-                        continue
-
-                logger.info("Database indexes setup completed")
-                return True
-
-        finally:
-            conn.close()
-
-    except Exception as e:
-        logger.error(f"Error setting up database indexes: {e}")
-        return False
 
 
 def execute_multi_model_hybrid_search(
