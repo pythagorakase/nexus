@@ -89,7 +89,14 @@ interface MapPaneProps {
 type MapState = "current" | "selected" | "hovered" | "rest";
 
 /** One static geometry contract for inverse-zoom canvas pins and the index. */
-function MapStateGlyph({ state, color, zoom = 1, x = 0, y = 0, glow = false }: {
+function MapStateGlyph({
+  state,
+  color,
+  zoom = 1,
+  x = 0,
+  y = 0,
+  glow = false,
+}: {
   state: MapState;
   color: string;
   zoom?: number;
@@ -102,20 +109,39 @@ function MapStateGlyph({ state, color, zoom = 1, x = 0, y = 0, glow = false }: {
     const props = {
       "data-map-part": outline ? "outline" : "fill",
       fill: outline ? "none" : color,
-      style: !outline && glow ? { filter: `drop-shadow(0 0 ${8 / zoom}px ${color})` } : undefined,
+      style:
+        !outline && glow
+          ? { filter: `drop-shadow(0 0 ${8 / zoom}px ${color})` }
+          : undefined,
       stroke: outline ? color : undefined,
       strokeWidth: outline ? 1 / zoom : undefined,
       opacity: outline ? 0.6 : undefined,
-      className: outline && (state === "selected" || state === "hovered") ? "animate-pulse" : undefined,
+      className:
+        outline && (state === "selected" || state === "hovered")
+          ? "animate-pulse"
+          : undefined,
     };
-    if (state === "selected") return <rect {...props} x={x - r} y={y - r} width={2 * r} height={2 * r} />;
-    if (state === "hovered") return <polygon {...props} points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`} />;
+    if (state === "selected") {
+      return (
+        <rect {...props} x={x - r} y={y - r} width={2 * r} height={2 * r} />
+      );
+    }
+    if (state === "hovered") {
+      return (
+        <polygon
+          {...props}
+          points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`}
+        />
+      );
+    }
     return <circle {...props} cx={x} cy={y} r={r} />;
   };
-  return <g data-map-state={state}>
-    {shape(PIN_RADIUS_PX, false)}
-    {state !== "rest" && shape(8, true)}
-  </g>;
+  return (
+    <g data-map-state={state}>
+      {shape(PIN_RADIUS_PX, false)}
+      {state !== "rest" && shape(8, true)}
+    </g>
+  );
 }
 
 /** Approximate label box width in SVG units for the AABB culler. */
@@ -572,7 +598,13 @@ export function MapPane({ slot }: MapPaneProps) {
                             onClick={() => selectPlace(place.id, true)}
                             data-testid={`map-place-row-${place.id}`}
                           >
-                            <svg className="map-place-dot" width={7} height={7} viewBox="-9 -9 18 18" aria-hidden="true">
+                            <svg
+                              className="map-place-dot"
+                              width={7}
+                              height={7}
+                              viewBox="-9 -9 18 18"
+                              aria-hidden="true"
+                            >
                               <MapStateGlyph state={state} color={PIN_COLOR[state]} />
                             </svg>
                             <span className="map-place-name">{place.name}</span>
@@ -703,7 +735,14 @@ export function MapPane({ slot }: MapPaneProps) {
                 }}
                 data-testid={`map-pin-${place.id}`}
               >
-                <MapStateGlyph state={state} color={pinColor} zoom={zoom} x={coords.x} y={coords.y} glow />
+                <MapStateGlyph
+                  state={state}
+                  color={pinColor}
+                  zoom={zoom}
+                  x={coords.x}
+                  y={coords.y}
+                  glow
+                />
                 {/* Label: kept mounted, toggled via CSS display so zoom
                     changes never thrash React reconciliation (spec §3.3) */}
                 <g style={{ display: labelVisible ? "" : "none" }}>

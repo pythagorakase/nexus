@@ -229,3 +229,62 @@ The compositing convention samples opaque interiors and static ring strokes with
 | Vector | 5,12,15,15,18,15,12 | 43740000 | 0 | 10.191082279599211 | 5 |
 
 Each theme therefore records **one theme exception**, with every shipped shortfall and its distinct geometry signatures in the resumed pair table. The exact Veil `#b83d7a` anchor and linked aliases, other hue families, backgrounds and existing opacity rules are retained.
+
+### State and Static Render Signatures
+
+Color and animation are removed from these signatures. The monochrome capture visually confirms them at their ordered sizes.
+
+| Surface | State | Static Signature | Source / Test |
+|---|---|---|---|
+| Memory | Normal | Existing meter, no warning | TopBar.tsx:198; StateGlyphs.test.tsx:74 |
+| Memory | Over | Same meter plus 12px AlertTriangle | TopBar.tsx:210; StateGlyphs.test.tsx:74 |
+| Delete | Unarmed | 11px Trash2 | LocalModelRows.tsx:439; StateGlyphs.test.tsx:87 |
+| Delete | Armed | 11px AlertTriangle | LocalModelRows.tsx:437; StateGlyphs.test.tsx:87 |
+| Map | Rest | Filled circle, no outline | MapPane.tsx:92; StateGlyphs.test.tsx:109 |
+| Map | Current | Filled circle with static circular outline (bullseye) | Same renderer on canvas at :738 and sidebar at :608 |
+| Map | Selected | Filled square and square outline | StateGlyphs.test.tsx:109; priority at MapPane.tsx:541 |
+| Map | Hovered | Filled diamond and diamond outline | StateGlyphs.test.tsx:109; priority at MapPane.tsx:541 |
+| Key | Optional Absent | 12px Circle | SettingsPane.tsx:33; StateGlyphs.test.tsx:170 |
+| Key | Required Missing | 12px AlertTriangle | Same renderer; four real SVG geometries compared |
+| Key | Present | 12px CircleDot | Same renderer |
+| Key | Verified | 12px CircleCheck, verified-first precedence | Same renderer; all required/present Boolean combinations verified |
+
+The real first-click/disarm path preserves button identity, accessible name and pressed state. An enabled ready exceeds-RAM delete is included, with no second click or mutation. Memory checks cover under/equal/over budget and no active model; existing TopBar tests retain GiB arithmetic and text assertions. Geometry proof checks all four shapes at two zooms, actual projection and offsetCoincidentPins per zoom, a nearby grouping that changes, leader endpoints and true-coordinate centering. Existing MapPane geometry tests remain and their pin-center reader now handles the new shapes. Existing SettingsPane key-store/status revision tests remain; the product diff only imports/extracts/uses the glyph renderer.
+
+### Complete Measurements, Search Witnesses and Exceptions
+
+- [Complete 417-row before/after CSV](pair-measurements.csv), with unrounded RGB and ΔE and both static signatures on every row.
+- [Complete before/after tables for every theme/context](pair-measurements.md); exact numerical duplicates are grouped, with **every** context named.
+- [Veil table and shipped assignment](veil-pairs.md): one theme exception, 25 below-15 contexts.
+- [Gilded table and shipped assignment](gilded-pairs.md): one theme exception, 56 below-15 contexts.
+- [Vector table and shipped assignment](vector-pairs.md): one theme exception, 48 below-15 contexts.
+- [Veil exhaustive result](veil-joint.json), [Gilded exhaustive result](gilded-joint.json), [Vector exhaustive result](vector-joint.json): full-domain counts, joint maxima, tie-break changes, maximizing assignments, individual factor-domain maxima/witnesses, and all before/after measurements.
+- [Explicit shortfall manifests](theme-exceptions.json). The test rejects missing/unlisted shortfalls, outside-domain values, remapping, non-maximal shipped assignments, non-minimal root-change ties, or coinciding static signatures. Stored JSON maxima are never the test oracle.
+
+The theme families are retained: Veil magenta/coral and warm neutrals; Gilded gold/bronze and warm neutrals; Vector cyan/blue and cyan neutrals. Destructive retains each theme's baseline red hue inside the ordered bright/saturated domain. No continuous-family impossibility claim is made. The joint results apply only to this order's finite domain and fixed proof convention.
+
+### Swatches and Browser Proof
+
+![Before/After Ordinary and Deutan Swatches](swatches.png)
+
+[Vector swatch source](swatches.svg) has all 84 labeled samples, with original CSS RGB and deutan-simulated RGB. Baseline for the added hovered token is the starting commit's brass-bright. Labels are QA artifact annotations, not product UI.
+
+![Shipped Glyphs at Actual Sizes, Reduced Motion](glyphs-reduced-motion.png)
+
+![Monochrome Glyphs at Actual Sizes, Reduced Motion](glyphs-monochrome-reduced-motion.png)
+
+[Full production pane fixture capture](production-panes-reduced-motion.png) and [browser receipt](browser-proof.json). The scratch fixture bundles the real TopBar, LocalModelRows, MapPane, KeyStatusGlyph and emitted production CSS, seeds real React Query data, and uses real DOM events. It uses a `file://` page and no app server/gateway. Both memory states are rendered by TopBar. Canvas samples are cloned from the real SVG groups with their actual zoom; sidebar samples are the actual 7px SVGs. All 45 sampled SVGs use the ordered 12/11/18-frame/7px dimensions. All 12 selected/hovered pulse elements have computed `animation: none`; reduced-motion media matches. The receipt reports zero API requests and zero page errors and pins CSS/source/fixture hashes. Monochrome removes glow filters and makes all glyph fills/strokes the same color. Geometry remains distinguishable.
+
+Scratch files remain exclusively under `/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/`: `fixture.tsx`, `capture.cjs`, `swatches.cjs`, `make-tables.py`, `inspect-css.cjs`, gate wrappers, logs and PR body. No server/listener was started. A capture preflight dispatched pointerenter instead of React's pointerover and aliased wrapper themes through the root override; both fixture issues were corrected and all final captures regenerated. The final receipt asserts 12 stopped pulses and three different root palettes.
+
+### Gates, Diagnostics and Landing Notes
+
+[Exact commands and verbatim tails](commands.md). Final focused suite: 76 passed; full UI: 478 passed; type-check and build passed. The emitted CSS selector is minified as `[class*=animate-]` and retains `animation:none!important` in the app-wide reduced-motion media rule. The restored-exclusion scratch plant fails both the existing guard assertion and the named pin regression test; it was reverted before the green gates and build.
+
+Owner-target proof: 80 passed, `secret-store guard: active; nexus-api: denied`, `dbname audit: owner targets: none`, zero connection targets. The complete offline split gates total **4721 passed, 1263 skipped, no failures**; the separate reachability gate passes 54. Skipped PostgreSQL/live tests are not represented as database proof; the order owes only the owner-target guard and no feature database gate. No #885 failure occurred. Black/flake8/mypy have no changed Python targets and are not applicable. UI check has no diagnostics. npm's existing audit advisory and the standard Vite large-chunk warning were reported without an out-of-scope dependency or bundle refactor. No stale fingerprint/allowlist baseline needed editing.
+
+No paid call, inference, gateway lane, product Python, nexus.toml, migration or owner database write. The whole-tree PostgreSQL gate at the final commit belongs to the coordinator. No new scripts/ classification row is triggered. The owner-target guard and file diff substantiate the bounded work; no live story or store behavior is inferred from seeded UI data.
+
+Landing: **no migration number, fleet application or gateway restart**. The coordinator runs `npm --prefix ui run build` after landing because the client bundle changes, then the whole-tree PostgreSQL gate at the final commit. If later authorized work expands into Python/config, the coordinator uses `nexus restart gateway` by service name. This slice does not implement narrow-width panes/rail, #767's ledger, map persistence or later layer/geography work. No merge is authorized here.
+
+Open coordinator questions: **none**. The amendment answers the historical stop-report question; the owner's recorded Build and bottom-rail rulings remain binding.

@@ -206,7 +206,9 @@ function MemoryMeter() {
           style={{ width: `${pct.toFixed(1)}%` }}
         />
       </span>
-      {over && <AlertTriangle size={12} className="mem-over-glyph" aria-hidden="true" />}
+      {over && (
+        <AlertTriangle size={12} className="mem-over-glyph" aria-hidden="true" />
+      )}
       <span className="k mem-text" data-testid="mem-text">
         {/* A model activated by path outside the catalog/installed scan has
             no known size; the meter still exists while it serves. */}
