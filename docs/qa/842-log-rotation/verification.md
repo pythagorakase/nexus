@@ -1461,3 +1461,323 @@ Regenerate Orrery package catalog........................................Passed
 Validate NEXUS config and model-ID drift.................................Passed
 Require COMMENT ON for new migration objects.........(no files to check)Skipped
 ```
+
+
+## After the Fifth Independent Review
+
+Round-5 order `1065-astra-fix-r5.md`, reviewer `review-1065e.out.md`, frozen
+head `c1dd182943ca5f62e376f6c3c0dfca79a1205f5f`. The initial worktree was clean,
+on `claude/842-log-rotation`, and contained the then-current `origin/main`.
+Import proof printed
+`/Users/pythagor/nexus/.claude/worktrees/842-log-rotation/nexus/__init__.py`.
+
+### Atomic Ownership and Re-Entrant Locking
+
+`nexus/runtime/supervisor.py:549` now holds `_start_lock` through the complete
+read/compare/unlink in `_unlink_own_record`. Replacement by `_start_service`
+uses the same lock, so a cleanup cannot validate an old record and delete a
+new one. Changed ownership still raises `record now names pid N; left in place`.
+
+`Supervisor.__init__` (`:427`) adds a `threading.RLock` and a hold count around
+the single flock file descriptor. `_start_lock` (`:512`) bounds both same-instance
+thread contention and cross-instance flock contention by the existing startup
+deadline, polling the flock at the existing health interval. Only the outermost
+acquisition locks/unlocks the descriptor. Both guards release in `finally`, so
+nested `_abandon_service` cleanup under `_start_service` neither deadlocks nor
+releases the startup window early. Health polling stays outside the startup lock.
+No tunable or lifecycle policy changes.
+
+### Deterministic Regression and Red Run
+
+`tests/test_runtime/test_supervisor.py:1867` uses two real Supervisor instances,
+real JSON record helpers and real flock. The replacement instance holds the
+startup lock while cleanup begins. Scheduling-only wrappers observe contention
+or pause the old unlocked read. The replacement writes PID 201 before releasing
+the lock; fixed cleanup then reads PID 201 under the lock, raises the ownership
+message, and leaves the record intact. Synthetic PIDs are never signalled.
+
+`:1932` checks bounded cleanup contention across instances and across threads
+sharing an instance, record preservation on timeout, and successful acquisition
+following timeout. `:1972` checks nested unlink preserves the outer flock until
+outer release. The existing real-process pidfile-write test (`:1461`) now also
+seeds a record naming the actual spawned service/writer and makes that file
+unwritable. Its real PermissionError enters `_abandon_service` inside the start
+lock, stops/reaps both pids, unlinks its own record, and raises without deadlock.
+All live-process tests retain fixture-assigned ports and tmp_path state.
+
+The red plant restored only `_unlink_own_record` from frozen `c1dd1829`. The new
+race test failed because replacement PID 201's record was deleted (`None`).
+`red_plant.py` restored green bytes in `finally` and byte-compared them to the
+scratch backup before any subsequent gate. No stash or history rewrite.
+
+### Test Commands and Verbatim Tails
+
+All commands ran from the authorized worktree.
+`PY=/Users/pythagor/nexus/.venv/bin/python`;
+`SP=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5`.
+The scratch runner `$PY $SP/run_gate.py LABEL ...` sets `PYTHONPATH=$PWD`,
+`TMPDIR=$SP`, `NEXUS_DBNAME_AUDIT=1`; removes gateway/API URLs, slot, runtime-home
+locators and live-LLM/secret-store opt-ins; sets `NEXUS_RUN_POSTGRES=1` only for
+`postgres-proof`; uses a foreground child with a 590-second deadline and
+120-second silence limit; and waits for completion. `--basetemp` keeps every
+pytest-created state directory under this order's scratch directory. Below are
+the exact child commands, using the two defined path abbreviations.
+
+The four offline root/support/lore/runtime pieces cover
+`tests --ignore=tests/test_api --ignore=tests/test_orrery`; API and Orrery run
+separately. The PostgreSQL proof includes supervisor, local inference, runtime
+home, local-model endpoints and owner-target guard. No paid call, owner runtime
+write, owner database write or owner service signal.
+
+**focused (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_runtime/test_supervisor.py -k 'cleanup_checks_ownership or cleanup_lock_contention or nested_cleanup or up_abandons' --basetemp=$SP/focused-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+6 passed, 65 deselected in 4.74s
+```
+
+**red-unlink (exit 1)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_runtime/test_supervisor.py::test_cleanup_checks_ownership_under_the_startup_lock --basetemp=$SP/red-tmp`:
+
+```text
+>           assert replacement._read_pidfile("echo") == new_record
+E           AssertionError: assert None == {'pid': 201}
+E            +  where None = _read_pidfile('echo')
+E            +    where _read_pidfile = <nexus.runtime.supervisor.Supervisor object at 0x10bcb3f10>._read_pidfile
+
+tests/test_runtime/test_supervisor.py:1919: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_supervisor.py::test_cleanup_checks_ownership_under_the_startup_lock
+1 failed in 0.25s
+sys:1: ResourceWarning: unclosed file <_io.BufferedWriter name='/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/red-tmp/test_cleanup_checks_ownership_0/state/supervisor.lock'>
+```
+
+**postgres-proof (exit 0)**
+
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_runtime tests/test_runtime_home.py tests/test_api/test_local_inference.py tests/test_api/test_local_models_endpoints.py tests/test_owner_target_guard.py --basetemp=$SP/postgres-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+366 passed, 7 warnings in 161.68s (0:02:41)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+**offline-root (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/test_config --ignore=tests/test_util --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --basetemp=$SP/root-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2049 passed, 387 skipped, 8 warnings in 389.53s (0:06:29)
+```
+
+**offline-support (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_config tests/test_util tests/test_ir_eval_v2 --basetemp=$SP/support-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+101 passed, 2 warnings in 3.90s
+```
+
+**offline-lore-memnon (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_lore tests/test_memnon --basetemp=$SP/lore-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+454 passed, 53 skipped, 5 warnings in 26.32s
+```
+
+**offline-runtime (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_runtime --basetemp=$SP/runtime-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+171 passed, 18 skipped in 56.55s
+```
+
+**offline-api (exit 1)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_api --basetemp=$SP/api-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_api/test_local_inference.py::test_active_raises_when_the_ownership_probe_goes_unanswered[slow]
+1 failed, 653 passed, 238 skipped, 7 warnings in 36.18s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+The unchanged test failed after deactivation; exact failure:
+
+```text
+>           assert not pid_alive(writer_pid)
+E           assert not True
+E            +  where True = pid_alive(36989)
+
+tests/test_api/test_local_inference.py:1240: AssertionError
+```
+
+**api-failure-recheck (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit 'tests/test_api/test_local_inference.py::test_active_raises_when_the_ownership_probe_goes_unanswered[slow]' --basetemp=$SP/api-recheck-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 passed, 7 warnings in 1.63s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+**offline-orrery (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_orrery --basetemp=$SP/orrery-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1188 passed, 508 skipped, 2 warnings in 9.55s
+```
+
+**reachability (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_reachability.py --basetemp=$SP/reachability-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+54 passed in 9.34s
+```
+
+### Python Checks Against Origin/Main
+
+The baseline is copied with `git show origin/main:<path>` under `$SP/main`,
+including the existing package initializers. No checkout is switched or modified.
+Mypy uses `MYPYPATH=$PWD` for the branch and `$SP/main:$PWD` for the baseline
+to preserve explicit package resolution, with separate scratch caches.
+
+`$PY -m black --check nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py` (exit 0):
+
+```text
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+```
+
+`$PY -m flake8 nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py` (exit 0):
+
+```text
+(no output)
+```
+
+`$PY -m flake8 $SP/main/nexus/runtime/supervisor.py $SP/main/tests/test_runtime/test_supervisor.py` (exit 0):
+
+```text
+(no output)
+```
+
+`$PY -m mypy --explicit-package-bases --cache-dir $SP/mypy-cache nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py` (exit 1):
+
+```text
+nexus/runtime/supervisor.py:34: error: Library stubs not installed for "requests"  [import-untyped]
+nexus/runtime/supervisor.py:34: note: Hint: "python3 -m pip install types-requests"
+nexus/runtime/supervisor.py:34: note: (or run "mypy --install-types" to install all missing stub packages)
+nexus/runtime/supervisor.py:34: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+nexus/runtime/supervisor.py:638: error: Module has no attribute "CREATE_NEW_PROCESS_GROUP"  [attr-defined]
+nexus/runtime/supervisor.py:638: error: Module has no attribute "DETACHED_PROCESS"  [attr-defined]
+nexus/runtime/supervisor.py:959: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:960: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:961: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:978: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+nexus/runtime/supervisor.py:1101: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:1103: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+Found 9 errors in 1 file (checked 2 source files)
+```
+
+`$PY -m mypy --explicit-package-bases --cache-dir $SP/mypy-main-cache $SP/main/nexus/runtime/supervisor.py $SP/main/tests/test_runtime/test_supervisor.py` (exit 1):
+
+```text
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:30: error: Library stubs not installed for "requests"  [import-untyped]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:30: note: Hint: "python3 -m pip install types-requests"
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:30: note: (or run "mypy --install-types" to install all missing stub packages)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:30: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:69: error: Module has no attribute "windll"  [attr-defined]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:556: error: Module has no attribute "CREATE_NEW_PROCESS_GROUP"  [attr-defined]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:556: error: Module has no attribute "DETACHED_PROCESS"  [attr-defined]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:758: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:759: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:760: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:777: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:897: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix5/main/nexus/runtime/supervisor.py:899: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+Found 10 errors in 1 file (checked 2 source files)
+```
+
+No new mypy diagnostics: 9 branch errors are present among 10 origin/main errors; no diagnostic is on a round-5 changed line.
+
+The baseline has one additional `ctypes.windll` diagnostic. No diagnostic
+suppression or dependency installation. `git diff --check` passed. No
+`nexus.toml` change; the normal validate-config hook still runs on commit.
+
+### Deferred and Landing Notes
+
+No round-5 P2 remains unfixed. The full offline API run has one failure in
+unchanged `tests/test_api/test_local_inference.py`:
+`test_active_raises_when_the_ownership_probe_goes_unanswered[slow]` saw a still-live
+writer PID immediately after deactivation. The same test passed in the full
+PostgreSQL proof and in one isolated recheck (both tails above). It is left
+untouched for coordinator triage under the common rules; the failed full API
+run is not claimed green. The nine baseline mypy diagnostics remain unchanged.
+
+The existing P3 for #842 remains deferred: `_stop_pid` waits its full grace for
+an exited foreground child until reaped. No change to `_stop_pid` in this round.
+Landing notes stay restart by name (`nexus restart gateway`, then
+`nexus restart mock_openai`), each service's writer shown in `nexus status`,
+no migration/fleet application, no client change and no UI rebuild. The
+coordinator owns merging and the whole-tree PostgreSQL gate.

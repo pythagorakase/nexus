@@ -1458,8 +1458,9 @@ def _managed_echo(tmp_path: Path) -> Supervisor:
     return supervisor
 
 
+@pytest.mark.parametrize("record_exists", (False, True), ids=("absent", "own-record"))
 def test_up_abandons_a_service_whose_pidfile_cannot_be_written(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, record_exists: bool
 ) -> None:
     """A real failed write leaves neither spawned process running nor a record."""
     supervisor = _managed_echo(tmp_path)
@@ -1474,6 +1475,10 @@ def test_up_abandons_a_service_whose_pidfile_cannot_be_written(
     ) -> tuple[int, int]:
         pids = spawn(name, service, slot, detached)
         spawned.append(pids)
+        if record_exists:
+            # A real unwritable record exercises nested cleanup's actual unlink.
+            _write_spawn_record(supervisor, *pids)
+            supervisor._pidfile(name).chmod(0o444)
         return pids
 
     monkeypatch.setattr(supervisor, "_spawn", observe_spawn)
@@ -1481,7 +1486,8 @@ def test_up_abandons_a_service_whose_pidfile_cannot_be_written(
     # the test still reaches the intended pidfile write failure after spawn.
     with supervisor._start_lock():
         pass
-    supervisor.state_dir.chmod(0o555)
+    if not record_exists:
+        supervisor.state_dir.chmod(0o555)
     try:
         with pytest.raises(PermissionError):
             supervisor.up(slot=5, echo=False)
@@ -1496,6 +1502,7 @@ def test_up_abandons_a_service_whose_pidfile_cannot_be_written(
         assert not supervisor._pidfile("echo").exists()
     finally:
         supervisor.state_dir.chmod(0o755)
+        supervisor._pidfile("echo").unlink(missing_ok=True)
         for pids in spawned:
             for pid in pids:
                 _kill_quietly(pid)
@@ -1850,3 +1857,129 @@ def test_startup_deadline_preserves_a_record_that_now_names_another_pid(
         _kill_quietly(writer_pid)
         _reap_quietly(writer_pid)
         supervisor._pidfile("echo").unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# After the fifth independent review (#842): atomic owned-record cleanup
+# ---------------------------------------------------------------------------
+
+
+def test_cleanup_checks_ownership_under_the_startup_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A replacement under the real lock survives an interleaved cleanup."""
+    cleanup = _managed_echo(tmp_path)
+    replacement = Supervisor.from_config(cleanup.config_path)
+    old_record = {"pid": 101}
+    new_record = {"pid": 201}
+    cleanup._write_pidfile("echo", old_record)
+    decision = threading.Event()
+    release_read = threading.Event()
+    blocked = threading.Event()
+    outcomes: list[Exception | None] = []
+    read = cleanup._read_pidfile
+    real_flock = supervisor_module.fcntl.flock
+
+    def pause_read(name: str) -> dict[str, Any] | None:
+        record = read(name)
+        if record == old_record:
+            # The old implementation reads without the startup lock. Pause
+            # that snapshot so the replacement is written before its unlink.
+            decision.set()
+            assert release_read.wait(5), "the test never released the old read"
+        return record
+
+    def observe_flock(file: Any, operation: int) -> None:
+        try:
+            real_flock(file, operation)
+        except BlockingIOError:
+            blocked.set()
+            decision.set()
+            raise
+
+    def unlink() -> None:
+        try:
+            cleanup._unlink_own_record("echo", old_record["pid"])
+        except Exception as exc:
+            outcomes.append(exc)
+        else:
+            outcomes.append(None)
+
+    monkeypatch.setattr(cleanup, "_read_pidfile", pause_read)
+    monkeypatch.setattr(supervisor_module.fcntl, "flock", observe_flock)
+    thread = threading.Thread(target=unlink)
+    try:
+        with replacement._start_lock():
+            thread.start()
+            assert decision.wait(5), "cleanup neither blocked nor read its record"
+            replacement._write_pidfile("echo", new_record)
+            release_read.set()
+        thread.join(5)
+        assert not thread.is_alive(), "cleanup did not finish after lock release"
+        assert replacement._read_pidfile("echo") == new_record
+        assert blocked.is_set(), "cleanup read ownership outside the startup lock"
+        assert len(outcomes) == 1
+        assert isinstance(outcomes[0], RuntimeError_)
+        assert "record now names pid 201; left in place" in str(outcomes[0])
+    finally:
+        release_read.set()
+        if thread.ident is not None:
+            thread.join(5)
+        assert not thread.is_alive()
+
+
+@pytest.mark.parametrize("same_instance", (False, True), ids=("flock", "rlock"))
+def test_cleanup_lock_contention_has_a_deadline_and_preserves_its_record(
+    tmp_path: Path, same_instance: bool
+) -> None:
+    """Cleanup's cross-instance and same-instance thread waits are bounded."""
+    owner = _managed_echo(tmp_path)
+    cleanup = owner if same_instance else Supervisor.from_config(owner.config_path)
+    cleanup.runtime.health.startup_deadline_seconds = 0.3
+    record = {"pid": 101}
+    owner._write_pidfile("echo", record)
+    acquired = threading.Event()
+    release = threading.Event()
+
+    def hold_lock() -> None:
+        with owner._start_lock():
+            acquired.set()
+            assert release.wait(5), "the test never released its lock"
+
+    thread = threading.Thread(target=hold_lock)
+    thread.start()
+    try:
+        assert acquired.wait(5)
+        started = time.monotonic()
+        with pytest.raises(
+            RuntimeError_, match="Could not acquire supervisor lock"
+        ) as e:
+            cleanup._unlink_own_record("echo", record["pid"])
+        elapsed = time.monotonic() - started
+        assert 0.3 <= elapsed < 0.3 + cleanup.runtime.health.poll_interval_seconds + 1
+        assert str(owner.state_dir / "supervisor.lock") in str(e.value)
+        assert "within 0.3s" in str(e.value)
+        assert owner._read_pidfile("echo") == record
+    finally:
+        release.set()
+        thread.join(5)
+        assert not thread.is_alive()
+    # A timed-out acquisition did not retain the instance mutex or flock.
+    cleanup._unlink_own_record("echo", record["pid"])
+    assert not cleanup._pidfile("echo").exists()
+
+
+def test_nested_cleanup_keeps_the_outer_startup_lock(tmp_path: Path) -> None:
+    """The inner unlink neither deadlocks nor unlocks the outer start's fd."""
+    owner = _managed_echo(tmp_path)
+    contender = Supervisor.from_config(owner.config_path)
+    contender.runtime.health.startup_deadline_seconds = 0.3
+    owner._write_pidfile("echo", {"pid": 101})
+    with owner._start_lock():
+        owner._unlink_own_record("echo", 101)
+        assert not owner._pidfile("echo").exists()
+        with pytest.raises(RuntimeError_, match="Could not acquire supervisor lock"):
+            with contender._start_lock():
+                pytest.fail("nested cleanup released its outer startup lock")
+    with contender._start_lock():
+        assert not contender._pidfile("echo").exists()

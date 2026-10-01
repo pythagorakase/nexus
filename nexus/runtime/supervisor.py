@@ -23,6 +23,7 @@ import socket
 import string
 import subprocess
 import sys
+import threading
 import time
 import zlib
 from contextlib import contextmanager
@@ -424,6 +425,8 @@ class Supervisor:
             self.logs_dir = self.logs_dir / f"gateway-{gateway.port}"
 
         self._start_lock_file: Optional[BinaryIO] = None
+        self._start_lock_guard = threading.RLock()
+        self._start_lock_depth = 0
 
     @classmethod
     def from_config(cls, config_path: Optional[Path] = None) -> "Supervisor":
@@ -507,41 +510,54 @@ class Supervisor:
 
     @contextmanager
     def _start_lock(self) -> Iterator[None]:
-        """Serialize check/spawn/record across supervisors with a bounded wait."""
+        """Bound and serialize starts and cleanup, allowing nested ownership."""
         path = self.state_dir / "supervisor.lock"
-        if self._start_lock_file is None:
-            self.state_dir.mkdir(parents=True, exist_ok=True)
-            self._start_lock_file = path.open("ab")
         health = self.runtime.health
         deadline = time.monotonic() + health.startup_deadline_seconds
-        while True:
-            try:
-                fcntl.flock(self._start_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise RuntimeError_(
-                        f"Could not acquire supervisor lock {path} within "
-                        f"{health.startup_deadline_seconds}s."
-                    )
-                time.sleep(min(health.poll_interval_seconds, remaining))
+        error = (
+            f"Could not acquire supervisor lock {path} within "
+            f"{health.startup_deadline_seconds}s."
+        )
+        if not self._start_lock_guard.acquire(timeout=health.startup_deadline_seconds):
+            raise RuntimeError_(error)
         try:
-            yield
+            if self._start_lock_file is None:
+                self.state_dir.mkdir(parents=True, exist_ok=True)
+                self._start_lock_file = path.open("ab")
+            if self._start_lock_depth == 0:
+                while True:
+                    try:
+                        fcntl.flock(
+                            self._start_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB
+                        )
+                        break
+                    except BlockingIOError:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise RuntimeError_(error)
+                        time.sleep(min(health.poll_interval_seconds, remaining))
+            self._start_lock_depth += 1
+            try:
+                yield
+            finally:
+                self._start_lock_depth -= 1
+                if self._start_lock_depth == 0:
+                    fcntl.flock(self._start_lock_file, fcntl.LOCK_UN)
         finally:
-            fcntl.flock(self._start_lock_file, fcntl.LOCK_UN)
+            self._start_lock_guard.release()
 
     def _unlink_own_record(self, name: str, pid: int) -> None:
-        """Remove only this failure path's record; report changed ownership."""
-        record = self._read_pidfile(name)
-        if record is None:
-            return
-        if int(record["pid"]) != pid:
-            raise RuntimeError_(
-                f"Service '{name}' cleanup for pid {pid}: record now names pid "
-                f"{record['pid']}; left in place."
-            )
-        self._pidfile(name).unlink(missing_ok=True)
+        """Check ownership and unlink atomically with concurrent starts."""
+        with self._start_lock():
+            record = self._read_pidfile(name)
+            if record is None:
+                return
+            if int(record["pid"]) != pid:
+                raise RuntimeError_(
+                    f"Service '{name}' cleanup for pid {pid}: record now names pid "
+                    f"{record['pid']}; left in place."
+                )
+            self._pidfile(name).unlink(missing_ok=True)
 
     def _write_pidfile(self, name: str, record: Dict[str, Any]) -> None:
         self._pidfile(name).write_text(json.dumps(record, indent=2))
