@@ -95,7 +95,7 @@ save_04 {"active_characters": 23, "with_current_location": 10, "places": 7, "soc
 
 ## Test and Lint Tails
 
-`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_travel_reachability_pg.py tests/test_travel_reachability.py tests/test_owner_target_guard.py`:
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_travel_reachability_pg.py tests/test_travel_reachability.py tests/test_owner_target_guard.py` (rerun at 81e8ede9, after the anchor-blockers test gained the protagonist `in_roster` false and `roster_size == 1` assertions):
 
 ```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
@@ -103,8 +103,10 @@ dbname audit: 4 targets: postgres, qa640_785_reach_* x3
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-85 passed, 2 warnings in 10.49s
+85 passed, 2 warnings in 10.78s
 ```
+
+The two CLI tests (`test_probe_reports_anchor_blockers`, `test_social_class_destination_differential`) run the probe as a child process, which is outside the dbname audit (`tests/dbname_audit.py:59`), so the audit lines above record the fixtures and `test_session_is_read_only`, not the probe's own connections; those are bounded by the explicit `--dbname <clone>`, the probe's own `current_database()` check (`scripts/qa_shift/travel_reachability.py:114-118`), and the `database['dbname'] == dbname` assertion in `test_probe_reports_anchor_blockers`.
 
 `$PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`:
 
