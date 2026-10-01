@@ -80,9 +80,31 @@ tests (eight literal budgets; the nine handlers' broad excepts), `DID NOT RAISE`
 for the revision-start 409 and 503, and the unknown settings key.
 
 `test_retry_without_a_usable_session_is_an_invalid_response` was added after
-the red run and was not run against the base; on the base its string recovery
-reaches `recovery["session_id"]` with no catch in `run_retry` (`nexus/cli.py:2812`
-at the base), a `TypeError` traceback.
+that run. It was later run against the base product code: a scratch copy of
+the tree at `914ba5ff` (tests included) with `nexus/cli.py`,
+`nexus/cli_contract.py`, `nexus/config/settings_models.py` and `nexus.toml`
+taken from `41783c1d` (`git show`, no stash). The same run includes
+`test_followed_redirect_loop_is_a_domain_failure` (see Review Fixes below):
+
+```text
+$ cd <scratch copy> && env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider --tb=line -W ignore::DeprecationWarning tests/test_cli_contract.py::test_retry_without_a_usable_session_is_an_invalid_response tests/test_cli_contract.py::test_followed_redirect_loop_is_a_domain_failure
+<scratch>/tests/test_cli_contract.py:252: AssertionError: Traceback (most recent call last):
+<scratch>/tests/test_cli_contract.py:252: AssertionError: Traceback (most recent call last):
+<scratch>/tests/test_cli_contract.py:252: AssertionError: Traceback (most recent call last):
+<scratch>/tests/test_cli_contract.py:787: AssertionError: assert False
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_cli_contract.py::test_retry_without_a_usable_session_is_an_invalid_response[recovery-string]
+FAILED tests/test_cli_contract.py::test_retry_without_a_usable_session_is_an_invalid_response[recovery-without-session]
+FAILED tests/test_cli_contract.py::test_retry_without_a_usable_session_is_an_invalid_response[answer-without-session]
+FAILED tests/test_cli_contract.py::test_followed_redirect_loop_is_a_domain_failure
+4 failed in 4.77s
+```
+
+The three `retry` tracebacks, from the `--tb=short` rerun of the same copy:
+`TypeError: string indices must be integers, not 'str'` at base
+`nexus/cli.py:2812` (`recovery-string`), `KeyError: 'session_id'` at :2812
+(`recovery-without-session`) and at :2816 (`answer-without-session`), each in
+`run_retry`.
 
 ## Green
 
@@ -197,10 +219,75 @@ Request budgets: the seven `timeout=120` literals (`nexus/cli.py:2144`, :2275,
   409 and 503 raise `ApiAnswerFailure` (`api_error`, the status, one request);
   the wrong-thread 200 keeps its return assertion.
 - `tests/test_cli_contract.py` `test_http_command_unanswered_request_exits_four`
-  gains `regenerate` (with `turn_request_timeout_seconds = 0.5`).
+  gains `regenerate` (with `turn_request_timeout_seconds = 0.5` and its short
+  budgets at 30 s, so only the turn budget gives `read timeout=0.5`).
 
 Fakes given the attributes the classifier reads, nothing else changed:
 `DummyResponse` and the `run_load` `Response` in `tests/test_cli.py`,
 `DummyResponse` in `tests/test_cli_model_selection.py`, `Response` in
 `tests/test_cli_wizard_confirmation.py` (`url`, `headers`, and `status_code`
 where missing).
+
+## Review Fixes (Commit `914ba5ff`)
+
+The review of `57907768` found these, all fixed in `914ba5ff`; the tails
+below ran on that tree.
+
+- `main()` now reports any other `requests.RequestException` as
+  `domain_failure` (`Could not read <API URL>: <error>`), not a traceback.
+  The broad excepts had absorbed it; `57907768` let it escape. New test
+  `test_followed_redirect_loop_is_a_domain_failure` (a route that redirects to
+  itself, no credential, so `requests` follows it). Red against `57907768`'s
+  `nexus/cli.py` in a scratch copy:
+
+  ```text
+  E       File "nexus/cli.py", line 1324, in run_load
+  E       File "nexus/cli.py", line 178, in _api_request
+  E     requests.exceptions.TooManyRedirects: Exceeded 30 redirects.
+  FAILED tests/test_cli_contract.py::test_followed_redirect_loop_is_a_domain_failure
+  1 failed in 1.96s
+  ```
+
+  Against the base (`41783c1d`, run above) the broad except reported it as
+  `domain_failure` with the bare message `Exceeded 30 redirects.`, so there
+  the test fails only on the message prefix (`test_cli_contract.py:787`).
+- `docs/cli.md` scopes the answer rules to the play and slot commands and
+  `inspect`. `partial.status_code` and the Access-naming message apply where
+  the command's own read rejects the answer. The steps that keep their own
+  wording are listed with what they carry: setup, the transition,
+  confirmations and phase introductions have the body only; `--weird` and
+  revision have `partial.status_code`; the seed transition has
+  `transition_error.status_code`; the opening turn and the generation wait
+  have the URL and status in their detail.
+- `turn_request_timeout_seconds`'s description drops "A request without an
+  answer in time exits 4". The phase introductions and the opening turn do
+  not exit 4.
+- `run_continue`'s two one-line implicit concatenations are merged into single
+  literals (same text).
+- `test_http_handlers_have_no_broad_except` checks each element of a tuple
+  and a qualified name. A sabotage copy of `914ba5ff` whose `run_clear` wraps
+  `_check_answer` in `except (Exception, ValueError): raise`, then in
+  `except builtins.Exception: raise`, fails it both times:
+  `AssertionError: assert ['run_clear at line 3132'] == []`.
+- The `regenerate` case of `test_http_command_unanswered_request_exits_four`
+  keeps `request_timeout_seconds` and `inspect_timeout_seconds` at 30.0. A
+  sabotage copy whose `run_regenerate` reads `_request_timeout_seconds()`
+  fails it after 31 s:
+  `assert 'read timeout=0.5' in "... Read timed out. (read timeout=30.0)"`.
+
+Covering tests on `914ba5ff`:
+
+```text
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider tests/test_cli_contract.py tests/test_cli_session_wait.py tests/test_cli_generation_http.py tests/test_cli_model_selection.py tests/test_cli.py tests/test_cli_wizard_confirmation.py tests/test_cli_choice_http.py tests/config/test_settings_models.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+436 passed, 5 warnings in 255.17s (0:04:15)
+```
+
+Black reports the four changed Python files unchanged. Their flake8 output
+matches `57907768`'s (the same 15 `E501` findings, compared without line
+numbers). mypy on `nexus/cli.py` and `nexus/config/settings_models.py` reports
+the same 7 errors at `settings_models.py` 130-138 and 4395 (4396 before one
+description line was dropped). The `validate-config` hook passed. Not rerun
+for `914ba5ff` (they ran on `57907768`, above): the PostgreSQL files and the
+two whole-tree offline commands. The change since then is the `main()`
+clause, two string literals, one description string, docs, and tests.
