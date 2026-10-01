@@ -2706,6 +2706,7 @@ def test_acquaintance_source_is_canonical_opted_in_and_default_off() -> None:
         enabled_session,
         anchor_chunk_id=100,
         actor_ids={1, 2},
+        introductions_per_entity=1,
     )
     assert bindings == ({Slot.ACTOR: 1, Slot.TARGET: 2},)
 
@@ -2758,6 +2759,7 @@ def test_acquaintance_source_caps_popular_entity_and_keeps_hydrated_actor() -> N
         session,
         anchor_chunk_id=100,
         actor_ids=hydrated_strangers,
+        introductions_per_entity=1,
     )
 
     assert bindings == ({Slot.ACTOR: 10, Slot.TARGET: popular_entity},)

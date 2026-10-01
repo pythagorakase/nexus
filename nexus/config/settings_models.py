@@ -1338,6 +1338,8 @@ class OrreryCompositionSettings(BaseModel):
     hostile_source_enabled: bool = False
     roster_source_enabled: bool = False
     acquaintance_source_enabled: bool = False
+    # Same-place introductions one character may join per tick.
+    acquaintance_introductions_per_entity_per_tick: int = Field(default=1, ge=1)
     roster_reach: int = Field(default=2, ge=1, le=4)
 
 
