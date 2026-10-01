@@ -46,6 +46,9 @@ reason = "Read-only reference-corpus metrics CLI documented in scripts/qa_shift/
 target = "scripts/qa_shift/world_clock.py:main"
 reason = "Read-only clock identity QA family documented in scripts/qa_shift/README.md; issue 778."
 [[operators]]
+target = "scripts/qa_shift/attention_class_grammar_probe.py:main"
+reason = "Read-only attention-class grammar and card-block probe for issue 784 (784-S1); evidence in docs/qa/784-attention-class-grammar/verification.md."
+[[operators]]
 target = "scripts/qa_shift/travel_reachability.py:main"
 reason = "Read-only travel reachability probe for issue 785; session-enforced default_transaction_read_only."
 [[operators]]
@@ -329,6 +332,7 @@ paths = [
     { path = "scripts/qa_shift/README.md", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
     { path = "scripts/qa_shift/__init__.py", class = "operator", reason = "operator root scripts/qa_shift/ann_gate.py:main" },
     { path = "scripts/qa_shift/ann_gate.py", class = "operator", reason = "operator root scripts/qa_shift/ann_gate.py:main" },
+    { path = "scripts/qa_shift/attention_class_grammar_probe.py", class = "operator", reason = "operator root scripts/qa_shift/attention_class_grammar_probe.py:main" },
     { path = "scripts/qa_shift/baselines/2026-09-23/ref_codex_bakeoff_2026_07.codex_bakeoff.json", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
     { path = "scripts/qa_shift/baselines/2026-09-23/save_01.human_play.json", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
     { path = "scripts/qa_shift/baselines/2026-09-23/save_04.codex_qa.json", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
