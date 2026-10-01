@@ -300,3 +300,96 @@ The joint proof now also counts actual visits and unique assignment tuples in ea
 The browser fixture uses `dispatchEvent('click')` for the first delete click: the existing exceeds-RAM row marks its ancestor `aria-disabled`, while the native delete button remains enabled. Playwright's higher-level click regarded that ancestor as disabled. The ordered disabled conditions and row semantics were preserved; this capture is a glyph-render proof, not a new acceptance claim for that existing interaction. Real component click/disarm tests preserve the native button's name, identity and state. No second delete or API action was run by the fixture.
 
 No paid call, app/gateway launch or owner database write was performed. Landing notes and scope above remain unchanged. Coordinator questions: none.
+
+
+## After Amendment 2 — Stop Report, 2026-10-01
+
+Starting branch head: `9f8f026fcf7bb96f044a1a724306c7ec0a4aa943`; open PR #1099. Amendment 2 cannot satisfy both its literal global-freeze rule and its retained exact Veil anchor rule against the pinned starting shade-domain commit, `8ccd3008a48bdf8115232667399868e2bdf66f93`. The common order's escape hatch requires a stop report when the premise is false or a hard rule cannot be satisfied. No alternate baseline or unapproved anchor exemption is used.
+
+The pinned CSS declares **all seven** Veil brand/linked tokens as `320 55% 48%` (wrapped in `hsl()` for brass and magenta). That resolves to unrounded 0–255 sRGB `(189.72, 55.07999999999999, 144.84000000000003)`, 8-bit `#be3791`. The mandatory exact anchor is `(184, 61, 122)`, `#b83d7a`. Equality fails even before rounding. Source lines in the pinned file: sidebar-primary 417, sidebar-ring 422, primary 430, ring 451, chart-1 454, brass 482, magenta 490. Existing verification.md and state-shades.test.ts both identify that starting commit; this is not inferred from a stale screen or a comment saying “#b83d7a”.
+
+| Frozen Global Token | Pinned Starting Value | Literal Freeze Requires | Retained Anchor Rule Requires |
+|---|---|---|---|
+| `--brass` | `hsl(320 55% 48%)` | `#be3791` | `#b83d7a` |
+| `--magenta` | `hsl(320 55% 48%)` | `#be3791` | `#b83d7a` |
+| `--primary` | `320 55% 48%` | `#be3791` | `#b83d7a` |
+| `--sidebar-primary` | `320 55% 48%` | `#be3791` | `#b83d7a` |
+| `--sidebar-ring` | `320 55% 48%` | `#be3791` | `#b83d7a` |
+| `--ring` | `320 55% 48%` | `#be3791` | `#b83d7a` |
+| `--chart-1` | `320 55% 48%` | `#be3791` | `#b83d7a` |
+
+`global_tokens_are_unchanged_from_baseline` cannot pass alongside `veil_anchor_is_exact_b83d7a` under these literal requirements. Treating `9f8f026f` as the starting palette would instead freeze the very global shade tuning Amendment 2 rejects. A coordinator amendment must identify either a sole brand-anchor exemption/normalized baseline or withdrawal of the anchor rule. The question was sent during the run; no answer was received before this stop report.
+
+Independent draft work mapped the twelve state consumers, renamed hovered, updated spec sections 3.1/3.2, and moved the joint proof into exact independent surface factors with BigInt full-domain counts. It is preserved as `amendment-2-independent-work.patch` in the prescribed scratch subdirectory. These incomplete product edits were restored to the accepted head before this evidence commit; the branch does not contain half-defined state tokens or an untested replacement search. Accepted glyphs, tests, measurement helper, spec and all prior evidence remain intact. No new state table, joint maximum, exception manifest, swatch or non-state pixel-equality claim is made for Amendment 2. The earlier tables and captures above remain historical Amendment 1 results, not Amendment 2 acceptance evidence.
+
+### Exact Commands and Verbatim Tails for This Attempt
+
+Worktree import proof:
+
+```text
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;print(nexus.__file__)'
+/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/nexus/__init__.py
+```
+
+Node bootstrap:
+
+```text
+npm --prefix ui ci
+added 957 packages, and audited 958 packages in 5s
+
+27 vulnerabilities (2 low, 8 moderate, 16 high, 1 critical)
+```
+
+Baseline proof (PostCSS parses the real pinned CSS; the retained production-independent measurement helper converts HSL):
+
+```text
+node /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/amendment-2-baseline-proof.cjs
+Baseline: 8ccd3008a48bdf8115232667399868e2bdf66f93
+--brass: hsl(320 55% 48%) => RGB (189.72, 55.07999999999999, 144.84000000000003) => #be3791; required #b83d7a
+--magenta: hsl(320 55% 48%) => RGB (189.72, 55.07999999999999, 144.84000000000003) => #be3791; required #b83d7a
+--primary: 320 55% 48% => RGB (189.72, 55.07999999999999, 144.84000000000003) => #be3791; required #b83d7a
+--sidebar-primary: 320 55% 48% => RGB (189.72, 55.07999999999999, 144.84000000000003) => #be3791; required #b83d7a
+--sidebar-ring: 320 55% 48% => RGB (189.72, 55.07999999999999, 144.84000000000003) => #be3791; required #b83d7a
+--ring: 320 55% 48% => RGB (189.72, 55.07999999999999, 144.84000000000003) => #be3791; required #b83d7a
+--chart-1: 320 55% 48% => RGB (189.72, 55.07999999999999, 144.84000000000003) => #be3791; required #b83d7a
+Contradiction proven: 7/7 pinned Veil brand tokens differ from the required exact anchor.
+Literal resolved-RGB global equality and exact #b83d7a cannot both pass.
+```
+
+Required owner-target guard, run through `run-gate.py` with an explicit 589-second bound:
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_owner_target_guard.py
+........................................................................ [ 90%]
+........                                                                 [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+80 passed in 2.77s
+```
+
+Offline API/Orrery proof, run through the same bounded wrapper:
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_orrery
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1852 passed, 821 skipped, 7 warnings in 34.19s
+```
+
+The remaining Amendment 2 UI/offline/build/browser gates were not run after the false-premise stop; no complete proof set is claimed. Black, flake8 and mypy remain not applicable: no changed Python targets. No paid call, gateway lane, Python product/config/migration change, secret-store access or owner database write. No merge. `origin/main` was fetched and remained `581aad0f301a65a0cee81b65222c6cbaa999a6f5`; the evidence-only fix is rebased onto newest main before push without rewriting any existing commit.
+
+Coordinator question: **Does the global-freeze test preserve the accepted exact `#b83d7a` correction as the sole declared global exemption, or must it restore all globals literally to `8ccd3008` and retire the exact-anchor rule?** Until that is answered, “every global unchanged” and non-state pixel equality against that starting commit cannot be truthfully certified.
+
+Codex, GPT-6.
