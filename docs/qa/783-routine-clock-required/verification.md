@@ -4,14 +4,17 @@ Status: **Required Proof Passed; Static Gate Adds No Diagnostics**. The suppleme
 caller-audit probe has three out-of-scope fixture errors, reported below for
 coordinator triage under the common rules. No merge authorized or performed.
 
-Inspected implementation: `c357ef46db4ab638ed9d8e85733ede33de0ab541`. Resume inspected HEAD: `711b7690c276282fc6d6bfc396d63fa44b4ea53e`.
-Initial fetched `origin/main` and static baseline: `5b977eabcba5f7aedf1a64a6ee20c021ab290911`. Both prior commits are retained.
+Inspected rebased implementation: `92118d71`. Final gates ran at `ab598bced1487745ca6cbdb68584e6194d0bde4e`.
+Latest fetched `origin/main`: `36ec0b2601811a0f89972542352e36c272be90c7`. The existing commit sequence was replayed
+without squashing or amending. Original c357ef46 and 711b7690 remain retained by
+local ref `refs/archive/783-S6-stop-report`; their rebased equivalents are
+92118d71 and 03328a45.
 `git fetch origin main` and `git rebase origin/main` ran from this worktree:
 
 ```text
 From https://github.com/pythagorakase/nexus
  * branch              main       -> FETCH_HEAD
-Current branch claude/783-routine-clock-required is up to date.
+Successfully rebased and updated refs/heads/claude/783-routine-clock-required.
 ```
 
 LG-Q1 applies verbatim: **B. Release all three now**. This is the 783-R11 doctrine
@@ -19,7 +22,7 @@ fix. Missing world time is an error, never due; present-clock schedule behavior
 is unchanged. This slice neither implements the writers nor reopens Q9.
 The 2026-10-01 common-rules addition and the coordinator's resume instruction
 resolve the earlier static-check stop: baseline diagnostics are reported, not
-fixed, and the gate is no new diagnostics. No product code changed on resume.
+fixed, and the gate is no new diagnostics. Resume edits are evidence only; upstream #1063 changes were preserved.
 
 ## Behavior and Story-Opening Trace
 
@@ -52,10 +55,12 @@ anchorless overrides also passed. No provider was called by these new cases.
 
 ## Read-Only Schema Evidence
 
-The previous run at the same implementation commit read the canonical schema
+The previous run at original implementation c357ef46 read the canonical schema
 through `tests.pg_fixtures.connect('NEXUS_template')`, with
 `conn.set_session(readonly=True)` before reads, then rolled back. This historical
-schema evidence is retained; no save/template connection was opened on resume.
+schema evidence is retained; no direct schema probe was repeated on resume.
+Disposable fixtures read the template to create their clones; no save/template
+write is authorized or performed.
 
 ```sql
 SHOW transaction_read_only;
@@ -233,7 +238,7 @@ errors in four files on both branch and main. None is repaired in this order.
 | resolver.py | 2755,2823,2841 | 2747,2815,2833 | 6 optional-value sorting/min/key errors |
 | test_pair_tag_substrate.py | 114,283 | 105,271 | 2 optional fetchone tuple indexing errors |
 | test_substrate.py | 1116,1117 | 1064,1065 | 2 string-key/Slot dictionary errors |
-| test_composition_sources_live.py | 397,398,463,464 | 395,396,459,460 | 16 shared-kwargs argument errors (four existing expected types at each call) |
+| test_composition_sources_live.py | 397,398,463,464 | 395,396,460,461 | 16 shared-kwargs argument errors (four existing expected types at each call) |
 
 The composition diagnostics display `datetime` in the branch's inferred kwargs
 union because the required explicit override was added; main's union lacks that
@@ -256,10 +261,9 @@ exit 1 for pre-existing diagnostics; the comparison gate passes.
 All commands ran from this worktree with the shared interpreter. The scratch
 run_gate.py wrapper runs subprocess.run(..., timeout=590), stores expanded argv
 and full logs in this order's scratch directory, and waits for completion.
-The PostgreSQL proof was rerun on resume. The two offline suites and reachability
-passed in the first run at the unchanged implementation commit; their original
-commands and verbatim tails remain valid and are retained below, not presented
-as resume reruns. No product code changed since those runs; rebase was a no-op.
+The PostgreSQL proof, both offline suites, reachability and static comparisons
+were rerun after rebasing onto #1063 at the inspected HEAD above. The earlier
+resume proof also passed at 711b7690 with 435 passed in 27.36s.
 Live LLM opt-in was unset; only TEST is permitted. No gateway was launched here.
 
 ### Import Preflight
@@ -272,10 +276,10 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;prin
 /Users/pythagor/nexus/.claude/worktrees/783-routine-clock-required/nexus/__init__.py
 ```
 
-### PostgreSQL Proof (Resume)
+### PostgreSQL Proof (After Rebase)
 
 ```sh
-env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 NEXUS_TEST_PROVIDER_ONLY=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/resume-postgres-tmp tests/test_orrery/test_routine_clock_required_pg.py tests/test_orrery/test_substrate.py tests/test_orrery/test_resolver.py tests/test_orrery/test_composition_sources_live.py tests/test_orrery/test_faction_membership_roles_pg.py tests/test_orrery/test_pair_tag_substrate.py tests/test_orrery/test_evidence.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 NEXUS_TEST_PROVIDER_ONLY=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/final-postgres-tmp tests/test_orrery/test_routine_clock_required_pg.py tests/test_orrery/test_substrate.py tests/test_orrery/test_resolver.py tests/test_orrery/test_composition_sources_live.py tests/test_orrery/test_faction_membership_roles_pg.py tests/test_orrery/test_pair_tag_substrate.py tests/test_orrery/test_evidence.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
 ```
 
 ```text
@@ -295,20 +299,20 @@ dbname audit: 17 targets: postgres, qa640_783s6_* x11, qa640_membership_roles_*,
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-435 passed in 27.36s
+435 passed in 29.33s
 ```
 
-### Offline Other (First Run)
+### Offline Other (After Rebase)
 
 ```sh
-env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_LIVE_LLM NEXUS_TEST_PROVIDER_ONLY=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_LIVE_LLM NEXUS_TEST_PROVIDER_ONLY=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/final-offline-other-tmp tests --ignore=tests/test_api --ignore=tests/test_orrery
 ```
 
 ```text
-................s..s.............................ssss.................ss [ 94%]
-sss...................................sssss...................sss....... [ 97%]
-.......ssss.....................................................ssssssss [ 99%]
-sssssssssssssssssss                                                      [100%]
+.................................s..s.............................ssss.. [ 94%]
+...............sssss...................................sssss............ [ 96%]
+.......sss..............ssss............................................ [ 98%]
+.........sssssssssssssssssssssssssss                                     [100%]
 =============================== warnings summary ===============================
 <frozen abc>:106
 <frozen abc>:106
@@ -334,24 +338,24 @@ tests/test_memnon_cross_encoder_artifact.py::test_qwen3_loads_its_local_folder_a
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2732 passed, 457 skipped, 8 warnings in 447.46s (0:07:27)
+2732 passed, 474 skipped, 8 warnings in 431.83s (0:07:11)
 ```
 
-### Offline API and Orrery (First Run)
+### Offline API and Orrery (After Rebase)
 
 ```sh
-env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_LIVE_LLM NEXUS_TEST_PROVIDER_ONLY=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_orrery
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_LIVE_LLM NEXUS_TEST_PROVIDER_ONLY=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/final-offline-api-tmp tests/test_api tests/test_orrery
 ```
 
 ```text
-..............ssssssss.................................................. [ 80%]
-...................................s.................ssss...s........... [ 83%]
-.......................................sssssssssssssssssssssssss........ [ 86%]
-................................................sssssssssssss.s......s.. [ 88%]
-.................s....sssssssssssssssssssss.....ss...............ssss... [ 91%]
-...................................ss....sssssssssss.................... [ 94%]
-.................................................................sssssss [ 97%]
-ssss........................ssssssssssss.............sssss..........s.   [100%]
+...............ssssssss................................................. [ 80%]
+....................................s.................sssss...s......... [ 83%]
+.........................................sssssssssssssssssssssssss...... [ 86%]
+..................................................sssssssssssss.s......s [ 88%]
+...................s....sssssssssssssssssssss.....ss...............ssss. [ 91%]
+.....................................ss....sssssssssss.................. [ 94%]
+...................................................................sssss [ 97%]
+ssssss........................ssssssssssss.............sssss..........s. [100%]
 =============================== warnings summary ===============================
 <frozen abc>:106
 <frozen abc>:106
@@ -373,13 +377,13 @@ ssss........................ssssssssssss.............sssss..........s.   [100%]
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1833 passed, 757 skipped, 7 warnings in 38.73s
+1833 passed, 759 skipped, 7 warnings in 36.38s
 ```
 
-### Reachability (First Run)
+### Reachability (After Rebase)
 
 ```sh
-/Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_reachability.py
+/Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/final-reachability-tmp tests/test_reachability.py
 ```
 
 ```text
@@ -399,10 +403,10 @@ tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_lit
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-54 passed, 5 warnings in 10.62s
+54 passed, 5 warnings in 10.06s
 ```
 
-### Black (Resume)
+### Black (After Rebase)
 
 ```sh
 /Users/pythagor/nexus/.venv/bin/python -m black --check nexus/agents/orrery/substrate.py nexus/agents/orrery/resolver.py tests/test_orrery/test_substrate.py tests/test_orrery/test_resolver.py tests/test_orrery/test_routine_clock_required_pg.py tests/test_orrery/test_composition_sources_live.py tests/test_orrery/test_faction_membership_roles_pg.py tests/test_orrery/test_pair_tag_substrate.py tests/test_orrery/test_evidence.py
@@ -413,7 +417,7 @@ All done! ✨ 🍰 ✨
 9 files would be left unchanged.
 ```
 
-### Flake8 Branch (Resume)
+### Flake8 Branch (After Rebase)
 
 ```sh
 /Users/pythagor/nexus/.venv/bin/python -m flake8 nexus/agents/orrery/substrate.py nexus/agents/orrery/resolver.py tests/test_orrery/test_substrate.py tests/test_orrery/test_resolver.py tests/test_orrery/test_routine_clock_required_pg.py tests/test_orrery/test_composition_sources_live.py tests/test_orrery/test_faction_membership_roles_pg.py tests/test_orrery/test_pair_tag_substrate.py tests/test_orrery/test_evidence.py
@@ -423,7 +427,7 @@ All done! ✨ 🍰 ✨
 nexus/agents/orrery/resolver.py:1355:89: E501 line too long (133 > 88 characters)
 ```
 
-### Flake8 origin/main (Resume)
+### Flake8 origin/main (After Rebase)
 
 ```sh
 /Users/pythagor/nexus/.venv/bin/python -m flake8 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/nexus/agents/orrery/substrate.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/nexus/agents/orrery/resolver.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_substrate.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_resolver.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_composition_sources_live.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_faction_membership_roles_pg.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_pair_tag_substrate.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_evidence.py
@@ -433,7 +437,7 @@ nexus/agents/orrery/resolver.py:1355:89: E501 line too long (133 > 88 characters
 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/nexus/agents/orrery/resolver.py:1347:89: E501 line too long (133 > 88 characters)
 ```
 
-### Mypy Branch (Resume)
+### Mypy Branch (After Rebase)
 
 ```sh
 /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases nexus/agents/orrery/substrate.py nexus/agents/orrery/resolver.py tests/test_orrery/test_substrate.py tests/test_orrery/test_resolver.py tests/test_orrery/test_routine_clock_required_pg.py tests/test_orrery/test_composition_sources_live.py tests/test_orrery/test_faction_membership_roles_pg.py tests/test_orrery/test_pair_tag_substrate.py tests/test_orrery/test_evidence.py
@@ -472,7 +476,7 @@ tests/test_orrery/test_resolver.py:247: note: By default the bodies of untyped f
 Found 26 errors in 4 files (checked 9 source files)
 ```
 
-### Mypy origin/main (Resume)
+### Mypy origin/main (After Rebase)
 
 ```sh
 /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases --shadow-file nexus/agents/orrery/substrate.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/nexus/agents/orrery/substrate.py --shadow-file nexus/agents/orrery/resolver.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/nexus/agents/orrery/resolver.py --shadow-file tests/test_orrery/test_substrate.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_substrate.py --shadow-file tests/test_orrery/test_resolver.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_resolver.py --shadow-file tests/test_orrery/test_composition_sources_live.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_composition_sources_live.py --shadow-file tests/test_orrery/test_faction_membership_roles_pg.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_faction_membership_roles_pg.py --shadow-file tests/test_orrery/test_pair_tag_substrate.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_pair_tag_substrate.py --shadow-file tests/test_orrery/test_evidence.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/783-S6/origin-main/tests/test_orrery/test_evidence.py nexus/agents/orrery/substrate.py nexus/agents/orrery/resolver.py tests/test_orrery/test_substrate.py tests/test_orrery/test_resolver.py tests/test_orrery/test_composition_sources_live.py tests/test_orrery/test_faction_membership_roles_pg.py tests/test_orrery/test_pair_tag_substrate.py tests/test_orrery/test_evidence.py
@@ -513,7 +517,8 @@ Found 26 errors in 4 files (checked 8 source files)
 
 ## Supplemental Caller-Audit Probe: Coordinator Triage
 
-This is outside the frozen proof set. The caller table exposed an existing
+This is outside the frozen proof set; the probe ran at original HEAD 711b7690.
+The fixture file and resolver behavior are unchanged by the rebase. The caller table exposed an existing
 fixture with integer IDs but no metadata rows:
 `tests/test_lore/test_recent_orrery_rulings_pg.py:44-81` inserts only
 narrative_chunks; :234-257 forwards those IDs through _resolve_then_commit
@@ -590,7 +595,7 @@ coordinator's resume instruction. Original inspected HEAD was c357ef46;
 outputs and is retained without history rewrite. At that stop, no push or PR
 had occurred; the caller table's fixture provenance was still incomplete.
 
-## Stop Reason
+### Original Stop Reason
 
 The common rules require: “if honest attempts cannot satisfy a rule or a gate,
 STOP and write a stop-report (what you tried, exact errors, your diagnosis).”
