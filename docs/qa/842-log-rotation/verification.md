@@ -191,7 +191,9 @@ dbname audit: owner targets: none
 `test_activate_captures_through_the_writer_under_the_policy` at
 `assert not pid_alive(writer_pid)`: the first version of the identity
 re-check reported the test process's own exited writer gone before reaping
-it. `df003728` limits the re-check to writers this process cannot reap.)
+it. `df003728` limits the re-check to writers this process cannot reap.
+That fix covered only the poll loop; the identity check before the loop kept
+the same race until `102daeef`, below.)
 
 `$PY -m pytest -q tests/test_reachability.py tests/test_prompt_lint.py` on
 `df003728`:
@@ -209,6 +211,102 @@ The branch does not hold the two slice commits the order asked for (842-S2,
 then 842-S3): S2 fixes and the evidence came after the S3 commit, and these
 review fixes add two more. Rebuilding it would rewrite published history,
 which this fix pass may not do; the coordinator decides.
+
+## Second Review Fix Pass (Commit `102daeef`)
+
+Confirmed review findings applied on top of `1a869905`:
+
+- `wait_for_writer`'s first identity check could return True for the
+  caller's own writer when the writer exited between the first `_reap` and the
+  `ps` probe: `ps` saw a zombie whose command no longer names the file, and the
+  zombie stayed unreaped (`test_activate_captures_through_the_writer_under_the_policy`
+  then fails at `assert not pid_alive(writer_pid)`). The first check now keeps
+  the reap's result and reaps once more before that return.
+- `_check_children` unlinked an exited service's pidfile before deciding
+  whether to respawn, and waited for the writer only on the respawn branch.
+  It now waits for each exited record's `log_writer_pid` before the unlink,
+  on the `never` and retries-exhausted paths too.
+- `_read_active` (llama-server dead after readiness; pid no longer ours) and
+  the three early returns of `_deactivate_locked` (no current record, failed,
+  ownership lost) unlinked `local-model.pid.json` without waiting for its
+  `log_writer_pid`. Each now waits first, so the record never goes while its
+  writer can still be live. (The not-ours branch of `_read_active` is the same
+  unlink; it is covered with the dead-after-readiness branch.)
+- `test_logs_since_waits_out_a_rotation_in_progress` created its fresh file
+  with `Path.write_text`, which leaves an empty file for a moment; a mark taken
+  in that moment held size 0. The test now writes a staging sibling and
+  `os.replace`s it into place.
+
+The activation test and the rotation-in-progress test, 12 runs each on
+`102daeef`:
+
+```
+run 1: 2 passed, 7 warnings in 3.35s
+...
+run 12: 2 passed, 7 warnings in 2.92s
+(12 of 12 passed)
+```
+
+The same 12-run loop of the activation test with `1a869905`'s
+`log_capture.py` planted back passed 12 of 12 on this machine, so the race did
+not reproduce here under this load; the fix is applied as the reviewer
+diagnosed it, not as a reproduced red run.
+
+Two scratch probes (session scratchpad `842-B/fix3/`, not committed), each red
+with the `1a869905` file planted back and green on `102daeef`:
+
+`test_check_children_probe.py`: a holding child whose writer outlives it, an
+`autorestart = "never"` record, `stop_grace_seconds = 1`; `_check_children`
+must raise the writer error, SIGKILL the writer, and keep the pidfile.
+
+```
+1a869905 supervisor.py:
+E           nexus.runtime.supervisor.RuntimeError_: Service 'echo' (pid 8443) exited and autorestart is 'never'.
+E           AssertionError: Regex pattern did not match.
+1 failed, 5 warnings in 0.82s
+102daeef:
+1 passed, 5 warnings in 1.81s
+```
+
+`test_read_active_probe.py`: a `ready_observed` record whose llama-server pid
+is reaped and whose `log_writer_pid` is a held writer; `active()` must raise
+`LocalInferenceError` naming the writer, SIGKILL it, and keep the record.
+
+```
+1a869905 local_inference.py:
+E           Failed: DID NOT RAISE <class 'nexus.api.local_inference.LocalInferenceError'>
+1 failed, 7 warnings in 0.83s
+102daeef:
+1 passed, 7 warnings in 1.84s
+```
+
+`$PY -m pytest -q tests/test_runtime/test_supervisor.py tests/test_api/test_local_inference.py`
+on `102daeef`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+67 passed, 7 warnings in 18.43s
+```
+
+The PostgreSQL gate command above, on `102daeef`, with `NEXUS_GATEWAY_PORT`,
+`NEXUS_API_URL` and `NEXUS_SLOT` unset:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+325 passed, 7 warnings in 119.10s (0:01:59)
+```
+
+Black on the four changed Python files: `4 files would be left unchanged.`
+Flake8 on them reports nothing; mypy on the three product files reports only
+the 9 pre-existing `nexus/runtime/supervisor.py` errors.
+
+The branch layout finding (842-S2 and 842-S3 not each in one commit) is not
+applied: it needs a history rewrite, which this fix pass may not do. The
+coordinator rebuilds the branch or lands it with a waiver.
 
 ## Static Checks
 
