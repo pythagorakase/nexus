@@ -109,8 +109,47 @@ FAILED tests/test_api/test_attempt_manifest_pg.py::test_observation_projects_nor
 1 failed, 4 deselected, 5 warnings in 1.61s
 ```
 
+Plants 3 and 4 ran on `8213d932`, which adds a superseded variant to
+`test_choice_readiness_is_the_complete_phase_row`: every phase stays,
+including the `complete` row, while the session reads `terminal_outcome`
+`"superseded"` and `phase` `"staging"`. Each plant gates readiness on one
+session field, inserted after the `_choice_readiness` call in
+`derive_turn_observation`. Both plants passed the test at `2bde9d69`, before
+the variant existed.
+
+Plant 3, readiness gated on `terminal_outcome`:
+
+```
++    if inspection["session"].get("terminal_outcome") != "accepted" and observed:
++        choice_ready_at, seconds_to_choice_ready = None, None
+
+$PY -m pytest -q tests/test_turn_observation.py -k choice_readiness
+>       assert superseded["choice_ready_at"] == f"{ledger_clock.today}T00:00:20.500000Z"
+E       AssertionError: assert None == '2026-10-01T00:00:20.500000Z'
+1 failed, 16 deselected, 5 warnings in 0.66s
+```
+
+Plant 4, readiness gated on the session's `phase`:
+
+```
++    if inspection["session"].get("phase") != "complete" and observed:
++        choice_ready_at, seconds_to_choice_ready = None, None
+
+$PY -m pytest -q tests/test_turn_observation.py -k choice_readiness
+>       assert superseded["choice_ready_at"] == f"{ledger_clock.today}T00:00:20.500000Z"
+E       AssertionError: assert None == '2026-10-01T00:00:20.500000Z'
+1 failed, 16 deselected, 5 warnings in 0.60s
+```
+
 `git checkout -- nexus/telemetry/turn_observation.py` reverted each plant;
-`git diff --stat` was empty afterwards.
+`git diff --stat` was empty afterwards. With the plants reverted, at
+`8213d932`:
+
+```
+$PY -m pytest -q tests/test_turn_observation.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+17 passed, 5 warnings in 1.30s
+```
 
 ## Offline Gates
 
