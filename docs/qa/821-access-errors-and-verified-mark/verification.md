@@ -8,9 +8,9 @@ interpreter (`$PY` = `/Users/pythagor/nexus/.venv/bin/python`) and
 was started, no `save_NN` or `NEXUS_template` was written, no paid call was
 made, and every test used an injected secret backend.
 
-## Red Runs Against `main`
+## Red Runs against `main`
 
-### 1. The New Tests Against `main` Exactly
+### 1. The New Tests against `main` Exactly
 
 `main` has none of the names the tests need, so the session stops at the
 shared fixture's import.
@@ -26,7 +26,7 @@ tests/conftest.py:39: in <module>
 E   ImportError: cannot import name 'keychain_read_error' from 'nexus.util.secret_manager'
 ```
 
-### 2. Consumer Tests With Only the Secret-Manager Change
+### 2. Consumer Tests with Only the Secret-Manager Change
 
 `nexus/util/secret_manager.py` carried items 1 to 3 (the error class, the
 translation, the uncached reader); `secrets_endpoints.py`, `readiness.py` and
@@ -60,7 +60,7 @@ FAILED tests/test_cli_contract.py::test_runtime_status_names_an_unreadable_acces
 The seven passing tests are the secret-manager tests, green once the module
 change exists.
 
-### 3. The Card Tests Against `main`'s `useSecrets.ts` and `SettingsPane.tsx`
+### 3. The Card Tests against `main`'s `useSecrets.ts` and `SettingsPane.tsx`
 
 ```sh
 cd ui && npx vitest run client/src/components/nexus/SettingsPane.test.tsx

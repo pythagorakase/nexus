@@ -286,11 +286,10 @@ commands; `docs/cli.md` lists each command's transport.
 registry of read-only checks in `nexus/runtime/readiness.py` (issue #803).
 It never creates, migrates, locks, or writes anything: database sessions are
 read-only, and secrets are reported present, missing, or unreadable, never
-printed. It
-exits 1 when any check fails and 0 otherwise. Text output is one line per
-check; `--json` prints the machine-readable report. Liveness (`/health`),
-readiness, and slot playability are three separate answers; this is the
-second.
+printed. It exits 1 when any check fails and 0 otherwise. Text output is one
+line per check; `--json` prints the machine-readable report. Liveness
+(`/health`), readiness, and slot playability are three separate answers; this
+is the second.
 
 | Check | Roles | Depends on | Passes when |
 | --- | --- | --- | --- |

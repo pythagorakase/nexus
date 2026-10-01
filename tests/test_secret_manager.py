@@ -31,7 +31,6 @@ from nexus.util.secret_manager import (
     use_secret_backend,
 )
 from tests import secret_store_guard
-from tests.conftest import UnreadableSecretBackend
 
 TEST_ACCOUNT = "test-secret-455"
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -147,7 +146,7 @@ def test_keychain_read_error_names_each_failure(
 
 
 def test_access_error_never_falls_back_to_the_environment(
-    unreadable_secret_store: UnreadableSecretBackend,
+    unreadable_secret_store: InMemorySecretBackend,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A store that cannot be read is not an absent item: no env fallback."""
