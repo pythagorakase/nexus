@@ -222,26 +222,30 @@ def handler_hash(handler: ast.ExceptHandler) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def _contains_yield(node: ast.AST) -> bool:
+def _contains_suspension(node: ast.AST) -> bool:
     if isinstance(
         node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
     ):
-        return False
-    return isinstance(node, (ast.Yield, ast.YieldFrom)) or any(
-        _contains_yield(child) for child in ast.iter_child_nodes(node)
+        # Bodies belong to the nested scope; defaults, decorators, bases, and
+        # definition-time annotations still execute in the enclosing scope.
+        return _evaluated_suspensions(node)
+    return isinstance(node, (ast.Yield, ast.YieldFrom, ast.Await)) or any(
+        _contains_suspension(child) for child in ast.iter_child_nodes(node)
     )
 
 
-def _evaluated_yields(node: ast.AST) -> bool:
+def _evaluated_suspensions(node: ast.AST) -> bool:
     # Inspect headers/defaults/decorators as well as direct expressions, while
     # leaving compound statement bodies to the ordered control-flow analysis.
-    if isinstance(node, ast.expr):
-        return _contains_yield(node)
-    for _, value in ast.iter_fields(node):
+    if isinstance(node, ast.expr) and not isinstance(node, ast.Lambda):
+        return _contains_suspension(node)
+    for field, value in ast.iter_fields(node):
+        if field == "body":
+            continue
         children = value if isinstance(value, list) else [value]
         for child in children:
             if isinstance(child, ast.AST) and not isinstance(child, ast.stmt):
-                if _evaluated_yields(child):
+                if _evaluated_suspensions(child):
                     return True
     return False
 
@@ -274,9 +278,17 @@ def _statement_exits(node: ast.stmt) -> set[str]:
             exits = (exits - {"complete"}) | sequence_exits(node.orelse)
         # Calls and other expressions may throw even without an explicit raise.
         # Keep an unmatched exception path; no exception-type inference is used.
-        for handler in node.handlers:
-            exits |= sequence_exits(handler.body)
-        if node.handlers:
+        cannot_raise = all(
+            isinstance(statement, ast.Pass)
+            or (
+                isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Constant)
+            )
+            for statement in node.body
+        )
+        if node.handlers and not cannot_raise:
+            for handler in node.handlers:
+                exits |= sequence_exits(handler.body)
             exits.add("raise")
         final = sequence_exits(node.finalbody)
         exits = (exits if "complete" in final else exits & {"suspend"}) | (
@@ -316,7 +328,7 @@ def _statement_exits(node: ast.stmt) -> set[str]:
                     exits |= sequence_exits(value)
     # Compound bodies handle suspension in sequence order; don't inspect their
     # unreachable descendants. Only inspect directly evaluated expressions.
-    if _evaluated_yields(node):
+    if _evaluated_suspensions(node):
         exits.add("suspend")
     return exits
 

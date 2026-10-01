@@ -291,6 +291,79 @@ def test_partial_and_overridden_raises_are_not_exempt(repo: Path, body: str) -> 
     assert "missing exception disposition" in _cli(repo).stderr
 
 
+@pytest.mark.parametrize(
+    "definition,suspends",
+    [
+        ("callback = lambda value=(yield caught): value", True),
+        ("callback = lambda *, value=(yield from values): value", True),
+        ("callback = lambda value=(await pending()): value", True),
+        ("callback = lambda value=1: value", False),
+        ("callback = lambda: (yield caught)", False),
+        ("def nested():\n    yield caught", False),
+        ("async def nested():\n    await pending()", False),
+        ("def nested(value=(yield caught)):\n    pass", True),
+        ("def nested(*, value=(yield from values)):\n    pass", True),
+        ("async def nested(value=(await pending())):\n    pass", True),
+        ("@(yield caught)\ndef nested():\n    pass", True),
+        ("@(yield caught)\nasync def nested():\n    pass", True),
+        ("@(await pending())\nclass Nested:\n    pass", True),
+        ("def nested(value: (yield caught)):\n    pass", True),
+        ("def nested() -> (yield caught):\n    pass", True),
+        ("class Nested((yield caught)):\n    pass", True),
+        ("class Nested(metaclass=(yield caught)):\n    pass", True),
+        ("class Nested:\n    def method(self):\n        yield caught", False),
+        ("callback = lambda value=(lambda item=(yield caught): item): value", True),
+    ],
+)
+def test_nested_scope_definition_suspension(
+    repo: Path, definition: str, suspends: bool
+) -> None:
+    """Definition expressions execute here; nested bodies execute later."""
+    prefix = "async def" if "await" in definition else "def"
+    source = f"{prefix} function():\n" + textwrap.indent(
+        _catch(definition + "\nraise"), "    "
+    )
+    compile(source, "nexus/example.py", "exec", dont_inherit=True)
+    _write(repo, source)
+    (handler,) = _handlers(repo)
+    assert handler.ast_exempt is not suspends
+    result = _cli(repo)
+    assert result.returncode == int(suspends)
+    assert ("missing exception disposition" in result.stderr) is suspends
+
+
+@pytest.mark.parametrize(
+    "inner_body,exempt",
+    [
+        ("pass", True),
+        ('"docstring"\npass\n...\nNone\n42', True),
+        ("x = 1", False),
+        ("foo()", False),
+        ("value", False),
+        ("value.attribute", False),
+        ("return value", False),
+    ],
+)
+def test_inner_handler_reachability(repo: Path, inner_body: str, exempt: bool) -> None:
+    """Only pass and constant expressions prove an inner catch unreachable."""
+    body = (
+        "try:\n"
+        + textwrap.indent(inner_body, "    ")
+        + "\nexcept Exception:\n    return\nraise"
+    )
+    source = "def function():\n" + textwrap.indent(_catch(body), "    ")
+    compile(source, "nexus/example.py", "exec", dont_inherit=True)
+    _write(repo, source)
+    outer, inner = _handlers(repo)
+    assert outer.ast_exempt is exempt
+    assert not inner.ast_exempt  # Still inventoried separately, even if unreachable.
+    result = _cli(repo)
+    assert result.returncode == 1
+    assert result.stderr.count("missing exception disposition") == (1 if exempt else 2)
+    assert (f": {outer.identity}\n" in result.stderr) is not exempt
+    assert f": {inner.identity}\n" in result.stderr
+
+
 @pytest.mark.parametrize("body", ["logging.error(caught)", "cleanup()"])
 def test_logging_observer_still_requires_disposition(repo: Path, body: str) -> None:
     _write(repo, _catch(body))
