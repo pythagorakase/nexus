@@ -42,6 +42,10 @@ target = "scripts/qa_shift/ann_gate.py:main"
 reason = "Issue 766 measured ANN gate; read-only slot dump, index evaluation only on disposable qa640_766_* clones."
 
 [[operators]]
+target = "scripts/qa_shift/envelope_measure.py:main"
+reason = "Read-only existing-ledger measurement for issue 759; evidence in docs/qa/759-envelope/measurement.md."
+
+[[operators]]
 target = "scripts/qa_shift/prose_metrics.py:main"
 reason = "Read-only reference-corpus metrics CLI documented in scripts/qa_shift/README.md; issue 765."
 
@@ -370,6 +374,7 @@ paths = [
     { path = "scripts/qa_shift/card_identity_probe.py", class = "operator", reason = "operator root scripts/qa_shift/card_identity_probe.py:main" },
     { path = "scripts/qa_shift/clock_contract.py", class = "operator", reason = "operator root scripts/qa_shift/clock_contract.py:main" },
     { path = "scripts/qa_shift/cooldown_calibration.py", class = "operator", reason = "operator root scripts/qa_shift/cooldown_calibration.py:main" },
+    { path = "scripts/qa_shift/envelope_measure.py", class = "operator", reason = "operator root scripts/qa_shift/envelope_measure.py:main" },
     { path = "scripts/qa_shift/historical_passage_limit.py", class = "operator", reason = "operator root scripts/qa_shift/historical_passage_limit.py:main" },
     { path = "scripts/qa_shift/intention_revision_weight.py", class = "operator", reason = "Offline Gaia revision grammar and listing measurement for issue 782; docs/orrery_intentions.md." },
     { path = "scripts/qa_shift/long_absence_probe.py", class = "operator", reason = "operator root scripts/qa_shift/long_absence_probe.py:main" },

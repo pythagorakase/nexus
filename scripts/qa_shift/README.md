@@ -406,3 +406,28 @@ with disposable_slot_database("qa640_778s4a_evidence", source_db="save_04", incl
     main()
 PY
 ```
+
+## Existing-Ledger Envelope Measurement
+
+Run the read-only #759 measurement with explicit inputs (inclusive UTC days):
+
+```bash
+PYTHONPATH=$PWD python scripts/qa_shift/envelope_measure.py \
+  --usage-dir /path/to/usage --from-day 2026-07-30 --through-day 2026-10-01 \
+  --slot-db 4=save_04
+```
+
+Repeat `--slot-db N=dbname` to inspect additional slots; omit it for ledger-only
+coverage. No implicit database is opened. The script prints one JSON document
+and writes no files. It validates captured byte prefixes, folds window revisions,
+and measures only attempts represented in those selected prefixes. Database-only
+attempts remain separate inventory. Enumeration and each inspection use separate
+read-only, repeatable-read transactions, so intervening changes are possible.
+
+`estimate_vs_reported` consumes the production observation's projected manifest
+counts. `rendered_window_vs_reported` separately compares rendered inputs with
+one matching nonaggregate response (including Anthropic cache reads and writes).
+Both expose separate signed/absolute and relative populations and exclusions.
+No dispatch times exist in these ledgers: concurrent demand remains unknown.
+See [the measured evidence](../../docs/qa/759-envelope/measurement.md) for input
+digests, coverage, limitations and proof.
