@@ -315,6 +315,61 @@ describe("SettingsPane API keys", () => {
     expect(calls).toEqual([STATUS_CALL, "POST /api/secrets/openai/verify", STATUS_CALL]);
   });
 
+  it("a verification started before a refresh does not mark the refreshed row", async () => {
+    const rotated: SecretStatus[] = [{ ...STATUSES[0], last4: "rot8" }, STATUSES[1]];
+    let releaseVerify: (response: Response) => void = () => {};
+    const heldVerify = new Promise<Response>((resolve) => {
+      releaseVerify = resolve;
+    });
+    let statusReads = 0;
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      if (init?.method === "POST") return heldVerify;
+      statusReads += 1;
+      return statusResponse(statusReads === 1 ? STATUSES : rotated);
+    });
+    const queryClient = renderPane();
+    await statusSettled(queryClient, calls);
+
+    fireEvent.click(screen.getByTestId("key-verify-openai"));
+    await waitFor(() => expect(screen.getByTestId("key-verify-openai")).toBeDisabled());
+
+    // The store is rotated outside the app; the refresh lands in a later millisecond.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 60_000);
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: secretsQueryKey(4) });
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() =>
+      expect(screen.getByTestId("key-input-openai")).toHaveAttribute(
+        "placeholder",
+        "••••••••rot8",
+      ),
+    );
+
+    // The answer for the key that was replaced arrives late.
+    await act(async () => {
+      releaseVerify(
+        new Response(
+          JSON.stringify({ provider: "openai", verified: true, detail: "Models endpoint reachable." }),
+          { status: 200 },
+        ),
+      );
+      await heldVerify;
+    });
+    await waitFor(() => expect(screen.getByTestId("key-verify-openai")).not.toBeDisabled());
+
+    expect(screen.getByTestId("key-status-openai")).toHaveClass("present");
+    expect(screen.getByTestId("key-status-openai")).not.toHaveClass("verified");
+    expect(screen.queryByTestId("keys-error")).not.toBeInTheDocument();
+    expect(calls).toEqual([STATUS_CALL, "POST /api/secrets/openai/verify", STATUS_CALL]);
+  });
+
   it("shows an unreadable store in the card's existing alert", async () => {
     const detail =
       "The login keychain refused to read account 'openai' (security exit 36). " +

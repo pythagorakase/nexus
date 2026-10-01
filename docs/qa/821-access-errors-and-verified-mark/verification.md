@@ -237,3 +237,71 @@ keychain), which this order does not opt in to.
 `MacOSKeychainBackend.read` no longer raises `MissingSecretError` at all: a
 non-44 exit, a timeout, and a missing `security` executable each raise
 `keychain_read_error(...) from exc`; exit 44 still returns `None`.
+
+## After the Independent Review
+
+Astra's P2 at `c28de203`: a verification still in flight when a status refresh
+lands (the store rotated outside the app, then the pane reopened or another row
+was replaced) added its row to `verified` after the refresh had cleared the set,
+so the card marked the rotated key Verified although it was never verified.
+
+Fix, inside `KeysSection` only (`ui/client/src/components/nexus/SettingsPane.tsx`):
+a `revisionRef` holds the latest `dataUpdatedAt`, set in the same effect that
+clears the set; `verify` captures `startedAt = revisionRef.current` before the
+request and discards a success whose revision has since changed (no mark, no
+error). A failed verification and a thrown error behave as before. The per-row
+clearing in `commit` and the whole-set clearing on `dataUpdatedAt` are unchanged;
+no new visual state, class or label.
+
+New test: `SettingsPane API keys > a verification started before a refresh does
+not mark the refreshed row` (verify POST held open on a deferred promise, clock
+advanced with `vi.useFakeTimers({ toFake: ["Date"] })` and `vi.setSystemTime`,
+status invalidated and answered with `last4` `rot8`, then the held POST resolved
+with `verified: true`).
+
+### Red on `c28de203` (Component Hunk Absent, New Test Present)
+
+`npm --prefix ui test -- -t "a verification started before a refresh" client/src/components/nexus/SettingsPane.test.tsx`
+
+```
+ FAIL  src/components/nexus/SettingsPane.test.tsx > SettingsPane API keys > a verification started before a refresh does not mark the refreshed row
+Error: expect(element).toHaveClass("present")
+
+Expected the element to have class:
+  present
+Received:
+  key-status verified
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 skipped (20)
+```
+
+### Green with the Fix
+
+`npm --prefix ui run check`
+
+```
+> nexus-ui@1.0.0 check
+> tsc && npm run check:design-sync
+
+
+> nexus-ui@1.0.0 check:design-sync
+> tsc -p .design-sync/tsconfig.previews.json
+```
+
+(exit 0)
+
+`npm --prefix ui test`
+
+```
+ Test Files  35 passed (35)
+      Tests  466 passed (466)
+```
+
+`$PY -m pytest -q tests/test_api/test_secrets_endpoints.py tests/test_secret_manager.py`
+(unchanged Python, sanity tail; the two skips are the `live_llm` tests)
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+34 passed, 2 skipped, 7 warnings in 4.51s
+```
