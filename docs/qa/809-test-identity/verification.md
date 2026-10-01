@@ -94,30 +94,96 @@ fallback):
 +        return "TEST"
 ```
 
-Offline tails:
+The tails below are a re-run at `df6f54d8`; the first run filtered its output
+and dropped the guard line. The plant was saved with `git diff` as
+`scratchpad/809-S2-fix/plant.patch` (its changed lines are identical to the diff
+above) and reverted with `git apply -R` after both runs. Since the wrap at
+`b7481fda`, the AST test names `wizard_chat.py:730` and `:1128`.
+
+Offline tail:
 
 ```
-E       AssertionError: assert ['nexus/api/w...chat.py:1126'] == []
-E         Left contains 2 more items, first extra item: 'nexus/api/wizard_chat.py:729'
-E         + [
-E         +     'nexus/api/wizard_chat.py:729',
-E         +     'nexus/api/wizard_chat.py:1126',
-E         + ]
-E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+$ PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id tests/test_new_story_setup_config.py::test_default_slot_model_raises_when_the_configuration_is_invalid tests/config/test_settings_models.py::test_test_identity_follows_the_provider_not_the_id 2>&1 | tee scratchpad/809-S2-fix/red_offline.full.log | tail -25
+----------------------------- Captured stderr call -----------------------------
+❌ Error validating /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-2693/test_default_slot_model_raises0/invalid_default_slot_model.toml:
+   1 validation error for Settings
+global.model
+  Value error, default_slot_model references unknown model id 'NO_SUCH_MODEL'. Known IDs: ['TEST', 'claude-fable-5-1', 'claude-opus-4-8', 'claude-opus-5', 'claude-sonnet-5', 'deepseek/deepseek-v4-pro', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'minimax/minimax-m3', 'moonshotai/kimi-k2.5', 'moonshotai/kimi-k3', 'nousresearch/hermes-4-405b', 'nousresearch/hermes-4-70b', 'nousresearch/hermes-4.3-36b', 'o3', 'z-ai/glm-5'] [type=value_error, input_value={'tokenizer_probe_timeout...model': 'gpt-5.6-terra'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.11/v/value_error
+=============================== warnings summary ===============================
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
 FAILED tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
 FAILED tests/test_new_story_setup_config.py::test_default_slot_model_raises_when_the_configuration_is_invalid
-=================== 2 failed, 1 passed, 5 warnings in 1.31s ====================
+2 failed, 1 passed, 5 warnings in 1.64s
+```
+
+Assertion lines above that tail (`scratchpad/809-S2-fix/red_offline.full.log`):
+
+```
+E       AssertionError: assert ['nexus/api/w...chat.py:1128'] == []
+E         Left contains 2 more items, first extra item: 'nexus/api/wizard_chat.py:730'
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
 ```
 
 PostgreSQL tail:
 
 ```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_api/test_mock_wizard_responses.py::test_renamed_test_provider_model_skips_derivation_and_retrograde 2>&1 | tee scratchpad/809-S2-fix/red_pg.full.log | tail -30
+pg_dump: warning: there are circular foreign-key constraints on this table:
+pg_dump: detail: tags
+pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: warning: there are circular foreign-key constraints on this table:
+pg_dump: detail: event_types
+pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_renamed_test_model_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_api/test_mock_wizard_responses.py::test_renamed_test_provider_model_skips_derivation_and_retrograde
+1 failed, 5 warnings in 3.74s
+```
+
+Errors and product frames above that tail (`scratchpad/809-S2-fix/red_pg.full.log`);
+the trait-input deriver ran against `TEMPTEST`:
+
+```
 E                   httpcore.ConnectError: [Errno 61] Connection refused
 E           httpx.ConnectError: [Errno 61] Connection refused
 E               openai.APIConnectionError: Connection error.
-dbname audit: owner targets: none
-FAILED tests/test_api/test_mock_wizard_responses.py::test_renamed_test_provider_model_skips_derivation_and_retrograde
-1 failed, 5 warnings in 3.53s
+nexus/api/new_story_flow.py:553: in perform_transition_with_retrograde
+nexus/api/trait_input_derivation.py:367: in ensure_trait_compile_inputs
 ```
 
 ### Single Plants: Which Test Catches Which
@@ -135,6 +201,58 @@ FAILED tests/test_api/test_mock_wizard_responses.py::test_renamed_test_provider_
 The AST test catches every inline comparison with `"TEST"`. A comparison
 against a restored module constant (`MOCK_WIZARD_MODEL`) compares a name, not
 a constant, so only the transition test catches that form.
+
+### Plants Reverted
+
+After `git apply -R scratchpad/809-S2-fix/plant.patch`, `git status` printed
+`nothing to commit, working tree clean`. The same two commands on the clean
+tree at `df6f54d8`:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id tests/test_new_story_setup_config.py::test_default_slot_model_raises_when_the_configuration_is_invalid tests/config/test_settings_models.py::test_test_identity_follows_the_provider_not_the_id 2>&1 | tee scratchpad/809-S2-fix/green_offline.full.log | tail -25
+...                                                                      [100%]
+=============================== warnings summary ===============================
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/config/test_settings_models.py::test_no_product_code_compares_the_literal_test_id
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3 passed, 5 warnings in 1.32s
+```
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_api/test_mock_wizard_responses.py::test_renamed_test_provider_model_skips_derivation_and_retrograde 2>&1 | tee scratchpad/809-S2-fix/green_pg.full.log | tail -30
+.                                                                        [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_renamed_test_model_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 passed, 5 warnings in 1.95s
+```
 
 ## Gates
 
@@ -205,8 +323,8 @@ onto two comment lines at both wizard-chat branches with its words unchanged,
 which removes the two E501 violations (flake8 on `nexus/api/wizard_chat.py`:
 base 18, branch 18). The two new tests in `tests/config/test_settings_models.py`
 carry parameter and return annotations. The wrap moves each wizard-chat `if`
-down one line (`:730` and `:1128` at `b7481fda`); the plant tails above ran
-before the wrap and name `:729` and `:1126`.
+down one line (`:730` and `:1128` at `b7481fda`); the single-plant table above
+ran before the wrap and names `:729` and `:1126`.
 
 Tails at `b7481fda`:
 
