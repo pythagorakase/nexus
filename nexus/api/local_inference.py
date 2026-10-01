@@ -378,6 +378,11 @@ def _read_active(settings: Settings) -> dict[str, Any] | None:
         }
     if not _pid_alive(pid):
         if record.get("ready_observed") is True:
+            # The record names the capture's writer: it goes only once that
+            # writer is gone, so the next activate never opens a second one.
+            _await_capture_writer(
+                settings, _record_writer_pid(record), _logs_dir(settings) / LOG_FILENAME
+            )
             _state_path(settings).unlink(missing_ok=True)
             return None
         record["failed"] = True
@@ -395,6 +400,9 @@ def _read_active(settings: Settings) -> dict[str, Any] | None:
             "error": record["error"],
         }
     if not _process_is_ours(settings, pid, gguf_path):
+        _await_capture_writer(
+            settings, _record_writer_pid(record), _logs_dir(settings) / LOG_FILENAME
+        )
         _state_path(settings).unlink(missing_ok=True)
         return None
     host, _, _ = _endpoint(settings)
@@ -432,16 +440,21 @@ def _signal_process_group(pid: int, sig: int) -> None:
 def _deactivate_locked(settings: Settings) -> dict[str, Any]:
     """Stop the recorded process while the lifecycle lock is held."""
     writer_pid = _record_writer_pid(_read_json(_state_path(settings)))
+    capture = _logs_dir(settings) / LOG_FILENAME
     current = _read_active(settings)
+    # Every path waits for the recorded writer before the record goes.
     if current is None:
+        _await_capture_writer(settings, writer_pid, capture)
         _state_path(settings).unlink(missing_ok=True)
         return {"stopped": False}
     if current.get("failed") is True:
+        _await_capture_writer(settings, writer_pid, capture)
         _state_path(settings).unlink(missing_ok=True)
         return {"stopped": False, "failed_cleared": True}
     pid = int(current["pid"])
     gguf_path = str(current["gguf_path"])
     if not _process_is_ours(settings, pid, gguf_path):
+        _await_capture_writer(settings, writer_pid, capture)
         _state_path(settings).unlink(missing_ok=True)
         return {"stopped": False, "ownership_lost": True}
     try:
@@ -471,7 +484,7 @@ def _deactivate_locked(settings: Settings) -> dict[str, Any]:
     # and reject with a spurious foreign-occupancy 409.
     host, port, _ = _endpoint(settings)
     _await_port_release(settings, host, port)
-    _await_capture_writer(settings, writer_pid, _logs_dir(settings) / LOG_FILENAME)
+    _await_capture_writer(settings, writer_pid, capture)
     return {"stopped": True, "pid": pid}
 
 

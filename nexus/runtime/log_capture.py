@@ -297,10 +297,14 @@ def wait_for_writer(
     Returns False when the writer is still alive after ``timeout_seconds``:
     something still holds the captured process's output.
     """
-    _reap(pid)
+    own_child = _reap(pid)
     if not pid_alive(pid):
         return True
     if os.name == "posix" and not _is_writer_for(pid, log_path, timeout_seconds):
+        # An own writer that exited during the probe is a zombie whose command
+        # line no longer names this file: collect it before reporting it gone.
+        if own_child:
+            _reap(pid)
         return True
     deadline = time.monotonic() + timeout_seconds
     while True:

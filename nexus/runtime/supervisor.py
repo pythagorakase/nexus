@@ -1203,6 +1203,11 @@ class Supervisor:
             record = self._read_pidfile(name)
             if record is None or _pid_alive(int(record["pid"])):
                 continue
+            # Wait out the writer before the record that names it goes, on
+            # every path: a later spawn must never start a second writer on
+            # the same capture.
+            if record.get("log_writer_pid") is not None:
+                self._await_writer(name, int(record["log_writer_pid"]))
             self._pidfile(name).unlink(missing_ok=True)
             exited.append((name, service, record))
 
@@ -1227,8 +1232,6 @@ class Supervisor:
                     f"[{name}] exited; restarting "
                     f"({restarts[name]}/{service.autorestart_max_retries})"
                 )
-            if record.get("log_writer_pid") is not None:
-                self._await_writer(name, int(record["log_writer_pid"]))
             self._start_service(name, service, slot, detached=False)
         if failures:
             raise RuntimeError_(" ".join(failures))

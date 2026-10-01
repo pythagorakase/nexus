@@ -292,6 +292,13 @@ def _write_lines(path: Path, lines: list[str]) -> None:
     path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
 
 
+def _create_with_lines(path: Path, lines: list[str]) -> None:
+    """Create ``path`` holding ``lines`` in one step (no empty-file window)."""
+    staging = path.with_name(f"{path.name}.staging")
+    _write_lines(staging, lines)
+    os.replace(staging, path)
+
+
 def test_logs_reads_backwards_across_rotated_segments(tmp_path: Path) -> None:
     """nexus logs -n N continues into .1, .2 when the current file is short."""
     supervisor = _logging_supervisor(tmp_path, max_bytes=1024, backup_count=3)
@@ -659,7 +666,7 @@ def test_logs_since_waits_out_a_rotation_in_progress(tmp_path: Path) -> None:
         time.sleep(0.5)
         log_path.replace(rotated_segment(log_path, 1))
         time.sleep(0.5)
-        _write_lines(log_path, ["fresh"])
+        _create_with_lines(log_path, ["fresh"])
 
     # .2 exists while .1 is absent: the shift of .1 -> .2 just ran.
     rotation = threading.Thread(target=finish_rotation)
@@ -674,7 +681,7 @@ def test_logs_since_waits_out_a_rotation_in_progress(tmp_path: Path) -> None:
 
     def open_fresh_file() -> None:
         time.sleep(0.5)
-        _write_lines(log_path, ["newer"])
+        _create_with_lines(log_path, ["newer"])
 
     rotation = threading.Thread(target=open_fresh_file)
     rotation.start()
