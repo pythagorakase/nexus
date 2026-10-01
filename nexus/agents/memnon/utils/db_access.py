@@ -5,7 +5,7 @@ This module provides functions for database operations, focusing on vector searc
 and hybrid search capabilities with PostgreSQL.
 """
 
-from nexus.database import url_connection_kwargs, verify_database_url
+from nexus.database import url_connection_kwargs
 
 import logging
 import psycopg2

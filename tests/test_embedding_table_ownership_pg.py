@@ -69,7 +69,7 @@ def ownership_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 def seed_source(
     dbname: str, spec: EmbeddingSource, text: str = "The ledger survived."
 ) -> int:
-    """Use shared seeds and production experience insertion; render without inference."""
+    """Seed production source identities and render without inference."""
     with closing(connect(dbname)) as conn, conn.cursor() as cur:
         cur.execute("SELECT coalesce(max(scene), 0) + 1 FROM chunk_metadata")
         scene = int(cur.fetchone()[0])
@@ -84,7 +84,8 @@ def seed_source(
     _, entity_id = seed_character(dbname, name=f"Witness {summary_id}")
     with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT recorded_at_chunk_id, world_event_id FROM retrograde_summaries WHERE id = %s",
+            "SELECT recorded_at_chunk_id, world_event_id FROM "
+            "retrograde_summaries WHERE id = %s",
             (summary_id,),
         )
         chunk_id, event_id = cur.fetchone()
@@ -109,7 +110,8 @@ def seed_source(
         experience_id = int(cur.fetchone()[0])
         # No deterministic rendering writer exists outside the provider/lease path.
         cur.execute(
-            "UPDATE character_experiences SET experience_text = %s, render_model = 'TEST', "
+            "UPDATE character_experiences SET experience_text = %s, "
+            "render_model = 'TEST', "
             "renderer_version = '810-S2', render_generation_id = %s WHERE id = %s",
             (text, str(uuid4()), experience_id),
         )
@@ -123,7 +125,8 @@ def catalog_snapshot(cur: Any) -> list[Any]:
         "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
         "WHERE n.nspname='public' ORDER BY c.oid",
         "SELECT a.attrelid, a.attnum, a.attname, format_type(a.atttypid,a.atttypmod), "
-        "a.attnotnull, pg_get_expr(d.adbin,d.adrelid), col_description(a.attrelid,a.attnum) "
+        "a.attnotnull, pg_get_expr(d.adbin,d.adrelid), "
+        "col_description(a.attrelid,a.attnum) "
         "FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid "
         "JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_attrdef d "
         "ON d.adrelid=a.attrelid AND d.adnum=a.attnum "
@@ -156,7 +159,9 @@ def assert_corpus_contract(cur: Any, spec: EmbeddingSource, dimensions: int) -> 
     descriptions = {
         "chunk_id": "Narrative chunk represented by this vector.",
         "summary_id": "Retrograde summary represented by this vector.",
-        "experience_id": "Actor-owned character_experiences.id bound to this vector row.",
+        "experience_id": (
+            "Actor-owned character_experiences.id bound to this vector row."
+        ),
     }
     experience = fk == "experience_id"
     assert columns == [
@@ -198,7 +203,8 @@ def assert_corpus_contract(cur: Any, spec: EmbeddingSource, dimensions: int) -> 
     )
     assert cur.fetchall() == [("now()",)]
     cur.execute(
-        "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid=%s::regclass ORDER BY contype",
+        "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE "
+        "conrelid=%s::regclass ORDER BY contype",
         (name,),
     )
     assert cur.fetchall() == [
@@ -209,7 +215,10 @@ def assert_corpus_contract(cur: Any, spec: EmbeddingSource, dimensions: int) -> 
     table_comments = {
         "chunk_id": "Narrative chunk vectors partitioned by embedding dimensions.",
         "summary_id": "Retrograde summary vectors partitioned by embedding dimensions.",
-        "experience_id": "Actor-owned character-experience vectors partitioned by embedding dimensions.",
+        "experience_id": (
+            "Actor-owned character-experience vectors partitioned by "
+            "embedding dimensions."
+        ),
     }
     assert cur.fetchone() == (table_comments[fk],)
     cur.execute(
@@ -238,8 +247,8 @@ def test_ensure_creates_commented_corpus_contract(
     if adapter == "sqlalchemy":
         engine = create_engine(sqlalchemy_url(ownership_db))
         try:
-            with engine.begin() as conn:
-                assert spec.ensure_table(conn, 3) == name
+            with engine.begin() as sa_conn:
+                assert spec.ensure_table(sa_conn, 3) == name
         finally:
             engine.dispose()
     else:
@@ -318,7 +327,8 @@ def test_ensure_refuses_malformed_objects_before_writing(
                 )
                 if malformation == "dimension":
                     cur.execute(
-                        f"ALTER TABLE {name} ALTER COLUMN embedding TYPE vector(4) USING '[1,2,3,4]'::vector(4)"
+                        f"ALTER TABLE {name} ALTER COLUMN embedding TYPE "
+                        "vector(4) USING '[1,2,3,4]'::vector(4)"
                     )
                 elif malformation == "source_type":
                     cur.execute(f"ALTER TABLE {name} ALTER COLUMN {fk} TYPE integer")
@@ -343,11 +353,13 @@ def test_ensure_refuses_malformed_objects_before_writing(
                     target_column = "id"
                     action = "CASCADE" if malformation == "fk_target" else "NO ACTION"
                     cur.execute(
-                        f"ALTER TABLE {name} ADD FOREIGN KEY ({fk}) REFERENCES {target}({target_column}) ON DELETE {action}"
+                        f"ALTER TABLE {name} ADD FOREIGN KEY ({fk}) "
+                        f"REFERENCES {target}({target_column}) ON DELETE {action}"
                     )
                 elif malformation == "timestamp":
                     cur.execute(
-                        f"ALTER TABLE {name} ALTER COLUMN created_at SET DEFAULT '2000-01-01'::timestamptz"
+                        f"ALTER TABLE {name} ALTER COLUMN created_at SET "
+                        "DEFAULT '2000-01-01'::timestamptz"
                     )
                 elif malformation == "index":
                     cur.execute(f"DROP INDEX {name}_model_idx")
@@ -461,7 +473,8 @@ def test_embedding_job_source_path_propagates_ensure_failure(ownership_db: str) 
         with conn.cursor() as cur:
             assert catalog_snapshot(cur) == before
             cur.execute(
-                "SELECT raw_text, embedding_generated_at FROM narrative_chunks WHERE id=%s",
+                "SELECT raw_text, embedding_generated_at FROM "
+                "narrative_chunks WHERE id=%s",
                 (row_id,),
             )
             assert cur.fetchone() == ("The ledger survived.", None)

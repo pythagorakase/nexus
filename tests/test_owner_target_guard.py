@@ -508,9 +508,7 @@ def test_an_exemption_admits_only_its_own_use() -> None:
     """A second use of an exempted rule in an exempted file is still a finding."""
 
     source = (
-        "module.slot_dbname(4)\n"
-        "module.slot_dbname(5)\n"
-        "module.slot_dbname(2)\n"
+        "module.slot_dbname(4)\n" "module.slot_dbname(5)\n" "module.slot_dbname(2)\n"
     )
     findings = scan_source(source, "test_scheduler_helpers_routing.py")
     assert [finding.rule for finding in findings] == [RULE_SLOT_DBNAME] * 3

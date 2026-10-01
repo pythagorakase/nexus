@@ -308,11 +308,13 @@ def _ensure_corpus_table(
         )
     _execute_ddl(
         connection,
-        f"COMMENT ON INDEX public.{primary_index} IS 'One vector per source row and embedding model.'",
+        f"COMMENT ON INDEX public.{primary_index} IS 'One vector per source "
+        f"row and embedding model.'",
     )
     _execute_ddl(
         connection,
-        f"COMMENT ON INDEX public.{index_name} IS 'Lookup of vector rows by embedding model.'",
+        f"COMMENT ON INDEX public.{index_name} IS 'Lookup of vector rows by "
+        f"embedding model.'",
     )
     return table_name
 
@@ -367,7 +369,8 @@ def ensure_character_experience_embedding_table(
         "character_experiences",
         "Actor-owned character-experience vectors partitioned by embedding dimensions.",
         {
-            "experience_id": "Actor-owned character_experiences.id bound to this vector row.",
+            "experience_id": "Actor-owned character_experiences.id bound to "
+            "this vector row.",
             "model": "Active MEMNON embedding model that produced this vector.",
             "embedding": f"Exact {dimensions}-dimension embedding of experience_text.",
             "created_at": "Database time of the most recent successful vector upsert.",

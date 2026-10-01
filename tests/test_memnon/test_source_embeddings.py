@@ -50,7 +50,8 @@ def _assert_vectors(
             table = spec.table_name_for_dimensions(dimension)
             assert_corpus_contract(cur, spec, dimension)
             cur.execute(
-                f"SELECT {spec.embedding_fk_column}, vector_dims(embedding) FROM {table} "
+                f"SELECT {spec.embedding_fk_column}, vector_dims(embedding) "
+                f"FROM {table} "
                 f"WHERE {spec.embedding_fk_column} = ANY(%s) AND model = %s "
                 f"ORDER BY {spec.embedding_fk_column}",
                 (ids, model),
@@ -246,7 +247,8 @@ def test_summaries_generate_every_vector_before_one_write_transaction(
                 )
                 assert cur.fetchone() == (None,)
             cur.execute(
-                "SELECT embedding_generated_at FROM retrograde_summaries WHERE id = ANY(%s)",
+                "SELECT embedding_generated_at FROM retrograde_summaries "
+                "WHERE id = ANY(%s)",
                 (ids,),
             )
             assert cur.fetchall() == [(None,), (None,)]
@@ -269,12 +271,14 @@ def test_summaries_generate_every_vector_before_one_write_transaction(
     _assert_vectors(source_db, spec, ids, {"alpha": 3, "beta": 5})
     with closing(connect(source_db)) as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT embedding::text FROM retrograde_summary_embeddings_0003d WHERE summary_id=%s AND model='alpha'",
+            "SELECT embedding::text FROM retrograde_summary_embeddings_0003d "
+            "WHERE summary_id=%s AND model='alpha'",
             (ids[0],),
         )
         assert cur.fetchone() == ("[27,0.5,0.5]",)
         cur.execute(
-            "SELECT embedding_generated_at FROM retrograde_summaries WHERE id = ANY(%s)",
+            "SELECT embedding_generated_at FROM retrograde_summaries WHERE "
+            "id = ANY(%s)",
             (ids,),
         )
         assert all(row[0] == stamps[ids[0]] for row in cur.fetchall())
@@ -289,11 +293,14 @@ def test_experiences_load_and_stamp_only_valid_rendered_rows(source_db: str) -> 
     ]
     with closing(connect(source_db)) as conn, conn, conn.cursor() as cur:
         cur.execute(
-            "UPDATE character_experiences SET experience_text=NULL, render_model=NULL, renderer_version=NULL, render_generation_id=NULL WHERE id=%s",
+            "UPDATE character_experiences SET experience_text=NULL, "
+            "render_model=NULL, renderer_version=NULL, "
+            "render_generation_id=NULL WHERE id=%s",
             (ids[2],),
         )
         cur.execute(
-            "UPDATE character_experiences SET invalidation_status='invalidated', invalidated_at=now() WHERE id=%s",
+            "UPDATE character_experiences SET "
+            "invalidation_status='invalidated', invalidated_at=now() WHERE id=%s",
             (ids[3],),
         )
     results = embed_character_experiences(source_db, [ids[1], ids[0]])
@@ -312,7 +319,8 @@ def test_experiences_load_and_stamp_only_valid_rendered_rows(source_db: str) -> 
         assert set(loaded) == set(ids[:3]) and loaded[ids[2]] is None
     with closing(connect(source_db)) as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT id, embedding_generated_at FROM character_experiences WHERE id=ANY(%s) ORDER BY id",
+            "SELECT id, embedding_generated_at FROM character_experiences "
+            "WHERE id=ANY(%s) ORDER BY id",
             (ids,),
         )
         rows = cur.fetchall()
@@ -399,7 +407,8 @@ def test_stamp_shortfall_rolls_back_the_upserted_vectors(source_db: str) -> None
     )
     with closing(connect(source_db)) as conn, conn, conn.cursor() as cur:
         cur.execute(
-            "UPDATE character_experiences SET invalidation_status='invalidated', invalidated_at=now() WHERE id=%s",
+            "UPDATE character_experiences SET "
+            "invalidation_status='invalidated', invalidated_at=now() WHERE id=%s",
             (ids[1],),
         )
     with closing(connect(source_db, cursor_factory=RealDictCursor)) as conn:
@@ -490,7 +499,8 @@ def test_shared_helpers_serve_a_caller_supplied_embedder(source_db: str) -> None
         }
         upsert_source_vectors(cur, CHUNK_SOURCE, generated)
         cur.execute(
-            "SELECT chunk_id, model, embedding::text FROM chunk_embeddings_0002d ORDER BY chunk_id"
+            "SELECT chunk_id, model, embedding::text FROM "
+            "chunk_embeddings_0002d ORDER BY chunk_id"
         )
         assert cur.fetchall() == [(row_id, "alpha", "[1,2]") for row_id in ids]
         assert_corpus_contract(cur, CHUNK_SOURCE, 2)

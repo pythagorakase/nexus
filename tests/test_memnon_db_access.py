@@ -25,7 +25,8 @@ def test_setup_database_indexes_is_absent() -> None:
                     name in {"setup_database_indexes", "_setup_hybrid_search"}
                     for name in names
                 ):
-                    found.append(f"{path.relative_to(root)}:{node.lineno}")
+                    line = getattr(node, "lineno")
+                    found.append(f"{path.relative_to(root)}:{line}")
     assert found == []
 
 
