@@ -35,10 +35,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("nexus.api.new_story_flow")
 
-# Mock wizard model: the transition must stay hermetic, so Retrograde's real
-# frontier calls are skipped when the slot ran the wizard against the mock.
-MOCK_WIZARD_MODEL = "TEST"
-
 
 def build_transition_data_from_cache(cache: Any) -> "TransitionData":
     """Hydrate the canonical transition package through wizard-cache adapters."""
@@ -485,7 +481,7 @@ def perform_transition_with_retrograde(
 
     Retrograde is skipped (plain transition) when the [orrery] section is
     disabled, when [orrery.retrograde.wizard].enabled is false, or when the
-    slot ran the wizard against the mock TEST model.
+    slot's wizard model belongs to the TEST provider.
 
     Args:
         slot_number: Target save slot (1-5)
@@ -534,12 +530,12 @@ def perform_transition_with_retrograde(
     )
 
     # Derive typed trait-compiler inputs before any world writes so the
-    # compiler can create stub entities and relationship rows (M9). Runs for
-    # real models only; the mock TEST wizard stays hermetic.
+    # compiler can create stub entities and relationship rows (M9). TEST-provider
+    # wizards stay hermetic: no trait derivation and no Retrograde calls.
     trait_inputs_outcome: Optional[Dict[str, Any]] = None
     trait_inputs_settings = settings.wizard.trait_inputs
     if (
-        effective_model != MOCK_WIZARD_MODEL
+        not settings.is_test_model(effective_model)
         and trait_inputs_settings.derive_at_transition
     ):
         from nexus.api.trait_input_derivation import ensure_trait_compile_inputs
@@ -564,7 +560,7 @@ def perform_transition_with_retrograde(
         skip_reason = "orrery_disabled"
     elif not orrery_settings.retrograde.wizard.enabled:
         skip_reason = "retrograde_wizard_disabled"
-    elif effective_model == MOCK_WIZARD_MODEL:
+    elif settings.is_test_model(effective_model):
         skip_reason = "mock_wizard_model"
     else:
         skip_reason = None

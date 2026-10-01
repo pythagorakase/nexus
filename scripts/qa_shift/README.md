@@ -255,3 +255,49 @@ Reads use a repeatable-read, read-only transaction. Exit 1 means at least one
 clock disagreement; after migration 118 the expected count is zero. A missing
 seed is reported as JSON null. Database and formatting errors surface loudly.
 This family never migrates or repairs a slot.
+
+## Travel Reachability
+
+The read-only travel reachability probe (issue 785) reports, for every active
+character, which predicates block each branch that starts travel and the
+relocation rows that hand off to it, against a production-parity hydrated
+state in one read-only, repeatable-read session per database:
+
+```sh
+PGOPTIONS='-c default_transaction_read_only=on' PYTHONPATH=$PWD "$PY" scripts/qa_shift/travel_reachability.py --dbname save_02 --dbname save_03 --dbname save_04
+```
+
+## Rearm Grammar Weight
+
+The rearm grammar weight report (issue 781, decision 781-Q2) builds throwaway
+wire variants that add one `rearm` field to the Orrery adjudication and prints
+the bytes and local token estimates of each seat, surface, and variant, with
+deltas against the baseline. It puts nothing on any wire and calls no
+provider. The registry seat reads one slot registry in a session that
+`default_transaction_read_only=on` makes read-only; `--skip-registry` opens no
+database:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/rearm_grammar_weight.py --skip-registry
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/rearm_grammar_weight.py --registry-dbname save_04
+```
+
+`--format json` prints the same header and rows as JSON. Token counts are the
+configured models' local estimates, not billed counts.
+
+## Routine-Delta Grammar Weight
+
+The read-only routine-delta grammar probe (issue 783, slice 783-S0) renders
+the structured-output grammars the configured seats send today (the Gaia
+registry strict format, the Gaia lenient format and prompt guide, and the
+Retrograde strict format for the wizard and maturation seats) as they stand and
+with the two candidate routine-delta placements, and reports bytes and local
+tokenizer counts. The Gaia grammar depends on the anchor chunk's present
+entities, so every number names its anchor. The probe sets
+`default_transaction_read_only=on` itself, builds no provider client, and
+reports numbers only:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49 --markdown
+```

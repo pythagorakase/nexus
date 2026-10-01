@@ -27,6 +27,7 @@ import pytest
 import tomlkit
 from sentence_transformers import SentenceTransformer
 
+from nexus.agents.memnon.utils import cross_encoder
 from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.config import load_settings_as_dict
 from tests.pg_fixtures import (
@@ -35,7 +36,15 @@ from tests.pg_fixtures import (
     seed_protagonist,
     sqlalchemy_url,
 )
-from tests.tiny_models import write_tiny_sentence_transformer
+from tests.tiny_models import (
+    write_drifted_sentence_transformer,
+    write_tiny_sentence_transformer,
+)
+
+# Texts for the tiny embedders, whose BERT has 32 positions: ``SHORT`` encodes,
+# while ``LONG`` (over 32 tokens) raises a size mismatch in the drifted folder.
+SHORT = "needle"
+LONG = " ".join(["needle"] * 40)
 
 
 def _bge_large_path() -> Path:
@@ -61,6 +70,7 @@ requires_bge_large = pytest.mark.skipif(
 def isolated_model_cache(monkeypatch: pytest.MonkeyPatch):
     """Keep process-global model cache assertions scoped to each test."""
     monkeypatch.setattr(em, "_MODEL_CACHE", {})
+    monkeypatch.setattr(cross_encoder, "_RERANKER_CACHE", {})
     yield
     em._MODEL_CACHE.clear()
     gc.collect()
@@ -266,3 +276,80 @@ def test_per_turn_lore_stacks_share_embedder_and_close(
         assert second.memnon.embedding_manager.models["bge-large"] is first_model
     finally:
         second.close()
+
+
+@pytest.fixture()
+def drifted_manager(tmp_path: Path) -> em.EmbeddingManager:
+    """A manager whose only active model ``tiny`` is the drifted folder."""
+
+    folder = write_drifted_sentence_transformer(tmp_path / "drifted")
+    return em.EmbeddingManager(
+        settings={"models": {"tiny": {"local_path": str(folder), "is_active": True}}}
+    )
+
+
+def test_generate_embedding_raises_when_the_model_cannot_encode(
+    drifted_manager: em.EmbeddingManager,
+) -> None:
+    """An encode failure raises naming the model, chained to the model error."""
+
+    embedding = drifted_manager.generate_embedding(SHORT, "tiny")
+    assert len(embedding) == 8 and all(isinstance(x, float) for x in embedding)
+
+    with pytest.raises(
+        RuntimeError, match="Embedding model 'tiny' failed to encode"
+    ) as raised:
+        drifted_manager.generate_embedding(LONG, "tiny")
+    assert isinstance(raised.value.__cause__, RuntimeError)
+    assert "size of tensor a" in str(raised.value.__cause__)
+
+
+def test_generate_embeddings_batch_raises_when_the_model_cannot_encode(
+    drifted_manager: em.EmbeddingManager,
+) -> None:
+    """A batch encode failure raises instead of returning None."""
+
+    assert len(drifted_manager.generate_embeddings_batch([SHORT, SHORT], "tiny")) == 2
+
+    with pytest.raises(
+        RuntimeError, match="Embedding model 'tiny' failed to encode"
+    ) as raised:
+        drifted_manager.generate_embeddings_batch([SHORT, LONG], "tiny")
+    assert "size of tensor a" in str(raised.value.__cause__)
+
+
+def test_generate_embedding_raises_for_a_model_that_is_not_loaded(
+    drifted_manager: em.EmbeddingManager,
+) -> None:
+    """Asking for a model that is not loaded names it and the loaded models."""
+
+    with pytest.raises(RuntimeError) as raised:
+        drifted_manager.generate_embedding(SHORT, "absent")
+
+    assert "'absent' is not loaded" in str(raised.value)
+    assert "['tiny']" in str(raised.value)
+    with pytest.raises(RuntimeError, match="'absent' is not loaded"):
+        drifted_manager.generate_embeddings_batch([SHORT], "absent")
+
+
+def test_generate_embedding_raises_for_empty_text(
+    drifted_manager: em.EmbeddingManager,
+) -> None:
+    """Empty or blank text is a caller error, not a None embedding."""
+
+    for text in ("", "   "):
+        with pytest.raises(ValueError, match="'tiny'"):
+            drifted_manager.generate_embedding(text, "tiny")
+
+
+def test_generate_embeddings_batch_raises_for_empty_text(
+    drifted_manager: em.EmbeddingManager,
+) -> None:
+    """A blank text in a batch raises naming its index; no vector is dropped."""
+
+    with pytest.raises(ValueError) as raised:
+        drifted_manager.generate_embeddings_batch([SHORT, "  ", SHORT], "tiny")
+
+    assert "'tiny'" in str(raised.value)
+    assert "indexes [1]" in str(raised.value)
+    assert drifted_manager.generate_embeddings_batch([], "tiny") == []

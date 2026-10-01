@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator, List, Optional
 
+import asyncpg
 import pytest
 from psycopg2 import sql
 from psycopg2.extras import Json
@@ -44,7 +45,12 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
-from nexus.agents.orrery.tag_writer import apply_tag_bestowal
+from nexus.agents.orrery.tag_writer import (
+    apply_exclusive_tag_bestowal,
+    apply_exclusive_tag_bestowal_async,
+    apply_tag_bestowal,
+    validate_tag_bestowal,
+)
 from nexus.api.commit_handler_sync import (
     apply_state_updates_sync,
     commit_incubator_to_database_sync,
@@ -53,7 +59,7 @@ from nexus.api.commit_handler_sync import (
 from nexus.api.db_pool import close_all_pools
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import connect, route_slot_to_disposable
+from tests.pg_fixtures import asyncpg_kwargs, connect, route_slot_to_disposable
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -1234,6 +1240,278 @@ def test_turn_grammar_cannot_clear_an_active_faction_tag_the_validator_accepts(
                 )
     finally:
         _clear_directly(qa649_db, entity, entity_kind, tag)
+
+
+def _deprecated_application_message(
+    database: _Qa649Database, entity_kind: str, tag: str
+) -> str:
+    """The writer's rejection text, built from the clone's own registry row."""
+
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.category, r.deprecated, r.replacement_categories
+                FROM tags t
+                JOIN tag_category_registry r
+                  ON r.category = t.category
+                 AND r.entity_kind = %s::entity_kind
+                WHERE t.tag = %s
+                  AND NOT t.deprecated
+                """,
+                (entity_kind, tag),
+            )
+            row = cur.fetchone()
+    assert row is not None, f"{tag!r} has no registry row for {entity_kind!r}"
+    category, deprecated, replacements = row
+    assert deprecated is True, f"{category!r} is live for {entity_kind!r}"
+    message = (
+        f"Orrery tag {tag!r} has category {category!r}, which "
+        f"tag_category_registry deprecates for entity_kind={entity_kind!r}; "
+        "bestowal uses the live library only"
+    )
+    if replacements:
+        message += f" (replacement categories: {', '.join(replacements)})"
+    return message
+
+
+def _active_entity_tag_id(
+    database: _Qa649Database, *, entity_id: int, tag: str
+) -> Optional[int]:
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT et.id
+                FROM entity_tags et
+                JOIN tags registry ON registry.id = et.tag_id
+                WHERE et.entity_id = %s
+                  AND registry.tag = %s
+                  AND et.cleared_at IS NULL
+                """,
+                (entity_id, tag),
+            )
+            row = cur.fetchone()
+    return None if row is None else int(row[0])
+
+
+def _clear_active_rows_with_sql(
+    database: _Qa649Database, *, entity_id: int, tag: str
+) -> None:
+    """Clear any active ``tag`` row on ``entity_id`` without the writer under test.
+
+    Cleanup for the module clone: a failed case must not leave an active
+    deprecated-category row for the cases after it.
+    """
+
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE entity_tags et
+                SET cleared_at = now()
+                FROM tags registry
+                WHERE registry.id = et.tag_id
+                  AND et.entity_id = %s
+                  AND registry.tag = %s
+                  AND et.cleared_at IS NULL
+                """,
+                (entity_id, tag),
+            )
+
+
+@pytest.mark.parametrize(
+    ("array_name", "entity_attribute", "entity_kind", "tag"),
+    _DEPRECATED_CATEGORY_TAGS,
+)
+def test_writer_rejects_deprecated_category_application(
+    qa649_db: _Qa649Database,
+    array_name: str,
+    entity_attribute: str,
+    entity_kind: str,
+    tag: str,
+) -> None:
+    """The writer applies only live-library tags (#811-Q7).
+
+    A live tag in a category the registry deprecates for the entity's kind is
+    rejected by the bestowal and by the exclusive bestowal, and no row lands.
+    """
+
+    entity = getattr(qa649_db, entity_attribute)
+    expected = _deprecated_application_message(qa649_db, entity_kind, tag)
+
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            with pytest.raises(ValueError) as caught:
+                apply_tag_bestowal(
+                    cur,
+                    entity_id=entity.entity_id,
+                    entity_kind=entity_kind,
+                    bestowal=OrreryTagBestowal(applied_tags=[tag]),
+                )
+            assert str(caught.value) == expected
+            with pytest.raises(ValueError) as caught_exclusive:
+                apply_exclusive_tag_bestowal(
+                    cur,
+                    entity_id=entity.entity_id,
+                    entity_kind=entity_kind,
+                    tag=tag,
+                )
+            assert str(caught_exclusive.value) == expected
+        conn.commit()
+
+    assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
+
+
+@pytest.mark.parametrize(
+    ("array_name", "entity_attribute", "entity_kind", "tag"),
+    _DEPRECATED_CATEGORY_TAGS,
+)
+def test_writer_clears_active_deprecated_category_tag_with_ledger(
+    qa649_db: _Qa649Database,
+    array_name: str,
+    entity_attribute: str,
+    entity_kind: str,
+    tag: str,
+) -> None:
+    """Clearing stays possible for any active tag, whatever its category."""
+
+    entity = getattr(qa649_db, entity_attribute)
+    _commit_activation(qa649_db, entity.entity_id, tag)
+    try:
+        entity_tag_id = _active_entity_tag_id(
+            qa649_db, entity_id=entity.entity_id, tag=tag
+        )
+        assert entity_tag_id is not None
+
+        with _connect(qa649_db.dbname) as conn:
+            with conn.cursor() as cur:
+                counters = apply_tag_bestowal(
+                    cur,
+                    entity_id=entity.entity_id,
+                    entity_kind=entity_kind,
+                    bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
+                )
+        assert counters == {"applied": 0, "cleared": 1}
+        assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
+
+        with _connect(qa649_db.dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT mechanism::text, justification
+                    FROM tag_clearance_log
+                    WHERE entity_tag_id = %s
+                    """,
+                    (entity_tag_id,),
+                )
+                ledger = cur.fetchall()
+        assert ledger == [("authored", {"reason": "bestowal.tags_to_clear"})]
+    finally:
+        _clear_active_rows_with_sql(qa649_db, entity_id=entity.entity_id, tag=tag)
+
+
+@pytest.mark.parametrize(
+    ("array_name", "entity_attribute", "entity_kind", "tag"),
+    _DEPRECATED_CATEGORY_TAGS,
+)
+def test_validate_tag_bestowal_splits_application_from_clear(
+    qa649_db: _Qa649Database,
+    array_name: str,
+    entity_attribute: str,
+    entity_kind: str,
+    tag: str,
+) -> None:
+    """One bestowal: the application is an issue, the clear is not."""
+
+    expected = _deprecated_application_message(qa649_db, entity_kind, tag)
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            issues = validate_tag_bestowal(
+                cur,
+                entity_kind=entity_kind,
+                bestowal=OrreryTagBestowal(applied_tags=[tag], tags_to_clear=[tag]),
+            )
+    assert issues == [f"applied_tags: {expected}"]
+
+
+def test_staged_draft_with_deprecated_category_application_fails(
+    qa649_db: _Qa649Database,
+) -> None:
+    """The commit's draft validation rejects a staged deprecated-category add."""
+
+    entity = qa649_db.commit_character
+    tag = "black_market_operator"
+    response = _response(
+        characters=[{"id": entity.wire_id, "name": entity.name, "tags_add": [tag]}]
+    )
+    session_id = str(uuid.uuid4())
+    try:
+        with _connect(qa649_db.dbname) as conn:
+            with conn.cursor() as cur:
+                _stage_incubator_response(
+                    cur,
+                    database=qa649_db,
+                    response=response,
+                    session_id=session_id,
+                )
+        commit_conn = _connect(qa649_db.dbname)
+        try:
+            with pytest.raises(ValueError, match="Invalid staged state tags") as caught:
+                commit_incubator_to_database_sync(commit_conn, session_id)
+        finally:
+            commit_conn.close()
+        assert "deprecates for entity_kind='character'" in str(caught.value)
+        assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
+    finally:
+        with _connect(qa649_db.dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM incubator WHERE session_id = %s", (session_id,)
+                )
+        _clear_active_rows_with_sql(qa649_db, entity_id=entity.entity_id, tag=tag)
+
+
+def test_registry_free_tag_validation_rejects_deprecated_category_application(
+    qa649_db: _Qa649Database,
+) -> None:
+    """Gaia's registry-free path (no vocabulary) rejects through the writer."""
+
+    entity = qa649_db.active_character
+    tag = "black_market_operator"
+    expected = _deprecated_application_message(qa649_db, "character", tag)
+    response = _response(
+        characters=_deprecated_category_update(entity, "tags_add", tag)
+    )
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            issues = collect_orrery_tag_issues(response, cur)
+    assert issues == [f"updates.characters[0]: applied_tags: {expected}"]
+
+
+@pytest.mark.asyncio
+async def test_async_exclusive_bestowal_rejects_deprecated_category_application(
+    qa649_db: _Qa649Database,
+) -> None:
+    """The asyncpg exclusive bestowal applies only live-library tags (#811-Q7)."""
+
+    entity = qa649_db.active_character
+    tag = "black_market_operator"
+    expected = _deprecated_application_message(qa649_db, "character", tag)
+    conn = await asyncpg.connect(**asyncpg_kwargs(qa649_db.dbname))
+    try:
+        with pytest.raises(ValueError) as caught:
+            await apply_exclusive_tag_bestowal_async(
+                conn,
+                entity_id=entity.entity_id,
+                entity_kind="character",
+                tag=tag,
+            )
+        assert str(caught.value) == expected
+        assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
+    finally:
+        await conn.close()
+        _clear_active_rows_with_sql(qa649_db, entity_id=entity.entity_id, tag=tag)
 
 
 def test_migration_109_seeds_only_time_cleared_defaults(
