@@ -857,6 +857,8 @@ def test_select_into_fails_like_ctas(tmp_path: Path) -> None:
 
     In a DO body SELECT INTO assigns a variable, as in migrations 077 and 109,
     so it passes there; a temporary target and INSERT INTO pass everywhere.
+    An EXECUTE command in a DO body is SQL, so its SELECT INTO is checked, and
+    a target built at run time is unresolvable.
     """
     _migration(
         tmp_path,
@@ -900,6 +902,13 @@ $migration$;
 COMMENT ON TABLE mood_snapshot IS 'Snapshot.';
 COMMENT ON TABLE recent_moods IS 'Recent moods.';
 COMMENT ON TABLE mood_ids IS 'Mood ids.';
+DO $$
+DECLARE
+    v_name text := 'mood_copy';
+BEGIN
+    EXECUTE 'SELECT 1 AS id INTO ' || v_name || ' FROM scene_moods';
+END
+$$;
 """,
     )
     _migration(
@@ -935,6 +944,9 @@ def run(cur) -> None:
         f"{NEXT}_snapshots.sql:2: SELECT INTO public.mood_snapshot {no_columns}",
         f"{NEXT}_snapshots.sql:6: SELECT INTO public.recent_moods {no_columns}",
         f"{NEXT}_snapshots.sql:9: SELECT INTO public.mood_ids {no_columns}",
+        f"{NEXT}_snapshots.sql:43: SELECT INTO names '{{}}', which is not a "
+        "literal identifier; name the object literally so its COMMENT can be "
+        "verified",
         f"{WATERMARK + 2:03d}_snapshots.py:3: SELECT INTO public.py_snapshot "
         f"{no_columns}",
         f"{WATERMARK + 2:03d}_snapshots.py:9: SELECT INTO public.py_recent "
@@ -970,13 +982,14 @@ def test_every_historical_migration_parses() -> None:
         "public.character_experience_basis has no COMMENT ON TYPE"
     ) in findings
     assert not [line for line in findings if line.startswith("migrations/114_")]
-    # PL/pgSQL SELECT INTO in DO bodies (077, 100, 109) assigns a variable.
+    # PL/pgSQL SELECT INTO in DO bodies (022, 077, 100, 109, 110, 134, 138)
+    # assigns a variable.
     assert not [
         line
         for line in findings
         if "SELECT INTO" in line
         or "IMPORT FOREIGN SCHEMA" in line
-        or "foreign table" in line
+        or "foreign table" in line.lower()
     ]
 
 

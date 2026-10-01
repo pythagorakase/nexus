@@ -50,12 +50,13 @@ format('%I')), including a Python string passed straight to execute() whose
 command starts with a placeholder; an EXECUTE whose command does not start
 with literal text, such as EXECUTE of a variable; a CREATE, ALTER, or ALTER
 TABLE that names no object kind or action, which can only be a fragment of a
-command assembled at run time; and columns a statement does not declare
+command assembled at run time; columns a statement does not declare
 (CREATE TABLE ... AS without a column list, PARTITION OF, OF type, INHERITS,
-LIKE whose options, applied left to right, do not include COMMENTS,
-IMPORT FOREIGN SCHEMA, and SELECT ... INTO outside PL/pgSQL). SELECT ... INTO
-in a DO body assigns a variable, creates nothing, and is not checked. A
-COMMENT that is NULL or blank is reported as removed documentation.
+or LIKE whose options, applied left to right, do not include COMMENTS);
+IMPORT FOREIGN SCHEMA; and SELECT ... INTO outside PL/pgSQL. SELECT ... INTO
+written as a PL/pgSQL statement in a DO body assigns a variable, creates
+nothing, and is not checked; inside an EXECUTE command it is SQL and is
+checked. A COMMENT that is NULL or blank is reported as removed documentation.
 
 Usage
 -----

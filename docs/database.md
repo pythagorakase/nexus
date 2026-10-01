@@ -178,10 +178,11 @@ documents none. What cannot be read statically fails rather
 than passes: verbs, object kinds, names, and `ALTER TABLE` actions built at
 run time (f-strings, `+` or `||` with a non-literal operand, `{}` and `%I`
 placeholders), an `EXECUTE` of a variable or of anything not starting with literal
-text, and columns a statement does not list (`AS` without a column list,
+text, columns a statement does not list (`AS` without a column list,
 `PARTITION OF`, `INHERITS`, or `LIKE` unless its options, applied left to right,
 include `COMMENTS`), `IMPORT FOREIGN SCHEMA`, and `SELECT ... INTO` outside a DO
-body (in a DO body it assigns a variable). Not covered: domains, composite types,
+body (as a PL/pgSQL statement in a DO body it assigns a variable; an `EXECUTE`
+command is still checked). Not covered: domains, composite types,
 triggers, indexes, sequences, `ALTER FOREIGN TABLE ... ADD COLUMN`, DDL inside a
 function body, even when the migration calls
 that function, and SQL a Python migration does not spell as a string literal in
