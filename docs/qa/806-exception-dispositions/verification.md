@@ -6827,7 +6827,7 @@ non-exempt, unmarked set.
       "ast_exempt": false,
       "caught_type": "(OSError, ValueError, SyntaxError, tokenize.TokenError, subprocess.CalledProcessError)",
       "identity": "scripts/check_exception_dispositions.py|main|3d9d3d4237cd1d8a2c53ee0fe8e2d5fa79df94a920d80c8f4e4be30010437c9d|1",
-      "line": 555,
+      "line": 567,
       "marker": {
         "kind": "fail",
         "reason": "lint error",
@@ -9523,3 +9523,387 @@ non-exempt, unmarked set.
 ```
 
 Agent: Codex (GPT-6)
+
+## After the Independent Review
+
+Date: 2026-10-01 (America/Chicago). Fix order: `1090-astra-fix.md`.
+Source fix commit: `b532c55be74d75cd18ba64a955bf37bb55b028d5`; reviewed starting head:
+`42de2749740e4698d1b492cc19fb6da2ec576697`. Comparison ref `origin/main`:
+`67256d15e2c5cf395c4336bb63f4a42472493db0`. This evidence-only follow-up does not alter the tested Python files.
+
+Both P2 findings are fixed. `scripts/check_exception_dispositions.py:225-250`
+walks lambda/function defaults, decorators, bases and definition-time annotations
+for yield, yield-from and await, without traversing nested bodies.
+`scripts/check_exception_dispositions.py:281-292` excludes inner except arms
+only for try bodies consisting entirely of pass and constant expressions.
+Assignments, calls, name loads, attributes and returns retain possible catches.
+The 26 additional real-git/collector/CLI cases are in
+`tests/test_scripts/test_check_exception_dispositions.py:294-364`.
+No product handler is converted and no fallback is approved.
+
+| Inventory Measure | Before | After |
+| --- | ---: | ---: |
+| Total | 863 | 863 |
+| nexus/ | 507 | 507 |
+| scripts/ | 356 | 356 |
+| Always raising / exempt | 278 | 278 |
+| Non-exempt | 585 | 585 |
+| Marked | 1 | 1 |
+| Missing marker / baseline entries | 584 | 584 |
+
+All handler identities, exemption flags, markers, and census count mappings are
+unchanged. Only the checker's reporting-handler line moved, from the code edit.
+The baseline remains byte-for-byte unchanged. The complete current inventory
+above has been refreshed from the byte-identical three-interpreter result.
+All six HEAD/origin-main lint checks pass, including the shrink-only check.
+
+### Proof Environment and Scope
+
+Every command ran from the assigned worktree. The shared interpreter import proof
+printed `/Users/pythagor/nexus/.claude/worktrees/806-exception-disposition-lint/nexus/__init__.py`.
+`PYTHONPATH=$PWD`, `TMPDIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4`, and
+`PATH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4/bin:$PATH` were set by the scratch runners;
+the existing bin/python3.12 link selects the installed 3.12.9 interpreter.
+Hook commands additionally set `VIRTUAL_ENV=/Users/pythagor/nexus/.venv`.
+`run_amendment_gate.py` bounds each test/commit command to 590 seconds and
+120 seconds of silence. `fix_proofs.py` bounds every subprocess to 90 seconds.
+No database, gateway, paid provider, or owner secret-store operation was required.
+The fix order's focused proof set was run; the earlier full offline and PostgreSQL
+proofs above remain historical and are not claimed as rerun for these fixes.
+No rebase, history rewrite, stash, new PR, or merge was performed.
+
+### Exact Commands and Verbatim Proof Tails
+
+#### Initial Test Fixture Attempt
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=0 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_scripts/test_check_exception_dispositions.py
+```
+
+Exit: 1.
+
+```text
+            ("callback = lambda value=(lambda item=(yield caught): item): value", True),
+        ],
+    )
+    def test_nested_scope_definition_suspension(
+        repo: Path, definition: str, suspends: bool
+    ) -> None:
+        """Definition expressions execute here; nested bodies execute later."""
+        prefix = "async def" if "await" in definition else "def"
+        source = f"{prefix} function():\n" + textwrap.indent(
+            _catch(definition + "\nraise"), "    "
+        )
+>       compile(source, "nexus/example.py", "exec")
+E         File "nexus/example.py", line 5
+E       SyntaxError: 'yield expression' can not be used within an annotation
+
+tests/test_scripts/test_check_exception_dispositions.py:326: SyntaxError
+=============================== warnings summary ===============================
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_scripts/test_check_exception_dispositions.py::test_nested_scope_definition_suspension[def nested(value: (yield caught)):\n    pass-True]
+FAILED tests/test_scripts/test_check_exception_dispositions.py::test_nested_scope_definition_suspension[def nested() -> (yield caught):\n    pass-True]
+2 failed, 92 passed, 5 warnings in 27.86s
+```
+
+The two annotation fixtures initially inherited the test module's future-annotations flag through compile(). They now use dont_inherit=True so compilation matches their own source. No production change or test skip was used to resolve this fixture error.
+
+#### Corrected Complete Test File
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=0 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_scripts/test_check_exception_dispositions.py
+```
+
+Exit: 0.
+
+```text
+........................................................................ [ 76%]
+......................                                                   [100%]
+=============================== warnings summary ===============================
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+94 passed, 5 warnings in 27.34s
+```
+
+```sh
+python3.11 --version
+```
+
+Exit: 0.
+
+```text
+Python 3.11.12
+```
+
+```sh
+python3.11 -S scripts/check_exception_dispositions.py --inventory > /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4/fix_inventory_3.11.json
+```
+
+Exit: 0.
+
+```text
+(no output)
+```
+
+```sh
+python3.11 -S scripts/check_exception_dispositions.py
+```
+
+Exit: 0.
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+```sh
+python3.11 -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+Exit: 0.
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+```sh
+python3.12 --version
+```
+
+Exit: 0.
+
+```text
+Python 3.12.9
+```
+
+```sh
+python3.12 -S scripts/check_exception_dispositions.py --inventory > /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4/fix_inventory_3.12.json
+```
+
+Exit: 0.
+
+```text
+(no output)
+```
+
+```sh
+python3.12 -S scripts/check_exception_dispositions.py
+```
+
+Exit: 0.
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+```sh
+python3.12 -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+Exit: 0.
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+```sh
+python3.13 --version
+```
+
+Exit: 0.
+
+```text
+Python 3.13.5
+```
+
+```sh
+python3.13 -S scripts/check_exception_dispositions.py --inventory > /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4/fix_inventory_3.13.json
+```
+
+Exit: 0.
+
+```text
+(no output)
+```
+
+```sh
+python3.13 -S scripts/check_exception_dispositions.py
+```
+
+Exit: 0.
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+```sh
+python3.13 -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+Exit: 0.
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+```sh
+cmp /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4/fix_inventory_3.11.json /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4/fix_inventory_3.12.json
+```
+
+Exit: 0.
+
+```text
+(no output)
+```
+
+```sh
+cmp /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4/fix_inventory_3.11.json /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/806-S4/fix_inventory_3.13.json
+```
+
+Exit: 0.
+
+```text
+(no output)
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -S scripts/check_reachability.py
+```
+
+Exit: 0.
+
+```text
+{
+  "maintained": 386,
+  "reachable_by_kind": {
+    "production": 215,
+    "operator": 237,
+    "migration": 196,
+    "test": 281
+  },
+  "test_only": 41,
+  "existing_unreachable": 61,
+  "newly_unreachable": [],
+  "lost_production_reachability": [],
+  "baseline_add_production_paths": [],
+  "baseline_remove_orphan_exemptions": [],
+  "baseline_remove_deleted_production_paths": [],
+  "forbidden_dependencies": [],
+  "tombstone_violations": [],
+  "unresolved_internal_imports": [],
+  "unregistered_dynamic_import_sites": [],
+  "unclassified_paths": [],
+  "classified_paths_not_in_repository": [],
+  "class_graph_mismatches": [],
+  "classification_counts": {
+    "dead": 33,
+    "documented": 8,
+    "openrouter-shim": 1,
+    "operator": 40,
+    "pending-ruling:811-Q1": 3,
+    "pending-ruling:811-Q3": 78,
+    "pending-ruling:811-Q4": 2,
+    "pending-ruling:811-Q5": 38,
+    "runtime": 5,
+    "test-only": 24
+  },
+  "route_reachability": "not_proven"
+}
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check scripts/check_exception_dispositions.py tests/test_scripts/test_check_exception_dispositions.py
+```
+
+Exit: 0.
+
+```text
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 scripts/check_exception_dispositions.py tests/test_scripts/test_check_exception_dispositions.py
+```
+
+Exit: 0.
+
+```text
+(no output)
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases scripts/check_exception_dispositions.py tests/test_scripts/test_check_exception_dispositions.py
+```
+
+Exit: 0.
+
+```text
+Success: no issues found in 2 source files
+```
+
+```sh
+git ls-tree origin/main -- scripts/check_exception_dispositions.py tests/test_scripts/test_check_exception_dispositions.py
+```
+
+Exit: 0.
+
+```text
+(no output)
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m pre_commit run validate-config --all-files
+```
+
+Exit: 0.
+
+```text
+Validate NEXUS config and model-ID drift.................................Passed
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m pre_commit run check-exception-dispositions --all-files
+```
+
+Exit: 0.
+
+```text
+Require dispositions for swallowing exception handlers.......................Passed
+```
+
+### Pre-existing Diagnostics and Unapplied Work
+
+No diagnostics. Both changed Python paths remain absent from origin/main,
+as the git ls-tree command above confirms; there are no pre-existing changed
+files to extract for a baseline static-check comparison. Black, flake8 and
+sanctioned mypy all pass. No requested fix or proof was left unapplied.
+The baseline needed no regeneration because its required key set did not change.
+The original landing notes and accepted stop-report are preserved.
+
+Agent: Codex (GPT-6 Astra)
