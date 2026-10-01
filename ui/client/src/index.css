@@ -1477,6 +1477,15 @@ html {
    rules with matching selectors so it wins without !important. slow-pulse
    has no consumer yet; one that adopts it joins this list. The shell's own
    animations are guarded in components/nexus/nexus-layout.css.
+
+   The second rule stills every element whose class names an animate-*
+   utility, anywhere in the app: animate-spin, animate-pulse, the Radix
+   enter and exit animations (animate-in, animate-out; their fade, slide
+   and zoom classes only feed them), the accordion, and the fade classes
+   above. It reaches portals, the wizard and the splash, which render
+   outside .nexus-shell. It needs !important because Tailwind appends its
+   data-[state] variant rules after this file. The map pin ring (.map-pin)
+   keeps its pulse until its glyph shapes land (#777, slice S2).
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   .terminal-flicker,
@@ -1488,5 +1497,9 @@ html {
   .deco-shimmer::after,
   .veil-shimmer::after {
     animation: none;
+  }
+
+  [class*="animate-"]:not(.map-pin *) {
+    animation: none !important;
   }
 }
