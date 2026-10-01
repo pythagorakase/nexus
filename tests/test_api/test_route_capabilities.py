@@ -498,3 +498,38 @@ def test_unclassified_route_fails_the_gateway_import() -> None:
     assert result.returncode != 0
     assert "UnclassifiedRouteError" in result.stderr
     assert "POST /api/slot/{slot}/lock" in result.stderr
+
+
+def test_feed_is_player_read_without_provider_effect() -> None:
+    """The real feed is classified, projected, and precedes the SPA tail."""
+    key = ("GET", "/api/narrative/feed")
+    capability = ROUTE_CAPABILITIES[key]
+    assert (
+        capability.plane,
+        capability.capability,
+        capability.slot_mode,
+        capability.provider_effect,
+        capability.destructive,
+    ) == (
+        "player",
+        "narrative.read",
+        "read",
+        False,
+        False,
+    )
+    assert classify_app(narrative.app) == []
+    player = build_player_app(narrative.app)
+    assert key in _keys(player)
+    for app in (narrative.app, player):
+        feed = next(i for i, route in enumerate(app.routes) if key in route_keys(route))
+        shell = next(
+            i
+            for i, route in enumerate(app.routes)
+            if any(
+                ROUTE_CAPABILITIES[k].capability == "ui.shell"
+                for k in route_keys(route)
+            )
+        )
+        assert feed < shell
+    response = TestClient(player).get("/api/narrative/feed", params={"slot": 9})
+    assert response.status_code == 400

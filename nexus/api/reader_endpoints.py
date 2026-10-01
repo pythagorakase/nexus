@@ -26,9 +26,10 @@ from __future__ import annotations
 import logging
 import re
 from datetime import timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, ConfigDict
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.db_pool import get_connection
@@ -194,6 +195,104 @@ async def get_latest_chunk(slot: Optional[int] = None) -> Dict[str, Any]:
     if not rows:
         raise HTTPException(status_code=404, detail="No chunks found")
     return _chunk_payload(rows[0])
+
+
+class ReaderFeedResponse(BaseModel):
+    """A playable-story page and strict keyset thresholds for its neighbors."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunks: list[dict[str, Any]]
+    previousCursor: int | None
+    nextCursor: int | None
+
+
+@router.get("/api/narrative/feed", response_model=ReaderFeedResponse)
+async def get_reader_feed(
+    slot: int | None = None,
+    anchor: Annotated[int | None, Query(ge=1)] = None,
+    before: Annotated[int | None, Query(ge=1)] = None,
+    after: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int | None, Query(ge=1)] = None,
+) -> ReaderFeedResponse:
+    """Read a bounded page in playable ID order from one read-only snapshot."""
+    if sum(value is not None for value in (anchor, before, after)) > 1:
+        raise HTTPException(
+            status_code=422, detail="Specify at most one of anchor, before, after"
+        )
+    policy = load_settings().ui.reader
+    if limit is not None and limit > policy.max_page_size:
+        raise HTTPException(
+            status_code=422, detail=f"limit must be <= {policy.max_page_size}"
+        )
+    page_size = policy.default_page_size if limit is None else limit
+    dbname = resolve_dbname(slot)
+    eligible = f"""
+        FROM narrative_chunks nc
+        JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+        WHERE {playable_narrative_predicate("nc")}
+    """
+    with get_connection(dbname, dict_cursor=True) as conn, conn.cursor() as cur:
+        cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+
+        def neighbors(
+            threshold: int | None, *, older: bool, count: int, prose: bool = True
+        ) -> list[dict[str, Any]]:
+            """Read only the nearest bounded rows on one side of a threshold."""
+            fields = _CHUNK_SELECT if prose else "SELECT nc.id, cm.season, cm.episode"
+            comparison = "<" if older else ">"
+            direction = "DESC" if older else "ASC"
+            clause = f"AND nc.id {comparison} %s" if threshold is not None else ""
+            params = (threshold, count) if threshold is not None else (count,)
+            cur.execute(
+                fields + eligible + clause + f" ORDER BY nc.id {direction} LIMIT %s",
+                params,
+            )
+            return [dict(row) for row in cur.fetchall()]
+
+        if anchor is not None:
+            cur.execute(_CHUNK_SELECT + eligible + "AND nc.id = %s", (anchor,))
+            anchor_row = cur.fetchone()
+            if anchor_row is None:
+                raise HTTPException(status_code=404, detail=f"Chunk {anchor} not found")
+            older_rows = neighbors(anchor, older=True, count=page_size - 1)
+            newer_rows = neighbors(anchor, older=False, count=page_size - 1)
+            older_count = min(len(older_rows), (page_size - 1) // 2)
+            newer_count = min(len(newer_rows), page_size - 1 - older_count)
+            older_count = min(len(older_rows), page_size - 1 - newer_count)
+            rows = [
+                *reversed(older_rows[:older_count]),
+                dict(anchor_row),
+                *newer_rows[:newer_count],
+            ]
+        else:
+            rows = neighbors(
+                before if before is not None else after,
+                older=after is None,
+                count=page_size,
+            )
+            if after is None:
+                rows.reverse()
+        if not rows:
+            return ReaderFeedResponse(chunks=[], previousCursor=None, nextCursor=None)
+
+        predecessor = neighbors(rows[0]["id"], older=True, count=1, prose=False)
+        successor = neighbors(rows[-1]["id"], older=False, count=1, prose=False)
+        previous = predecessor[0] if predecessor else None
+        chunks = []
+        for row in rows:
+            payload = _chunk_payload(row)
+            payload["episodeBoundary"] = previous is None or (
+                row["season"],
+                row["episode"],
+            ) != (previous["season"], previous["episode"])
+            chunks.append(payload)
+            previous = row
+        return ReaderFeedResponse(
+            chunks=chunks,
+            previousCursor=rows[0]["id"] if predecessor else None,
+            nextCursor=rows[-1]["id"] if successor else None,
+        )
 
 
 @router.get("/api/narrative/outline")

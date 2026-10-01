@@ -24,6 +24,8 @@ import type {
   GenerationSession,
   GenerationSettings,
   IncubatorPayload,
+  ReaderFeedOptions,
+  ReaderFeedResponse,
   SlotState,
 } from "@/types/narrative";
 import { parseNarrativePhase } from "@/types/narrative";
@@ -70,6 +72,19 @@ export function getEpisodeChunks(
   return getJson(
     `/api/narrative/chunks/${seasonId}/${episodeId}?limit=${limit}&slot=${slot}`,
   );
+}
+
+/** Read a keyset page; invalid selectors and missing anchors throw. */
+export function getReaderFeed(
+  slot: number,
+  options: ReaderFeedOptions = {},
+  signal?: AbortSignal,
+): Promise<ReaderFeedResponse> {
+  const query = new URLSearchParams({ slot: String(slot) });
+  for (const key of ["anchor", "before", "after", "limit"] as const) {
+    if (options[key] !== undefined) query.set(key, String(options[key]));
+  }
+  return getJson(`/api/narrative/feed?${query}`, signal);
 }
 
 export function getChunkContext(chunkId: number, slot: number): Promise<ChunkContext> {

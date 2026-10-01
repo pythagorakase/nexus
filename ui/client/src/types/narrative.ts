@@ -13,6 +13,22 @@ export type ChunkWithMetadata = Omit<NarrativeChunk, "choiceObject"> & {
   metadata?: ChunkMetadata & { worldTime: string | null; worldTimeFace: string | null };
 };
 
+/** A feed chunk retains the existing payload and adds an episode boundary. */
+export type ReaderFeedChunk = ChunkWithMetadata & { episodeBoundary: boolean };
+
+export interface ReaderFeedResponse {
+  chunks: ReaderFeedChunk[];
+  previousCursor: number | null;
+  nextCursor: number | null;
+}
+
+export interface ReaderFeedOptions {
+  anchor?: number;
+  before?: number;
+  after?: number;
+  limit?: number;
+}
+
 /**
  * Choice object structure from the chunk / incubator JSONB column.
  * `presented`: choice strings from the storyteller.
