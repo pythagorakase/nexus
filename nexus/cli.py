@@ -1180,8 +1180,9 @@ _CREDENTIAL_ERRORS: tuple[type[BaseException], ...] = (
     InsecureRuntimeTransportError,
     MissingSecretError,
 )
-# A handler whose broad ``except`` turns failures into a result re-raises these
-# first (``except _TRANSPORT_ERRORS: raise``), so they reach main().
+# A handler that turns some request errors of its own into a result (``up``)
+# re-raises these first (``except _TRANSPORT_ERRORS: raise``), so they reach
+# main(), which reports them as api_unreachable or config_error.
 _TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
     requests.exceptions.ConnectionError,
     requests.exceptions.ChunkedEncodingError,
@@ -1189,6 +1190,103 @@ _TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
     *_API_URL_ERRORS,
     *_CREDENTIAL_ERRORS,
 )
+
+
+class ApiAnswerFailure(Exception):
+    """An API answer an HTTP handler cannot use; main() reports it by ``code``.
+
+    ``code`` is ``api_error`` (a non-2xx answer), ``config_error`` (an access
+    rejection, :func:`_is_access_rejection`), or ``invalid_response`` (a 2xx
+    body that is not the JSON the handler reads). ``status_code`` is the
+    answer's HTTP status when the status is the failure. Not a ValueError, so
+    a handler's own ``except ValueError`` never absorbs it.
+    """
+
+    def __init__(
+        self, code: str, message: str, *, status_code: Optional[int] = None
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+
+
+def _answer_url(response: requests.Response) -> str:
+    """The URL a response answered, without its query string."""
+    return str(response.url).split("?", 1)[0]
+
+
+def _is_access_rejection(response: requests.Response) -> bool:
+    """Whether an answer is an edge's rejection: a 401, a 403, or any 3xx.
+
+    The NEXUS gateway answers no 401, 403 or redirect itself, so one of these
+    comes from an edge in front of it, such as Cloudflare Access. Requests
+    follows redirects unless the request carries a runtime credential
+    (``_api_request``), so a 3xx reaches a handler only unfollowed.
+    """
+    status = response.status_code
+    return status in (401, 403) or 300 <= status < 400
+
+
+def _access_rejection_message(response: requests.Response) -> str:
+    """Name the rejected URL, its status, any redirect target, and the remedy."""
+    status = response.status_code
+    message = f"{_answer_url(response)} returned HTTP {status}"
+    if 300 <= status < 400:
+        location = response.headers.get("Location")
+        message += (
+            f" redirecting to {location}"
+            if location
+            else " (a redirect with no Location header)"
+        )
+    return (
+        f"{message}: an access rejection from in front of the NEXUS API, which "
+        "answers no 401, 403 or redirect itself. Check the runtime credential: "
+        "[runtime.remote.cloudflare_access] and its Access service token, or "
+        "NEXUS_AUTH."
+    )
+
+
+def _answer_failure_code(response: requests.Response) -> str:
+    """The CLI error code of a non-2xx answer: config_error or api_error."""
+    return "config_error" if _is_access_rejection(response) else "api_error"
+
+
+def _check_answer(response: requests.Response) -> None:
+    """Return on a 2xx answer; raise :class:`ApiAnswerFailure` otherwise."""
+    status = response.status_code
+    if 200 <= status < 300:
+        return
+    if _is_access_rejection(response):
+        raise ApiAnswerFailure(
+            "config_error", _access_rejection_message(response), status_code=status
+        )
+    raise ApiAnswerFailure(
+        "api_error", f"API error: {response.text}", status_code=status
+    )
+
+
+def _api_answer(response: requests.Response) -> Any:
+    """Return a 2xx answer's JSON body; raise :class:`ApiAnswerFailure` otherwise."""
+    _check_answer(response)
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise ApiAnswerFailure(
+            "invalid_response",
+            f"{_answer_url(response)} returned a body that is not JSON: {exc}",
+        ) from exc
+
+
+def _api_object(response: requests.Response) -> Dict[str, Any]:
+    """Return a 2xx answer's JSON object; raise :class:`ApiAnswerFailure` otherwise."""
+    body = _api_answer(response)
+    if not isinstance(body, dict):
+        raise ApiAnswerFailure(
+            "invalid_response",
+            f"{_answer_url(response)} returned a body that is not a JSON object",
+        )
+    return body
 
 
 def _runtime_cli_settings() -> RuntimeCliSettings:
@@ -1209,6 +1307,11 @@ def _request_timeout_seconds() -> float:
     return _runtime_cli_settings().request_timeout_seconds
 
 
+def _turn_request_timeout_seconds() -> float:
+    """The per-request budget of a model-turn request (chat, scheduling POSTs)."""
+    return _runtime_cli_settings().turn_request_timeout_seconds
+
+
 def run_load(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Display current slot state.
@@ -1218,85 +1321,76 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
     """
     url = f"{get_api_url()}/api/slot/{args.slot}/state"
 
-    try:
-        response = _api_get(url, timeout=_request_timeout_seconds())
-        response.raise_for_status()
-        data = response.json()
+    response = _api_get(url, timeout=_request_timeout_seconds())
+    data = _api_object(response)
 
-        if data.get("is_empty"):
-            return {
-                "success": True,
-                "message": (
-                    f"Slot {args.slot} is empty. "
-                    f"Use 'nexus continue --slot {args.slot}' to initialize."
-                ),
-                "is_empty": True,
-            }
-
-        if data.get("is_wizard_mode"):
-            result = {
-                "success": True,
-                "message": f"Slot {args.slot} is in wizard mode.",
-                "phase": data.get("phase"),
-                "choices": data.get("choices", []),
-                "weird_level": data.get("weird_level"),
-            }
-            if data.get("pending_confirmation") in {"setting", "character"}:
-                phase = data["pending_confirmation"]
-                result.update(
-                    pending_confirmation=phase,
-                    artifact_token=data.get("artifact_token"),
-                    thread_id=data.get("thread_id"),
-                    message=(
-                        f"The saved {phase} draft awaits confirmation. "
-                        f"Use 'nexus continue --slot {args.slot}' to confirm, "
-                        "or supply --user-text to revise it."
-                    ),
-                )
-            if data.get("awaiting_introduction") in _WIZARD_PHASE_ACCEPTED_BEFORE:
-                phase = data["awaiting_introduction"]
-                result.update(
-                    awaiting_introduction=phase,
-                    message=(
-                        f"The {phase} phase was entered but never introduced. "
-                        f"Run 'nexus continue --slot {args.slot}' to load its "
-                        "introduction."
-                    ),
-                )
-            if data.get("character_revision_pending"):
-                result.update(
-                    character_revision_pending=True,
-                    message=(
-                        "Character revision is unfinished. Continue with --user-text "
-                        "describing the replacement before confirming."
-                    ),
-                )
-            # Include trait menu if in traits subphase
-            if data.get("trait_menu"):
-                result["trait_menu"] = data.get("trait_menu")
-                result["can_confirm"] = data.get("can_confirm", False)
-                result["subphase"] = data.get("subphase")
-            return result
-
-        # Narrative mode
+    if data.get("is_empty"):
         return {
             "success": True,
-            "message": data.get("storyteller_text") or "No narrative text available.",
-            "choices": data.get("choices", []),
-            "chunk_id": data.get("current_chunk_id"),
-            "has_pending": data.get("has_pending"),
-            "recovery": data.get("recovery"),
-            "retry_command": (
-                f"nexus retry --slot {args.slot}" if data.get("recovery") else None
+            "message": (
+                f"Slot {args.slot} is empty. "
+                f"Use 'nexus continue --slot {args.slot}' to initialize."
             ),
+            "is_empty": True,
         }
 
-    except _TRANSPORT_ERRORS:
-        raise
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    if data.get("is_wizard_mode"):
+        result = {
+            "success": True,
+            "message": f"Slot {args.slot} is in wizard mode.",
+            "phase": data.get("phase"),
+            "choices": data.get("choices", []),
+            "weird_level": data.get("weird_level"),
+        }
+        if data.get("pending_confirmation") in {"setting", "character"}:
+            phase = data["pending_confirmation"]
+            result.update(
+                pending_confirmation=phase,
+                artifact_token=data.get("artifact_token"),
+                thread_id=data.get("thread_id"),
+                message=(
+                    f"The saved {phase} draft awaits confirmation. "
+                    f"Use 'nexus continue --slot {args.slot}' to confirm, "
+                    "or supply --user-text to revise it."
+                ),
+            )
+        if data.get("awaiting_introduction") in _WIZARD_PHASE_ACCEPTED_BEFORE:
+            phase = data["awaiting_introduction"]
+            result.update(
+                awaiting_introduction=phase,
+                message=(
+                    f"The {phase} phase was entered but never introduced. "
+                    f"Run 'nexus continue --slot {args.slot}' to load its "
+                    "introduction."
+                ),
+            )
+        if data.get("character_revision_pending"):
+            result.update(
+                character_revision_pending=True,
+                message=(
+                    "Character revision is unfinished. Continue with --user-text "
+                    "describing the replacement before confirming."
+                ),
+            )
+        # Include trait menu if in traits subphase
+        if data.get("trait_menu"):
+            result["trait_menu"] = data.get("trait_menu")
+            result["can_confirm"] = data.get("can_confirm", False)
+            result["subphase"] = data.get("subphase")
+        return result
+
+    # Narrative mode
+    return {
+        "success": True,
+        "message": data.get("storyteller_text") or "No narrative text available.",
+        "choices": data.get("choices", []),
+        "chunk_id": data.get("current_chunk_id"),
+        "has_pending": data.get("has_pending"),
+        "recovery": data.get("recovery"),
+        "retry_command": (
+            f"nexus retry --slot {args.slot}" if data.get("recovery") else None
+        ),
+    }
 
 
 def _inspect_timeout_seconds() -> float:
@@ -1332,12 +1426,20 @@ def _inspect_response(
 
 
 def _inspect_body(response: requests.Response) -> Any:
-    """Return a 2xx response's JSON body, or raise the matching InspectFailure."""
+    """Return a 2xx response's JSON body, or raise the matching InspectFailure.
+
+    A 404 is ``not_found``; an access rejection (a 401, a 403 or an unfollowed
+    redirect) is ``config_error``; any other non-2xx answer is ``api_error``.
+    """
     url = response.url.split("?", 1)[0]
     status = response.status_code
     if status == 404:
         raise InspectFailure(
             "not_found", f"{url} returned 404: {response.text}", status_code=status
+        )
+    if _is_access_rejection(response):
+        raise InspectFailure(
+            "config_error", _access_rejection_message(response), status_code=status
         )
     if not 200 <= status < 300:
         raise InspectFailure(
@@ -1856,10 +1958,12 @@ def wait_for_session(
     (``error``, with the API's own message), the budget spent while the
     session still runs or a status read stalls, before or after its headers
     (``timeout``), a gateway that refuses or drops the connection
-    (``unreachable``, reported as ``api_unreachable``), an HTTP error answer or
-    any other failed request (``http_error``), an unusable payload
-    (``invalid_response``), or Ctrl+C (``interrupted``). A failed read is
-    never retried.
+    (``unreachable``, reported as ``api_unreachable``), a non-2xx answer
+    (``http_error``, reported as ``api_error``, or as ``config_error`` for an
+    access rejection: a 401, a 403 or an unfollowed redirect), any other
+    failed request (``http_error``, a domain failure), an unusable payload
+    (``invalid_response``, a domain failure), or Ctrl+C (``interrupted``). A
+    failed read is never retried.
     """
     url = f"{get_api_url()}/api/narrative/status/{session_id}"
     deadline = time.monotonic() + timeout
@@ -1877,6 +1981,7 @@ def wait_for_session(
                 raise SessionWaitFailure(
                     "http_error",
                     f"{url} returned HTTP {response.status_code}: {response.text}",
+                    code=_answer_failure_code(response),
                 )
             try:
                 status = _session_status(response.json())
@@ -1906,9 +2011,12 @@ def _load_session_result(
 
     Raises :class:`SessionWaitFailure` when the state cannot be read or no
     longer shows this session's result: ``unreachable`` (``api_unreachable``)
-    when the gateway refuses or drops the connection, a domain failure for a
-    read that times out (a body stalled after its headers included) or fails
-    otherwise. :func:`_failed_session_read` classifies the failed read.
+    when the gateway refuses or drops the connection; ``http_error`` for a
+    non-2xx answer, reported as ``api_error``, or as ``config_error`` for an
+    access rejection (a 401, a 403 or an unfollowed redirect); a domain
+    failure for a read that times out (a body stalled after its headers
+    included) or fails otherwise, an unusable state, or a state that no longer
+    shows the result. :func:`_failed_session_read` classifies the failed read.
     """
     url = f"{get_api_url()}/api/slot/{slot}/state"
     try:
@@ -1921,6 +2029,7 @@ def _load_session_result(
         raise SessionWaitFailure(
             "http_error",
             f"{url} returned HTTP {response.status_code}: {response.text}",
+            code=_answer_failure_code(response),
         )
     try:
         state = response.json()
@@ -1976,7 +2085,9 @@ def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
     The one waiter of ``continue``, ``retry``, ``regenerate``, and the seed's
     opening turn. A failed wait keeps the scheduled session and its recovery
     command, reported under the failure's own code: ``api_unreachable``
-    (exit 4) when the gateway is gone, ``domain_failure`` (exit 1) otherwise.
+    (exit 4) when the gateway is gone, ``api_error`` for a non-2xx answer,
+    ``config_error`` for an access rejection (a 401, a 403 or an unfollowed
+    redirect), ``domain_failure`` otherwise (all exit 1).
     """
     try:
         status = wait_for_session(
@@ -2007,12 +2118,16 @@ def _bootstrap_seed_narrative(
     result: Dict[str, Any],
     slot: int,
     model: Optional[str],
-    schedule_timeout: float = 120,
+    schedule_timeout: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Preserve the saved seed while scheduling and awaiting its opening turn.
 
     ``schedule_timeout`` bounds the POST that schedules the turn, in seconds;
-    the wait on the scheduled session keeps its own budgets.
+    None reads ``[runtime.cli].turn_request_timeout_seconds``. The wait on the
+    scheduled session keeps its own budgets. A non-2xx scheduling answer is
+    ``api_error``, or ``config_error`` for an access rejection; a 2xx answer
+    without a session ID, a body that is not a JSON object included, is a
+    domain failure. Either way the saved seed stays in the result.
     """
 
     result["phase"] = None  # The successful transition has left wizard mode.
@@ -2021,13 +2136,24 @@ def _bootstrap_seed_narrative(
     if model:
         payload["model"] = model
     url = f"{get_api_url()}/api/narrative/continue"
+    if schedule_timeout is None:
+        schedule_timeout = _turn_request_timeout_seconds()
     try:
         response = _api_post(url, json=payload, timeout=schedule_timeout)
-        response.raise_for_status()
-        session_id = response.json().get("session_id")
-        if not isinstance(session_id, str) or not session_id:
-            raise ValueError("Opening generation returned no session ID")
-        completion = _wait_for_narrative_result(slot, session_id)
+        if not 200 <= response.status_code < 300:
+            completion = {
+                "success": False,
+                "code": _answer_failure_code(response),
+                "error": (
+                    f"{url} returned HTTP {response.status_code}: {response.text}"
+                ),
+            }
+        else:
+            body = response.json()
+            session_id = body.get("session_id") if isinstance(body, dict) else None
+            if not isinstance(session_id, str) or not session_id:
+                raise ValueError("Opening generation returned no session ID")
+            completion = _wait_for_narrative_result(slot, session_id)
     except KeyboardInterrupt:
         completion = {
             "success": False,
@@ -2086,8 +2212,11 @@ def _seed_transition_failure(
     """Report a persisted seed whose narrative transition did not complete.
 
     ``code`` is the CLI error code: ``api_unreachable`` (exit 4) when the
-    gateway refused or dropped the transition, a domain failure otherwise.
-    Either way the saved seed and its retry command stay in the result.
+    gateway refused or dropped the transition, ``api_error`` for a non-2xx
+    answer, ``config_error`` for an access rejection (a 401, a 403 or an
+    unfollowed redirect), ``invalid_response`` for a 2xx body that is not a
+    JSON object, a domain failure otherwise. Either way the saved seed and its
+    retry command stay in the result.
     """
     retry_command = f"nexus continue --slot {slot}"
     result.update(
@@ -2140,38 +2269,37 @@ def _apply_traits_to_wildcard_transition(
     recovery_command = (
         f'nexus continue --slot {slot} --user-text "Continue to the wildcard step."'
     )
-    try:
-        intro_response = _api_post(url, json=intro_payload, timeout=120)
-    except requests.exceptions.RequestException as exc:
-        result["intro_error"] = {
-            "detail": str(exc),
-            "status_code": None,
-        }
+
+    def intro_failed(detail: str, status_code: Optional[int]) -> None:
+        """Keep the saved traits a success and name the introduction's retry."""
+        result["intro_error"] = {"detail": detail, "status_code": status_code}
         result["intro_recovery_command"] = recovery_command
         result["message"] = (
             f"{result.get('message') or 'Traits confirmed.'} Traits were saved, "
             "but the wildcard introduction could not be loaded. Retry with: "
             f"{recovery_command}"
         )
+
+    try:
+        intro_response = _api_post(
+            url, json=intro_payload, timeout=_turn_request_timeout_seconds()
+        )
+    except requests.exceptions.RequestException as exc:
+        intro_failed(str(exc), None)
         return
 
     if not intro_response.ok:
         detail = intro_response.text.strip() or (
             f"Wildcard intro request failed with HTTP {intro_response.status_code}."
         )
-        result["intro_error"] = {
-            "detail": detail,
-            "status_code": intro_response.status_code,
-        }
-        result["intro_recovery_command"] = recovery_command
-        result["message"] = (
-            f"{result.get('message') or 'Traits confirmed.'} Traits were saved, "
-            "but the wildcard introduction could not be loaded. Retry with: "
-            f"{recovery_command}"
-        )
+        intro_failed(detail, intro_response.status_code)
         return
 
-    intro_data = intro_response.json()
+    try:
+        intro_data = _api_object(intro_response)
+    except ApiAnswerFailure as exc:
+        intro_failed(exc.message, exc.status_code)
+        return
     result["next_phase_intro"] = intro_data.get("message")
     result["choices"] = intro_data.get("choices", [])
     result["phase"] = intro_data.get("phase") or "character"
@@ -2208,7 +2336,12 @@ def _confirm_wizard_artifact_and_introduce(
     result: Dict[str, Any],
     model: Optional[str],
 ) -> Dict[str, Any]:
-    """Confirm the authoritative draft before requesting the next phase intro."""
+    """Confirm the authoritative draft before requesting the next phase intro.
+
+    A non-2xx confirmation answer keeps its code (``api_error``, or
+    ``config_error`` for an access rejection) in the failed result.
+    """
+    failure_code: Optional[str] = None
     try:
         identity = _wizard_artifact_identity(data)
         response = _api_post(
@@ -2217,6 +2350,7 @@ def _confirm_wizard_artifact_and_introduce(
             timeout=_request_timeout_seconds(),
         )
         if not 200 <= response.status_code < 300:
+            failure_code = _answer_failure_code(response)
             raise ValueError(f"Wizard confirmation failed: {response.text}")
         confirmed = response.json()
         next_phase = _WIZARD_PHASE_ENTERED_BY[identity["phase"]]
@@ -2234,6 +2368,8 @@ def _confirm_wizard_artifact_and_introduce(
             error=str(exc),
             recovery_command=f"nexus load --slot {slot}",
         )
+        if failure_code is not None:
+            result["code"] = failure_code
         return result
 
     # A failed or lost acknowledgement above never schedules another model turn.
@@ -2257,7 +2393,12 @@ def _introduce_accepted_phase(
     result: Dict[str, Any],
     model: Optional[str],
 ) -> Dict[str, Any]:
-    """Request the introduction of a phase whose predecessor is already accepted."""
+    """Request the introduction of a phase whose predecessor is already accepted.
+
+    A non-2xx answer keeps its code (``api_error``, or ``config_error`` for an
+    access rejection) in the failed result, beside its recovery command.
+    """
+    failure_code: Optional[str] = None
     payload = {
         "slot": slot,
         "thread_id": thread_id,
@@ -2272,9 +2413,12 @@ def _introduce_accepted_phase(
         payload["model"] = model
     try:
         response = _api_post(
-            f"{get_api_url()}/api/story/new/chat", json=payload, timeout=120
+            f"{get_api_url()}/api/story/new/chat",
+            json=payload,
+            timeout=_turn_request_timeout_seconds(),
         )
         if not 200 <= response.status_code < 300:
+            failure_code = _answer_failure_code(response)
             raise ValueError(f"Next phase introduction failed: {response.text}")
         intro = response.json()
         if (
@@ -2292,11 +2436,17 @@ def _introduce_accepted_phase(
             error=f"Artifact confirmed, but the next phase could not be loaded: {exc}",
             recovery_command=f"nexus load --slot {slot}",
         )
+        if failure_code is not None:
+            result["code"] = failure_code
     return result
 
 
 def _start_wizard_character_revision(slot: int, state: Mapping[str, Any]) -> str:
-    """Enter persisted concept revision before sending replacement player text."""
+    """Enter persisted concept revision before sending replacement player text.
+
+    A non-2xx answer raises :class:`ApiAnswerFailure`; a missing or unexpected
+    identity raises ValueError.
+    """
     identity = _wizard_artifact_identity(state)
     response = _api_post(
         f"{get_api_url()}/api/story/new/setup/character/revise",
@@ -2308,8 +2458,12 @@ def _start_wizard_character_revision(slot: int, state: Mapping[str, Any]) -> str
         timeout=_request_timeout_seconds(),
     )
     if not 200 <= response.status_code < 300:
-        raise ValueError(f"Character revision could not start: {response.text}")
-    revised = response.json()
+        raise ApiAnswerFailure(
+            _answer_failure_code(response),
+            f"Character revision could not start: {response.text}",
+            status_code=response.status_code,
+        )
+    revised = _api_answer(response)
     if (
         not isinstance(revised, dict)
         or revised.get("status") != "revision_started"
@@ -2325,6 +2479,10 @@ def _record_wizard_weird_level(slot: int, level: str) -> Optional[str]:
 
     Returns:
         None once the gateway saved ``level``, otherwise the failure detail.
+
+    Raises:
+        ApiAnswerFailure: The gateway answered a non-2xx status or a body that
+            is not a JSON object.
     """
     response = _api_request(
         "put",
@@ -2334,8 +2492,12 @@ def _record_wizard_weird_level(slot: int, level: str) -> Optional[str]:
     )
     if not 200 <= response.status_code < 300:
         detail = response.text.strip() or f"HTTP {response.status_code}"
-        return f"Failed to save --weird {level}: {detail}"
-    saved = response.json().get("weird_level")
+        raise ApiAnswerFailure(
+            _answer_failure_code(response),
+            f"Failed to save --weird {level}: {detail}",
+            status_code=response.status_code,
+        )
+    saved = _api_object(response).get("weird_level")
     if saved != level:
         return f"Failed to save --weird {level}: the wizard reports {saved!r}"
     return None
@@ -2352,306 +2514,240 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     retrograde_info: Optional[Dict[str, Any]] = None
     # --weird belongs to the new-story wizard; direct callers may omit it.
     weird_level: Optional[str] = getattr(args, "weird", None)
-    try:
-        # First, get slot state to determine mode
-        state_url = f"{get_api_url()}/api/slot/{args.slot}/state"
-        state_response = _api_get(state_url, timeout=_request_timeout_seconds())
-        state_response.raise_for_status()
-        state = state_response.json()
+    # First, get slot state to determine mode
+    state_url = f"{get_api_url()}/api/slot/{args.slot}/state"
+    state_response = _api_get(state_url, timeout=_request_timeout_seconds())
+    state = _api_object(state_response)
 
-        if weird_level is not None and not (
-            state.get("is_empty") or state.get("is_wizard_mode")
-        ):
+    if weird_level is not None and not (
+        state.get("is_empty") or state.get("is_wizard_mode")
+    ):
+        return {
+            "success": False,
+            "error": (
+                f"--weird applies only to a new story; slot {args.slot} "
+                "already holds a story in narrative mode."
+            ),
+        }
+
+    if state.get("is_empty"):
+        # Initialize via setup/start endpoint. Forward only an explicit
+        # --model override; otherwise the backend preserves an
+        # operator-set slot model or resolves the configured wizard
+        # default for a fresh slot.
+        setup_url = f"{get_api_url()}/api/story/new/setup/start"
+        setup_payload = {"slot": args.slot}
+        model_to_use = getattr(args, "model", None)
+        if model_to_use:
+            setup_payload["model"] = model_to_use
+        setup_response = _api_post(
+            setup_url, json=setup_payload, timeout=_request_timeout_seconds()
+        )
+        if not setup_response.ok:
             return {
                 "success": False,
-                "error": (
-                    f"--weird applies only to a new story; slot {args.slot} "
-                    "already holds a story in narrative mode."
-                ),
+                "code": _answer_failure_code(setup_response),
+                "error": f"Failed to initialize wizard: {setup_response.text}",
             }
 
-        if state.get("is_empty"):
-            # Initialize via setup/start endpoint. Forward only an explicit
-            # --model override; otherwise the backend preserves an
-            # operator-set slot model or resolves the configured wizard
-            # default for a fresh slot.
-            setup_url = f"{get_api_url()}/api/story/new/setup/start"
-            setup_payload = {"slot": args.slot}
-            model_to_use = getattr(args, "model", None)
-            if model_to_use:
-                setup_payload["model"] = model_to_use
-            setup_response = _api_post(
-                setup_url, json=setup_payload, timeout=_request_timeout_seconds()
-            )
-            if not setup_response.ok:
+        # Use the actual response from the backend
+        setup_data = _api_object(setup_response)
+        if weird_level is not None:
+            weird_error = _record_wizard_weird_level(args.slot, weird_level)
+            if weird_error is not None:
+                return {"success": False, "error": weird_error}
+        return {
+            "success": True,
+            "message": setup_data.get("welcome_message")
+            or f"Wizard initialized for slot {args.slot}.",
+            "choices": setup_data.get("welcome_choices", []),
+            "phase": "setting",
+            "model": setup_data.get("model"),
+        }
+
+    if state.get("is_wizard_mode"):
+        # Saved before any wizard step, so a call that does not reach the
+        # transition still leaves the level for the one that does.
+        if weird_level is not None:
+            weird_error = _record_wizard_weird_level(args.slot, weird_level)
+            if weird_error is not None:
+                return {"success": False, "error": weird_error}
+        transition_payload: Dict[str, Any] = {"slot": args.slot}
+        if weird_level is not None:
+            transition_payload["weird_level"] = weird_level
+        revision_thread_id = None
+        awaiting_introduction = state.get("awaiting_introduction")
+        if (
+            awaiting_introduction in _WIZARD_PHASE_ACCEPTED_BEFORE
+            and not (args.user_text or "").strip()
+            and args.choice is None
+            and not args.accept_fate
+            and not args.dev
+        ):
+            # The acceptance is durable; only its introduction is missing.
+            thread_id = state.get("thread_id")
+            if not isinstance(thread_id, str) or not thread_id.strip():
                 return {
                     "success": False,
-                    "error": f"Failed to initialize wizard: {setup_response.text}",
+                    "error": "Wizard conversation identity is missing. "
+                    "Reload the saved wizard.",
                 }
-
-            # Use the actual response from the backend
-            setup_data = setup_response.json()
-            if weird_level is not None:
-                weird_error = _record_wizard_weird_level(args.slot, weird_level)
-                if weird_error is not None:
-                    return {"success": False, "error": weird_error}
-            return {
-                "success": True,
-                "message": setup_data.get("welcome_message")
-                or f"Wizard initialized for slot {args.slot}.",
-                "choices": setup_data.get("welcome_choices", []),
-                "phase": "setting",
-                "model": setup_data.get("model"),
-            }
-
-        if state.get("is_wizard_mode"):
-            # Saved before any wizard step, so a call that does not reach the
-            # transition still leaves the level for the one that does.
-            if weird_level is not None:
-                weird_error = _record_wizard_weird_level(args.slot, weird_level)
-                if weird_error is not None:
-                    return {"success": False, "error": weird_error}
-            transition_payload: Dict[str, Any] = {"slot": args.slot}
-            if weird_level is not None:
-                transition_payload["weird_level"] = weird_level
-            revision_thread_id = None
-            awaiting_introduction = state.get("awaiting_introduction")
-            if (
-                awaiting_introduction in _WIZARD_PHASE_ACCEPTED_BEFORE
-                and not (args.user_text or "").strip()
-                and args.choice is None
-                and not args.accept_fate
-                and not args.dev
-            ):
-                # The acceptance is durable; only its introduction is missing.
-                thread_id = state.get("thread_id")
-                if not isinstance(thread_id, str) or not thread_id.strip():
-                    return {
-                        "success": False,
-                        "error": "Wizard conversation identity is missing. "
-                        "Reload the saved wizard.",
-                    }
-                return _introduce_accepted_phase(
+            return _introduce_accepted_phase(
+                slot=args.slot,
+                thread_id=thread_id,
+                accepted_phase=_WIZARD_PHASE_ACCEPTED_BEFORE[awaiting_introduction],
+                next_phase=awaiting_introduction,
+                result={
+                    "success": True,
+                    "phase": awaiting_introduction,
+                    "pending_confirmation": None,
+                },
+                model=getattr(args, "model", None),
+            )
+        pending_confirmation = state.get("pending_confirmation")
+        if pending_confirmation in {"setting", "character"}:
+            if args.choice is not None:
+                return {
+                    "success": False,
+                    "error": (
+                        "A saved artifact awaits confirmation. Continue without "
+                        "a choice to confirm it, or type a revision."
+                    ),
+                }
+            if not (args.user_text or "").strip():
+                if args.dev:
+                    return {"success": False, "error": "Dev mode requires text."}
+                return _confirm_wizard_artifact_and_introduce(
                     slot=args.slot,
-                    thread_id=thread_id,
-                    accepted_phase=_WIZARD_PHASE_ACCEPTED_BEFORE[awaiting_introduction],
-                    next_phase=awaiting_introduction,
+                    data=state,
                     result={
                         "success": True,
-                        "phase": awaiting_introduction,
-                        "pending_confirmation": None,
+                        "phase": pending_confirmation,
+                        "phase_complete": True,
+                        "pending_confirmation": pending_confirmation,
+                        "artifact_token": state.get("artifact_token"),
                     },
                     model=getattr(args, "model", None),
                 )
-            pending_confirmation = state.get("pending_confirmation")
-            if pending_confirmation in {"setting", "character"}:
-                if args.choice is not None:
-                    return {
-                        "success": False,
-                        "error": (
-                            "A saved artifact awaits confirmation. Continue without "
-                            "a choice to confirm it, or type a revision."
-                        ),
-                    }
-                if not (args.user_text or "").strip():
-                    if args.dev:
-                        return {"success": False, "error": "Dev mode requires text."}
-                    return _confirm_wizard_artifact_and_introduce(
-                        slot=args.slot,
-                        data=state,
-                        result={
-                            "success": True,
-                            "phase": pending_confirmation,
-                            "phase_complete": True,
-                            "pending_confirmation": pending_confirmation,
-                            "artifact_token": state.get("artifact_token"),
-                        },
-                        model=getattr(args, "model", None),
-                    )
-                if args.accept_fate:
-                    return {
-                        "success": False,
-                        "error": "Cannot combine a revision with --accept-fate.",
-                    }
+            if args.accept_fate:
+                return {
+                    "success": False,
+                    "error": "Cannot combine a revision with --accept-fate.",
+                }
+            try:
                 revision_thread_id = _wizard_artifact_identity(state)["thread_id"]
                 if pending_confirmation == "character":
                     revision_thread_id = _start_wizard_character_revision(
                         args.slot, state
                     )
-            # Check if wizard is ready for transition to narrative
-            if state.get("phase") == "ready":
-                # Call transition endpoint, then bootstrap. Retrograde
-                # cold-start generation runs inside the transition, so the
-                # timeout comes from orrery.retrograde.wizard settings.
-                transition_url = f"{get_api_url()}/api/story/new/transition"
-                with _echo_retrograde_stages(args.slot, enabled=not args.json):
-                    transition_response = _api_post(
-                        transition_url,
-                        json=transition_payload,
-                        timeout=_transition_timeout_seconds(),
-                    )
-                if not transition_response.ok:
-                    return {
-                        "success": False,
-                        "error": f"Transition failed: {transition_response.text}",
-                    }
-                retrograde_info = transition_response.json().get("retrograde")
+            except ValueError as exc:
+                # A missing or unexpected artifact identity; a failed request
+                # (ApiAnswerFailure) reaches main().
+                return {"success": False, "error": str(exc)}
+        # Check if wizard is ready for transition to narrative
+        if state.get("phase") == "ready":
+            # Call transition endpoint, then bootstrap. Retrograde
+            # cold-start generation runs inside the transition, so the
+            # timeout comes from orrery.retrograde.wizard settings.
+            transition_url = f"{get_api_url()}/api/story/new/transition"
+            with _echo_retrograde_stages(args.slot, enabled=not args.json):
+                transition_response = _api_post(
+                    transition_url,
+                    json=transition_payload,
+                    timeout=_transition_timeout_seconds(),
+                )
+            if not transition_response.ok:
+                return {
+                    "success": False,
+                    "code": _answer_failure_code(transition_response),
+                    "error": f"Transition failed: {transition_response.text}",
+                }
+            retrograde_info = _api_object(transition_response).get("retrograde")
 
-                # Transition complete - refresh state and continue to narrative
-                state_response = _api_get(state_url, timeout=_request_timeout_seconds())
-                state = state_response.json()
+            # Transition complete - refresh state and continue to narrative
+            state_response = _api_get(state_url, timeout=_request_timeout_seconds())
+            state = _api_object(state_response)
 
-                if state.get("is_wizard_mode"):
-                    return {
-                        "success": False,
-                        "error": "Transition completed but still in wizard mode",
-                    }
+            if state.get("is_wizard_mode"):
+                return {
+                    "success": False,
+                    "error": "Transition completed but still in wizard mode",
+                }
 
-                # Continue to narrative mode handling below (don't return here)
-            else:
-                # A wizard choice is sent as its presented text; only narrative
-                # mode records an edited choice. Refuse the mix rather than
-                # silently dropping the typed text.
-                if args.choice is not None and (args.user_text or "").strip():
+            # Continue to narrative mode handling below (don't return here)
+        else:
+            # A wizard choice is sent as its presented text; only narrative
+            # mode records an edited choice. Refuse the mix rather than
+            # silently dropping the typed text.
+            if args.choice is not None and (args.user_text or "").strip():
+                return {
+                    "success": False,
+                    "error": (
+                        "Wizard mode takes --choice or --text, not both. "
+                        "Send your own wording with --text alone."
+                    ),
+                }
+            # Call wizard chat directly
+            url = f"{get_api_url()}/api/story/new/chat"
+            # Omission is meaningful: the backend resolves the slot's
+            # locked model. Only forward an explicit CLI override.
+            model_to_use = getattr(args, "model", None)
+
+            # Check if we're in trait selection mode
+            trait_menu = state.get("trait_menu")
+
+            # Map --accept-fate to --choice 0 when confirmation is available.
+            if trait_menu and args.accept_fate and state.get("can_confirm"):
+                args.choice = 0  # Treat as confirm
+
+            if trait_menu and args.choice is not None:
+                if args.dev:
                     return {
                         "success": False,
                         "error": (
-                            "Wizard mode takes --choice or --text, not both. "
-                            "Send your own wording with --text alone."
+                            "Dev mode is not supported for trait selection " "toggles."
                         ),
                     }
-                # Call wizard chat directly
-                url = f"{get_api_url()}/api/story/new/chat"
-                # Omission is meaningful: the backend resolves the slot's
-                # locked model. Only forward an explicit CLI override.
-                model_to_use = getattr(args, "model", None)
-
-                # Check if we're in trait selection mode
-                trait_menu = state.get("trait_menu")
-
-                # Map --accept-fate to --choice 0 when confirmation is available.
-                if trait_menu and args.accept_fate and state.get("can_confirm"):
-                    args.choice = 0  # Treat as confirm
-
-                if trait_menu and args.choice is not None:
-                    if args.dev:
+                # Trait toggle/confirm mode: choice 0 = confirm, 1-10 = toggle
+                if args.choice == 0:
+                    if not state.get("can_confirm"):
                         return {
                             "success": False,
-                            "error": (
-                                "Dev mode is not supported for trait selection "
-                                "toggles."
-                            ),
+                            "error": "Cannot confirm: must select exactly 3 traits",
                         }
-                    # Trait toggle/confirm mode: choice 0 = confirm, 1-10 = toggle
-                    if args.choice == 0:
-                        if not state.get("can_confirm"):
-                            return {
-                                "success": False,
-                                "error": "Cannot confirm: must select exactly 3 traits",
-                            }
-                    elif not (1 <= args.choice <= 10):
-                        return {
-                            "success": False,
-                            "error": (
-                                f"Choice {args.choice} out of range "
-                                "(0-10 for trait selection)"
-                            ),
-                        }
-
-                    payload = {
-                        "slot": args.slot,
-                        "message": "",
-                        "trait_choice": args.choice,
-                        # Required for trait toggle handler.
-                        "current_phase": "character",
+                elif not (1 <= args.choice <= 10):
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Choice {args.choice} out of range "
+                            "(0-10 for trait selection)"
+                        ),
                     }
-                    if model_to_use:
-                        payload["model"] = model_to_use
-
-                    response = _api_post(url, json=payload, timeout=120)
-                    response.raise_for_status()
-                    data = response.json()
-
-                    result = {
-                        "success": True,
-                        "message": data.get("message", ""),
-                        "phase": data.get("phase"),
-                        "subphase": data.get("subphase"),
-                        "trait_menu": data.get("trait_menu"),
-                        "can_confirm": data.get("can_confirm", False),
-                        "subphase_complete": data.get("subphase_complete", False),
-                    }
-                    _apply_traits_to_wildcard_transition(
-                        url=url,
-                        slot=args.slot,
-                        data=data,
-                        result=result,
-                        model=model_to_use,
-                    )
-                    return result
-
-                # Resolve --choice to user text if provided (non-trait mode)
-                user_text = args.user_text or ""
-                if args.choice is not None and state.get("choices"):
-                    choices = state.get("choices", [])
-                    if 1 <= args.choice <= len(choices):
-                        user_text = choices[args.choice - 1]
-                    else:
-                        return {
-                            "success": False,
-                            "error": (
-                                f"Choice {args.choice} out of range "
-                                f"(1-{len(choices)})"
-                            ),
-                        }
 
                 payload = {
                     "slot": args.slot,
-                    "message": user_text,
-                    "accept_fate": args.accept_fate,
-                    # thread_id and current_phase resolved by backend
+                    "message": "",
+                    "trait_choice": args.choice,
+                    # Required for trait toggle handler.
+                    "current_phase": "character",
                 }
-                if revision_thread_id is not None:
-                    payload["thread_id"] = revision_thread_id
-                if args.dev and args.accept_fate:
-                    return {
-                        "success": False,
-                        "error": "Cannot combine --dev with --accept-fate.",
-                    }
-                if not user_text.strip() and not args.accept_fate:
-                    return {
-                        "success": False,
-                        "error": (
-                            "Wizard continue requires non-empty text, --choice, "
-                            "or --accept-fate."
-                        ),
-                    }
-                if args.dev:
-                    payload["dev"] = True
                 if model_to_use:
                     payload["model"] = model_to_use
 
-                response = _api_post(url, json=payload, timeout=120)
-                response.raise_for_status()
-                data = response.json()
+                response = _api_post(
+                    url, json=payload, timeout=_turn_request_timeout_seconds()
+                )
+                data = _api_object(response)
 
                 result = {
                     "success": True,
-                    "message": data.get("message"),
-                    "choices": data.get("choices", []),
+                    "message": data.get("message", ""),
                     "phase": data.get("phase"),
-                    "artifact_type": data.get("artifact_type"),
-                    "artifact_data": data.get("data"),
-                    "phase_complete": data.get("phase_complete"),
-                    # Trait menu fields (character subphase)
+                    "subphase": data.get("subphase"),
                     "trait_menu": data.get("trait_menu"),
                     "can_confirm": data.get("can_confirm", False),
-                    "subphase": data.get("subphase"),
                     "subphase_complete": data.get("subphase_complete", False),
-                    "pending_confirmation": data.get("pending_confirmation"),
-                    "artifact_token": data.get("artifact_token"),
                 }
-
                 _apply_traits_to_wildcard_transition(
                     url=url,
                     slot=args.slot,
@@ -2659,130 +2755,205 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     result=result,
                     model=model_to_use,
                 )
-
-                # Auto-transition: if phase completed, trigger next phase intro
-                if data.get("phase_complete"):
-                    current_phase = data.get("phase")
-                    next_phase = _get_next_phase(current_phase)
-
-                    if next_phase and next_phase != "ready":
-                        return _confirm_wizard_artifact_and_introduce(
-                            slot=args.slot,
-                            data=data,
-                            result=result,
-                            model=model_to_use,
-                        )
-
-                    elif next_phase == "ready":
-                        # Seed phase complete → transition to narrative mode
-                        transition_url = f"{get_api_url()}/api/story/new/transition"
-                        try:
-                            with _echo_retrograde_stages(
-                                args.slot, enabled=not args.json
-                            ):
-                                transition_response = _api_post(
-                                    transition_url,
-                                    json=transition_payload,
-                                    timeout=_transition_timeout_seconds(),
-                                )
-                        except (
-                            requests.exceptions.ConnectionError,
-                            requests.exceptions.ChunkedEncodingError,
-                            requests.exceptions.Timeout,
-                        ) as exc:
-                            # Classified as the wait's reads are, the saved
-                            # seed kept either way: an answer that ran out of
-                            # time, a body stalled after its headers included,
-                            # is a domain failure (exit 1); a refused or
-                            # dropped connection is api_unreachable (exit 4).
-                            failure = _failed_session_read(
-                                exc,
-                                transition_url,
-                                str(exc) or "Transition request timed out.",
-                            )
-                            return _seed_transition_failure(
-                                result=result,
-                                slot=args.slot,
-                                detail=failure.detail,
-                                status_code=None,
-                                status=failure.status,
-                                code=failure.code,
-                            )
-                        if not 200 <= transition_response.status_code < 300:
-                            detail = transition_response.text.strip() or (
-                                "Transition request failed with HTTP "
-                                f"{transition_response.status_code}."
-                            )
-                            return _seed_transition_failure(
-                                result=result,
-                                slot=args.slot,
-                                detail=detail,
-                                status_code=transition_response.status_code,
-                                status="http_error",
-                            )
-                        result["retrograde"] = transition_response.json().get(
-                            "retrograde"
-                        )
-                        return _bootstrap_seed_narrative(
-                            result=result, slot=args.slot, model=model_to_use
-                        )
-
                 return result
 
-        # Narrative mode - call continue directly
-        # (Also reached after wizard transition above)
-        if not state.get("is_wizard_mode"):
-            # Narrative mode - call continue directly
-            # The API already resolves the persisted slot model. Sending a
-            # model is an explicit override and must remain opt-in.
-            # --choice with --text is one edited-choice payload: the server
-            # keeps the number and records the text when it differs.
-            model_to_use = getattr(args, "model", None)
+            # Resolve --choice to user text if provided (non-trait mode)
             user_text = args.user_text or ""
+            if args.choice is not None and state.get("choices"):
+                choices = state.get("choices", [])
+                if 1 <= args.choice <= len(choices):
+                    user_text = choices[args.choice - 1]
+                else:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Choice {args.choice} out of range " f"(1-{len(choices)})"
+                        ),
+                    }
 
-            url = f"{get_api_url()}/api/narrative/continue"
             payload = {
                 "slot": args.slot,
-                "user_text": user_text,
-                "choice": args.choice,
+                "message": user_text,
                 "accept_fate": args.accept_fate,
-                # chunk_id resolved by backend
+                # thread_id and current_phase resolved by backend
             }
+            if revision_thread_id is not None:
+                payload["thread_id"] = revision_thread_id
+            if args.dev and args.accept_fate:
+                return {
+                    "success": False,
+                    "error": "Cannot combine --dev with --accept-fate.",
+                }
+            if not user_text.strip() and not args.accept_fate:
+                return {
+                    "success": False,
+                    "error": (
+                        "Wizard continue requires non-empty text, --choice, "
+                        "or --accept-fate."
+                    ),
+                }
+            if args.dev:
+                payload["dev"] = True
             if model_to_use:
                 payload["model"] = model_to_use
 
-            response = _api_post(url, json=payload, timeout=120)
-            response.raise_for_status()
-            data = response.json()
+            response = _api_post(
+                url, json=payload, timeout=_turn_request_timeout_seconds()
+            )
+            data = _api_object(response)
 
-            # Wait for generation to complete and fetch result
-            session_id = data.get("session_id")
-            if session_id:
-                terminal_result = _wait_for_narrative_result(args.slot, session_id)
-                if retrograde_info:
-                    terminal_result["retrograde"] = retrograde_info
-                return terminal_result
-
-            no_session_result = {
+            result = {
                 "success": True,
                 "message": data.get("message"),
-                "session_id": session_id,
+                "choices": data.get("choices", []),
+                "phase": data.get("phase"),
+                "artifact_type": data.get("artifact_type"),
+                "artifact_data": data.get("data"),
+                "phase_complete": data.get("phase_complete"),
+                # Trait menu fields (character subphase)
+                "trait_menu": data.get("trait_menu"),
+                "can_confirm": data.get("can_confirm", False),
+                "subphase": data.get("subphase"),
+                "subphase_complete": data.get("subphase_complete", False),
+                "pending_confirmation": data.get("pending_confirmation"),
+                "artifact_token": data.get("artifact_token"),
             }
-            if retrograde_info:
-                no_session_result["retrograde"] = retrograde_info
-            return no_session_result
 
-        return {
-            "success": False,
-            "error": "Slot state was neither wizard nor narrative mode",
+            _apply_traits_to_wildcard_transition(
+                url=url,
+                slot=args.slot,
+                data=data,
+                result=result,
+                model=model_to_use,
+            )
+
+            # Auto-transition: if phase completed, trigger next phase intro
+            if data.get("phase_complete"):
+                current_phase = data.get("phase")
+                next_phase = (
+                    _get_next_phase(current_phase)
+                    if isinstance(current_phase, str)
+                    else None
+                )
+
+                if next_phase and next_phase != "ready":
+                    return _confirm_wizard_artifact_and_introduce(
+                        slot=args.slot,
+                        data=data,
+                        result=result,
+                        model=model_to_use,
+                    )
+
+                elif next_phase == "ready":
+                    # Seed phase complete → transition to narrative mode
+                    transition_url = f"{get_api_url()}/api/story/new/transition"
+                    try:
+                        with _echo_retrograde_stages(args.slot, enabled=not args.json):
+                            transition_response = _api_post(
+                                transition_url,
+                                json=transition_payload,
+                                timeout=_transition_timeout_seconds(),
+                            )
+                    except (
+                        requests.exceptions.ConnectionError,
+                        requests.exceptions.ChunkedEncodingError,
+                        requests.exceptions.Timeout,
+                    ) as exc:
+                        # Classified as the wait's reads are, the saved
+                        # seed kept either way: an answer that ran out of
+                        # time, a body stalled after its headers included,
+                        # is a domain failure (exit 1); a refused or
+                        # dropped connection is api_unreachable (exit 4).
+                        failure = _failed_session_read(
+                            exc,
+                            transition_url,
+                            str(exc) or "Transition request timed out.",
+                        )
+                        return _seed_transition_failure(
+                            result=result,
+                            slot=args.slot,
+                            detail=failure.detail,
+                            status_code=None,
+                            status=failure.status,
+                            code=failure.code,
+                        )
+                    if not 200 <= transition_response.status_code < 300:
+                        detail = transition_response.text.strip() or (
+                            "Transition request failed with HTTP "
+                            f"{transition_response.status_code}."
+                        )
+                        return _seed_transition_failure(
+                            result=result,
+                            slot=args.slot,
+                            detail=detail,
+                            status_code=transition_response.status_code,
+                            status="http_error",
+                            code=_answer_failure_code(transition_response),
+                        )
+                    try:
+                        transition = _api_object(transition_response)
+                    except ApiAnswerFailure as exc:
+                        return _seed_transition_failure(
+                            result=result,
+                            slot=args.slot,
+                            detail=exc.message,
+                            status_code=transition_response.status_code,
+                            status="invalid_response",
+                            code="invalid_response",
+                        )
+                    result["retrograde"] = transition.get("retrograde")
+                    return _bootstrap_seed_narrative(
+                        result=result, slot=args.slot, model=model_to_use
+                    )
+
+            return result
+
+    # Narrative mode - call continue directly
+    # (Also reached after wizard transition above)
+    if not state.get("is_wizard_mode"):
+        # Narrative mode - call continue directly
+        # The API already resolves the persisted slot model. Sending a
+        # model is an explicit override and must remain opt-in.
+        # --choice with --text is one edited-choice payload: the server
+        # keeps the number and records the text when it differs.
+        model_to_use = getattr(args, "model", None)
+        user_text = args.user_text or ""
+
+        url = f"{get_api_url()}/api/narrative/continue"
+        payload = {
+            "slot": args.slot,
+            "user_text": user_text,
+            "choice": args.choice,
+            "accept_fate": args.accept_fate,
+            # chunk_id resolved by backend
         }
+        if model_to_use:
+            payload["model"] = model_to_use
 
-    except _TRANSPORT_ERRORS:
-        raise
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+        response = _api_post(url, json=payload, timeout=_turn_request_timeout_seconds())
+        data = _api_object(response)
+
+        # Wait for generation to complete and fetch result
+        session_id = data.get("session_id")
+        if session_id:
+            terminal_result = _wait_for_narrative_result(args.slot, session_id)
+            if retrograde_info:
+                terminal_result["retrograde"] = retrograde_info
+            return terminal_result
+
+        no_session_result = {
+            "success": True,
+            "message": data.get("message"),
+            "session_id": session_id,
+        }
+        if retrograde_info:
+            no_session_result["retrograde"] = retrograde_info
+        return no_session_result
+
+    return {
+        "success": False,
+        "error": "Slot state was neither wizard nor narrative mode",
+    }
 
 
 def run_retry(args: argparse.Namespace) -> Dict[str, Any]:
@@ -2793,30 +2964,40 @@ def run_retry(args: argparse.Namespace) -> Dict[str, Any]:
     ``expected_session_id`` to POST /api/narrative/retry (which resumes the
     recorded action without recording it again and fences a stale session),
     then waits for and loads the new turn exactly as ``nexus continue`` does.
+    A recovery or retry answer without a session ID is ``invalid_response``.
     """
-    try:
-        state_response = _api_get(
-            f"{get_api_url()}/api/slot/{args.slot}/state",
-            timeout=_request_timeout_seconds(),
+    state_url = f"{get_api_url()}/api/slot/{args.slot}/state"
+    state_response = _api_get(state_url, timeout=_request_timeout_seconds())
+    recovery = _api_object(state_response).get("recovery")
+    if not recovery:
+        return {
+            "success": False,
+            "error": f"Slot {args.slot} has no failed continuation to retry.",
+        }
+    if not isinstance(recovery, dict):
+        raise ApiAnswerFailure(
+            "invalid_response",
+            f"{state_url} returned a recovery that is not a JSON object: "
+            f"{recovery!r}",
         )
-        state_response.raise_for_status()
-        recovery = state_response.json().get("recovery")
-        if not recovery:
-            return {
-                "success": False,
-                "error": f"Slot {args.slot} has no failed continuation to retry.",
-            }
-
-        response = _api_post(
-            f"{get_api_url()}/api/narrative/retry",
-            json={"slot": args.slot, "expected_session_id": recovery["session_id"]},
-            timeout=120,
+    expected_session_id = recovery.get("session_id")
+    if not isinstance(expected_session_id, str) or not expected_session_id:
+        raise ApiAnswerFailure(
+            "invalid_response", f"{state_url} returned a recovery with no session ID"
         )
-        response.raise_for_status()
-        return _wait_for_narrative_result(args.slot, response.json()["session_id"])
 
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
+    retry_url = f"{get_api_url()}/api/narrative/retry"
+    response = _api_post(
+        retry_url,
+        json={"slot": args.slot, "expected_session_id": expected_session_id},
+        timeout=_turn_request_timeout_seconds(),
+    )
+    session_id = _api_object(response).get("session_id")
+    if not isinstance(session_id, str) or not session_id:
+        raise ApiAnswerFailure(
+            "invalid_response", f"{retry_url} returned no session ID"
+        )
+    return _wait_for_narrative_result(args.slot, session_id)
 
 
 def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
@@ -2827,25 +3008,16 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
     """
     url = f"{get_api_url()}/api/slot/{args.slot}/undo"
 
-    try:
-        response = _api_post(url, timeout=_request_timeout_seconds())
-        response.raise_for_status()
-        data = response.json()
+    response = _api_post(url, timeout=_request_timeout_seconds())
+    data = _api_object(response)
 
-        success = data.get("success", True)
-        message = data.get("message")
-        if not success:
-            # Surface the API's reason via "error" so main() prints something
-            # informative instead of the generic "Unknown error" fallback.
-            return {"success": False, "error": message or "Undo failed"}
-        return {"success": True, "message": message}
-
-    except _TRANSPORT_ERRORS:
-        raise
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    success = data.get("success", True)
+    message = data.get("message")
+    if not success:
+        # Surface the API's reason via "error" so main() prints something
+        # informative instead of the generic "Unknown error" fallback.
+        return {"success": False, "error": message or "Undo failed"}
+    return {"success": True, "message": message}
 
 
 def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
@@ -2860,23 +3032,14 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
     if args.note:
         payload["note"] = args.note
 
-    try:
-        response = _api_post(url, json=payload, timeout=120)
-        response.raise_for_status()
-        data = response.json()
+    response = _api_post(url, json=payload, timeout=_turn_request_timeout_seconds())
+    data = _api_object(response)
 
-        session_id = data.get("session_id")
-        if not session_id:
-            return {"success": False, "error": "No session ID returned from regenerate"}
+    session_id = data.get("session_id")
+    if not session_id:
+        return {"success": False, "error": "No session ID returned from regenerate"}
 
-        return _wait_for_narrative_result(args.slot, session_id)
-
-    except _TRANSPORT_ERRORS:
-        raise
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    return _wait_for_narrative_result(args.slot, session_id)
 
 
 def run_model(args: argparse.Namespace) -> Dict[str, Any]:
@@ -2884,72 +3047,74 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
     Get or set the model for a slot.
 
     Read seat identities directly; change pins through PATCH /api/slot/{slot}/settings.
+    A slot database the read cannot open or query is ``database_error``; a
+    story pin naming a model no longer registered is a domain failure whose
+    error names the remedy.
     """
-    try:
-        if args.list:
-            # List available models from config (no slot required)
-            from nexus.config import get_available_api_models
+    if args.list:
+        # List available models from config (no slot required)
+        from nexus.config import get_available_api_models
 
-            models = get_available_api_models()
-            return {
-                "success": True,
-                "message": f"Available models: {', '.join(models)}",
-                "available_models": models,
-            }
+        models = get_available_api_models()
+        return {
+            "success": True,
+            "message": f"Available models: {', '.join(models)}",
+            "available_models": models,
+        }
 
-        # Slot is required for get/set operations
-        base_url = f"{get_api_url()}/api/slot/{args.slot}/settings"
+    # Slot is required for get/set operations
+    base_url = f"{get_api_url()}/api/slot/{args.slot}/settings"
 
-        if args.set or getattr(args, "clear", False):
-            # Set the model
-            response = _api_request(
-                "patch",
-                base_url,
-                json={"skald_model": args.set},
-                timeout=_request_timeout_seconds(),
-            )
-            response.raise_for_status()
-            data = response.json()
-            return {
-                "success": True,
-                "message": f"Model changed to {data.get('skald_model')}",
-                "model": data.get("skald_model"),
-            }
-
-        # Read-only diagnostics do not require a running gateway.
-        from dataclasses import asdict
-
-        from nexus.api.slot_utils import slot_dbname
-        from nexus.config import load_settings
-        from nexus.config.story_model import (
-            AUXILIARY_SEATS,
-            read_story_settings,
-            resolve_seat,
+    if args.set or getattr(args, "clear", False):
+        # Set the model
+        response = _api_request(
+            "patch",
+            base_url,
+            json={"skald_model": args.set},
+            timeout=_request_timeout_seconds(),
         )
+        data = _api_object(response)
+        return {
+            "success": True,
+            "message": f"Model changed to {data.get('skald_model')}",
+            "model": data.get("skald_model"),
+        }
 
-        settings = load_settings()
+    # Read-only diagnostics do not require a running gateway.
+    from dataclasses import asdict
+
+    from nexus.api.slot_utils import slot_dbname
+    from nexus.config import load_settings
+    from nexus.config.story_model import (
+        AUXILIARY_SEATS,
+        read_story_settings,
+        resolve_seat,
+    )
+
+    import psycopg2
+
+    settings = load_settings()
+    try:
         story = read_story_settings(slot_dbname(args.slot))
-        story.slot = args.slot
+    except psycopg2.Error as exc:
+        return {"success": False, "code": "database_error", "error": str(exc)}
+    story.slot = args.slot
+    try:
         seats = [
             resolve_seat(seat, settings=settings, story=story)
             for seat in ("skald", "gaia", "wizard", *AUXILIARY_SEATS)
         ]
-        return {
-            "success": True,
-            "message": "\n".join(
-                f"{item.seat} {item.policy} {item.model} {item.source}"
-                for item in seats
-            ),
-            "model": story.skald_model,
-            "seats": [asdict(item) for item in seats],
-        }
-
-    except _TRANSPORT_ERRORS:
-        raise
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    except ValueError as exc:
+        # A story pin naming an unregistered model; the error names the remedy.
+        return {"success": False, "error": str(exc)}
+    return {
+        "success": True,
+        "message": "\n".join(
+            f"{item.seat} {item.policy} {item.model} {item.source}" for item in seats
+        ),
+        "model": story.skald_model,
+        "seats": [asdict(item) for item in seats],
+    }
 
 
 def run_clear(args: argparse.Namespace) -> Dict[str, Any]:
@@ -2958,22 +3123,15 @@ def run_clear(args: argparse.Namespace) -> Dict[str, Any]:
 
     Calls POST /api/story/new/setup/reset.
     """
-    try:
-        url = f"{get_api_url()}/api/story/new/setup/reset"
-        response = _api_post(
-            url, json={"slot": args.slot}, timeout=_request_timeout_seconds()
-        )
-        response.raise_for_status()
-        return {
-            "success": True,
-            "message": f"Slot {args.slot} cleared",
-        }
-    except _TRANSPORT_ERRORS:
-        raise
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    url = f"{get_api_url()}/api/story/new/setup/reset"
+    response = _api_post(
+        url, json={"slot": args.slot}, timeout=_request_timeout_seconds()
+    )
+    _check_answer(response)
+    return {
+        "success": True,
+        "message": f"Slot {args.slot} cleared",
+    }
 
 
 def _load_trait_inputs(raw_value: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -4007,20 +4165,13 @@ def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
 
     Calls POST /api/slot/{slot}/lock.
     """
-    try:
-        url = f"{get_api_url()}/api/slot/{args.slot}/lock"
-        response = _api_post(url, timeout=_request_timeout_seconds())
-        response.raise_for_status()
-        return {
-            "success": True,
-            "message": f"Slot {args.slot} locked",
-        }
-    except _TRANSPORT_ERRORS:
-        raise
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    url = f"{get_api_url()}/api/slot/{args.slot}/lock"
+    response = _api_post(url, timeout=_request_timeout_seconds())
+    _check_answer(response)
+    return {
+        "success": True,
+        "message": f"Slot {args.slot} locked",
+    }
 
 
 def run_unlock(args: argparse.Namespace) -> Dict[str, Any]:
@@ -4029,20 +4180,13 @@ def run_unlock(args: argparse.Namespace) -> Dict[str, Any]:
 
     Calls POST /api/slot/{slot}/unlock.
     """
-    try:
-        url = f"{get_api_url()}/api/slot/{args.slot}/unlock"
-        response = _api_post(url, timeout=_request_timeout_seconds())
-        response.raise_for_status()
-        return {
-            "success": True,
-            "message": f"Slot {args.slot} unlocked",
-        }
-    except _TRANSPORT_ERRORS:
-        raise
-    except requests.exceptions.HTTPError as e:
-        return {"success": False, "error": f"API error: {e.response.text}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    url = f"{get_api_url()}/api/slot/{args.slot}/unlock"
+    response = _api_post(url, timeout=_request_timeout_seconds())
+    _check_answer(response)
+    return {
+        "success": True,
+        "message": f"Slot {args.slot} unlocked",
+    }
 
 
 # =============================================================================
@@ -4067,10 +4211,13 @@ def run_up(args: argparse.Namespace) -> Dict[str, Any]:
             foreground=args.foreground,
             echo=not args.json,
         )
+    except _TRANSPORT_ERRORS:
+        # An unreachable remote runtime is api_unreachable (exit 4) and a
+        # missing or refused credential config_error, reported by main().
+        raise
     except (
         RuntimeError_,
         FileNotFoundError,
-        MissingSecretError,
         ValueError,
         requests.RequestException,
     ) as exc:
@@ -5906,6 +6053,13 @@ def main() -> int:
         )
     except _CREDENTIAL_ERRORS as exc:
         return _fail(args, "config_error", str(exc))
+    except ApiAnswerFailure as exc:
+        return _fail(
+            args,
+            exc.code,
+            exc.message,
+            {} if exc.status_code is None else {"status_code": exc.status_code},
+        )
     if isinstance(outcome, int):
         return outcome
     result = outcome
