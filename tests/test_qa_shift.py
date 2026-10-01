@@ -17,12 +17,17 @@ import tomllib
 from typing import Any, Mapping, cast
 
 import psycopg2
+from pydantic import ValidationError
 import pytest
 import tomlkit
 
+from nexus.config.settings_models import BoundaryCatchupSettings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime.contract import HOME_ENV
 from scripts.qa_shift import clock_contract, qa_shift
+from scripts.qa_shift.boundary_catchup import (
+    load_config as load_boundary_catchup_config,
+)
 from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
 from tests.pg_fixtures import (
     connect,
@@ -262,6 +267,17 @@ def test_tracked_config_encodes_bounded_completion_policy() -> None:
     assert config.daily_token_limit == 10_000_000
     assert config.reserve_tokens == 1_000_000
     assert config.token_fence == 9_000_000
+
+
+def test_tracked_config_declares_boundary_catchup_skips() -> None:
+    assert load_boundary_catchup_config().skip_minutes == [0, 60, 4320]
+    for invalid in ([-1, 60], [0, 60, 60], [60, 0], []):
+        with pytest.raises(ValidationError):
+            BoundaryCatchupSettings.model_validate({"skip_minutes": invalid})
+    with pytest.raises(ValidationError):
+        BoundaryCatchupSettings.model_validate(
+            {"skip_minutes": [0], "unexpected": True}
+        )
 
 
 def test_begin_creates_archive_and_pins_every_remote_model(

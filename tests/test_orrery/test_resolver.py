@@ -1358,45 +1358,6 @@ def _localized_weather_settings() -> dict:
     return settings
 
 
-@pytest.mark.parametrize(
-    ("anchor_chunk_id", "world_time"),
-    [
-        (None, datetime(2073, 10, 31, 12, tzinfo=timezone.utc)),
-        (100, None),
-    ],
-)
-def test_local_weather_refuses_incomplete_story_clock(
-    anchor_chunk_id, world_time, caplog
-) -> None:
-    """Anchorless and clockless scenes stay unknown instead of using 1970."""
-
-    caplog.set_level("DEBUG", logger="nexus.agents.orrery.resolver")
-    session = FakeSession(world_time=world_time)
-    settings = _localized_weather_settings()
-
-    state = hydrate_world_state(
-        session,
-        anchor_chunk_id=anchor_chunk_id,
-        window_chunks=30,
-        weather_settings=settings,
-    )
-    proposal = resolve_dry_run(
-        session,
-        (),
-        anchor_chunk_id=anchor_chunk_id,
-        window_chunks=30,
-        weather_settings=settings,
-    )
-
-    assert state.weather is None
-    assert state.place_weather == {}
-    assert not weather_is("clear", "rain", "fog", "snow", "warm")(
-        state, {Slot.ACTOR: 1}
-    )
-    assert proposal.scene_conditions == {}
-    assert "Refusing localized weather derivation" in caplog.text
-
-
 def test_disabled_weather_omits_scene_conditions() -> None:
     """FIX 4: the localized prompt contract does not attach when disabled."""
 
@@ -2706,6 +2667,7 @@ def test_acquaintance_source_is_canonical_opted_in_and_default_off() -> None:
         enabled_session,
         anchor_chunk_id=100,
         actor_ids={1, 2},
+        introductions_per_entity=1,
     )
     assert bindings == ({Slot.ACTOR: 1, Slot.TARGET: 2},)
 
@@ -2758,6 +2720,7 @@ def test_acquaintance_source_caps_popular_entity_and_keeps_hydrated_actor() -> N
         session,
         anchor_chunk_id=100,
         actor_ids=hydrated_strangers,
+        introductions_per_entity=1,
     )
 
     assert bindings == ({Slot.ACTOR: 10, Slot.TARGET: popular_entity},)

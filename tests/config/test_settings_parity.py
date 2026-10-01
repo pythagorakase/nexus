@@ -272,6 +272,12 @@ OWNERSHIP: dict[FacadePath, str] = {
     (
         "Agent Settings",
         "LORE",
+        "retrieval",
+        "deep_query_k",
+    ): "lore.retrieval.deep_query_k",
+    (
+        "Agent Settings",
+        "LORE",
         "presence_audit",
         "enabled",
     ): "lore.presence_audit.enabled",

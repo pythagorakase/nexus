@@ -46,3 +46,7 @@ legacy_section_pattern = '^##[ \t]+(Storyteller|You)[ \t]*$'
 # Numbered Markdown and Unicode keycap menus observed in save_01.
 legacy_choice_pattern = '^\s*(?:#{1,6}\s+)?(?:\*\*)?(?P<number>[1-9][0-9]*)(?:[.)]|\uFE0F?\u20E3)\s*(?P<text>.+)$'
 legacy_menu_min_choices = 2
+
+[boundary_catchup]
+# Projected child-clock skips measured per run: a zero-time turn, a one-hour skip, a three-day skip.
+skip_minutes = [0, 60, 4320]
