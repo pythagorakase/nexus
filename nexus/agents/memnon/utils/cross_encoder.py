@@ -199,14 +199,12 @@ class CrossEncoderReranker:
 
         Returns:
             Relevance score between 0 and 1
+
+        Raises:
+            Exception: Any error from the model's ``predict``, unchanged.
         """
-        try:
-            # Use sentence-transformers CrossEncoder predict method
-            scores = self.model.predict([(query, passage)])
-            return self._normalize_score(scores)
-        except Exception as e:
-            logger.error(f"Error scoring pair: {e}")
-            return 0.0
+        scores = self.model.predict([(query, passage)])
+        return self._normalize_score(scores)
 
     def _normalize_score(self, raw_score: Any) -> float:
         """Normalize a CrossEncoder score to the 0-1 relevance range."""
@@ -243,18 +241,16 @@ class CrossEncoderReranker:
 
         Returns:
             Relevance scores between 0 and 1, one per passage
+
+        Raises:
+            ValueError: When the model returns a different number of scores.
+            Exception: Any error from the model's ``predict``, unchanged.
         """
         if not passages:
             return []
 
         pairs = [(query, passage) for passage in passages]
-        try:
-            raw_scores = self.model.predict(pairs, batch_size=batch_size)
-        except Exception as e:
-            logger.error(
-                f"Error scoring batch: {e}; falling back to per-passage scoring"
-            )
-            return [self.score_pair(query, passage) for passage in passages]
+        raw_scores = self.model.predict(pairs, batch_size=batch_size)
 
         if isinstance(raw_scores, np.ndarray):
             score_values = raw_scores.reshape(-1).tolist()
@@ -281,21 +277,18 @@ class CrossEncoderReranker:
 
         Returns:
             Maximum relevance score across windows
+
+        Raises:
+            Exception: Any error from the model's ``predict``, unchanged.
         """
         # If passage is not too long, score directly
         if not self._needs_sliding_window(passage):
             return self.score_pair(query, passage)
 
         # For long passages, use sliding window approach
-        try:
-            windows = self._build_sliding_windows(passage)
-            scores = [self.score_pair(query, window) for window in windows]
-            return self._max_window_score(scores)
-
-        except Exception as e:
-            logger.error(f"Error scoring with sliding window: {e}")
-            # Fall back to direct scoring with truncation
-            return self.score_pair(query, passage)
+        windows = self._build_sliding_windows(passage)
+        scores = [self.score_pair(query, window) for window in windows]
+        return self._max_window_score(scores)
 
     def _needs_sliding_window(self, passage: str) -> bool:
         """Return whether a passage is long enough to be scored in windows."""
@@ -665,7 +658,7 @@ class Qwen3LMReranker:
 _RERANKER_CACHE: Dict[Tuple[str, str, Optional[str]], Any] = {}
 
 
-def _get_or_create_reranker(
+def get_or_create_reranker(
     model_path: str,
     api_type: str,
     device: Optional[str],
@@ -675,6 +668,19 @@ def _get_or_create_reranker(
 
     ``repo_id`` only names the install command when a reranker folder is
     missing; it is not part of the cache key.
+
+    Args:
+        model_path: Local folder holding the reranker model
+        api_type: "cross_encoder" or "qwen3_lm"
+        device: Device to use for inference, or None to auto-detect
+        repo_id: Hugging Face repository of the reranker, if known
+
+    Returns:
+        The cached ``CrossEncoderReranker`` or ``Qwen3LMReranker``
+
+    Raises:
+        RuntimeError: When the reranker folder is missing or fails to load.
+        ValueError: When ``api_type`` is not 'cross_encoder' or 'qwen3_lm'.
     """
     key = (model_path, api_type, device)
     cached = _RERANKER_CACHE.get(key)
@@ -737,73 +743,68 @@ def rerank_results(
 
     Returns:
         Reranked list of result dicts with updated scores
+
+    Raises:
+        RuntimeError: When the reranker folder is missing or fails to load.
+        ValueError: When ``api_type`` is unknown or the model returns the
+            wrong number of scores.
+        Exception: Any scoring error from the model, unchanged.
     """
     if not results:
         logger.warning("No results to rerank")
         return []
 
-    try:
-        # Get cached reranker (loaded once per process; eviction is not needed
-        # at our scale and would defeat the latency win).
-        reranker = _get_or_create_reranker(
-            model_path=model_path,
-            api_type=api_type,
-            device=device,
-            repo_id=repo_id,
-        )
+    # Get cached reranker (loaded once per process; eviction is not needed
+    # at our scale and would defeat the latency win).
+    reranker = get_or_create_reranker(
+        model_path=model_path,
+        api_type=api_type,
+        device=device,
+        repo_id=repo_id,
+    )
 
-        # Extract passages from results
-        passages = [result.get("text", "") for result in results]
-        original_scores = [result.get("score", 0.0) for result in results]
+    # Extract passages from results
+    passages = [result.get("text", "") for result in results]
+    original_scores = [result.get("score", 0.0) for result in results]
 
-        # Get reranker scores
-        reranker_scores = reranker.rerank_batch(
-            query=query,
-            passages=passages,
-            batch_size=batch_size,
-            use_sliding_window=use_sliding_window,
-        )
+    # Get reranker scores
+    reranker_scores = reranker.rerank_batch(
+        query=query,
+        passages=passages,
+        batch_size=batch_size,
+        use_sliding_window=use_sliding_window,
+    )
+
+    # Blend scores
+    final_scores = []
+    for orig_score, reranker_score in zip(original_scores, reranker_scores):
+        # Normalize original score to 0-1 range if needed
+        norm_orig_score = min(max(orig_score, 0.0), 1.0)
 
         # Blend scores
-        final_scores = []
-        for orig_score, reranker_score in zip(original_scores, reranker_scores):
-            # Normalize original score to 0-1 range if needed
-            norm_orig_score = min(max(orig_score, 0.0), 1.0)
+        final_score = alpha * norm_orig_score + (1 - alpha) * reranker_score
+        final_scores.append(final_score)
 
-            # Blend scores
-            final_score = alpha * norm_orig_score + (1 - alpha) * reranker_score
-            final_scores.append(final_score)
+    # Create reranked results
+    reranked_results = []
+    for i, (result, score) in enumerate(zip(results, final_scores)):
+        # Create a copy of the original result
+        reranked_result = result.copy()
 
-        # Create reranked results
-        reranked_results = []
-        for i, (result, score) in enumerate(zip(results, final_scores)):
-            # Create a copy of the original result
-            reranked_result = result.copy()
+        # Update scores
+        reranked_result["original_score"] = result.get("score", 0.0)
+        reranked_result["reranker_score"] = reranker_scores[i]
+        reranked_result["score"] = score  # Update the main score
 
-            # Update scores
-            reranked_result["original_score"] = result.get("score", 0.0)
-            reranked_result["reranker_score"] = reranker_scores[i]
-            reranked_result["score"] = score  # Update the main score
+        reranked_results.append(reranked_result)
 
-            reranked_results.append(reranked_result)
+    # Sort by score and limit to top_k
+    reranked_results = sorted(
+        reranked_results, key=lambda x: x.get("score", 0.0), reverse=True
+    )
+    reranked_results = reranked_results[:top_k]
 
-        # Sort by score and limit to top_k
-        reranked_results = sorted(
-            reranked_results, key=lambda x: x.get("score", 0.0), reverse=True
-        )
-        reranked_results = reranked_results[:top_k]
-
-        logger.info(
-            f"Reranked {len(results)} results to {len(reranked_results)} using cross-encoder"
-        )
-        return reranked_results
-
-    except Exception as e:
-        logger.error(f"Error during reranking: {e}")
-        import traceback
-
-        logger.error(traceback.format_exc())
-
-        # Return original results if reranking fails
-        logger.warning("Returning original results due to reranking failure")
-        return sorted(results, key=lambda x: x.get("score", 0.0), reverse=True)[:top_k]
+    logger.info(
+        f"Reranked {len(results)} results to {len(reranked_results)} using cross-encoder"
+    )
+    return reranked_results

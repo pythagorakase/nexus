@@ -325,16 +325,32 @@ def test_wait_keeps_a_gone_gateway_unreachable_while_a_read_timeout_is_handled(
 
 
 def test_wait_reports_an_http_error_answer_with_its_body(api_url) -> None:
-    """A status route that answers with an error status is a domain failure."""
+    """A status route that answers with an error status is an api_error."""
     session = Session(status_code=404)
     with _gateway(session) as base_url:
         api_url(base_url)
         with pytest.raises(cli.SessionWaitFailure) as caught:
             cli.wait_for_session(SESSION, slot=5, timeout=10, interval=0.05)
 
-    assert (caught.value.status, caught.value.code) == ("http_error", "domain_failure")
+    assert (caught.value.status, caught.value.code) == ("http_error", "api_error")
     assert "returned HTTP 404" in caught.value.detail
     assert "Session gone" in caught.value.detail
+
+
+def test_wait_reports_an_access_rejection_as_a_config_error(api_url) -> None:
+    """A 401 on the status route is an edge's rejection, so config_error."""
+    session = Session(status_code=401)
+    with _gateway(session) as base_url:
+        api_url(base_url)
+        with pytest.raises(cli.SessionWaitFailure) as caught:
+            cli.wait_for_session(SESSION, slot=5, timeout=10, interval=0.05)
+
+    assert (caught.value.status, caught.value.code) == ("http_error", "config_error")
+    assert caught.value.detail.startswith(
+        f"{base_url}/api/narrative/status/{SESSION} returned HTTP 401: "
+    )
+    assert ERROR_CODES[caught.value.code] == ExitCode.DOMAIN_FAILURE
+    assert session.status_reads == 1
 
 
 def test_wait_reports_any_other_failed_read_as_a_domain_failure(api_url) -> None:
@@ -522,6 +538,30 @@ def test_command_keeps_the_session_when_a_read_fails_otherwise(command: str) -> 
     assert envelope["partial"]["session_id"] == SESSION
     assert envelope["partial"]["generation_error"]["status"] == "http_error"
     assert envelope["partial"]["recovery_command"] == "nexus load --slot 5"
+
+
+@pytest.mark.parametrize("command", sorted(COMMANDS))
+def test_command_keeps_the_session_when_the_status_route_answers_an_error(
+    command: str,
+) -> None:
+    """A status read answered 503 is api_error and keeps the scheduled session."""
+    argv, _route = COMMANDS[command]
+    session = Session(status_code=503)
+    with _gateway(session) as base_url:
+        completed = _run(base_url, *argv)
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stderr
+    assert completed.stdout == ""
+    assert "Traceback" not in completed.stderr
+    envelope = json.loads(completed.stderr)
+    assert envelope["code"] == "api_error"
+    assert envelope["error"].startswith(
+        f"{base_url}/api/narrative/status/{SESSION} returned HTTP 503: "
+    )
+    assert envelope["partial"]["session_id"] == SESSION
+    assert envelope["partial"]["generation_error"]["status"] == "http_error"
+    assert envelope["partial"]["recovery_command"] == "nexus load --slot 5"
+    assert session.status_reads == 1
 
 
 def test_continue_reports_a_state_read_dropped_after_the_session_as_unreachable() -> (

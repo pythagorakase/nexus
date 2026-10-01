@@ -898,8 +898,21 @@ class RuntimeCliSettings(BaseModel):
         description=(
             "Per-request HTTP timeout of the play and slot commands' short API "
             "requests (slot state reads, wizard setup and confirmation, undo, "
-            "clear, lock, unlock, model changes); generation, wizard chat, and "
-            "transition requests keep their own budgets"
+            "clear, lock, unlock, model changes); wizard chat, trait toggles, "
+            "phase introductions and the turn-scheduling POSTs take "
+            "turn_request_timeout_seconds, the transition takes the Retrograde "
+            "wizard's budget, and the generation wait apex's"
+        ),
+    )
+    turn_request_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Per-request HTTP timeout of the CLI's model-turn requests: wizard "
+            "chat, trait toggles, phase introductions, and the POSTs that "
+            "schedule continue, retry, regenerate and the seed's opening turn; "
+            "a finite number of seconds greater than 0"
         ),
     )
     poll_interval_seconds: float = Field(
@@ -1718,6 +1731,31 @@ class OrreryRouteGraphSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_edges_per_query: int = Field(default=5000, ge=1)
+
+
+class OrreryTravelModeTable(BaseModel):
+    """One positive, finite value per ``orrery_travel_mode`` label."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    walking: float = Field(..., gt=0, allow_inf_nan=False)
+    vehicle: float = Field(..., gt=0, allow_inf_nan=False)
+    rail: float = Field(..., gt=0, allow_inf_nan=False)
+    water: float = Field(..., gt=0, allow_inf_nan=False)
+    air: float = Field(..., gt=0, allow_inf_nan=False)
+    covert: float = Field(..., gt=0, allow_inf_nan=False)
+    mixed: float = Field(..., gt=0, allow_inf_nan=False)
+
+
+class OrreryTravelSettings(BaseModel):
+    """The per-mode speed and detour factor that route estimates and graph routes
+    use.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    speed_kmh: OrreryTravelModeTable
+    detour_factor: OrreryTravelModeTable
 
 
 class OrreryNarrationSettings(BaseModel):
@@ -3116,6 +3154,7 @@ class OrrerySettings(BaseModel):
     route_graph: OrreryRouteGraphSettings = Field(
         default_factory=OrreryRouteGraphSettings
     )
+    travel: OrreryTravelSettings
     narration: OrreryNarrationSettings
     experiences: OrreryExperienceSettings
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)

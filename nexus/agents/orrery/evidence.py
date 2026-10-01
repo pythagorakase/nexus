@@ -957,11 +957,15 @@ def _travel_progress_at_or_above(
     entity_id = _entity(bindings, slot)
     travel = _travel_state(state, entity_id)
     progress = travel["progress_ratio"] if travel else None
+    observed: dict[str, Any] = {"progress_ratio": progress}
+    for key in ("started_at_world_time", "updated_at_world_time", "eta_world_time"):
+        value = travel[key] if travel else None
+        observed[key] = value.isoformat() if value is not None else None
     return _evidence(
         "travel_progress_at_or_above",
         params={"threshold": threshold, "slot": slot},
         entities={slot: entity_id},
-        observed={"progress_ratio": progress},
+        observed=observed,
         result=(
             entity_id is not None and progress is not None and progress >= threshold
         ),

@@ -908,6 +908,9 @@ def _load_travel_states(session: Any) -> dict[int, TravelState]:
                    cts.progress_ratio,
                    cts.estimated_distance_m,
                    cts.estimated_duration_minutes,
+                   cts.started_at_world_time,
+                   cts.updated_at_world_time,
+                   cts.eta_world_time,
                    cts.route_metadata ->> 'purpose' AS route_purpose
             FROM character_travel_states cts
             JOIN entities e
@@ -937,6 +940,9 @@ def _load_travel_states(session: Any) -> dict[int, TravelState]:
                 else None
             ),
             route_purpose=row.get("route_purpose"),
+            started_at_world_time=row["started_at_world_time"],
+            updated_at_world_time=row["updated_at_world_time"],
+            eta_world_time=row["eta_world_time"],
         )
     return states
 

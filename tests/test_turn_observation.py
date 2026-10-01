@@ -147,8 +147,14 @@ def _manifest(
     *,
     provider_outcome: Optional[str],
     outcome: Optional[str] = "accepted",
+    estimated: Optional[int] = None,
+    reported: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Build one row exactly as ``inspect_turn`` returns it."""
+    """Build one row exactly as ``inspect_turn`` returns it.
+
+    ``estimated`` and ``reported`` add the counts ``record_token_counts``
+    merges into ``window_record`` with jsonb ``||``.
+    """
     included = {
         "block_tokens",
         "input_tokens",
@@ -172,7 +178,17 @@ def _manifest(
             }
             for kind, tokens in record.block_tokens.items()
         ],
-        "window_record": record.model_dump(include=included),
+        "window_record": {
+            **record.model_dump(include=included),
+            **(
+                {}
+                if estimated is None and reported is None
+                else {
+                    "estimated_input_tokens": estimated,
+                    "reported_input_tokens": reported,
+                }
+            ),
+        },
         "retrieval_ids": [51],
         "recall_ids": [162, 163],
         "exposure_ids": [388, 389],
@@ -460,8 +476,15 @@ def _two_pass_turn(
         "manifests": [
             _manifest(gaia[0], provider_outcome="error"),
             _manifest(gaia[1], provider_outcome="rejected_validation"),
-            _manifest(gaia[2], provider_outcome="accepted"),
-            _manifest(writer, provider_outcome="accepted"),
+            # Gaia 3's reported input is the Anthropic normalisation of its
+            # usage: 3,100 + 13,000 cache reads + 0 cache writes. Gaia 1 had no
+            # response to estimate; Gaia 2's estimate failed and was logged.
+            _manifest(
+                gaia[2], provider_outcome="accepted", estimated=15980, reported=16100
+            ),
+            _manifest(
+                writer, provider_outcome="accepted", estimated=20412, reported=20777
+            ),
         ],
         # The order inspect_turn reads the queues in.
         "jobs": [
@@ -547,7 +570,7 @@ def test_observation_joins_each_attempt_with_its_provider_usage(
     inspection, session, _ = _two_pass_turn(ledger_clock)
     observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
 
-    assert observation["schema_version"] == SCHEMA_VERSION == 1
+    assert observation["schema_version"] == SCHEMA_VERSION == 2
     assert observation["generation_session"] == session
     assert observation["read_at"] == f"{ledger_clock.today}T12:00:00Z"
     assert observation["ledger_days_read"] == [
@@ -572,6 +595,8 @@ def test_observation_joins_each_attempt_with_its_provider_usage(
     assert writer["window"] == {
         "provenance": "attempt_manifest",
         "input_tokens": 20777,
+        "estimated_input_tokens": 20412,
+        "reported_input_tokens": 20777,
         "effective_ceiling": 71000,
         "policy_headroom": 4000,
         "headroom": 50223,
@@ -590,6 +615,7 @@ def test_observation_joins_each_attempt_with_its_provider_usage(
         "provider": "openai",
         "transport": "responses",
         "outcomes": ["accepted"],
+        "provider_completed_at": f"{ledger_clock.yesterday}T23:59:59.500000Z",
         "input_tokens": 20777,
         "output_tokens": 2100,
         "cached_input_tokens": 12288,
@@ -863,6 +889,191 @@ def test_phase_spans_cross_utc_midnight_and_offsets(ledger_clock: _LedgerClock) 
         "ended_at": f"{ledger_clock.today}T00:00:20.500000Z",
         "seconds": 50.25,
     }
+
+
+def test_choice_readiness_is_the_complete_phase_row(
+    ledger_clock: _LedgerClock,
+) -> None:
+    """Readiness is the server's one ``complete`` row, never the wall's end."""
+    inspection, session, _ = _two_pass_turn(ledger_clock)
+
+    def observe(**changes: Any) -> dict[str, Any]:
+        return observe_turn(
+            {**inspection, **changes}, slot=4, read_at=ledger_clock.read_at
+        )
+
+    observation = observe()
+    assert observation["choice_ready_at"] == f"{ledger_clock.today}T00:00:20.500000Z"
+    assert observation["seconds_to_choice_ready"] == 50.25
+    # The keys follow wall_time directly.
+    keys = list(observation)
+    assert keys[keys.index("wall_time") + 1 : keys.index("wall_time") + 3] == [
+        "choice_ready_at",
+        "seconds_to_choice_ready",
+    ]
+
+    # A staged draft later superseded: every phase stays, the session's own
+    # fields change. The choices were still ready at the complete row.
+    superseded = observe(
+        session={
+            **inspection["session"],
+            "terminal_outcome": "superseded",
+            "phase": "staging",
+        }
+    )
+    assert superseded["choice_ready_at"] == f"{ledger_clock.today}T00:00:20.500000Z"
+    assert superseded["seconds_to_choice_ready"] == 50.25
+
+    # Failed at Gaia: the wall ends at the Gaia row, yet no choice is ready.
+    # The session row's own phase stays "complete" here: it is never read.
+    failed = observe(
+        session={**inspection["session"], "terminal_outcome": "error"},
+        phases=inspection["phases"][:4],
+    )
+    assert failed["wall_time"]["ended_at"] == f"{ledger_clock.today}T00:00:11.125000Z"
+    assert failed["choice_ready_at"] is None
+    assert failed["seconds_to_choice_ready"] is None
+    assert (
+        format_turn_summary(failed)
+        .splitlines()[1]
+        .endswith("→ gaia · choices not ready")
+    )
+
+    # Still generating: phases through the writer, no terminal outcome.
+    in_flight = observe(
+        session={**inspection["session"], "terminal_outcome": None},
+        phases=inspection["phases"][:3],
+    )
+    assert (in_flight["choice_ready_at"], in_flight["seconds_to_choice_ready"]) == (
+        None,
+        None,
+    )
+
+    # No phase observed (a session from before migration 124): no source.
+    unrecorded = observe(phases=[])
+    assert unrecorded["choice_ready_at"] == UNKNOWN
+    assert unrecorded["seconds_to_choice_ready"] == UNKNOWN
+    assert format_turn_summary(unrecorded).splitlines()[1] == (
+        "Wall unknown: no phases observed · choices unknown"
+    )
+
+    # The complete row is the first observed row: ready, time unknown.
+    only = observe(phases=inspection["phases"][-1:])
+    assert only["choice_ready_at"] == f"{ledger_clock.today}T00:00:20.500000Z"
+    assert only["seconds_to_choice_ready"] == UNKNOWN
+    assert format_turn_summary(only).splitlines()[1] == (
+        "Wall unknown: complete · choices ready unknown"
+    )
+
+    twice = [
+        *inspection["phases"],
+        {"phase": "complete", "recorded_at": f"{ledger_clock.today} 00:00:21+00"},
+    ]
+    with pytest.raises(ValueError) as refused:
+        observe(phases=twice)
+    assert str(refused.value) == (
+        f"Generation session {session} records 2 'complete' phases; choice "
+        "readiness is ambiguous"
+    )
+
+
+def test_provider_completion_is_each_attempts_latest_usage_event(
+    ledger_clock: _LedgerClock,
+) -> None:
+    """Each attempt's usage names when its latest response arrived."""
+    inspection, _, _ = _two_pass_turn(ledger_clock)
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
+    attempts = _by_key(observation)
+
+    assert (
+        attempts[("skald_writer", 1)]["usage"]["provider_completed_at"]
+        == f"{ledger_clock.yesterday}T23:59:59.500000Z"
+    )
+    assert (
+        attempts[("gaia", 3)]["usage"]["provider_completed_at"]
+        == f"{ledger_clock.today}T00:00:10Z"
+    )
+    # Gaia 1 timed out: no response arrived, so no source recorded the time.
+    assert attempts[("gaia", 1)]["usage"]["provider_completed_at"] == UNKNOWN
+    # Provider completion is not readiness.
+    assert observation["choice_ready_at"] == f"{ledger_clock.today}T00:00:20.500000Z"
+    # Jobs and totals carry no completion time.
+    assert all(
+        "provider_completed_at" not in entry["usage"]
+        for entry in observation["jobs"]["entries"]
+        if "usage" in entry
+    )
+    assert all(
+        "provider_completed_at" not in totals
+        for totals in observation["usage_totals"].values()
+    )
+
+    # A seat without a manifest numbers two calls attempt 1: the later wins.
+    session = str(uuid4())
+    for ts in ("00:00:03.25", "00:00:09.75"):
+        record_usage_event(
+            _event(
+                session,
+                f"{ledger_clock.today}T{ts}Z",
+                "skald",
+                1,
+                "skald-model",
+                outcome="accepted",
+                input_tokens=100,
+                output_tokens=10,
+                total_tokens=110,
+            )
+        )
+    manifestless = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [
+            {"phase": "retrieval", "recorded_at": f"{ledger_clock.today} 00:00:01+00"},
+            {"phase": "complete", "recorded_at": f"{ledger_clock.today} 00:00:12+00"},
+        ],
+        "manifests": [],
+        "jobs": [],
+    }
+    (attempt,) = observe_turn(manifestless, slot=4, read_at=ledger_clock.read_at)[
+        "attempts"
+    ]
+    assert attempt["usage"]["events"] == 2
+    assert (
+        attempt["usage"]["provider_completed_at"]
+        == f"{ledger_clock.today}T00:00:09.750000Z"
+    )
+
+
+def test_window_projects_estimated_and_reported_input(
+    ledger_clock: _LedgerClock,
+) -> None:
+    """The manifest's estimate and normalised reported input reach each window."""
+    inspection, _, _ = _two_pass_turn(ledger_clock)
+    attempts = _by_key(observe_turn(inspection, slot=4, read_at=ledger_clock.read_at))
+
+    def counts(key: tuple[str, int]) -> tuple[Any, Any]:
+        window = attempts[key]["window"]
+        return window["estimated_input_tokens"], window["reported_input_tokens"]
+
+    assert counts(("skald_writer", 1)) == (20412, 20777)
+    assert counts(("gaia", 3)) == (15980, 16100)
+    # The ledger keeps Anthropic's raw input; the window has the normalised one.
+    assert attempts[("gaia", 3)]["usage"]["input_tokens"] == 3100
+    # No estimate was attempted for Gaia 1; Gaia 2's estimate failed.
+    assert counts(("gaia", 1)) == (UNKNOWN, UNKNOWN)
+    assert counts(("gaia", 2)) == (UNKNOWN, UNKNOWN)
+
+    # A window-ledger record never carries either count.
+    ledger_only = _by_key(
+        observe_turn(
+            {**inspection, "manifests": []}, slot=4, read_at=ledger_clock.read_at
+        )
+    )
+    writer = ledger_only[("skald_writer", 1)]["window"]
+    assert writer["provenance"] == "prompt_window_ledger"
+    assert (writer["estimated_input_tokens"], writer["reported_input_tokens"]) == (
+        UNKNOWN,
+        UNKNOWN,
+    )
 
 
 def test_phases_recorded_out_of_order_refuse_the_join(
@@ -1313,17 +1524,18 @@ def test_summary_renders_one_concise_read_of_the_turn(
 
     assert lines[0] == (
         f"Turn {session} (accepted) · read {ledger_clock.today}T12:00:00Z · ledger "
-        f"{ledger_clock.yesterday} to {ledger_clock.today} · schema v1"
+        f"{ledger_clock.yesterday} to {ledger_clock.today} · schema v2"
     )
     assert lines[1] == (
         "Wall 50.250s: retrieval 8.250s → assembly 2.500s → writer 30.125s → "
-        "gaia 8.875s → staging 0.500s → complete"
+        "gaia 8.875s → staging 0.500s → complete · choices ready 50.250s"
     )
     writer = lines.index(
         "skald_writer #1 writer-model · outcome accepted · provider accepted"
     )
     assert lines[writer + 1] == (
-        "  window 20,777 / 71,000 · headroom 50,223 [attempt_manifest]"
+        "  window 20,777 / 71,000 · headroom 50,223 · estimated 20,412 · "
+        "reported 20,777 [attempt_manifest]"
     )
     assert lines[writer + 2] == (
         "  roles voice_source 18,611 · player_language 26 · "
@@ -1331,7 +1543,8 @@ def test_summary_renders_one_concise_read_of_the_turn(
     )
     assert lines[writer + 3] == (
         "  usage in 20,777 · cached 12,288 · cache write unknown · out 2,100 · "
-        "reasoning 800 · effort high · max out 8,000 [provider_usage_ledger ×1]"
+        "reasoning 800 · effort high · max out 8,000 · completed "
+        f"{ledger_clock.yesterday}T23:59:59.500000Z [provider_usage_ledger ×1]"
     )
     assert (
         "  validation repairs 0 · rejections 1 "

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -158,6 +158,9 @@ RICH_STATE = WorldState(
             progress_ratio=0.6,
             route_purpose="socialize",
             risk="low",
+            started_at_world_time=datetime(2073, 5, 3, 10, 0, tzinfo=timezone.utc),
+            updated_at_world_time=datetime(2073, 5, 3, 11, 0, tzinfo=timezone.utc),
+            eta_world_time=datetime(2073, 5, 3, 12, 15, tzinfo=timezone.utc),
         ),
         4: TravelState(status="in_transit"),
     },
@@ -361,6 +364,17 @@ def test_observed_values_surface_for_thresholds() -> None:
     assert cooldown["observed"]["latest_matching_tick"] == 95
     assert cooldown["observed"]["elapsed_ticks"] == 5
     assert cooldown["result"] is True
+
+    progress = resolve_evidence(
+        travel_progress_at_or_above(0.5).__name__, RICH_STATE, BINDINGS
+    )
+    assert progress["observed"] == {
+        "progress_ratio": 0.6,
+        "started_at_world_time": "2073-05-03T10:00:00+00:00",
+        "updated_at_world_time": "2073-05-03T11:00:00+00:00",
+        "eta_world_time": "2073-05-03T12:15:00+00:00",
+    }
+    assert progress["result"] is True
 
 
 def test_inbound_pair_tag_evidence_names_the_subjects() -> None:

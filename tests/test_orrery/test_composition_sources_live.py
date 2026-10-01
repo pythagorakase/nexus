@@ -51,7 +51,7 @@ from tests.pg_fixtures import (
 )
 
 
-pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
+pytestmark = pytest.mark.requires_postgres
 
 STORY_WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 COMPOSITION = {

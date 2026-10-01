@@ -189,7 +189,8 @@ class _RecordingCursor:
         self._fetchall = []
         self._fetchone = None
         if "FROM tag_category_registry" in normalized:
-            self._fetchall = [("bodyform",), ("disposition",)]
+            # Registry rows are not deprecated by default.
+            self._fetchall = [("bodyform", False, None), ("disposition", False, None)]
         elif "FROM tags" in normalized:
             self._fetchone = None
         elif (
@@ -848,6 +849,32 @@ def test_pg_unregistered_tag_hint_fails_loudly(maturation_conn: Any) -> None:
             slot=2,
             settings=_ENABLED_SETTINGS,
         )
+
+
+@pytest.mark.requires_postgres
+def test_pg_deprecated_category_tag_hint_fails_loudly(maturation_conn: Any) -> None:
+    """A live tag in a deprecated category is no bestowable hint (#811-Q7)."""
+    name = "M8 Deprecated Category Hint Entity (Rollback)"
+    declaration = {
+        "kind": "character",
+        "name": name,
+        "summary": "Carries a tag from a retired category.",
+        "tag_hints": ["black_market_operator"],
+    }
+    chunk_id = _latest_chunk_id(maturation_conn)
+    with pytest.raises(RetrogradeMaturationVocabularyError) as caught:
+        enqueue_declared_entity_maturations(
+            maturation_conn,
+            declarations=[declaration],
+            chunk_id=chunk_id,
+            raw_text=f"{name} appears.",
+            slot=2,
+            settings=_ENABLED_SETTINGS,
+        )
+    assert "deprecates" in str(caught.value)
+    with maturation_conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM characters WHERE name = %s", (name,))
+        assert cur.fetchone()[0] == 0
 
 
 @pytest.mark.requires_postgres

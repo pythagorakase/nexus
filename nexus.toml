@@ -614,6 +614,25 @@ backstage_poll_idle_ms = 8000
 [orrery.route_graph]
 max_edges_per_query = 5000
 
+# Per-mode route estimates: km/h, and the detour factor over the geodesic distance.
+[orrery.travel.speed_kmh]
+walking = 5.0
+vehicle = 45.0
+rail = 75.0
+water = 25.0
+air = 450.0
+covert = 3.5
+mixed = 25.0
+
+[orrery.travel.detour_factor]
+walking = 1.35
+vehicle = 1.25
+rail = 1.15
+water = 1.40
+air = 1.05
+covert = 1.80
+mixed = 1.40
+
 [orrery.narration]
 # Historical queue name; records now contain deterministic perceptual descriptors.
 # No provider call is made. Existing prose rows remain available for audit.
@@ -1393,9 +1412,10 @@ port_release_timeout_seconds = 5.0 # swap waits this long for the old llama-serv
 inspect_timeout_seconds = 30.0  # per request of `nexus inspect`; no answer in time exits 4
 # Per short request of load, continue, retry, undo, regenerate, clear, lock,
 # unlock and model --set/--clear (state reads, wizard setup and confirmation,
-# slot administration). Generation, wizard chat and transition requests keep
-# their own budgets.
+# slot administration). Model-turn requests take turn_request_timeout_seconds,
+# the transition the Retrograde wizard's budget, the generation wait apex's.
 request_timeout_seconds = 30.0
+turn_request_timeout_seconds = 120.0 # per wizard chat, trait toggle, phase intro, and continue/retry/regenerate/opening-turn scheduling POST
 # Delay between status reads while continue, retry, regenerate and the seed's
 # opening turn wait on a generation session: a finite number of seconds greater
 # than 0 (inf and nan are rejected); apex.generation_timeout_seconds bounds the

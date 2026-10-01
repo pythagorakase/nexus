@@ -1,6 +1,7 @@
 """Tests for the NEXUS CLI helpers."""
 
 import argparse
+import ast
 from argparse import Namespace
 import json
 from pathlib import Path
@@ -16,6 +17,7 @@ from nexus.cli import _is_terminal_generation_status
 
 
 REPO_CONFIG = Path(__file__).resolve().parents[1] / "nexus.toml"
+CLI_SOURCE = Path(__file__).resolve().parents[1] / "nexus" / "cli.py"
 LOG_LINE_COUNT_ERROR = "Log line count must be a positive integer"
 
 
@@ -54,6 +56,8 @@ class DummyResponse:
         self.ok = ok
         self.text = text
         self.status_code = status_code
+        self.url = "http://127.0.0.1:8002/api"
+        self.headers: dict[str, str] = {}
 
     def json(self) -> dict[str, Any]:
         """Return response JSON."""
@@ -752,15 +756,22 @@ def _stub_seed_completion_requests(
 
 
 @pytest.mark.parametrize(
-    "status_code,requests_ok", [(300, True), (400, False), (422, False), (500, False)]
+    "status_code,requests_ok,code",
+    [
+        (300, True, "config_error"),
+        (400, False, "api_error"),
+        (422, False, "api_error"),
+        (500, False, "api_error"),
+    ],
 )
 def test_seed_completion_transition_http_failure_exits_nonzero_with_retry(
-    monkeypatch, capsys, status_code: int, requests_ok: bool
+    monkeypatch, capsys, status_code: int, requests_ok: bool, code: str
 ) -> None:
     """A persisted seed cannot make a failed atomic transition look successful.
 
     requests.Response.ok is True for any status < 400, so a 3xx must fail
-    the strict 2xx contract even while ok=True.
+    the strict 2xx contract even while ok=True. A 3xx the gateway never sends
+    is an access rejection (config_error); any other non-2xx is api_error.
     """
     detail = f'{{"detail":"Atomic transition failed with {status_code}"}}'
     _stub_seed_completion_requests(
@@ -778,7 +789,7 @@ def test_seed_completion_transition_http_failure_exits_nonzero_with_retry(
     captured = capsys.readouterr()
     assert captured.out == ""
     envelope = json.loads(captured.err)
-    assert (envelope["ok"], envelope["code"]) == (False, "domain_failure")
+    assert (envelope["ok"], envelope["code"]) == (False, code)
     payload = envelope["partial"]
     assert payload["phase_complete"] is True
     assert payload["artifact_type"] == "story_seed"
@@ -1788,6 +1799,10 @@ def test_load_reports_a_failed_continuation_instead_of_consumed_choices(
     }
 
     class Response:
+        status_code = 200
+        url = "http://127.0.0.1:8002/api/slot/4/state"
+        headers: dict[str, str] = {}
+
         def raise_for_status(self) -> None:
             return None
 
@@ -1939,3 +1954,101 @@ def test_continue_weird_accepts_only_the_three_levels(capsys) -> None:
     with pytest.raises(SystemExit):
         parser.parse_args(["continue", "--slot", "5", "--weird", "extreme"])
     assert "invalid choice: 'extreme'" in capsys.readouterr().err
+
+
+# The nine legacy HTTP handlers: each reports its own failures or lets them
+# reach main(), never through a broad except.
+_HTTP_HANDLERS = (
+    "run_load",
+    "run_continue",
+    "run_retry",
+    "run_undo",
+    "run_regenerate",
+    "run_model",
+    "run_clear",
+    "run_lock",
+    "run_unlock",
+)
+# The CLI's request helpers, whose timeout must come from [runtime.cli].
+_REQUEST_HELPERS = {"_api_get", "_api_post", "_api_request"}
+
+
+def _cli_tree() -> ast.Module:
+    return ast.parse(CLI_SOURCE.read_text(encoding="utf-8"))
+
+
+def _is_number(node: ast.AST | None) -> bool:
+    return (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, (int, float))
+        and not isinstance(node.value, bool)
+    )
+
+
+def test_cli_requests_take_no_literal_timeout() -> None:
+    """No request budget in nexus/cli.py is a literal; nexus.toml holds them."""
+    literals = []
+    for node in ast.walk(_cli_tree()):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in _REQUEST_HELPERS
+        ):
+            literals.extend(
+                f"{node.func.id} timeout at line {node.lineno}"
+                for keyword in node.keywords
+                if keyword.arg == "timeout" and _is_number(keyword.value)
+            )
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            arguments = node.args
+            positional = [*arguments.posonlyargs, *arguments.args]
+            defaults = list(
+                zip(
+                    positional[len(positional) - len(arguments.defaults) :],
+                    arguments.defaults,
+                )
+            ) + [
+                (arg, default)
+                for arg, default in zip(arguments.kwonlyargs, arguments.kw_defaults)
+                if default is not None
+            ]
+            literals.extend(
+                f"{node.name}({arg.arg}) default at line {node.lineno}"
+                for arg, default in defaults
+                if arg.arg.endswith("timeout") and _is_number(default)
+            )
+    assert literals == []
+
+
+def test_http_handlers_have_no_broad_except() -> None:
+    """The HTTP handlers catch no Exception and use no bare except.
+
+    A tuple of types and a qualified name (``builtins.Exception``) are checked
+    element by element.
+    """
+    handlers = {
+        node.name: node
+        for node in _cli_tree().body
+        if isinstance(node, ast.FunctionDef) and node.name in _HTTP_HANDLERS
+    }
+    assert set(handlers) == set(_HTTP_HANDLERS)
+    broad = []
+    for name, handler in handlers.items():
+        for node in ast.walk(handler):
+            if not isinstance(node, ast.ExceptHandler):
+                continue
+            caught = node.type
+            if caught is None:
+                broad.append(f"{name} at line {node.lineno}")
+                continue
+            types = caught.elts if isinstance(caught, ast.Tuple) else [caught]
+            for type_node in types:
+                if isinstance(type_node, ast.Name):
+                    type_name = type_node.id
+                elif isinstance(type_node, ast.Attribute):
+                    type_name = type_node.attr
+                else:
+                    continue
+                if type_name in {"Exception", "BaseException"}:
+                    broad.append(f"{name} at line {node.lineno}")
+    assert broad == []

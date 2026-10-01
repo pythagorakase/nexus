@@ -50,6 +50,8 @@ any migration or restore error and never log success, but the partial target
 database remains: initialization can leave committed migrations, seed rows, and
 the `global_variables` row without IDF initialization, and a failed clone can
 keep the source's `new_story = false`, which lists the slot as active.
+Both paths refuse a locked slot before any drop, with the message
+`reset_setup` uses (`Slot N is locked. Unlock it first with: nexus unlock --slot N`).
 `start_setup` reuses an existing database without checking its migrations, so
 recreate the target with `--force` after fixing the cause; durable quarantine
 and staged replacement belong to #823. The runner itself propagates connection
@@ -130,6 +132,10 @@ python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot --dry-run
 python scripts/rebuild_memory_idf.py --all
 python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 ```
+
+## Two Clocks
+
+PostgreSQL comments define both clocks; read them with `\d+ chunk_metadata`, `\df+ refresh_world_time_from_chunk*` and `\dd trg_chunk_metadata_refresh_world_time`. The story clock is `chunk_metadata.world_time`, recomputed by `refresh_world_time_from_chunk()` from `global_variables.base_timestamp` and primary-layer `time_delta` after every insert and every `time_delta` or `world_layer` update; event occurrence time is `world_events.world_time`. Diegetic state belongs on the story clock. The tick clock is the accepted chunk in each `tick_chunk_id` column; it serves ordering, replay, exposure fairness, habituation, and narration cadence.
 
 ## Schema Documentation
 
