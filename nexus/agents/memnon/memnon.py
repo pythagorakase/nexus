@@ -1502,66 +1502,53 @@ class MEMNON:
         Returns:
             Dictionary containing the chunk data and metadata
         """
-        try:
-            with self.Session() as session:
-                query = text(
-                    """
-                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
-                           cm.world_layer
-                    FROM narrative_chunks nc
-                    LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
-                    WHERE nc.id = :chunk_id
+        with self.Session() as session:
+            query = text(
                 """
-                )
+                SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
+                       cm.world_layer
+                FROM narrative_chunks nc
+                LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
+                WHERE nc.id = :chunk_id
+            """
+            )
 
-                result = session.execute(query, {"chunk_id": chunk_id}).fetchone()
+            result = session.execute(query, {"chunk_id": chunk_id}).fetchone()
 
-                if result:
-                    return {
-                        "query": f"chunk_id:{chunk_id}",
-                        "query_type": "direct_id",
-                        "results": [
-                            {
-                                "id": result.id,
-                                "text": result.raw_text,
-                                "metadata": {
-                                    "season": result.season,
-                                    "episode": result.episode,
-                                    "scene_number": result.scene_number,
-                                    "world_layer": result.world_layer,
-                                },
-                                "score": 1.0,  # Perfect match for ID query
-                                "source": "direct_id_lookup",
-                            }
-                        ],
-                        "metadata": {
-                            "search_strategies": ["direct_id_lookup"],
-                            "result_count": 1,
-                        },
-                    }
-                else:
-                    return {
-                        "query": f"chunk_id:{chunk_id}",
-                        "query_type": "direct_id",
-                        "results": [],
-                        "metadata": {
-                            "search_strategies": ["direct_id_lookup"],
-                            "result_count": 0,
-                            "error": f"Chunk with ID {chunk_id} not found",
-                        },
-                    }
-        except Exception as e:
-            logger.error(f"Error retrieving chunk by ID {chunk_id}: {e}")
-            return {
-                "query": f"chunk_id:{chunk_id}",
-                "query_type": "direct_id",
-                "results": [],
-                "metadata": {
-                    "search_strategies": ["direct_id_lookup"],
-                    "result_count": 0,
-                    "error": str(e),
-                },
-            }
+            if result:
+                return {
+                    "query": f"chunk_id:{chunk_id}",
+                    "query_type": "direct_id",
+                    "results": [
+                        {
+                            "id": result.id,
+                            "text": result.raw_text,
+                            "metadata": {
+                                "season": result.season,
+                                "episode": result.episode,
+                                "scene_number": result.scene_number,
+                                "world_layer": result.world_layer,
+                            },
+                            "score": 1.0,  # Perfect match for ID query
+                            "source": "direct_id_lookup",
+                        }
+                    ],
+                    "metadata": {
+                        "search_strategies": ["direct_id_lookup"],
+                        "result_count": 1,
+                    },
+                }
+            else:
+                return {
+                    "query": f"chunk_id:{chunk_id}",
+                    "query_type": "direct_id",
+                    "results": [],
+                    "metadata": {
+                        "search_strategies": ["direct_id_lookup"],
+                        "result_count": 0,
+                        "error": f"Chunk with ID {chunk_id} not found",
+                    },
+                }
 
     def query_memory(
         self,

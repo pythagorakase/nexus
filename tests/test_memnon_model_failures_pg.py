@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import asyncio
 import time
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Callable, Iterator, Tuple, cast
 
 import psycopg2.errors
 import pytest
+import sqlalchemy.exc
 import tomlkit
 
 from nexus.agents.lore.lore import LORE
@@ -34,7 +36,9 @@ from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.database import database_url
 from nexus.memory import ContextMemoryManager
 from tests.pg_fixtures import (
+    connect,
     disposable_slot_database,
+    require_disposable_target,
     route_slot_to_disposable,
     seed_committed_chunk,
     seed_protagonist,
@@ -243,6 +247,37 @@ def test_sql_layer_propagates_a_query_error(
     assert raised.value.__context__ is None
 
 
+def test_chunk_id_lookup_propagates_a_query_error(
+    write_config: ConfigWriter, clone: str, memnon_factory: Callable[[], MEMNON]
+) -> None:
+    """A SQL error on a chunk_id: lookup fails query_memory (812-Q8)."""
+
+    write_config(enabled=False)
+    memnon = memnon_factory()
+    require_disposable_target(clone)
+    with closing(connect(clone)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM narrative_chunks WHERE raw_text = %s", (SEEDED_TEXT,)
+        )
+        chunk_id = int(cur.fetchone()[0])
+
+    found = memnon.query_memory(f"chunk_id:{chunk_id}")
+    assert _result_texts(found) == [SEEDED_TEXT]
+    missing = memnon.query_memory(f"chunk_id:{chunk_id + 1000}")
+    assert missing["results"] == []
+
+    # Break the lookup's SQL on the disposable clone: the column it selects
+    # no longer exists, so PostgreSQL rejects the statement.
+    with closing(connect(clone)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "ALTER TABLE chunk_metadata RENAME COLUMN world_layer TO world_layer_gone"
+        )
+
+    with pytest.raises(sqlalchemy.exc.ProgrammingError) as raised:
+        memnon.query_memory(f"chunk_id:{chunk_id}")
+    assert isinstance(raised.value.orig, psycopg2.errors.UndefinedColumn)
+
+
 @pytest.fixture()
 def lore_on_clone(write_config: ConfigWriter, clone: str) -> Iterator[LORE]:
     """A fresh LORE per test on the clone: healthy reranker, drifted embedder."""
@@ -343,3 +378,11 @@ def test_blank_raw_input_runs_no_query(lore_on_clone: LORE) -> None:
     assert _memory(lore_on_clone).incremental.retrieve_from_raw_input(
         "   ", budget=10_000
     ) == ([], 0)
+
+
+def test_blank_directive_runs_no_query(lore_on_clone: LORE) -> None:
+    """A directive that sanitizes to nothing runs no query_memory call."""
+
+    result = asyncio.run(lore_on_clone.retrieve_context(["???"], chunk_id=None))
+
+    assert result["directives"]["???"]["search_progress"] == []
