@@ -1,6 +1,6 @@
 # Strangeness Entry Points Verification
 
-Work order 838-S3; issue #838; branch `claude/838-zero-spend-entry-checks`, cut from `origin/main` at `9fff6a75`, where the exported run below was made. The branch was later rebased onto `6d551b7a` (#1066, CSS only), the client was rebuilt, and the proof was rerun without re-exporting the evidence; that rerun's tail is under "Rerun After the Rebase". Exported run on 2026-10-01 from 2026-10-01T05:01:29Z to 2026-10-01T05:02:01Z (UTC). No migration, no product code change, no paid call.
+Work order 838-S3; issue #838; branch `claude/838-zero-spend-entry-checks`, cut from `origin/main` at `9fff6a75`, where the exported run below was made. The branch was later rebased onto `6d551b7a` (#1066, CSS only), the client was rebuilt, and the proof was rerun without re-exporting the evidence; that rerun's tail is under "Rerun After the Rebase". A fix commit after review, `6099d7f0`, changed only the proof's request recorder; the proof was rerun on lane 8015 at that commit with its own Sequencing checks, owner-slot reads, and teardown, under "Rerun After the Review Fixes". Exported run on 2026-10-01 from 2026-10-01T05:01:29Z to 2026-10-01T05:02:01Z (UTC). No migration, no product code change, no paid call.
 
 ## Lane and Sequencing Checks
 
@@ -41,6 +41,8 @@ sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 
 Same command on the branch rebased onto `6d551b7a` (#1066, CSS only), with the client rebuilt; the proof file is the one in `3f83d966`, and `dee4bc38` adds only this evidence. Evidence not re-exported: the tables, transcripts, and screenshots below are from the exported run at `9fff6a75`.
 
+Lane 8012, from about 2026-10-01T05:13:48Z to 05:14:23Z (UTC). The three Sequencing checks were not re-run for this rerun; the checks above are the ones run before the exported run at 05:01Z. No owner-slot digest pair was taken around it, and no `nexus down`, `lsof`, or `qa640_838` check was recorded after it; its only teardown record is the proof's own `nexus down` under its private runtime config, which printed `nothing running` once per test. The owner-slot digests read later, before and after the rerun under "Rerun After the Review Fixes" (05:37Z), match the exported run's before and after digests exactly, so the current read matches the exported run. Three exploratory runs on lane 8012, from 04:58:36Z to 04:59:49Z, came before any check recorded here.
+
 ```text
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 dbname audit: 4 targets: mock, postgres, qa640_838_browser_*, qa640_838_cli_*
@@ -50,6 +52,64 @@ dbname audit: owner targets: none
 2 passed, 2 warnings in 34.86s
 sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
+
+### Rerun After the Review Fixes
+
+At `6099d7f0` (the recorder keeps its record for a 500 or a non-JSON body; no other change), from 2026-10-01T05:37:15Z to 05:37:45Z (UTC). Evidence not re-exported. The lane is 8015: the coordinator assigned it because the nightly-QA lane 8012 had a listener when this fix was dispatched. At 05:37:02Z the Sequencing checks found 8012 idle, but the run kept 8015 so it could not collide with the nightly-QA listener seen at dispatch; 8015 is the first free port from 8014 upward that is not a suite lane.
+
+```text
+$ lsof -nP -iTCP:8012 -sTCP:LISTEN
+(exit 1)
+$ pgrep -fl scripts/qa_shift
+(exit 1)
+$ newest shift_state.json: /Users/pythagor/nexus/temp/qa_night_2026-10-01_043326Z/shift_state.json
+status = finished
+$ lsof -nP -iTCP:8015 -sTCP:LISTEN
+(exit 1)
+```
+
+```sh
+env -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 NEXUS_GATEWAY_PORT=8015 $PY -m pytest -q -s -p tests.dbname_audit tests/proofs/proof_weird_entry_points.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 4 targets: mock, postgres, qa640_838_browser_*, qa640_838_cli_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2 passed, 2 warnings in 29.06s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+The proof's own `nexus down` printed `nothing running` once per test. Then:
+
+```text
+$ NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 $PY -m nexus.cli down
+nothing running
+(exit 0)
+$ lsof -nP -iTCP:8015 -sTCP:LISTEN
+(exit 1)
+$ psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_838%'"
+(exit 0)
+```
+
+Owner slots, read only, before the run (05:37:02Z) and after the teardown checks (about 05:38Z; `save_04` then `save_05`; creator-row digest, then `global_variables` digest), the same command as under "Teardown":
+
+```text
+before:
+d41d8cd98f00b204e9800998ecf8427e
+a99669a36dbc5dfc0d0caef98eed1732
+4b557de44110a547256a0ea12e663553
+f661debf7c72bbe18df8ed928151f34b
+after:
+d41d8cd98f00b204e9800998ecf8427e
+a99669a36dbc5dfc0d0caef98eed1732
+4b557de44110a547256a0ea12e663553
+f661debf7c72bbe18df8ed928151f34b
+```
+
+Identical, and identical to the exported run's digests.
 
 `mock` in the audit's target list is the TEST provider's canned-response database: the in-process gateway's TEST wizard path reads it with a `SELECT` through `query_wizard_cache` (`nexus/api/wizard_chat.py:734`, `nexus/api/mock_openai.py:77`). It is neither an owner target nor written.
 
@@ -512,7 +572,7 @@ While the fourth save (`low`) was held in the browser by `page.route`, Confirm a
 - `Failed to load resource: the server responded with a status of 404 (Not Found)` at `http://127.0.0.1:8012/api/dev/backstage/health`
 - `Failed to load resource: the server responded with a status of 404 (Not Found)` at `http://127.0.0.1:8012/api/dev/backstage/health`
 
-Both are the client's developer-mode gate probe (`ui/client/src/contexts/DeveloperModeContext.tsx:25`, one per page load). The gateway registers Backstage only when `[orrery.dashboard] enabled` is true (`nexus/api/narrative.py:217`), which is committed false, so the probe answers 404 by design. Neither is on the strangeness path.
+Both are the client's developer-mode gate probe (`ui/client/src/contexts/DeveloperModeContext.tsx:25`, one per page load). The gateway registers Backstage only when `[orrery.dashboard] enabled` is true (`nexus/api/narrative.py:219`, inside `_include_backstage_router`, `:210-227`), which is committed false, so the probe answers 404 by design. Neither is on the strangeness path.
 
 ## Teardown
 
