@@ -719,9 +719,11 @@ def test_classification_requires_one_entry_per_scoped_path(static_repo) -> None:
     assert findings["unclassified_paths"] == []
     assert findings["classification_counts"] == {"dead": 2, "operator": 2}
 
+    # The duplicate is also out of order, so the message names the duplicate
+    # only when the duplicate check runs before the sorted check.
     _classify(config, full)
     paths = config["classification"]["paths"]
-    config["classification"]["paths"] = [paths[0], dict(paths[0]), *paths[1:]]
+    config["classification"]["paths"] = [paths[0], paths[1], dict(paths[0]), paths[2]]
     with pytest.raises(ValueError, match="more than one"):
         _classification(root, config)
 
@@ -793,29 +795,44 @@ GRAPH_FIXTURE_CLASSES = {
 
 
 @pytest.mark.parametrize(
-    "graph,overrides,expected",
+    "fixture,overrides,expected",
     [
-        (True, {}, []),
-        (True, {"scripts/orphan.py": "dead"}, []),
-        (True, {"scripts/shared.py": "operator"}, ["runtime"]),
-        (True, {"scripts/migrate.py": "operator"}, ["runtime"]),
-        (True, {"scripts/tool.py": "dead"}, ["operator"]),
-        (True, {"scripts/tool_helper.py": "test-only"}, ["operator"]),
-        (True, {"scripts/tested.py": "operator"}, ["test-only"]),
-        (True, {"scripts/orphan.py": "runtime"}, ["documented|dead"]),
-        (False, {"scripts/migrate.py": "dead"}, ["operator"]),
-        (False, {"scripts/migrate.py": "operator"}, []),
+        ("graph", {}, []),
+        ("graph", {"scripts/orphan.py": "dead"}, []),
+        ("graph", {"scripts/shared.py": "operator"}, ["runtime"]),
+        ("graph", {"scripts/migrate.py": "operator"}, ["runtime"]),
+        ("graph", {"scripts/tool.py": "dead"}, ["operator"]),
+        ("graph", {"scripts/tool_helper.py": "test-only"}, ["operator"]),
+        ("graph", {"scripts/tested.py": "operator"}, ["test-only"]),
+        ("graph", {"scripts/orphan.py": "runtime"}, ["documented|dead"]),
+        ("base", {"scripts/migrate.py": "dead"}, ["operator"]),
+        ("base", {"scripts/migrate.py": "operator"}, []),
+        ("base-tested", {"scripts/migrate.py": "test-only"}, ["operator"]),
+        ("base-tested", {"scripts/migrate.py": "operator"}, []),
     ],
 )
 def test_classification_graph_classes_follow_reachability(
-    static_repo, graph, overrides, expected
+    static_repo, fixture, overrides, expected
 ) -> None:
-    """Production beats operator and migration, which beat test, which beats none."""
+    """Production beats operator and migration, which beat test, which beats none.
+
+    ``graph`` is the ``_graph_repo`` fixture. ``base`` is the unmodified base
+    fixture, where only the migration kind reaches the loader. ``base-tested``
+    adds a test import of the loader, so migration and test roots reach it and
+    no production or operator root does.
+    """
     root, config = static_repo
-    if graph:
+    if fixture == "graph":
         _graph_repo(root, config)
         classes = {**GRAPH_FIXTURE_CLASSES, **overrides}
     else:
+        if fixture == "base-tested":
+            _write(
+                root,
+                "tests/test_example.py",
+                "def test_example():\n    import pkg.helper\n"
+                "    import scripts.migrate\n",
+            )
         classes = dict(overrides)
     _classify(config, classes)
     findings = _classification(root, config)
