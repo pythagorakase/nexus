@@ -393,3 +393,62 @@ The remaining Amendment 2 UI/offline/build/browser gates were not run after the 
 Coordinator question: **Does the global-freeze test preserve the accepted exact `#b83d7a` correction as the sole declared global exemption, or must it restore all globals literally to `8ccd3008` and retire the exact-anchor rule?** Until that is answered, “every global unchanged” and non-state pixel equality against that starting commit cannot be truthfully certified.
 
 Codex, GPT-6.
+
+
+## After Amendment 2 — Completed Under Amendment 3, 2026-10-01
+
+Amendment 3 resolves the historical stop report above: exactly seven Veil global tokens may change to the owner's recorded `#b83d7a`; every other global is frozen to the pinned starting CSS `8ccd3008a48bdf8115232667399868e2bdf66f93`. The accepted glyphs, geometry, precedence, event/timer paths, status-revision guard, minimal UI and reduced-motion guard remain intact. No new element was introduced, so the preceding shadcn check remains applicable.
+
+Product fix: `25a1aa81`; proof after merging current main: `afb5db9e9087f53ed3d5af40413cd12125572526` (origin/main `160134540517f6b74aacd1d1e1f3f584454eef86`, PR #1065). The merge preserves every previous commit ID. No rebase, amend, stash or force push. Prior sections and their artifacts are historical; this section and the `amendment-2/` artifacts supersede only their shade/global results.
+
+### Frozen Globals and the Sole Anchor Exemption
+
+The shared `VEIL_ANCHOR_TOKENS` list in `state-shades.test.ts` drives both `global_tokens_are_unchanged_from_baseline` and `veil_anchor_is_exact_b83d7a`. It contains `--brass`, `--magenta`, `--primary`, `--sidebar-primary`, `--sidebar-ring`, `--ring`, `--chart-1`. All seven resolve to exactly sRGB `(184,61,122)` / `#b83d7a`. The starting `(189.72,55.07999999999999,144.84000000000003)` / 8-bit `#be3791` is the expressly permitted anchor drift correction. Global `--brass-bright` and `--magenta-light` retain their original 320-degree hue. Gilded and Vector explicitly override the inherited `--magenta` with its original value, so the Veil exemption cannot leak into them. No new global pigment is introduced.
+
+[Every frozen global value, baseline → shipped](amendment-2/global-tokens.md): 95 resolved global declarations per theme, including root defaults, backgrounds, aliases, opacity colors, fonts and shadows. All other custom declaration scopes are frozen by the test too. Exactly twelve state tokens per theme are the only new token names; `--map-hovered` is removed.
+
+[Browser pixel receipt](amendment-2/global-proof.json), [before capture](amendment-2/globals-before.png), [shipped capture](amendment-2/globals-after.png). Both images use the emitted production CSS, with the pinned global declarations overlaid for the before image. They contain all 59 directly paintable global-color samples per theme plus non-state chevron, cancel, input and secondary-text regions. Full RGBA comparison at 1200×2310 reports **0 changed pixels for Gilded and Vector**. Veil reports **47,700 changed pixels, entirely inside the seven anchor-token swatches; 0 outside**. The sampled non-state component regions are identical in all themes. Combined with the full declaration/consumer tests, non-state surfaces remain pixel-identical in Gilded and Vector; Veil differs only where an anchor-linked token paints. This is a finite fixture/token proof, not a claim to have navigated every application screen.
+
+![Global Before/After, Ordinary and Deutan; Veil Anchor Correction Labeled](amendment-2/global-swatches.png)
+
+The SVG source is [global-swatches.svg](amendment-2/global-swatches.svg). Alpha samples are composited on the fixed swatch backdrop before the deutan transform. The anchor correction is labeled in the QA swatches only; no product label/legend/control was added.
+
+### State Tokens, Search and Exceptions
+
+[Per-theme baseline → shipped state tokens](amendment-2/state-tokens.md), with [machine-readable values](amendment-2/state-tokens.json). Veil brass-derived state baselines start at the corrected anchor, as ordered. Historical before pair measurements use the literal pinned application CSS including its old anchor; the state-token swatch/table baseline instead uses the corrected anchor for those three states. Both conventions are explicit and neither alters the fixed search domain.
+
+The production meter fill/warning, delete pigment, key glyphs, both map surfaces and leaders read only dedicated state tokens; global surfaces read none. State tokens are static CSS values, not aliases or runtime tunables. The meter's glow uses state pigments while retaining each theme's existing shadow sizes/opacity. Cancel/chevron/download-progress colors retain global pigments. `state_surfaces_read_only_state_tokens` reads actual mappings and sweeps production CSS/TS/TSX consumers; no mocked palette is used.
+
+Exhaustive search now has twelve independent state roots and fixed global/composited backgrounds. Each pair/context matrix visits every pair of candidates. Each surface factor enumerates its entire Cartesian product, checks visited/unique/expected counts, and the minimum of the four factor maxima gives the exact twelve-root joint maximum. A second selection chooses the fewest changed state tokens above that maximum. BigInt counts preserve full Cartesian sizes exactly. JSON evidence is never the test oracle: it recomputes from production CSS and the fixed domain.
+
+| Theme | Joint Maximum Minimum ΔE | Full Candidate Count | Satisfying Assignments | Changed State Tokens | Shortfall Contexts |
+|---|---:|---:|---:|---:|---:|
+| Veil | 9.913464335675082 | 258280326000000 | 0 | 5 | 30 |
+| Gilded | 11.515866170801722 | 446308403328000 | 0 | 8 | 45 |
+| Vector | 10.191082279599211 | 2834352000000 | 0 | 5 | 58 |
+
+Exactly **one joint exception per theme**. Shortfall counts by surface: Veil map 16/key 11/delete 3; Gilded map 30/key 11/delete 3/memory 1; Vector map 45/key 12/memory 1. The fewest-changes tie-break may retain a baseline shade on a surface capable of a higher independent maximum; only the joint criterion decides acceptance. The families remain fixed. Static distinctions carry every shortfall: absence/presence of memory triangle, Trash2/triangle, circle/bullseye/square/diamond, Circle/triangle/CircleDot/CircleCheck.
+
+[All 417 unrounded before/after pair measurements](amendment-2/pair-measurements.csv), [complete grouped tables](amendment-2/pair-measurements.md), [every shortfall and its two signatures](amendment-2/exceptions.md), [explicit shortfall IDs](amendment-2/theme-exceptions.json). Every theme still has 139 pair/context measurements, including optional-key rest/hover/focus opacity, canvas/sidebar ring/background contexts, and enabled exceeds-RAM deletion's row→provider compositing. [Veil](amendment-2/veil-joint.json), [Gilded](amendment-2/gilded-joint.json), [Vector](amendment-2/vector-joint.json) record exact domains/counts, factor coverage, joint assignment, individual pair/context maxima/witnesses and all unrounded RGB/ΔE.
+
+![State Before/After Swatches, Ordinary and Deutan](amendment-2/swatches.png)
+
+[144 state swatch SVG samples](amendment-2/swatches.svg). No hue family was dropped or remapped. The published 34 Sharma reference vectors and the original Machado severity-1.0/D65/unit-weight CIEDE2000/compositing convention remain unchanged.
+
+### Rendered Glyphs and Gates
+
+![Production Glyphs at Actual Sizes, Reduced Motion](amendment-2/glyphs-reduced-motion.png)
+
+![Monochrome Glyphs at Actual Sizes, Reduced Motion](amendment-2/glyphs-monochrome-reduced-motion.png)
+
+[Full pane fixture](amendment-2/production-panes-reduced-motion.png) and [hashed browser receipt](amendment-2/browser-proof.json): real components/CSS, seeded React Query data, real DOM events, file origin, no gateway/server. 45 SVGs at the ordered sizes, 12 pulse elements all `animation:none`, reduced motion true, distinct palettes, zero page errors/API requests. The actual meter styles are retained in the fixture; its former scratch global-pigment override was removed. Captures were visually inspected. Standalone-SVG raster capture timed out; inline SVG in a local HTML fixture succeeded and regenerated both swatch PNGs. No product workaround was introduced.
+
+[Exact commands and verbatim tails](amendment-2/commands.md). Focused UI **78 passed**; full UI **498 passed**; UI check/build pass. Emitted `index-BBCeaPR-.css` has the app-wide `[class*=animate-]` selector and `animation:none!important`. Restoring the exclusion in a scratch plant produces **2 failed/7 passed** including the named pin regression; reverted before green gates.
+
+Owner-target guard **80 passed** with `secret-store guard: active; nexus-api: denied` and `dbname audit: owner targets: none`; zero targets. Every offline test file/directory was exercised in the listed bounded splits. The initial unchanged exception-baseline test failed because shared origin/main advanced to #1065 during the gates. Its exact failure is preserved; merge `afb5db9e9087f53ed3d5af40413cd12125572526` integrated main's six-entry shrink without manual baseline/Python edits. The complete affected subsystem rerun passes **517/26 skipped**, including that test, runtime-home and reachability; upstream local-inference **34 passed**, CLI **232 passed**. Separate reachability **54 passed**. All other shards pass; two live modules are skipped at collection (exit 5), not claimed as passes. No unresolved failure and no #885 failure. The whole-tree PostgreSQL gate remains the coordinator's.
+
+Black/flake8/mypy: not applicable, no Python targets introduced/edited by this slice. No new UI diagnostics. Existing npm audit advisories and Vite chunk-size warning remain out of scope. No scripts/ classification row, runtime tunable, paid/provider call, app/gateway service, database write, migration or config/product-Python edit. Changes to Python/config in the merge are upstream #1065, absent from this slice's diff against main.
+
+Landing notes stand: no migration/fleet application or gateway restart; coordinator builds the client after landing and runs the whole-tree PostgreSQL gate. This implementer pushes and updates PR #1099; **does not merge the PR**. Open coordinator questions: **none**; Amendment 3 answers the historical anchor question.
+
+Codex, GPT-6.

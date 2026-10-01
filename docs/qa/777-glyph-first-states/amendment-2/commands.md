@@ -1,0 +1,452 @@
+# Amendment 2/3 Commands and Verbatim Tails
+
+Product commit: `25a1aa81`. Integrated proof head: `afb5db9e9087f53ed3d5af40413cd12125572526`; merged `origin/main`: `160134540517f6b74aacd1d1e1f3f584454eef86`. All commands run from the assigned worktree. Long gates use the preserved `run-gate.py` wrapper with a 589-second timeout, heartbeats, and the command below as its exact argv. Every root test file is covered in six explicit batches, plus both `*_test.py` files and every collected test directory. Live/PostgreSQL skips are not database proof.
+
+## a3-focused
+
+```text
+npm --prefix ui test -- shell-accessibility state-shades StateGlyphs TopBar LocalModelRows MapPane SettingsPane
+
+ Test Files  7 passed (7)
+      Tests  78 passed (78)
+   Start at  07:12:06
+   Duration  1.33s (transform 426ms, setup 272ms, collect 1.35s, tests 1.68s, environment 1.67s, prepare 224ms)
+
+```
+
+## a3-ui-all
+
+```text
+npm --prefix ui test
+
+ Test Files  37 passed (37)
+      Tests  498 passed (498)
+   Start at  07:12:15
+   Duration  6.47s (transform 1.94s, setup 2.07s, collect 10.79s, tests 16.59s, environment 14.37s, prepare 1.74s)
+
+```
+
+## a3-check
+
+```text
+npm --prefix ui run check
+
+> nexus-ui@1.0.0 check
+> tsc && npm run check:design-sync
+
+
+> nexus-ui@1.0.0 check:design-sync
+> tsc -p .design-sync/tsconfig.previews.json
+
+```
+
+## a3-build
+
+```text
+npm --prefix ui run build
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2.62s
+
+PWA v1.0.3
+mode      generateSW
+precache  22 entries (2315.28 KiB)
+files generated
+  ../dist/public/sw.js
+  ../dist/public/workbox-40c80ae4.js
+```
+
+## a3-owner-guard
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_owner_target_guard.py
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+........................................................................ [ 90%]
+........                                                                 [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+80 passed in 2.77s
+```
+
+## a3-api-orrery
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_orrery
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1852 passed, 821 skipped, 7 warnings in 34.03s
+```
+
+## a3-lore
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+414 passed, 55 skipped, 5 warnings in 20.46s
+```
+
+## a3-small
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_config tests/test_ir_eval_v2 tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util
+........................................................................ [ 17%]
+.........................................sss..........................ss [ 35%]
+....s..s.s.............................................................. [ 53%]
+...................sssss................................................ [ 71%]
+ssssssssssss............................................................ [ 89%]
+.................................F.......                                [100%]
+=================================== FAILURES ===================================
+_______________ test_repository_tree_matches_committed_baseline ________________
+
+    def test_repository_tree_matches_committed_baseline() -> None:
+        root = CHECKER.parents[1]
+        assert lint.check_tree(root, root / lint.BASELINE_PATH, "HEAD") == []
+>       assert lint.check_tree(root, root / lint.BASELINE_PATH, "origin/main") == []
+E       AssertionError: assert ['nexus/api/l...d94f71cb35|1'] == []
+E         
+E         Left contains 6 more items, first extra item: 'nexus/api/local_inference.py:278: baseline growth forbidden: nexus/api/local_inference.py|_process_is_ours|c829651a3d0b37c04b9ed9232199ba0d95638d82263e26d703a6523b90238792|1'
+E         Use -v to get more diff
+
+tests/test_scripts/test_check_exception_dispositions.py:636: AssertionError
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_scripts/test_check_exception_dispositions.py::test_repository_tree_matches_committed_baseline
+1 failed, 375 passed, 25 skipped, 7 warnings in 53.79s
+```
+
+## a3-config
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/config
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+126 passed, 5 warnings in 4.96s
+```
+
+## a3-other-root
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/live_seed_schema_test.py tests/live_set_designer_test.py
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2 skipped in 0.02s
+```
+
+## a3-reachability
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_reachability.py
+
+tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports
+tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+54 passed, 5 warnings in 9.52s
+```
+
+## a3-merged-small
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_config tests/test_ir_eval_v2 tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util tests/test_runtime_home.py tests/test_reachability.py
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+517 passed, 26 skipped, 7 warnings in 115.52s (0:01:55)
+```
+
+## a3-merged-api
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api/test_local_inference.py
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+34 passed, 7 warnings in 10.32s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+## a3-merged-cli
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_cli.py tests/test_cli_contract.py
+
+tests/test_cli.py::test_terminal_generation_statuses_include_api_and_incubator_values
+tests/test_cli.py::test_terminal_generation_statuses_include_api_and_incubator_values
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_cli.py::test_terminal_generation_statuses_include_api_and_incubator_values
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+232 passed, 5 warnings in 112.07s (0:01:52)
+```
+
+## a3-emitted-css
+
+```text
+node /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/inspect-css.cjs
+Emitted index-BBCeaPR-.css: (prefers-reduced-motion: reduce) [class*=animate-]{animation:none!important}
+```
+
+## a3-browser
+
+```text
+node /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/a3-capture.cjs
+Browser fixture: 45 SVGs; 12 pulse elements all animation:none; API requests: 0; page errors: 0; CSS index-BBCeaPR-.css
+```
+
+## a3-global-browser
+
+```text
+node /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/a3-globals.cjs
+{"Veil":{"globals":95,"samples":59,"changed":["--brass","--chart-1","--magenta","--primary","--ring","--sidebar-primary","--sidebar-ring"]},"Gilded":{"globals":95,"samples":59,"changed":[]},"Vector":{"globals":95,"samples":59,"changed":[]}}
+```
+
+## a3-pixel-proof
+
+```text
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/a3-pixel-proof.py
+Before/after RGBA arrays: (2310, 1200, 4) ; changed pixels: 47700 ; outside seven Veil anchor swatches: 0
+Veil: 95 frozen/exempt global declarations; 59 rendered color swatches; 47700 changed pixels; component-region changed pixels: 0
+Gilded: 95 frozen/exempt global declarations; 59 rendered color swatches; 0 changed pixels; component-region changed pixels: 0
+Vector: 95 frozen/exempt global declarations; 59 rendered color swatches; 0 changed pixels; component-region changed pixels: 0
+```
+
+## a3-shades
+
+```text
+STATE_SHADES_EVIDENCE_DIR=$PWD/docs/qa/777-glyph-first-states/amendment-2 npm --prefix ui test -- state-shades
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  07:10:37
+   Duration  826ms (transform 32ms, setup 27ms, collect 70ms, tests 401ms, environment 160ms, prepare 31ms)
+
+```
+
+## a3-red-plant
+
+```text
+npm --prefix ui test -- shell-accessibility
+    236|     expect(rule.selectors.map(normalize)).toEqual([GUARD]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/shell-accessibility.test.ts > reduced motion (app-wide animate-* guard) > map_pin_pulses_match_the_app_wide_reduced_motion_guard
+AssertionError: expected [ Array(1) ] to deeply equal [ '[class*="animate-"]' ]
+
+- Expected
++ Received
+
+  Array [
+-   "[class*=\"animate-\"]",
++   "[class*=\"animate-\"]:not(.map-pin *)",
+  ]
+
+ ❯ src/shell-accessibility.test.ts:251:47
+    249|       if (within(rule, isReducedMotion) && rule.selector.includes('[cl…
+    250|     });
+    251|     expect(guards.map(rule => rule.selector)).toEqual([GUARD]);
+       |                                               ^
+    252|     expect(guards[0].nodes.some(node => node.type === "decl" && node.p…
+    253|     const uses: { file: string; token: string }[] = [];
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 7 passed (9)
+   Start at  07:12:05
+   Duration  412ms (transform 21ms, setup 28ms, collect 23ms, tests 25ms, environment 170ms, prepare 43ms)
+
+```
+
+## a3-root-1
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_backfill_review_packet.py tests/test_bootstrap_episode_pg.py tests/test_character_identity.py tests/test_character_name_reveals.py tests/test_character_name_reveals_pg.py tests/test_character_relationship_id_types_pg.py tests/test_character_tag_manifest.py tests/test_chunk_lifecycle_columns_migration_pg.py tests/test_cli.py tests/test_cli_choice_http.py tests/test_cli_contract.py tests/test_cli_generation_http.py tests/test_cli_inspect_pg.py tests/test_cli_model_selection.py tests/test_cli_session_wait.py tests/test_cli_wizard_confirmation.py tests/test_clock_face.py tests/test_commit_choice_presence_pg.py tests/test_commit_chronology.py tests/test_commit_handler_sync.py tests/test_connection_lifecycle.py tests/test_correspondence.py tests/test_correspondence_live.py tests/test_database_contract.py tests/test_db_converters.py
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+490 passed, 28 skipped, 5 warnings in 249.44s (0:04:09)
+```
+
+## a3-root-2
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_dbname_audit.py tests/test_doc_front_matter.py tests/test_embedding_artifacts.py tests/test_embedding_table_ownership_pg.py tests/test_entity_reference_parity_pg.py tests/test_entity_tag_manifest_apply.py tests/test_enum_column_comment_labels_pg.py tests/test_faction_table_audit.py tests/test_gis_scripts_live.py tests/test_golden_path_live.py tests/test_idf_dictionary_pg.py tests/test_inherited_slot_isolation_pg.py tests/test_intention_revision_weight.py tests/test_interaction_boundary.py tests/test_interactions_pg.py tests/test_issue_601_wizard_live.py tests/test_jobs_cli_pg.py tests/test_live_gate_clones_pg.py tests/test_local_skald_live.py tests/test_logon_mock_integration.py tests/test_lore_adapter_metadata.py tests/test_measure_place_coordinate_costs.py tests/test_measure_place_coordinate_costs_pg.py tests/test_measure_place_scale_grammar.py tests/test_measure_place_scale_grammar_pg.py
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+120 passed, 145 skipped, 5 warnings in 12.47s
+```
+
+## a3-root-3
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_memnon_cross_encoder.py tests/test_memnon_cross_encoder_artifact.py tests/test_memnon_cross_encoder_dependencies.py tests/test_memnon_db_access.py tests/test_memnon_embedding_cache.py tests/test_memnon_embedding_contract.py tests/test_memnon_model_failures_pg.py tests/test_memnon_runtime_config.py tests/test_memnon_script_model_loaders.py tests/test_migration_comment_lint.py tests/test_mock_openai.py tests/test_model_artifact_lock_committed.py tests/test_model_drift.py tests/test_model_registry_live.py tests/test_name_reveal_staged_bindings.py tests/test_name_reveal_staged_bindings_pg.py tests/test_name_reveal_tag_validation.py tests/test_name_reveal_tag_validation_pg.py tests/test_native_structured_output.py tests/test_new_story_cache.py tests/test_new_story_cli.py tests/test_new_story_integration.py tests/test_new_story_schemas.py tests/test_new_story_setup.py tests/test_new_story_setup_config.py
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/tokenization_utils_base.py:2718: UserWarning: `max_length` is ignored when `padding`=`True` and there is no truncation strategy. To pad to max length, use `padding='max_length'`.
+    warnings.warn(
+
+tests/test_memnon_cross_encoder_dependencies.py::test_sentencepiece_runtime_dependency_available
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_memnon_cross_encoder_dependencies.py::test_sentencepiece_runtime_dependency_available
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+360 passed, 53 skipped, 8 warnings in 28.92s
+```
+
+## a3-root-4
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_openai_registry_capabilities.py tests/test_orrery_tag_validation.py tests/test_orrery_tag_validation_pg.py tests/test_owner_target_guard.py tests/test_pg_accepted_turn_factory.py tests/test_pg_adjudication_ledger_seed.py tests/test_pg_anchor_pair_tag_seeds.py tests/test_pg_character_pair_seed.py tests/test_pg_disposable_target.py tests/test_pg_legacy_faction_tag_seed.py tests/test_pg_target_contract.py tests/test_place_tag_manifest.py tests/test_player_identity_consumers_pg.py tests/test_postgres_tools.py tests/test_presence_audit.py tests/test_presence_boost.py tests/test_presence_boost_pg.py tests/test_presence_reconciliation.py tests/test_presence_roster.py tests/test_presence_roster_pg.py tests/test_prompt_lint.py tests/test_prompt_tag_vocabulary_pg.py tests/test_prose_metrics.py tests/test_prose_metrics_pg.py tests/test_qa_shift.py
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+472 passed, 140 skipped, 7 warnings in 30.74s
+```
+
+## a3-root-5
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_reachability.py tests/test_rebuild_memory_idf_pg.py tests/test_record_revelation_cli_pg.py tests/test_reentry_wire_ledger.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_register_drift_study.py tests/test_retrograde_summary_retrieval.py tests/test_routine_delta_grammar_probe_pg.py tests/test_runtime_home.py tests/test_scheduler_helpers_basetemp.py tests/test_scheduler_helpers_routing.py tests/test_schema_documentation_pg.py tests/test_secret_manager.py tests/test_secret_store_guard.py tests/test_secret_store_integration.py tests/test_skald_wire.py tests/test_slot_routed_entrypoints.py tests/test_slot_utils.py tests/test_summary_triggers.py tests/test_tags_audit_pg.py tests/test_trait_compiler.py tests/test_trait_compiler_integration.py tests/test_trait_input_derivation.py tests/test_trait_menu_docs.py tests/test_travel_reachability.py
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+442 passed, 76 skipped, 7 warnings in 37.17s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+## a3-root-6
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_travel_reachability_pg.py tests/test_turn_observation.py tests/test_unowned_index_adoption_pg.py tests/test_usage_recorder.py tests/test_wizard_agent.py tests/test_wizard_live.py tests/test_wizard_opening_presence_pg.py tests/test_world_clock_contract_pg.py
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+87 passed, 34 skipped, 7 warnings in 5.88s
+```
+
+The restored-exclusion plant was reverted in a `finally` block before green UI tests/build. The initial a3-small failure was an upstream-ref race: another worktree fetched #1065, shrinking origin/main's exception baseline by six entries after the first merge check. The failure is retained verbatim. `git merge origin/main` integrated those changes in afb5db9e9087f53ed3d5af40413cd12125572526; the complete affected subsystem gate then passed, including the baseline test, followed by upstream API/CLI checks. No baseline or Python file was manually edited. `a3-other-root` exits 5 because both modules are skipped at collection; no pass is claimed.
+
+Black, flake8 and mypy: not applicable (no Python targets introduced/edited by this slice). UI check: no diagnostics. Existing npm audit advisories and Vite chunk warning were not fixed. No new scripts/ path.
