@@ -72,9 +72,10 @@ message when the store itself could not be read; that message never carries the
 must use sanitized exceptions with no chained subprocess/backend exception that
 can retain argv.
 
-A store that cannot be read raises `SecretStoreAccessError`, never
-`MissingSecretError`, and `get_secret` does not fall back to the environment
-variable after it. Its `reason` is `locked` (a `security` exit other than 44;
+On macOS, a login Keychain that cannot be read raises `SecretStoreAccessError`,
+never `MissingSecretError`, and `get_secret` does not fall back to the
+environment variable after it (the `keyring` backend elsewhere still reads a
+`KeyringError` as absent). Its `reason` is `locked` (a `security` exit other than 44;
 unlock the login keychain in Keychain Access or with `security unlock-keychain`
 and retry), `timeout` (the keychain did not answer within the `security` call
 timeout; unlock it, then retry), or `no_security_cli` (no `security` on the

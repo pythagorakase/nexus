@@ -853,7 +853,7 @@ def _check_ui_bundle(ctx: ReadinessContext) -> Outcome:
 def _check_seat_secrets(ctx: ReadinessContext) -> Outcome:
     """Every key the model seats in use read is present (never printed).
 
-    An account whose store cannot be read is ``unreadable``, never
+    An account whose macOS Keychain cannot be read is ``unreadable``, never
     ``missing``; any unreadable account fails the check with the first one's
     remediation, since storing a key cannot help while the store is shut.
     """
