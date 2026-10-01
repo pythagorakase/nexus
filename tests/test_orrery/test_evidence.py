@@ -116,6 +116,7 @@ from tests.pg_fixtures import (
     seed_entity_tag,
     seed_pair_tag,
     seed_protagonist,
+    seed_story_clock,
     seed_routine_anchor,
 )
 
@@ -456,7 +457,8 @@ def test_slot_backed_explain_carries_evidence_end_to_end(
 ) -> None:
     """Evidence must survive the full audit payload path on a seeded slot.
 
-    With no anchor chunk, the resolver binds off-screen actors from three
+    With no anchor chunk and an explicit seeded clock, the resolver binds
+    off-screen actors from three
     anchor-less sources (``compose_actor_bindings``): a current ephemeral tag,
     an inbound ``hunting`` pair tag, and a routine anchor whose mobility policy
     is neither ``none`` nor ``nomadic``. The clone seeds one actor through each
@@ -475,7 +477,11 @@ def test_slot_backed_explain_carries_evidence_end_to_end(
     with disposable_slot_database("qa885_evidence") as dbname:
         route_slot_to_disposable(monkeypatch.setattr, slot=ROUTED_SLOT, dbname=dbname)
         monkeypatch.setenv("NEXUS_SLOT", str(ROUTED_SLOT))
-        _, hunter_entity = seed_protagonist(dbname, name="Evidence Hunter")
+        STORY_WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
+        seed_story_clock(dbname, world_time=STORY_WORLD_TIME)
+        _, hunter_entity = seed_protagonist(
+            dbname, name="Evidence Hunter", base_timestamp=STORY_WORLD_TIME.isoformat()
+        )
         _, grieving_entity = seed_character(dbname, name="Evidence Mourner")
         _, hunted_entity = seed_character(dbname, name="Evidence Quarry")
         _, anchored_entity = seed_character(dbname, name="Evidence Homebody")
@@ -521,6 +527,7 @@ def test_slot_backed_explain_carries_evidence_end_to_end(
                     session,
                     BUILTIN_TEMPLATES,
                     anchor_chunk_id=None,
+                    world_time_override=STORY_WORLD_TIME,
                     window_chunks=int(orrery["binding"]["window_chunks"]),
                     sunhelm_settings=orrery.get("sunhelm"),
                 )

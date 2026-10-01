@@ -263,6 +263,7 @@ character_tags = 8
 
 [lore.retrieval]
 max_deep_queries = 5
+deep_query_k = 15  # Results MEMNON returns per deep query, before deduplication
 
 [lore.token_budget]
 # Context window limits for APEX generation
@@ -340,6 +341,9 @@ window_chunks = 30
 hostile_source_enabled = true
 roster_source_enabled = true
 acquaintance_source_enabled = true
+# Same-place introductions one character may join per tick.
+# At 1, each character joins at most one introduction per off-screen beat.
+acquaintance_introductions_per_entity_per_tick = 1
 roster_reach = 2
 
 [orrery.resolver]

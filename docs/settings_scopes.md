@@ -71,6 +71,8 @@ the test suite.
 | `memory.warm_slice_default` | semantic | Warm-slice expansion behavior. |
 | `memory.max_sql_iterations` | semantic | Query iteration cap that shapes retrieval. |
 
+The LORE retrieval breadth settings `lore.retrieval.max_deep_queries` and `lore.retrieval.deep_query_k`, and the historical-passage cap `lore.render_limits.historical_passages`, sit outside the fingerprinted tables. `deep_query_k` bounds the results MEMNON returns for each deep query before deduplication. Changing these settings does not change the Pass-2 configuration fingerprint or require a stored-baseline refresh.
+
 On continuation:
 
 - An equal full fingerprint proceeds.

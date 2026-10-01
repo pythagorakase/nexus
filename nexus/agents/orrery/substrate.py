@@ -1811,7 +1811,9 @@ def _routine_schedule_due(
     schedule: Mapping[str, Any],
     world_time: Optional[datetime],
 ) -> bool:
-    if world_time is None or not schedule:
+    if world_time is None:
+        raise ValueError("Cannot evaluate routine schedule due-ness without world_time")
+    if not schedule:
         return True
     weekdays = schedule.get("weekdays")
     if weekdays is not None and world_time.weekday() not in {
