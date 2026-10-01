@@ -468,6 +468,27 @@ IDENTITY = {
     ),
 }
 HIDDEN = {
+    "sql-array-cast": "SELECT NULL::public._item_type::text",
+    "sql-quoted-array-cast": 'SELECT NULL::"public"."_item_type"::text',
+    "sql-row-array-cast": "SELECT NULL::public._items::text",
+    "sql-typed-literal": (
+        "SELECT (emotional_valence '+2|friendly')::text "
+        "FROM public.character_relationships"
+    ),
+    "sql-catalog-cast": "SELECT CAST('public.items' AS regclass)::oid",
+    "sql-catalog-cast-parentheses": (
+        "SELECT CAST((('public.items')) AS pg_catalog.regclass)::oid"
+    ),
+    "sql-catalog-parentheses": "SELECT (('public.items'))::regclass::oid",
+    "sql-catalog-regtype": "SELECT CAST('public._item_type' AS regtype)::oid",
+    "sql-catalog-computed-format": "SELECT format('%I', input)::regclass::oid",
+    "sql-catalog-computed-concat": ("SELECT CAST('public.' || input AS regclass)::oid"),
+    "sql-catalog-computed-column": (
+        "SELECT CAST(name AS regclass)::oid FROM public.characters"
+    ),
+    "sql-catalog-computed-parameter": "SELECT CAST(input AS regclass)::oid",
+    "sql-catalog-computed-suffix": "SELECT input::regclass::oid",
+    "sql-catalog-computed-parentheses": ("SELECT ('public.' || input)::regclass::oid"),
     "unicode-identifier": r'BEGIN PERFORM NULL::U&"item\005ftype"; RETURN; END',
     "computed-path": (
         "BEGIN PERFORM set_config('SEARCH_'||'PATH','assets,public',true); "
@@ -513,13 +534,20 @@ def _refusal(dbname: str, case: str, caplog: pytest.LogCaptureFixture) -> None:
     elif group == "identity":
         statement, offender = IDENTITY[name]
     else:
-        signature = "input text" if name == "unresolved" else ""
+        signature = "input text" if name == "unresolved" or "computed" in name else ""
         language = "sql" if name.startswith("sql-") else "plpgsql"
         result_type = {
             "sql-query": "bigint",
             "sql-atomic": "bigint",
             "sql-cast": "text",
-        }.get(name, "void")
+        }.get(
+            name,
+            (
+                "oid"
+                if "catalog" in name
+                else "text" if name.startswith("sql-") else "void"
+            ),
+        )
         statement = (
             f"CREATE FUNCTION public.probe813({signature}) "
             f"RETURNS {result_type} LANGUAGE {language} "
@@ -546,6 +574,20 @@ def _refusal(dbname: str, case: str, caplog: pytest.LogCaptureFixture) -> None:
     assert not _apply(dbname), case
     assert offender in caplog.text, caplog.text
     assert "target public." in caplog.text, caplog.text
+    expected_reference = {
+        "sql-array-cast": "public._item_type",
+        "sql-quoted-array-cast": "public._item_type",
+        "sql-row-array-cast": "public._items",
+        "sql-typed-literal": "emotional_valence",
+        "sql-catalog-cast": "public.items",
+        "sql-catalog-cast-parentheses": "public.items",
+        "sql-catalog-parentheses": "public.items",
+        "sql-catalog-regtype": "public._item_type",
+    }.get(name)
+    if expected_reference:
+        assert expected_reference in caplog.text, caplog.text
+    if "computed" in name and group == "hidden":
+        assert "unresolved" in caplog.text, caplog.text
     assert (
         _snapshot(dbname, surviving=False) == before
     ), "partial migration or changed row/comment"
@@ -604,6 +646,28 @@ def test_migration_143_refuses_hidden_body_reference(
         _refusal(dbname, "hidden:" + probe, caplog)
 
 
+def _lock_refusal(dbname: str, caplog: pytest.LogCaptureFixture) -> None:
+    before, stamps = _snapshot(dbname, surviving=False), _stamps(dbname)
+    with closing(connect(dbname)) as blocker, blocker.cursor() as cur:
+        cur.execute("LOCK TABLE public.items IN ACCESS SHARE MODE")
+        caplog.clear()
+        assert not _apply(dbname)
+        assert "lock timeout" in caplog.text, caplog.text
+        blocker.rollback()
+    assert _snapshot(dbname, surviving=False) == before
+    assert _stamps(dbname) == stamps
+    assert all(s[0] != "143" for s in stamps)
+
+
+def test_migration_143_refuses_conflicting_lock_atomically(
+    archives: dict[str, Path], tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A real competing transaction hits the five-second bound and rolls back."""
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        _lock_refusal(dbname, caplog)
+
+
 def _column_consumers(dbname: str) -> None:
     _sql(
         dbname,
@@ -612,7 +676,7 @@ def _column_consumers(dbname: str) -> None:
         "FROM public.character_relationships cr$$; "
         "COMMENT ON FUNCTION public.probe813_columns() IS '813 varchar alias'; "
         "CREATE FUNCTION public.probe813_bare() RETURNS SETOF text "
-        "LANGUAGE sql AS $$SELECT emotional_valence::text "
+        "LANGUAGE sql AS $$SELECT emotional_valence "
         "FROM public.character_relationships$$; "
         "COMMENT ON FUNCTION public.probe813_bare() IS '813 varchar column'; "
         "CREATE FUNCTION public.probe813_percent() RETURNS void LANGUAGE plpgsql "
@@ -629,6 +693,43 @@ def _column_consumers(dbname: str) -> None:
         "SET search_path=assets,public AS $$SELECT 'other'::item_type::text$$; "
         "COMMENT ON FUNCTION public.probe813_shadow() IS '813 effective search path'",
     )
+
+
+def _catalog_consumers(dbname: str) -> None:
+    _sql(
+        dbname,
+        "CREATE FUNCTION public.probe813_catalog() RETURNS oid LANGUAGE sql "
+        "AS $$SELECT CAST('public.characters' AS regclass)::oid$$; "
+        "COMMENT ON FUNCTION public.probe813_catalog() IS '813 surviving CAST'; "
+        "CREATE FUNCTION public.probe813_parentheses() RETURNS oid LANGUAGE sql "
+        "AS $$SELECT (('public.places'))::pg_catalog.regclass::oid$$; "
+        "COMMENT ON FUNCTION public.probe813_parentheses() "
+        "IS '813 surviving parenthesized catalog cast'; "
+        "CREATE FUNCTION public.probe813_cast_parentheses() RETURNS oid "
+        "LANGUAGE sql AS $$SELECT CAST((('public.characters')) "
+        "AS pg_catalog.regclass)::oid$$; "
+        "COMMENT ON FUNCTION public.probe813_cast_parentheses() "
+        "IS '813 surviving parenthesized CAST'; "
+        "CREATE FUNCTION public.probe813_regproc() RETURNS oid LANGUAGE sql "
+        "AS $$SELECT CAST('public.set_updated_at' AS regproc)::oid$$; "
+        "COMMENT ON FUNCTION public.probe813_regproc() IS '813 surviving regproc'; "
+        "CREATE FUNCTION public.probe813_regprocedure() RETURNS oid LANGUAGE sql "
+        "AS $$SELECT ('public.set_updated_at()')::regprocedure::oid$$; "
+        "COMMENT ON FUNCTION public.probe813_regprocedure() "
+        "IS '813 surviving regprocedure'",
+    )
+
+
+def _catalog_results(dbname: str) -> None:
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT probe813_catalog()='public.characters'::regclass::oid, "
+            "probe813_parentheses()='public.places'::regclass::oid, "
+            "probe813_cast_parentheses()='public.characters'::regclass::oid, "
+            "probe813_regproc()='public.set_updated_at'::regproc::oid, "
+            "probe813_regprocedure()='public.set_updated_at()'::regprocedure::oid"
+        )
+        assert cur.fetchone() == (True, True, True, True, True)
 
 
 def _relationship(dbname: str) -> None:
@@ -710,7 +811,9 @@ def _transition(dbname: str, monkeypatch: pytest.MonkeyPatch) -> None:
         close_all_pools()
 
 
-@pytest.mark.parametrize("case", (*REFUSALS, "relationship", "deferred", "transition"))
+@pytest.mark.parametrize(
+    "case", (*REFUSALS, "lock", "relationship", "catalog", "deferred", "transition")
+)
 def test_migration_143_regressions_work_from_post143_clone(
     archives: dict[str, Path],
     tmp_path: Path,
@@ -728,13 +831,19 @@ def test_migration_143_regressions_work_from_post143_clone(
         assert _stamps(dbname) == [s for s in stamps if s[0] != "143"]
         if case in REFUSALS:
             _refusal(dbname, case, caplog)
+        elif case == "lock":
+            _lock_refusal(dbname, caplog)
         elif case == "deferred":
             _deferred(dbname)
         else:
             if case == "relationship":
                 _column_consumers(dbname)
+            if case == "catalog":
+                _catalog_consumers(dbname)
             assert _apply(dbname)
-            if case == "relationship":
+            if case == "catalog":
+                _catalog_results(dbname)
+            elif case == "relationship":
                 _relationship(dbname)
             else:
                 _transition(dbname, monkeypatch)
@@ -751,6 +860,19 @@ def test_migration_143_accepts_live_relationship_column_names(
         assert _apply(dbname)
         assert _snapshot(dbname, surviving=True) == before
         _relationship(dbname)
+
+
+def test_migration_143_accepts_surviving_catalog_casts(
+    archives: dict[str, Path], tmp_path: Path
+) -> None:
+    """Surviving catalog literals pass CAST and parenthesized :: forms."""
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        _catalog_consumers(dbname)
+        before = _snapshot(dbname, surviving=True)
+        assert _apply(dbname)
+        assert _snapshot(dbname, surviving=True) == before
+        _catalog_results(dbname)
 
 
 def test_migration_143_preserves_deferred_function_consumers(

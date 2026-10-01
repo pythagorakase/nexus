@@ -7,13 +7,22 @@
 -- Surviving triggers: public.characters.trg_characters_set_updated and
 -- public.places.trg_places_set_updated. Their definitions and body are untouched.
 --
+-- Locks: ACCESS EXCLUSIVE on each dropped relation and type; each lock waits
+-- at most five seconds, and a timeout rolls back the whole transaction.
+--
 -- Body support: SQL and PL/pgSQL, quoted/schema-qualified identifiers, nested
 -- comments, ordinary/E/dollar literals, casts, CAST AS, declarations, %TYPE,
 -- %ROWTYPE and relation names. Identifier candidates resolve under proconfig's
 -- search_path (otherwise the caller's path). NEW/OLD column names are allowed
 -- only if EVERY attached relation has that column and its actual type is outside
 -- the closure. Other qualified columns require an actual resolved relation and
--- unrelated column type; unsupported/unresolved target-name uses refuse.
+-- unrelated column type in a qualified column or resolved SELECT column list.
+-- Typed literals are type uses; unclassified target-name occurrences refuse.
+-- Candidate names come from every enum, row type and generated array in the
+-- complete type closure, including quoted and schema-qualified spellings.
+-- Catalog casts support CAST(expr AS reg*) and expr::reg*, with parenthesized
+-- literal expressions. Computed catalog expressions always refuse; literals
+-- resolve through the catalog, and references into the drop closure refuse.
 -- Constant EXECUTE expressions support literals, parentheses, concatenation and
 -- pg_catalog.format with literal arguments; fold then recursively inspect SQL.
 -- Parameter/variable-built EXECUTE, unsupported expressions, ambiguous search
@@ -23,6 +32,8 @@
 -- Diagnostic strings/comments are not identifiers. Temporary helpers are removed
 -- in this transaction; no persistent helper or new documentation debt remains.
 -- All validation precedes DROP; the runner owns commit, rollback and the stamp.
+
+SET LOCAL lock_timeout = '5s';
 
 CREATE FUNCTION pg_temp.dead143_tokens(body text) RETURNS jsonb
 LANGUAGE plpgsql AS $lexer$
@@ -132,6 +143,11 @@ DECLARE
     relation_name text;
     type_context boolean;
     catalog_kind text;
+    catalog_at integer;
+    expression_left integer;
+    expression_right integer;
+    depth integer;
+    column_position boolean;
     r record;
 BEGIN
     IF nesting > 8 THEN RAISE EXCEPTION 'unresolved nested dynamic SQL'; END IF;
@@ -177,34 +193,84 @@ BEGIN
             PERFORM pg_temp.dead143_body(folded,function_oid,targets,relation_targets,names,nesting+1);
             i := j; CONTINUE;
         END IF;
-        -- Resolve catalog casts and catalog/sequence lookup calls, including
-        -- literal SQL-standard bodies. Computed lookup arguments refuse.
-        catalog_kind := NULL;
+        -- Catalog casts are inspected from their operator, not from a literal:
+        -- this catches CAST, parentheses, and computed expressions uniformly.
+        catalog_kind := NULL; expression_left := NULL; expression_right := NULL;
         IF kind='id' AND name IN ('nextval','currval','setval','to_regclass','to_regtype')
-            AND tokens->(i+1)->>'v'='(' AND tokens->(i+2)->>'k' IS DISTINCT FROM 'string' THEN
-            RAISE EXCEPTION 'target public.items/public.ai_notebook or enum: unresolved catalog lookup %',name;
-        END IF;
-        IF kind='string' THEN
-            IF tokens->(i+1)->>'v'='::' THEN
-                catalog_kind := tokens->(i+2)->>'v';
-                IF catalog_kind='pg_catalog' AND tokens->(i+3)->>'v'='.' THEN catalog_kind := tokens->(i+4)->>'v'; END IF;
-            ELSIF tokens->(i-1)->>'v'='(' THEN
-                catalog_kind := CASE tokens->(i-2)->>'v'
-                    WHEN 'to_regtype' THEN 'regtype'
-                    WHEN 'to_regclass' THEN 'regclass'
-                    WHEN 'nextval' THEN 'regclass'
-                    WHEN 'currval' THEN 'regclass'
-                    WHEN 'setval' THEN 'regclass' END;
+            AND tokens->(i+1)->>'v'='(' THEN
+            catalog_kind := CASE WHEN name='to_regtype' THEN 'regtype' ELSE 'regclass' END;
+            expression_left := i+2; expression_right := i+2;
+            IF tokens->(i+3)->>'v' NOT IN (')',',','::') THEN
+                RAISE EXCEPTION 'unresolved catalog lookup %',name;
             END IF;
+        ELSIF name='::' THEN
+            catalog_at := i+1;
+            IF tokens->catalog_at->>'v'='pg_catalog' AND tokens->(catalog_at+1)->>'v'='.' THEN
+                catalog_at := catalog_at+2;
+            END IF;
+            catalog_kind := tokens->catalog_at->>'v';
+            expression_right := i-1; expression_left := expression_right;
+            IF tokens->expression_right->>'v'=')' THEN
+                depth := 1; expression_left := expression_right-1;
+                WHILE expression_left>=0 AND depth>0 LOOP
+                    IF tokens->expression_left->>'v'=')' THEN depth := depth+1;
+                    ELSIF tokens->expression_left->>'v'='(' THEN depth := depth-1; END IF;
+                    IF depth>0 THEN expression_left := expression_left-1; END IF;
+                END LOOP;
+                -- A function call is computed, even if all its arguments are literals.
+                IF tokens->(expression_left-1)->>'k'='id'
+                    AND tokens->(expression_left-1)->>'v' NOT IN ('select','perform','return','then','when','else') THEN
+                    expression_left := expression_left-1;
+                END IF;
+            END IF;
+        ELSIF kind='id' AND name='cast' AND tokens->(i+1)->>'v'='(' THEN
+            depth := 0; j := i+2;
+            WHILE j<count_tokens LOOP
+                IF tokens->j->>'v'='(' THEN depth := depth+1;
+                ELSIF tokens->j->>'v'=')' THEN
+                    IF depth=0 THEN EXIT; END IF;
+                    depth := depth-1;
+                ELSIF depth=0 AND tokens->j->>'v'='as' THEN
+                    expression_left := i+2; expression_right := j-1;
+                    catalog_at := j+1;
+                    IF tokens->catalog_at->>'v'='pg_catalog' AND tokens->(catalog_at+1)->>'v'='.' THEN
+                        catalog_at := catalog_at+2;
+                    END IF;
+                    catalog_kind := tokens->catalog_at->>'v'; EXIT;
+                END IF;
+                j := j+1;
+            END LOOP;
         END IF;
-        IF catalog_kind IN ('regclass','regtype') THEN
-            IF catalog_kind = 'regclass' THEN relation_oid := to_regclass(name); type_oid := NULL;
-            ELSE type_oid := to_regtype(name); relation_oid := NULL; END IF;
+        IF catalog_kind IN ('regclass','regtype','regproc','regprocedure','regtypeoid') THEN
+            -- Strip only parentheses enclosing the complete expression.
+            WHILE expression_left<expression_right AND tokens->expression_left->>'v'='('
+                AND tokens->expression_right->>'v'=')' LOOP
+                depth := 0; j := expression_left;
+                WHILE j<expression_right LOOP
+                    IF tokens->j->>'v'='(' THEN depth := depth+1;
+                    ELSIF tokens->j->>'v'=')' THEN depth := depth-1; END IF;
+                    IF depth=0 THEN EXIT; END IF;
+                    j := j+1;
+                END LOOP;
+                IF j<expression_right THEN EXIT; END IF;
+                expression_left := expression_left+1; expression_right := expression_right-1;
+            END LOOP;
+            IF expression_left IS NULL OR expression_left<>expression_right
+                OR tokens->expression_left->>'k' IS DISTINCT FROM 'string'
+                OR tokens->expression_left->>'raw' ~* '^e' THEN
+                RAISE EXCEPTION 'unresolved computed catalog cast/lookup %',catalog_kind;
+            END IF;
+            folded := tokens->expression_left->>'v';
+            relation_oid := NULL; type_oid := NULL;
+            IF catalog_kind='regclass' THEN relation_oid := to_regclass(folded);
+            ELSIF catalog_kind IN ('regtype','regtypeoid') THEN type_oid := to_regtype(folded);
+            ELSIF catalog_kind='regproc' THEN relation_oid := to_regproc(folded);
+            ELSE relation_oid := to_regprocedure(folded); END IF;
             IF relation_oid IS NULL AND type_oid IS NULL THEN
-                RAISE EXCEPTION 'unresolved catalog literal %',name;
+                RAISE EXCEPTION 'unresolved catalog literal %',folded;
             END IF;
-            IF relation_oid = ANY(relation_targets) OR type_oid = ANY(targets) THEN
-                RAISE EXCEPTION 'target %: catalog body reference',name;
+            IF (catalog_kind='regclass' AND relation_oid=ANY(relation_targets)) OR type_oid=ANY(targets) THEN
+                RAISE EXCEPTION 'target %: catalog body reference',folded;
             END IF;
         END IF;
         IF kind = 'id' AND name = ANY(names) THEN
@@ -212,8 +278,14 @@ BEGIN
             IF i >= 2 AND tokens->(i-1)->>'v' = '.' AND tokens->(i-2)->>'k' = 'id' THEN
                 qualified := quote_ident(tokens->(i-2)->>'v') || '.' || qualified;
             END IF;
+            type_context := tokens->(i+1)->>'k'='string'
+                OR (i>0 AND tokens->(i-1)->>'v' IN ('::','as'));
+            IF i>=3 AND tokens->(i-1)->>'v'='.' THEN
+                type_context := coalesce(type_context,false) OR tokens->(i-3)->>'v' IN ('::','as');
+            END IF;
             -- NEW/OLD is a column use, not an enum use, only with catalog proof.
-            IF i >= 2 AND tokens->(i-1)->>'v' = '.' AND tokens->(i-2)->>'v' IN ('new','old') THEN
+            IF i >= 2 AND tokens->(i-1)->>'v' = '.' AND tokens->(i-2)->>'v' IN ('new','old')
+                AND NOT coalesce(type_context,false) THEN
                 found_column := false;
                 FOR r IN SELECT tgrelid FROM pg_trigger WHERE tgfoid = function_oid LOOP
                     SELECT atttypid INTO column_type FROM pg_attribute
@@ -228,17 +300,21 @@ BEGIN
                 -- Prove a query-column use in this semicolon-delimited statement.
                 -- Recognize direct relation names and FROM/JOIN/UPDATE/INTO aliases.
                 -- Cast/declaration type contexts cannot borrow a column's proof.
-                type_context := i>0 AND tokens->(i-1)->>'v' IN ('::','as');
-                IF i>=2 AND tokens->(i-1)->>'v'='.' THEN
-                    type_context := coalesce(type_context,false) OR (i>=3 AND tokens->(i-3)->>'v' IN ('::','as'));
-                END IF;
                 left_edge := i; right_edge := i;
                 WHILE left_edge>0 AND tokens->(left_edge-1)->>'v'<>';' LOOP left_edge := left_edge-1; END LOOP;
                 WHILE right_edge<count_tokens-1 AND tokens->(right_edge+1)->>'v'<>';' LOOP right_edge := right_edge+1; END LOOP;
                 qualifier := NULL;
                 IF i>=2 AND tokens->(i-1)->>'v'='.' THEN qualifier := tokens->(i-2)->>'v'; END IF;
                 found_column := false;
-                IF NOT coalesce(type_context,false) THEN
+                -- Bare candidates must occupy a SELECT column-list position.
+                -- Mere presence of an unrelated same-named column is not proof.
+                column_position := qualifier IS NOT NULL OR (
+                    tokens->(i-1)->>'v' IN ('select',',')
+                    AND tokens->(i+1)->>'v' IN ('::',',','from','as')
+                    AND EXISTS (SELECT 1 FROM jsonb_array_elements(tokens) WITH ORDINALITY t(token,position)
+                        WHERE position BETWEEN left_edge+1 AND i AND token->>'v'='select')
+                );
+                IF coalesce(column_position,false) AND NOT coalesce(type_context,false) THEN
                     FOR j IN left_edge..right_edge LOOP
                         IF tokens->j->>'v' IN ('from','join','update','into') AND tokens->(j+1)->>'k'='id' THEN
                             relation_at := j+1;
@@ -712,7 +788,7 @@ $manifest$;
         'pg_type:type public.trait:n:schema public',
         'pg_type:type public.trait[]:i:type public.trait'
     ];
-    names text[] := ARRAY['items','ai_notebook','items_id_seq','ai_notebook_id_seq','agent_type','log_level_type','emotional_valence','entity_type','item_type','relationship_type','threat_domain_type','threat_lifecycle_type','trait'];
+    names text[];
     tables oid[] := ARRAY[]::oid[];
     enums oid[] := ARRAY[]::oid[];
     targets oid[];
@@ -895,7 +971,13 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
         (SELECT unnest(enums) UNION SELECT reltype FROM pg_class WHERE oid=ANY(tables))
         UNION SELECT t.oid FROM pg_type t JOIN types b ON t.typbasetype=b.oid OR t.typelem=b.oid
     ) SELECT array_agg(oid) INTO targets FROM types;
-    
+    -- typname supplies the actual generated array names, never guessed spellings.
+    SELECT array_agg(DISTINCT candidate) INTO names FROM (
+        SELECT typname AS candidate FROM pg_type WHERE oid=ANY(targets)
+        UNION SELECT relname FROM pg_class WHERE oid=ANY(tables)
+        UNION SELECT relname FROM pg_class WHERE oid IN (to_regclass('public.items_id_seq'),to_regclass('public.ai_notebook_id_seq'))
+    ) candidates;
+
     FOR f IN SELECT p.*,l.lanname,format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)) AS identity
         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
         WHERE p.prokind IN ('f','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_(temp|toast)'

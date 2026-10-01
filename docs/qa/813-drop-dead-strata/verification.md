@@ -565,3 +565,389 @@ and the final whole-tree PostgreSQL gate. No UI rebuild is owed. No merge here.
 Open questions for the coordinator: none; sequencing and landing work remain.
 
 Authored by Codex, running GPT-6.
+
+
+## After the Independent Review
+
+Fix order `1098-astra-fix.md`, against frozen parent `121465222bb227e667095a4ef6994277729ab2a0`.
+All four findings are applied without changing the drop manifest, reconstruction
+fixture, shared function body, surviving triggers, six deferred helpers, or
+schema-documentation debt. No paid provider call or owner database write occurred.
+
+1. Candidate names now come from the complete catalog type closure, including
+   each enum, table row type and actual generated array `pg_type.typname`. The
+   lexer resolves quoted/unquoted and schema-qualified spellings with fresh OIDs.
+   The array probes refuse with both `probe813` and the actual type identity.
+2. A candidate immediately followed by a string is a typed literal. Column proof
+   is restricted to qualified occurrences or a SELECT column-list position whose
+   relation and unrelated actual column type resolve through the catalog.
+   `emotional_valence '+2|friendly'` refuses; a bare SELECT of the live varchar
+   column and the real valence trigger/diagnostic/write still pass.
+3. Catalog casts are inspected from CAST/AS or `::`, including enclosing
+   parentheses and `pg_catalog` qualification. Literal regclass/regtype/regproc/
+   regprocedure/regtypeoid expressions resolve through the catalog; closure
+   references and unresolved literals refuse. Concatenations, parameters,
+   function calls and column expressions refuse as unresolved rather than being
+   evaluated. Surviving characters/places and set_updated_at catalog casts pass
+   and return the same OIDs after retirement.
+4. `SET LOCAL lock_timeout = '5s';` is the first SQL statement. The header records
+   ACCESS EXCLUSIVE locks on dropped relations/types and a five-second maximum
+   wait for each acquisition, with transaction rollback on timeout. A real
+   competing ACCESS SHARE transaction causes lock timeout and leaves all schema,
+   rows, comments and stamps unchanged, before and after reconstruction.
+
+The module now has 114 real PostgreSQL cases (82 before this review), including
+all new refusal/pass cases repeated from complete post-143 clones. The 34-case
+verbose subset below names the review probes, pass cases and reconstruction
+counterparts. The separate six-source rerun takes new read-only full-data dumps
+of `NEXUS_template`, `save_01`, `save_02`, `save_03`, `save_04` and `save_05`,
+restores each through `disposable_database("qa640_813_case")`, pins TEST, exercises
+raw pre-143 runner rehearsal plus reconstruction, compares schema/data/comments
+and other stamps, and verifies that the second full-runner pass applies nothing.
+All allocations are dropped by their fixture context; no archived dump is used.
+Slot 2 remains schema/emptiness evidence only, never time evidence.
+
+### Gate Results and Coordinator Follow-up
+
+The complete ordered PostgreSQL proof: 376 passed, with only the expected
+`test_migration_sequence_has_only_known_gaps` failure naming reserved 141 and 142.
+The focused review subset: 34 passed; the separate fresh fleet rerun: all six
+passed. Every pytest command below has the secret-store guard active and the
+owner-target audit reports none. Offline skips are not counted as PostgreSQL proof.
+
+Offline root and API suites and reachability passed. Offline Orrery has only the
+same expected sequence failure. The remaining core directories have one unrelated
+failure: `tests/test_scripts/test_check_exception_dispositions.py::test_repository_tree_matches_committed_baseline`.
+It reports four `wizard_chat.py` baseline growth entries against origin/main
+`8ccd3008a48bdf8115232667399868e2bdf66f93` (the newer shared ref observed during
+this run); the HEAD comparison is clean. Neither wizard_chat.py nor its baseline
+changed under this fix order. The common protocol requires reporting, not fixing,
+unrelated failures. No ordered change here made this baseline stale.
+
+Black and migration comments pass. Sanctioned mypy uses
+`--explicit-package-bases` and passes on both branch and main copies. The 17
+flake8 diagnostics match exactly modulo file prefixes and line shifts, are on
+untouched pre-existing lines, and are reproduced below. Main copies were read
+using `git show 8ccd3008a48bdf8115232667399868e2bdf66f93:<path>` into this order's
+scratch directory, never into another checkout.
+
+No rebase was performed: this fix order and the user's instructions require
+fix commits only and explicitly prohibit history rewrite, overriding the generic
+common-workflow rebase instruction. Integrating preceding migrations and resolving
+unrelated main/branch baseline divergence remain coordinator tasks. No merge or
+new PR was made. All four fixes and their proof were applied; no fix was deferred.
+
+### Exact Commands and Verbatim Tails
+
+Every command ran from the assigned worktree. Long commands were executed
+sequentially through the existing scratch `run.py` with a 540-second subprocess
+timeout, and were awaited to completion. `PYTHONPATH=$PWD` and `TMPDIR` were set
+to this worktree and this order's `after-review/` scratch, respectively. Mypy
+uses separate caches in that same scratch. No shared venv install occurred.
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k 'hidden_body_reference or accepts_live_relationship or accepts_surviving_catalog'
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 34 targets: postgres, qa640_813_case_* x33
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+33 passed, 75 deselected in 64.59s (0:01:04)
+EXIT STATUS: 0
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py tests/test_schema_documentation_pg.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py tests/test_orrery/test_retrograde_constraints_pg.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+```
+
+```text
+=================================== FAILURES ===================================
+_________________ test_migration_sequence_has_only_known_gaps __________________
+
+    def test_migration_sequence_has_only_known_gaps() -> None:
+        """A new hole or a reused historical hole in the numbering fails."""
+    
+        versions = _on_disk_versions()
+        head = max(int(version) for version in versions)
+        missing = {f"{number:03d}" for number in range(1, head + 1)} - set(versions)
+    
+        assert min(versions) == "001"
+>       assert missing == KNOWN_GAPS
+E       AssertionError: assert {'013', '119', '141', '142'} == frozenset({'013', '119'})
+E         
+E         Extra items in the left set:
+E         '142'
+E         '141'
+E         Use -v to get more diff
+
+tests/test_orrery/test_migrate.py:266: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 140 targets: nexus_m10_fresh_test_21595, nexus_m10_template_test_21595, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_813_case_* x114, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_issue601_* x4, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps
+1 failed, 376 passed in 317.98s (0:05:17)
+EXIT STATUS: 1
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k drops_only_manifest_on_each_fleet_clone
+```
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template] PASSED [ 16%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01] PASSED [ 33%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02] PASSED [ 50%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03] PASSED [ 66%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04] PASSED [ 83%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05] PASSED [100%]
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 7 targets: postgres, qa640_813_case_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+================= 6 passed, 108 deselected in 79.08s (0:01:19) =================
+EXIT STATUS: 0
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util --ignore=tests/config --ignore=tests/proofs
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1933 passed, 410 skipped, 8 warnings in 359.24s (0:05:59)
+EXIT STATUS: 0
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util tests/config tests/proofs
+```
+
+```text
+=================================== FAILURES ===================================
+_______________ test_repository_tree_matches_committed_baseline ________________
+
+    def test_repository_tree_matches_committed_baseline() -> None:
+        root = CHECKER.parents[1]
+        assert lint.check_tree(root, root / lint.BASELINE_PATH, "HEAD") == []
+>       assert lint.check_tree(root, root / lint.BASELINE_PATH, "origin/main") == []
+E       AssertionError: assert ['nexus/api/w...21bbe32550|1'] == []
+E         
+E         Left contains 4 more items, first extra item: 'nexus/api/wizard_chat.py:1168: baseline growth forbidden: nexus/api/wizard_chat.py|new_story_chat_stream_endpoint.wizard_events|2e26b6145d23378bbe531f8663edbfc55460043d18da997bc263bca43ef00e4b|1'
+E         Use -v to get more diff
+
+tests/test_scripts/test_check_exception_dispositions.py:636: AssertionError
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_scripts/test_check_exception_dispositions.py::test_repository_tree_matches_committed_baseline
+1 failed, 906 passed, 70 skipped, 7 warnings in 74.96s (0:01:14)
+EXIT STATUS: 1
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_api
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+641 passed, 240 skipped, 7 warnings in 22.15s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+EXIT STATUS: 0
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_orrery
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps
+1 failed, 1189 passed, 626 skipped, 2 warnings in 9.03s
+EXIT STATUS: 1
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_reachability.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+54 passed in 9.15s
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+4 files would be left unchanged.
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+nexus/agents/logon/apex_schema.py:305:89: E501 line too long (92 > 88 characters)
+nexus/api/new_story_db_mapper.py:12:1: F401 'typing.List' imported but unused
+nexus/api/new_story_db_mapper.py:12:1: F401 'typing.Tuple' imported but unused
+nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.datetime' imported but unused
+nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.timezone' imported but unused
+nexus/api/new_story_db_mapper.py:15:1: F401 'nexus.api.new_story_schemas.SpecificLocation' imported but unused
+nexus/api/new_story_db_mapper.py:107:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:211:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:265:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:315:89: E501 line too long (91 > 88 characters)
+nexus/api/new_story_db_mapper.py:318:89: E501 line too long (102 > 88 characters)
+nexus/api/new_story_db_mapper.py:545:89: E501 line too long (118 > 88 characters)
+nexus/api/new_story_db_mapper.py:552:89: E501 line too long (100 > 88 characters)
+nexus/api/new_story_db_mapper.py:562:89: E501 line too long (93 > 88 characters)
+nexus/api/new_story_db_mapper.py:563:89: E501 line too long (90 > 88 characters)
+nexus/api/new_story_db_mapper.py:566:89: E501 line too long (91 > 88 characters)
+nexus/api/new_story_db_mapper.py:687:89: E501 line too long (91 > 88 characters)
+EXIT STATUS: 1
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/agents/logon/apex_schema.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/agents/logon/apex_enums.py
+```
+
+```text
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/agents/logon/apex_schema.py:305:89: E501 line too long (92 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:12:1: F401 'typing.List' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:12:1: F401 'typing.Tuple' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.datetime' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.timezone' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:15:1: F401 'nexus.api.new_story_schemas.SpecificLocation' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:107:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:211:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:265:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:315:89: E501 line too long (91 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:318:89: E501 line too long (102 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:545:89: E501 line too long (118 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:552:89: E501 line too long (100 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:562:89: E501 line too long (93 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:563:89: E501 line too long (90 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:566:89: E501 line too long (91 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py:689:89: E501 line too long (91 > 88 characters)
+EXIT STATUS: 1
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+Success: no issues found in 4 source files
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/api/new_story_db_mapper.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/agents/logon/apex_schema.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review/origin-main/nexus/agents/logon/apex_enums.py
+```
+
+```text
+Success: no issues found in 3 source files
+EXIT STATUS: 0
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k 'sql-array or sql-quoted-array or sql-row-array or sql-typed-literal or catalog or relationship or lock'
+```
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-array-cast] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-quoted-array-cast] PASSED [  5%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-row-array-cast] PASSED [  8%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-typed-literal] PASSED [ 11%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-cast] PASSED [ 14%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-cast-parentheses] PASSED [ 17%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-parentheses] PASSED [ 20%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype] PASSED [ 23%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-format] PASSED [ 26%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-concat] PASSED [ 29%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-column] PASSED [ 32%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-parameter] PASSED [ 35%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-suffix] PASSED [ 38%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-parentheses] PASSED [ 41%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_conflicting_lock_atomically PASSED [ 44%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-array-cast] PASSED [ 47%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-quoted-array-cast] PASSED [ 50%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-row-array-cast] PASSED [ 52%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-typed-literal] PASSED [ 55%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-cast] PASSED [ 58%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-cast-parentheses] PASSED [ 61%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-parentheses] PASSED [ 64%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regtype] PASSED [ 67%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-computed-format] PASSED [ 70%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-computed-concat] PASSED [ 73%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-computed-column] PASSED [ 76%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-computed-parameter] PASSED [ 79%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-computed-suffix] PASSED [ 82%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-computed-parentheses] PASSED [ 85%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[lock] PASSED [ 88%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[relationship] PASSED [ 91%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[catalog] PASSED [ 94%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names PASSED [ 97%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_surviving_catalog_casts PASSED [100%]
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 35 targets: postgres, qa640_813_case_* x34
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+================= 34 passed, 80 deselected in 88.81s (0:01:28) =================
+EXIT STATUS: 0
+```
+
+Unrelated baseline diagnostic inventory (read-only):
+
+```text
+BASELINE REF: 8ccd3008a48bdf8115232667399868e2bdf66f93
+nexus/api/wizard_chat.py:1168: baseline growth forbidden: nexus/api/wizard_chat.py|new_story_chat_stream_endpoint.wizard_events|2e26b6145d23378bbe531f8663edbfc55460043d18da997bc263bca43ef00e4b|1
+nexus/api/wizard_chat.py:1210: baseline growth forbidden: nexus/api/wizard_chat.py|new_story_chat_stream_endpoint.wizard_events|326cd8cce1c1e55ab05eb3c7bc20df030ab107da8b427799b8070ce405d49952|1
+nexus/api/wizard_chat.py:772: baseline growth forbidden: nexus/api/wizard_chat.py|new_story_chat_endpoint|fb0fba2b5d218b71a960a846f0e49c24022812e642d4b532e743048bb69734d8|1
+nexus/api/wizard_chat.py:815: baseline growth forbidden: nexus/api/wizard_chat.py|new_story_chat_endpoint|730a0ad62f7e700aedc6d1c8b16ab2f8cab571a9ca7336c33066c121bbe32550|1
+HEAD diagnostics: []
+```
