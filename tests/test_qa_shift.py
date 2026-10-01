@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 
+from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
+import runpy
+import sys
 from pathlib import Path
 import subprocess
 import tomllib
 from typing import Any, Mapping, cast
 
+import psycopg2
 from pydantic import ValidationError
 import pytest
 import tomlkit
@@ -20,9 +24,16 @@ import tomlkit
 from nexus.config.settings_models import BoundaryCatchupSettings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime.contract import HOME_ENV
-from scripts.qa_shift import qa_shift
+from scripts.qa_shift import clock_contract, qa_shift
 from scripts.qa_shift.boundary_catchup import (
     load_config as load_boundary_catchup_config,
+)
+from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
 )
 
 
@@ -1618,6 +1629,183 @@ def test_pending_check_exit_code_contract(
 
     assert qa_shift.main(["check", str(tmp_path)]) == qa_shift.PENDING_EXIT_CODE == 3
     assert json.loads(capsys.readouterr().out) == {"status": "pending"}
+
+
+CLOCK_FIELDS = {
+    "chunks",
+    "disagreements",
+    "primary_regressions",
+    "missing_base",
+    "nonprimary_contributions",
+    "bootstrap_nonzero",
+}
+
+
+@pytest.fixture()
+def clock_contract_db() -> Any:
+    """Own a fresh template clone with a base seeded before any metadata."""
+    with disposable_slot_database("qa640_778s6a_family") as dbname:
+        seed_protagonist(dbname, base_timestamp=NOW.isoformat())
+        yield dbname
+
+
+def _clock_contract_chunk(
+    cur: Any, scene: int, layer: str, delta: timedelta | None
+) -> int:
+    """Insert valid clock metadata using the production writer."""
+    cur.execute(
+        "INSERT INTO narrative_chunks (raw_text) VALUES (%s) RETURNING id",
+        (f"Clock family probe {scene}",),
+    )
+    chunk_id = int(cur.fetchone()[0])
+    insert_chunk_metadata_sync(
+        cur,
+        chunk_id=chunk_id,
+        season=1,
+        episode=1,
+        scene=scene,
+        world_layer=layer,
+        time_delta=delta,
+        generation_date=NOW,
+        slug=f"S01E01_{scene:03d}",
+        generation_model="TEST",
+        scene_weather=None,
+    )
+    return chunk_id
+
+
+def _clock_contract_read(dbname: str) -> dict[str, Any]:
+    """Call the real measurement under an enforced repeatable-read transaction."""
+    with closing(connect(dbname)) as conn:
+        conn.set_session(isolation_level="REPEATABLE READ", readonly=True)
+        return clock_contract.measure_connection(conn)
+
+
+def _clock_contract_cli(monkeypatch: pytest.MonkeyPatch) -> int:
+    """Run the actual family CLI after routing its selected slot."""
+    monkeypatch.setattr(sys, "argv", ["clock_contract.py", "--slot", "4"])
+    with pytest.raises(SystemExit) as exited:
+        runpy.run_module("scripts.qa_shift.clock_contract", run_name="__main__")
+    return int(cast(Any, exited.value.code) or 0)
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize(
+    "violation",
+    [
+        "primary_regressions",
+        "missing_base",
+        "nonprimary_contributions",
+        "bootstrap_nonzero",
+        "disagreements",
+    ],
+)
+def test_clock_contract_reports_all_violation_counts(
+    clock_contract_db: str,
+    violation: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Plant each impossible writer defect independently on a disposable clone."""
+    dbname = clock_contract_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        first = _clock_contract_chunk(cur, 1, "primary", timedelta(0))
+        second = _clock_contract_chunk(cur, 2, "primary", timedelta(minutes=7))
+        third = _clock_contract_chunk(cur, 3, "flashback", timedelta(minutes=3))
+        if violation == "primary_regressions":
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+                (NOW - timedelta(minutes=1), second),
+            )
+        elif violation == "missing_base":
+            cur.execute("ALTER TABLE global_variables DISABLE TRIGGER USER")
+            cur.execute("UPDATE global_variables SET base_timestamp = NULL WHERE id")
+        elif violation == "nonprimary_contributions":
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = world_time + "
+                "interval '1 minute' WHERE chunk_id = %s",
+                (third,),
+            )
+        elif violation == "bootstrap_nonzero":
+            cur.execute("ALTER TABLE chunk_metadata DISABLE TRIGGER USER")
+            cur.execute(
+                "UPDATE chunk_metadata SET time_delta = interval '1 minute' "
+                "WHERE chunk_id = %s",
+                (first,),
+            )
+        else:
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = NULL WHERE chunk_id = %s",
+                (second,),
+            )
+    report = _clock_contract_read(dbname)
+    assert set(report) == CLOCK_FIELDS
+    assert report["chunks"] == 3
+    assert report[violation] > 0
+    assert _clock_contract_cli(monkeypatch) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"family": "clock_contract", "slots": [{"slot": 4, **report}]}
+
+
+@pytest.mark.requires_postgres
+def test_clock_contract_empty_and_null_deltas(
+    clock_contract_db: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Empty metadata, NULL bootstrap, and zero/NULL primary deltas stay clean."""
+    dbname = clock_contract_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+    empty = dict.fromkeys(CLOCK_FIELDS, 0)
+    assert _clock_contract_read(dbname) == empty
+    assert _clock_contract_cli(monkeypatch) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "family": "clock_contract",
+        "slots": [{"slot": 4, **empty}],
+    }
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        _clock_contract_chunk(cur, 1, "primary", None)
+        _clock_contract_chunk(cur, 2, "primary", timedelta(0))
+        _clock_contract_chunk(cur, 3, "primary", None)
+        cur.execute("SELECT world_time FROM chunk_metadata ORDER BY chunk_id")
+        assert cur.fetchall() == [(NOW,)] * 3
+    assert _clock_contract_read(dbname) == {**empty, "chunks": 3}
+    assert _clock_contract_cli(monkeypatch) == 0
+
+
+@pytest.mark.requires_postgres
+def test_clock_contract_refuses_writable_connection(clock_contract_db: str) -> None:
+    """The guard fails before reading clock data on a real writable connection."""
+    with closing(connect(clock_contract_db)) as conn:
+        with pytest.raises(RuntimeError, match="clock_contract requires a read-only"):
+            clock_contract.measure_connection(conn)
+
+
+@pytest.mark.requires_postgres
+def test_clock_contract_connection_rejects_writes(clock_contract_db: str) -> None:
+    """PostgreSQL itself refuses an INSERT on the measurement connection."""
+    with closing(connect(clock_contract_db)) as conn:
+        conn.set_session(isolation_level="REPEATABLE READ", readonly=True)
+        assert clock_contract.measure_connection(conn)["chunks"] == 0
+        with conn.cursor() as cur:
+            cur.execute("SAVEPOINT attempted_write")
+            with pytest.raises(psycopg2.errors.ReadOnlySqlTransaction):
+                cur.execute(
+                    "INSERT INTO narrative_chunks (raw_text) VALUES ('Forbidden')"
+                )
+            cur.execute("ROLLBACK TO SAVEPOINT attempted_write")
+            cur.execute("SELECT current_setting('transaction_isolation')")
+            assert cur.fetchone()[0] == "repeatable read"
+
+
+@pytest.mark.requires_postgres
+def test_clock_contract_missing_singleton_raises(clock_contract_db: str) -> None:
+    """An absent singleton raises even when metadata is empty."""
+    with closing(connect(clock_contract_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM global_variables")
+    with pytest.raises(RuntimeError, match="Missing global_variables singleton"):
+        _clock_contract_read(clock_contract_db)
 
 
 # 778-S4a: all PostgreSQL state belongs to qa640_778s4a_* clones. Requires
