@@ -10,28 +10,38 @@
 -- Locks: ACCESS EXCLUSIVE on each dropped relation and type; each lock waits
 -- at most five seconds, and a timeout rolls back the whole transaction.
 --
--- Body support: SQL and PL/pgSQL, quoted/schema-qualified identifiers, nested
--- comments, ordinary/E/dollar literals, casts, CAST AS, declarations, %TYPE,
--- %ROWTYPE and relation names. Identifier candidates resolve under proconfig's
--- search_path (otherwise the caller's path). NEW/OLD column names are allowed
--- only if EVERY attached relation has that column and its actual type is outside
--- the closure. Other qualified columns require an actual resolved relation and
--- unrelated column type in a qualified column or resolved SELECT column list.
--- Typed literals are type uses; unclassified target-name occurrences refuse.
--- Candidate names come from every enum, row type and generated array in the
--- complete type closure, including quoted and schema-qualified spellings.
--- Catalog casts support CAST(expr AS reg*) and expr::reg*, with parenthesized
--- literal expressions. Computed catalog expressions always refuse; literals
--- resolve through the catalog, and references into the drop closure refuse.
--- Constant EXECUTE expressions support literals, parentheses, concatenation and
--- pg_catalog.format with literal arguments; fold then recursively inspect SQL.
--- Parameter/variable-built EXECUTE, unsupported expressions, ambiguous search
--- paths (including runtime search_path mutation or a different SECURITY DEFINER
--- owner), Unicode-escape quoted identifiers, non-SQL application bodies and unresolved regclass/regtype literals
--- refuse with the function identity. No function-name exemption exists.
--- Diagnostic strings/comments are not identifiers. Temporary helpers are removed
--- in this transaction; no persistent helper or new documentation debt remains.
--- All validation precedes DROP; the runner owns commit, rollback and the stamp.
+-- First line of defense: the catalog-aware scanner covers SQL/PLpgSQL relation
+-- and type names, casts, declarations, %TYPE/%ROWTYPE, arrays and constant EXECUTE.
+-- Ordinary, E, U& (optional UESCAPE), B, X, N, dollar/tagged literals and newline
+-- literal concatenation are single string tokens. Unknown prefixes/malformed
+-- literals refuse. PostgreSQL decodes only validated literal grammar, never a
+-- computed operand. Diagnostic strings and comments are not identifier uses.
+-- Typed literals, ::, CAST AS and declarations are type contexts. Columns in
+-- SELECT/WHERE/HAVING/ON/GROUP BY/ORDER BY/RETURNING, arguments and UPDATE SET
+-- require catalog proof on resolved FROM/JOIN/UPDATE/INSERT targets or aliases;
+-- NEW/OLD requires proof on EVERY attached relation. Unclassified names refuse.
+-- Candidate names include the catalog's actual generated arrays and row types.
+-- regclass/regtype/regproc/regprocedure/regoper/regoperator/regconfig/
+-- regdictionary/regnamespace/regrole/regcollation (bare or pg_catalog-qualified)
+-- support typed literals, CAST AS, :: and function-style casts, plus to_reg*.
+-- Literal operands resolve through catalog input functions; closure references
+-- refuse. Every nonliteral operand or unresolved catalog literal refuses.
+-- Constant EXECUTE supports literal concatenation and pg_catalog.format; fold
+-- then scan recursively. Variable/parameter expressions, non-SQL application
+-- languages, ambiguous paths, runtime search_path/role mutation, different
+-- SECURITY DEFINER owners and Unicode-escape quoted identifiers refuse.
+-- Resolution uses each function's effective search_path, never a name allowlist.
+-- Second line of defense: after restrictive drops, before comments/stamping,
+-- run PostgreSQL's own language validators (fmgr_sql_validator, plpgsql_validator)
+-- over EVERY surviving application function/procedure with check_function_bodies=on
+-- and its effective path. That is the check CREATE FUNCTION performs, against the
+-- post-drop catalog, with no DDL: nothing is re-created, so OIDs, ownership, ACLs
+-- and comments are untouched and a named failure rolls the transaction back.
+-- SQL bodies are parsed/analyzed against the post-drop catalog; PLpgSQL syntax
+-- and declared types are validated. Neither defense completely covers PLpgSQL
+-- expression-level references: that is the residual risk of this text guard.
+-- All catalog/scanner guards precede DROP. Post-drop validation remains within
+-- the runner's same atomic transaction. No persistent helper/debt remains.
 
 SET LOCAL lock_timeout = '5s';
 
@@ -48,6 +58,8 @@ DECLARE
     kind text;
     result jsonb := '[]';
     escaped boolean;
+    prefix text;
+    suffix text;
 BEGIN
     WHILE i <= length(body) LOOP
         ch := substr(body, i, 1);
@@ -70,19 +82,42 @@ BEGIN
             RAISE EXCEPTION 'unsupported Unicode-escape quoted identifier';
         END IF;
         start_at := i; value := ''; escaped := false;
-        IF ch = '''' OR (lower(ch) = 'e' AND substr(body, i+1, 1) = '''') THEN
-            escaped := ch <> ''''; IF escaped THEN i := i + 1; END IF;
-            i := i + 1;
+        prefix := substring(substr(body,i) FROM '^([a-zA-Z]+&?)''');
+        IF ch = '''' OR prefix IS NOT NULL THEN
+            IF prefix IS NOT NULL AND lower(prefix) NOT IN ('e','u&','b','x','n') THEN
+                RAISE EXCEPTION 'unresolved string literal prefix %',prefix;
+            END IF;
+            escaped := lower(coalesce(prefix,''))='e';
+            i := i + length(coalesce(prefix,'')) + 1;
             LOOP
                 IF i > length(body) THEN RAISE EXCEPTION 'unclosed string'; END IF;
                 ch := substr(body,i,1); i := i + 1;
                 IF escaped AND ch = E'\\' THEN
-                    value := value || ch || substr(body,i,1); i := i + 1;
+                    i := i + 1;
                 ELSIF ch = '''' THEN
-                    IF substr(body,i,1) = '''' THEN value := value || ''''; i := i + 1;
-                    ELSE EXIT; END IF;
-                ELSE value := value || ch; END IF;
+                    IF substr(body,i,1) = '''' THEN i := i + 1;
+                    ELSE
+                        -- SQL newline concatenation is one literal, including
+                        -- escape semantics inherited from its first segment.
+                        suffix := substring(substr(body,i) FROM '^([[:space:]]+)''');
+                        IF suffix IS NOT NULL AND suffix ~ E'[\n\r]' THEN
+                            i := i + length(suffix) + 1;
+                        ELSE EXIT; END IF;
+                    END IF;
+                END IF;
             END LOOP;
+            IF lower(prefix)='u&' THEN
+                suffix := substring(substr(body,i) FROM '^([[:space:]]+[uU][eE][sS][cC][aA][pP][eE][[:space:]]+''(?:[^'']|'''')*'')');
+                IF suffix IS NOT NULL THEN i := i + length(suffix); END IF;
+            END IF;
+            raw := substr(body,start_at,i-start_at);
+            -- Only the fully delimited literal grammar above reaches EXECUTE.
+            -- PostgreSQL decodes escapes/UESCAPE; no caller expression executes.
+            BEGIN
+                EXECUTE 'SELECT ('||raw||')::text' INTO value;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE EXCEPTION 'unresolved string literal: %',SQLERRM;
+            END;
             kind := 'string';
         ELSIF ch = '"' THEN
             i := i + 1;
@@ -148,6 +183,8 @@ DECLARE
     expression_right integer;
     depth integer;
     column_position boolean;
+    clause text;
+    catalog_types text[] := ARRAY['regclass','regtype','regproc','regprocedure','regoper','regoperator','regconfig','regdictionary','regnamespace','regrole','regcollation'];
     r record;
 BEGIN
     IF nesting > 8 THEN RAISE EXCEPTION 'unresolved nested dynamic SQL'; END IF;
@@ -156,7 +193,6 @@ BEGIN
         IF kind='id' AND name='set_config' AND tokens->(i+1)->>'v'='('
             AND (tokens->(i+2)->>'k' IS DISTINCT FROM 'string'
                 OR tokens->(i+3)->>'v' IS DISTINCT FROM ','
-                OR tokens->(i+2)->>'raw' ~* '^e'
                 OR lower(tokens->(i+2)->>'v') IN ('search_path','role','session_authorization')) THEN
             RAISE EXCEPTION 'target public.items/public.ai_notebook or enum: unresolved runtime search_path mutation';
         END IF;
@@ -196,13 +232,29 @@ BEGIN
         -- Catalog casts are inspected from their operator, not from a literal:
         -- this catches CAST, parentheses, and computed expressions uniformly.
         catalog_kind := NULL; expression_left := NULL; expression_right := NULL;
-        IF kind='id' AND name IN ('nextval','currval','setval','to_regclass','to_regtype')
-            AND tokens->(i+1)->>'v'='(' THEN
-            catalog_kind := CASE WHEN name='to_regtype' THEN 'regtype' ELSE 'regclass' END;
-            expression_left := i+2; expression_right := i+2;
-            IF tokens->(i+3)->>'v' NOT IN (')',',','::') THEN
+        IF kind='id' AND (name=ANY(catalog_types) OR name LIKE 'to_reg%'
+            OR name IN ('nextval','currval','setval')) THEN
+            catalog_kind := CASE
+                WHEN name IN ('nextval','currval','setval') THEN 'regclass'
+                WHEN name LIKE 'to_reg%' THEN substr(name,4)
+                ELSE name END;
+            IF NOT catalog_kind=ANY(catalog_types) THEN
                 RAISE EXCEPTION 'unresolved catalog lookup %',name;
             END IF;
+            IF tokens->(i+1)->>'k'='string' AND name=ANY(catalog_types) THEN
+                expression_left := i+1; expression_right := i+1;
+            ELSIF tokens->(i+1)->>'v'='(' THEN
+                expression_left := i+2; j := i+2; depth := 0;
+                WHILE j<count_tokens LOOP
+                    IF tokens->j->>'v'='(' THEN depth := depth+1;
+                    ELSIF tokens->j->>'v'=')' THEN
+                        IF depth=0 THEN EXIT; END IF;
+                        depth := depth-1;
+                    ELSIF depth=0 AND tokens->j->>'v'=',' THEN EXIT; END IF;
+                    j := j+1;
+                END LOOP;
+                expression_right := j-1;
+            ELSE catalog_kind := NULL; END IF;
         ELSIF name='::' THEN
             catalog_at := i+1;
             IF tokens->catalog_at->>'v'='pg_catalog' AND tokens->(catalog_at+1)->>'v'='.' THEN
@@ -241,7 +293,7 @@ BEGIN
                 j := j+1;
             END LOOP;
         END IF;
-        IF catalog_kind IN ('regclass','regtype','regproc','regprocedure','regtypeoid') THEN
+        IF catalog_kind=ANY(catalog_types) OR catalog_kind='regtypeoid' THEN
             -- Strip only parentheses enclosing the complete expression.
             WHILE expression_left<expression_right AND tokens->expression_left->>'v'='('
                 AND tokens->expression_right->>'v'=')' LOOP
@@ -256,19 +308,19 @@ BEGIN
                 expression_left := expression_left+1; expression_right := expression_right-1;
             END LOOP;
             IF expression_left IS NULL OR expression_left<>expression_right
-                OR tokens->expression_left->>'k' IS DISTINCT FROM 'string'
-                OR tokens->expression_left->>'raw' ~* '^e' THEN
+                OR tokens->expression_left->>'k' IS DISTINCT FROM 'string' THEN
                 RAISE EXCEPTION 'unresolved computed catalog cast/lookup %',catalog_kind;
             END IF;
             folded := tokens->expression_left->>'v';
             relation_oid := NULL; type_oid := NULL;
-            IF catalog_kind='regclass' THEN relation_oid := to_regclass(folded);
-            ELSIF catalog_kind IN ('regtype','regtypeoid') THEN type_oid := to_regtype(folded);
-            ELSIF catalog_kind='regproc' THEN relation_oid := to_regproc(folded);
-            ELSE relation_oid := to_regprocedure(folded); END IF;
-            IF relation_oid IS NULL AND type_oid IS NULL THEN
-                RAISE EXCEPTION 'unresolved catalog literal %',folded;
-            END IF;
+            BEGIN
+                EXECUTE 'SELECT '||quote_literal(folded)||'::pg_catalog.'||
+                    quote_ident(CASE WHEN catalog_kind='regtypeoid' THEN 'regtype' ELSE catalog_kind END)||'::oid'
+                    INTO relation_oid;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE EXCEPTION 'unresolved catalog literal % for %: %',folded,catalog_kind,SQLERRM;
+            END;
+            IF catalog_kind IN ('regtype','regtypeoid') THEN type_oid := relation_oid; END IF;
             IF (catalog_kind='regclass' AND relation_oid=ANY(relation_targets)) OR type_oid=ANY(targets) THEN
                 RAISE EXCEPTION 'target %: catalog body reference',folded;
             END IF;
@@ -278,7 +330,7 @@ BEGIN
             IF i >= 2 AND tokens->(i-1)->>'v' = '.' AND tokens->(i-2)->>'k' = 'id' THEN
                 qualified := quote_ident(tokens->(i-2)->>'v') || '.' || qualified;
             END IF;
-            type_context := tokens->(i+1)->>'k'='string'
+            type_context := tokens->(i+1)->>'k'='string' OR tokens->(i+1)->>'v'='('
                 OR (i>0 AND tokens->(i-1)->>'v' IN ('::','as'));
             IF i>=3 AND tokens->(i-1)->>'v'='.' THEN
                 type_context := coalesce(type_context,false) OR tokens->(i-3)->>'v' IN ('::','as');
@@ -306,14 +358,20 @@ BEGIN
                 qualifier := NULL;
                 IF i>=2 AND tokens->(i-1)->>'v'='.' THEN qualifier := tokens->(i-2)->>'v'; END IF;
                 found_column := false;
-                -- Bare candidates must occupy a SELECT column-list position.
-                -- Mere presence of an unrelated same-named column is not proof.
-                column_position := qualifier IS NOT NULL OR (
-                    tokens->(i-1)->>'v' IN ('select',',')
-                    AND tokens->(i+1)->>'v' IN ('::',',','from','as')
-                    AND EXISTS (SELECT 1 FROM jsonb_array_elements(tokens) WITH ORDINALITY t(token,position)
-                        WHERE position BETWEEN left_edge+1 AND i AND token->>'v'='select')
-                );
+                -- Classify expression clauses, rather than only SELECT's
+                -- first column. Declarations/types never borrow column proof.
+                clause := NULL;
+                FOR j IN left_edge..i LOOP
+                    IF tokens->j->>'k'='id' AND tokens->j->>'v' IN
+                        ('select','where','having','on','group','order','returning','set',
+                         'from','join','update','into','declare','begin','returns') THEN
+                        clause := tokens->j->>'v';
+                    END IF;
+                END LOOP;
+                column_position := clause IN ('select','where','having','on','group','order','returning','set');
+                IF clause IN ('declare','returns') AND NOT (
+                    tokens->(i+1)->>'v'='%' AND tokens->(i+2)->>'v'='type'
+                ) THEN type_context := true; END IF;
                 IF coalesce(column_position,false) AND NOT coalesce(type_context,false) THEN
                     FOR j IN left_edge..right_edge LOOP
                         IF tokens->j->>'v' IN ('from','join','update','into') AND tokens->(j+1)->>'k'='id' THEN
@@ -1017,6 +1075,38 @@ DROP TYPE public.relationship_type RESTRICT;
 DROP TYPE public.threat_domain_type RESTRICT;
 DROP TYPE public.threat_lifecycle_type RESTRICT;
 DROP TYPE public.trait RESTRICT;
+-- Independent second line: PostgreSQL's language validators check every surviving
+-- application function/procedure against the post-drop catalog, exactly as
+-- CREATE FUNCTION would, without creating or replacing anything.
+SET LOCAL check_function_bodies = on;
+DO $validate$
+DECLARE
+    f record;
+    saved_path text := current_setting('search_path');
+    effective_path text;
+BEGIN
+    FOR f IN SELECT p.oid,p.proconfig,l.lanname,
+        format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)) AS identity
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
+        WHERE p.prokind IN ('f','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_(temp|toast)'
+        AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid='pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e')
+        ORDER BY p.oid
+    LOOP
+        BEGIN
+            SELECT split_part(setting,'=',2) INTO effective_path FROM unnest(f.proconfig) setting WHERE setting LIKE 'search_path=%';
+            PERFORM set_config('search_path',coalesce(effective_path,saved_path),true);
+            CASE f.lanname
+                WHEN 'sql' THEN PERFORM pg_catalog.fmgr_sql_validator(f.oid);
+                WHEN 'plpgsql' THEN PERFORM pg_catalog.plpgsql_validator(f.oid);
+                ELSE RAISE EXCEPTION 'unsupported application body language %',f.lanname;
+            END CASE;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: %',f.identity,SQLERRM;
+        END;
+    END LOOP;
+    PERFORM set_config('search_path',saved_path,true);
+END
+$validate$;
 COMMENT ON FUNCTION public.set_updated_at() IS 'BEFORE UPDATE trigger on characters and places (trg_characters_set_updated, trg_places_set_updated): stamps updated_at with now(), the transaction start time.';
 DROP FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], integer);
 DROP FUNCTION pg_temp.dead143_tokens(text);

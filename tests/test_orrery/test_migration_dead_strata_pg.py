@@ -347,6 +347,21 @@ def _snapshot(dbname: str, *, surviving: bool) -> str:
     return hashlib.sha256("".join(kept).encode()).hexdigest()
 
 
+def _function_catalog(dbname: str) -> list[Any]:
+    """Record surviving application functions including owner, ACL and comment."""
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT p.oid,n.nspname,p.proname,pg_get_functiondef(p.oid),"
+            "p.proowner,p.proacl,p.proconfig,"
+            "CASE WHEN p.oid='public.set_updated_at()'::regprocedure THEN NULL "
+            "ELSE obj_description(p.oid,'pg_proc') END "
+            "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
+            "WHERE n.nspname IN ('public','assets') AND p.prokind IN ('f','p') "
+            "ORDER BY p.oid"
+        )
+        return cur.fetchall()
+
+
 def _apply(dbname: str) -> bool:
     with closing(connect(dbname)) as conn:
         return migrate.apply_migration(
@@ -381,6 +396,7 @@ def test_migration_143_drops_only_manifest_on_each_fleet_clone(
             cur.execute("SELECT count(*) FROM schema_migrations WHERE version='143'")
             was_post = cur.fetchone()[0] == 1
         before = _snapshot(dbname, surviving=True)
+        functions = _function_catalog(dbname)
         if not was_post:
             raw_stamps = _stamps(dbname)
             assert migrate.migrate_database(dbname, skip_locked=False) == (1, 0)
@@ -399,6 +415,7 @@ def test_migration_143_drops_only_manifest_on_each_fleet_clone(
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             _post_state(cur)
         assert _snapshot(dbname, surviving=True) == before
+        assert _function_catalog(dbname) == functions
         assert [s for s in _stamps(dbname) if s[0] != "143"] == stamps
         assert migrate.migrate_database(dbname, skip_locked=False) == (0, 0)
         assert _snapshot(dbname, surviving=True) == before
@@ -517,6 +534,52 @@ HIDDEN = {
     "sequence-body": "BEGIN PERFORM nextval('public.items_id_seq'); RETURN; END",
     "regtype": "BEGIN PERFORM 'public.item_type'::regtype; RETURN; END",
 }
+# All catalog input forms must classify literals and refuse computed operands.
+CATALOG_TYPES = (
+    "regclass",
+    "regtype",
+    "regproc",
+    "regprocedure",
+    "regoper",
+    "regoperator",
+    "regconfig",
+    "regdictionary",
+    "regnamespace",
+    "regrole",
+    "regcollation",
+)
+for catalog in CATALOG_TYPES:
+    for form, expression in {
+        "typed": f"{catalog} 'public.items'",
+        "call": f"pg_catalog.{catalog}('public.items')",
+        "computed-call": f"pg_catalog.{catalog}(input)",
+        "computed-cast": f"CAST(input AS {catalog})",
+        "computed-suffix": f"input::{catalog}",
+        "computed-lookup": f"pg_catalog.to_{catalog}(input)",
+    }.items():
+        # Some reg* types have no to_reg* SQL function; check_function_bodies=off
+        # deliberately plants their unsupported form to prove fail-closed refusal.
+        HIDDEN[f"sql-catalog-{catalog}-{form}"] = f"SELECT ({expression})::oid"
+
+LITERAL_FORMS = {
+    "ordinary": "'+2|friendly'",
+    "escaped": r"E'+2|frien\x64ly'",
+    "unicode": "U&'+2|friendly'",
+    "unicode-escape": "U&'+2|frien!0064ly' UESCAPE '!'",
+    "national": "N'+2|friendly'",
+    "binary": "B'101'",
+    "hex": "X'aa'",
+    "dollar": "$$+2|friendly$$",
+    "tagged": "$lit$+2|friendly$lit$",
+    "adjacent": "'+2|'\n'friendly'",
+    "unknown": "unknown'+2|friendly'",
+}
+for form, literal in LITERAL_FORMS.items():
+    HIDDEN[f"sql-literal-{form}"] = (
+        f"SELECT (public.emotional_valence {literal})::text "
+        "FROM public.character_relationships AS public"
+    )
+
 REFUSALS = (
     *("nonempty:" + key for key in NONEMPTY),
     *("external:" + key for key in EXTERNAL),
@@ -568,7 +631,7 @@ def _refusal(dbname: str, case: str, caplog: pytest.LogCaptureFixture) -> None:
                 "COMMENT ON FUNCTION public.probe813() IS '813 parsed SQL probe'"
             )
         offender = "probe813"
-    _sql(dbname, statement)
+    _sql(dbname, "SET LOCAL check_function_bodies=off; " + statement)
     before = _snapshot(dbname, surviving=False)
     caplog.clear()
     assert not _apply(dbname), case
@@ -679,6 +742,18 @@ def _column_consumers(dbname: str) -> None:
         "LANGUAGE sql AS $$SELECT emotional_valence "
         "FROM public.character_relationships$$; "
         "COMMENT ON FUNCTION public.probe813_bare() IS '813 varchar column'; "
+        "CREATE FUNCTION public.probe813_where() RETURNS SETOF integer LANGUAGE sql "
+        "AS $$SELECT 1 FROM public.character_relationships "
+        "WHERE emotional_valence = '+2|friendly'$$; "
+        "COMMENT ON FUNCTION public.probe813_where() IS '813 WHERE column'; "
+        "CREATE FUNCTION public.probe813_group() RETURNS SETOF text LANGUAGE sql "
+        "AS $$SELECT emotional_valence FROM public.character_relationships "
+        "GROUP BY emotional_valence HAVING emotional_valence = '+2|friendly' "
+        "ORDER BY emotional_valence$$; "
+        "COMMENT ON FUNCTION public.probe813_group() IS '813 HAVING ORDER column'; "
+        "CREATE FUNCTION public.probe813_argument() RETURNS SETOF text LANGUAGE sql "
+        "AS $$SELECT upper(emotional_valence) FROM public.character_relationships$$; "
+        "COMMENT ON FUNCTION public.probe813_argument() IS '813 argument column'; "
         "CREATE FUNCTION public.probe813_percent() RETURNS void LANGUAGE plpgsql "
         "AS $$DECLARE v public.character_relationships.emotional_valence%TYPE; "
         "BEGIN RETURN; END$$; "
@@ -691,7 +766,9 @@ def _column_consumers(dbname: str) -> None:
         "COMMENT ON TYPE assets.item_type IS '813 namespace shadow'; "
         "CREATE FUNCTION public.probe813_shadow() RETURNS text LANGUAGE sql "
         "SET search_path=assets,public AS $$SELECT 'other'::item_type::text$$; "
-        "COMMENT ON FUNCTION public.probe813_shadow() IS '813 effective search path'",
+        "COMMENT ON FUNCTION public.probe813_shadow() IS '813 effective search path'; "
+        "REVOKE ALL ON FUNCTION public.probe813_where() FROM PUBLIC; "
+        "GRANT EXECUTE ON FUNCTION public.probe813_where() TO CURRENT_USER",
     )
 
 
@@ -718,6 +795,44 @@ def _catalog_consumers(dbname: str) -> None:
         "COMMENT ON FUNCTION public.probe813_regprocedure() "
         "IS '813 surviving regprocedure'",
     )
+    literals = {
+        "regclass": "public.characters",
+        "regtype": "text",
+        "regproc": "public.set_updated_at",
+        "regprocedure": "public.set_updated_at()",
+        "regoper": "+",
+        "regoperator": "+(integer,integer)",
+        "regconfig": "english",
+        "regdictionary": "english_stem",
+        "regnamespace": "public",
+        "regrole": "CURRENT_USER",
+        "regcollation": '"C"',
+    }
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT current_user")
+        literals["regrole"] = cur.fetchone()[0]
+        for catalog, literal in literals.items():
+            if catalog == "regoper":
+                # Unqualified + is overloaded; select one uniquely named operator.
+                cur.execute(
+                    "SELECT oid::regoper::text FROM pg_operator "
+                    "WHERE oprname IN (SELECT oprname FROM pg_operator "
+                    "GROUP BY oprname HAVING count(*)=1) LIMIT 1"
+                )
+                literal = cur.fetchone()[0]
+            for form, expression in {
+                "typed": f"pg_catalog.{catalog} '{literal}'",
+                "call": f"pg_catalog.{catalog}('{literal}')",
+                "cast": f"CAST('{literal}' AS pg_catalog.{catalog})",
+                "suffix": f"'{literal}'::pg_catalog.{catalog}",
+            }.items():
+                function = f"probe813_{catalog}_{form}"
+                cur.execute(
+                    f"CREATE FUNCTION public.{function}() RETURNS oid "
+                    f"LANGUAGE sql AS $probe$SELECT ({expression})::oid$probe$; "
+                    f"COMMENT ON FUNCTION public.{function}() IS "
+                    "'813 surviving catalog literal'"
+                )
 
 
 def _catalog_results(dbname: str) -> None:
@@ -751,6 +866,12 @@ def _relationship(dbname: str) -> None:
         value, literal = cur.fetchone()
         assert float(value) == pytest.approx(2 / 5.5)
         assert literal == "+2|friendly"
+        cur.execute(
+            "SELECT EXISTS(SELECT FROM public.probe813_where()), "
+            "EXISTS(SELECT FROM public.probe813_group() "
+            "WHERE probe813_group='+2|friendly')"
+        )
+        assert cur.fetchone() == (True, True)
         cur.execute("SAVEPOINT invalid_literal")
         with pytest.raises(Exception, match="Unparseable emotional_valence"):
             cur.execute(
@@ -857,8 +978,10 @@ def test_migration_143_accepts_live_relationship_column_names(
         _load_fixture(dbname)
         _column_consumers(dbname)
         before = _snapshot(dbname, surviving=True)
+        functions = _function_catalog(dbname)
         assert _apply(dbname)
         assert _snapshot(dbname, surviving=True) == before
+        assert _function_catalog(dbname) == functions
         _relationship(dbname)
 
 
@@ -870,8 +993,10 @@ def test_migration_143_accepts_surviving_catalog_casts(
         _load_fixture(dbname)
         _catalog_consumers(dbname)
         before = _snapshot(dbname, surviving=True)
+        functions = _function_catalog(dbname)
         assert _apply(dbname)
         assert _snapshot(dbname, surviving=True) == before
+        assert _function_catalog(dbname) == functions
         _catalog_results(dbname)
 
 
@@ -892,6 +1017,66 @@ def test_new_story_transition_after_migration_143(
         _load_fixture(dbname)
         assert _apply(dbname)
         _transition(dbname, monkeypatch)
+
+
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize(
+    "body",
+    (
+        "SELECT count(*) FROM public.items",
+        "DECLARE v public.item_type; BEGIN RETURN; END",
+    ),
+)
+def test_migration_143_validation_refuses_without_scanner(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    body: str,
+    post: bool,
+) -> None:
+    """The language validators refuse SQL references and PLpgSQL declarations."""
+    language, result = (
+        ("sql", "bigint") if body.startswith("SELECT") else ("plpgsql", "void")
+    )
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        if post:
+            before = _snapshot(dbname, surviving=True)
+            stamps = _stamps(dbname)
+            assert _apply(dbname)
+            _load_fixture(dbname)
+            assert _snapshot(dbname, surviving=True) == before
+            assert _stamps(dbname) == stamps
+        _sql(
+            dbname,
+            f"CREATE FUNCTION public.probe813() RETURNS {result} "
+            f"LANGUAGE {language} AS $probe${body}$probe$; "
+            "COMMENT ON FUNCTION public.probe813() IS '813 independent defense'; "
+            "REVOKE ALL ON FUNCTION public.probe813() FROM PUBLIC; "
+            "GRANT EXECUTE ON FUNCTION public.probe813() TO CURRENT_USER",
+        )
+        scratch = tmp_path / MIGRATION.name
+        sql = MIGRATION.read_text()
+        sql, removed = re.subn(
+            r"^            PERFORM pg_temp.dead143_body\(CASE.*;\n",
+            "",
+            sql,
+            flags=re.MULTILINE,
+        )
+        assert removed == 1
+        scratch.write_text(sql)
+        before, functions = _snapshot(dbname, surviving=False), _function_catalog(
+            dbname
+        )
+        caplog.clear()
+        with closing(connect(dbname)) as conn:
+            assert not migrate.apply_migration(
+                conn, "143", "drop_dead_schema_strata", scratch
+            )
+        assert "probe813" in caplog.text and "post-drop" in caplog.text, caplog.text
+        assert _snapshot(dbname, surviving=False) == before
+        assert _function_catalog(dbname) == functions
+        assert all(s[0] != "143" for s in _stamps(dbname))
 
 
 @pytest.mark.parametrize(

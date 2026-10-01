@@ -951,3 +951,1471 @@ nexus/api/wizard_chat.py:772: baseline growth forbidden: nexus/api/wizard_chat.p
 nexus/api/wizard_chat.py:815: baseline growth forbidden: nexus/api/wizard_chat.py|new_story_chat_endpoint|730a0ad62f7e700aedc6d1c8b16ab2f8cab571a9ca7336c33066c121bbe32550|1
 HEAD diagnostics: []
 ```
+
+
+## After the Second Independent Review
+
+### STOP-REPORT: Catalog Re-Creation Conflicts With the Mandatory Migration Lint
+
+Round-two fix order `1098-astra-fix-r2.md`, frozen parent/current HEAD
+`fc7d298ecfd2b38f702a3139dff61ecf38ba973a`. **No fix commit was created and no
+push was made:** the real `check-migration-comments` commit hook refused the
+ordered post-drop `EXECUTE f.definition`. The pending migration, tests and this
+report are staged in the assigned worktree. No history rewrite, stash, merge or
+new PR occurred. PR #1098 is updated to identify the pending patch and blocker.
+
+The new checker diagnostic is not a stale fingerprint, allowlist, exemption
+entry or pinned baseline. `scripts/check_migration_comments.py:1246-1279` explicitly
+rejects EXECUTE whose command is built at runtime, and has no exemption entry to
+update. The fix order requires re-creating every surviving public routine from
+`pg_get_functiondef(oid)`. A literal DML prefix or hiding this DDL would evade the
+check; an exception would change its rule. Neither was applied. The common
+protocol's stop-report escape hatch applies. The coordinator must resolve this
+rule conflict before the patch can be committed/pushed; the checker and its
+repository test remain intact.
+
+### Pending Implementation and Preservation Proof
+
+1. Catalog input types now include regclass, regtype, regproc, regprocedure,
+   regoper, regoperator, regconfig, regdictionary, regnamespace, regrole and
+   regcollation. Typed literals, function-style casts, CAST AS, :: and to_reg*
+   are classified. Literal operands resolve through catalog input functions;
+   closure references and unresolved literals refuse. Nonliteral operands
+   refuse as unresolved, without evaluation. The existing regtypeoid spelling
+   remains in the previous CAST/:: compatibility path.
+2. Ordinary/doubled-quote, E/backslash, U&/optional UESCAPE, B, X, N,
+   dollar/tagged and newline-concatenated literals are single string tokens.
+   Unknown prefixes and invalid/unclosed literals refuse. Only validated literal
+   grammar is decoded by PostgreSQL. The Unicode enum literal cannot borrow the
+   unrelated varchar column's exemption. Invalid B/X enum and nonexistent
+   to_reg* function forms are planted with check_function_bodies=off deliberately
+   to demonstrate fail-closed scanner behavior, not valid SQL execution.
+3. SELECT, WHERE, HAVING, ON, GROUP BY, ORDER BY, RETURNING, function arguments
+   and UPDATE SET positions require catalog proof on named relations/aliases.
+   Type contexts do not borrow column proof. The WHERE and HAVING/ORDER BY
+   consumers are executed after a real relationship write; the deriving trigger
+   and its diagnostic are preserved. Unrelated %TYPE still passes.
+4. The scanner is the first line; after the restrictive drops and before comment
+   writes/stamping, the second line re-creates every public function/procedure
+   from pg_get_functiondef with check_function_bodies=on and its effective path.
+   Public is the namespace of every explicit drop target. A named re-creation
+   failure rolls back the entire migration. A scratch plant removes only the
+   scanner invocation: SQL target queries and PLpgSQL target declarations still
+   refuse, both before and after post-143 reconstruction.
+
+The header states the residual risk plainly: neither defense completely covers
+PLpgSQL expression-level references. SQL parse/analyze and PLpgSQL declaration
+validation are not a claim of complete PLpgSQL expression validation.
+
+Real catalog comparisons include routine OIDs, definitions, ownership, ACLs,
+proconfig and comments (excluding only the ordered shared-trigger comment).
+An explicit REVOKE/GRANT on the varchar WHERE consumer is preserved. Full-data
+schema/data/trigger/stamp snapshots retain all other objects and rows. The
+manifest, fixture, deferred six helper definitions, schema debt baseline,
+product files, migration runner and ratchets are unchanged by this round.
+
+### Before-Fix Evidence
+
+The scratch `old_scanner.py` pytest plugin points only this module's MIGRATION at
+an immutable `git show` copy; production/worktree SQL is never temporarily
+reverted. `round2.sql` is fc7d298e's migration; `round1.sql` is 12146522's migration
+plus only a seven-second statement_timeout to safely bound its missing-lock-
+timeout probe. All plants run through the real apply_migration runner on
+allocated clones, which are dropped even when an assertion fails.
+
+- Round-one scanner: all 25 selected array, typed-literal, catalog CAST/computed,
+  lexical-form and lock regressions fail. The lock failure is statement timeout,
+  not the required lock timeout. The catalog-regtype case is included in the
+  additional catalog run.
+- Round-two parent: 65 failures/16 passes reproduce the new catalog forms,
+  Unicode/N/B/X/unknown-prefix escapes, required column pass case, and absence
+  of the independent second line. Existing guarded CAST/:: forms remain green.
+- Additional round-one catalog matrix: 65 failures/2 passes. The two already-
+  guarded to_regclass/to_regtype computed lookups were already refused by that
+  parent; they are retained coverage, not claimed as new escapes. Every added
+  failing refusal form has a red tail in these runs. No guard was artificially
+  disabled to turn those two existing refusals red.
+
+### Gate Results, Scope and Cleanup
+
+- Migration module: **272 passed**, split into 143 direct/independent/fixture
+  cases and 129 complete-post-143 reconstruction cases.
+- Remaining ordered PostgreSQL files: **262 passed**, only the expected
+  `test_migration_sequence_has_only_known_gaps` failure naming reserved 141/142.
+  The full ordered proof therefore has 534 passes and that one named failure.
+- Separate fresh fleet rerun: **six passed**, one source each from NEXUS_template
+  and save_01..05, restored into qa640_813_case_* via read-only custom pg_dump
+  and clone-only pg_restore. The original manifest's frozen source identities
+  remain above. The fresh audit records six unique disposable allocations;
+  each loader verifies its allocated current_database identity before writes.
+  This rerun exercises raw pre-143 full-runner rehearsal, then reconstruction,
+  compares preservation and checks a second runner pass applies nothing.
+  Slot 2 remains schema/emptiness and preservation evidence, never time evidence.
+- Audited offline root: 1932 passed/410 skipped, with the new mandatory migration-
+  lint failure. Audited remaining core directories: 906 passed/70 skipped,
+  with the existing four-entry wizard exception-baseline failure at
+  `tests/test_scripts/test_check_exception_dispositions.py::test_repository_tree_matches_committed_baseline`.
+  It is unrelated to this order and is reported, not repaired.
+- Audited offline API/Orrery: 1830 passed/1024 skipped, with only the same reserved-
+  number failure. Offline skips are not counted as PostgreSQL proof.
+- Reachability: 54 passed. Black and sanctioned explicit-package-bases mypy pass.
+  Final flake8 has only the same 17 pre-existing diagnostics as origin/main
+  `8ccd3008a48bdf8115232667399868e2bdf66f93`; paths/line shifts normalized and
+  multisets compared. Two added long strings were wrapped with an asserted
+  identical Python AST. No executable Python changed after the database proofs.
+- Migration-comment command and real commit hook both fail at migration line
+  1092: EXECUTE f.definition is runtime-built, unverifiable DDL. Other hooks pass.
+  No hook bypass or linter weakening was used. The stop report records this
+  required rule conflict, rather than treating it as an unrelated exemption.
+- A read-only admin query on postgres confirms **no qa640_813_case_* database
+  remains**. No paid call, owner/template write, or service start occurred.
+
+Each completed audited pytest gate below has the active secret-store guard and
+owner targets: none. The existing C ReplicationConnection audit limitation is
+printed verbatim, as in prior runs. The first combined offline attempt was
+interrupted to split by directory; a short first root attempt was interrupted
+because its audit flag was missing. Neither partial, unaudited run is a gate.
+
+### Exact Commands and Verbatim Tails
+
+All commands execute from this worktree. The scratch run.py gives each child a
+540-second duration bound and 120-second silence bound, sets PYTHONPATH to the
+worktree plus the plugin directory, and TMPDIR to this order's after-review-r2
+scratch. Every process was awaited; no command started by this fixer remains running. No rebase was
+performed because the user requires fix commits only and forbids history rewrite.
+
+#### red-round1
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/round1.sql /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k '(refuses_hidden and (sql-array or sql-quoted-array or sql-row-array or sql-typed-literal or sql-catalog-cast or sql-catalog-parentheses or sql-catalog-computed or sql-literal)) or refuses_conflicting_lock'
+```
+
+```text
+        archives: dict[str, Path], tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A real competing transaction hits the five-second bound and rolls back."""
+        with _clone(archives, tmp_path) as dbname:
+            _load_fixture(dbname)
+>           _lock_refusal(dbname, caplog)
+
+tests/test_orrery/test_migration_dead_strata_pg.py:722: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dbname = 'qa640_813_case_0e74765e2290'
+caplog = <_pytest.logging.LogCaptureFixture object at 0x10d3d8990>
+
+    def _lock_refusal(dbname: str, caplog: pytest.LogCaptureFixture) -> None:
+        before, stamps = _snapshot(dbname, surviving=False), _stamps(dbname)
+        with closing(connect(dbname)) as blocker, blocker.cursor() as cur:
+            cur.execute("LOCK TABLE public.items IN ACCESS SHARE MODE")
+            caplog.clear()
+            assert not _apply(dbname)
+>           assert "lock timeout" in caplog.text, caplog.text
+E           AssertionError: ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - canceling statement due to statement timeout
+E             CONTEXT:  SQL statement "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE"
+E             PL/pgSQL function inline_code_block line 449 at EXECUTE
+E             
+E             
+E           assert 'lock timeout' in 'ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - canceling statement due to statement ti...tement "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE"\nPL/pgSQL function inline_code_block line 449 at EXECUTE\n\n'
+E            +  where 'ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - canceling statement due to statement ti...tement "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE"\nPL/pgSQL function inline_code_block line 449 at EXECUTE\n\n' = <_pytest.logging.LogCaptureFixture object at 0x10d3d8990>.text
+
+tests/test_orrery/test_migration_dead_strata_pg.py:709: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - canceling statement due to statement timeout
+CONTEXT:  SQL statement "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE"
+PL/pgSQL function inline_code_block line 449 at EXECUTE
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 26 targets: postgres, qa640_813_case_* x25
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-array-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-quoted-array-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-row-array-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-typed-literal]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-cast-parentheses]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-parentheses]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-format]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-concat]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-column]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-parameter]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-computed-parentheses]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-ordinary]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-escaped]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unicode]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unicode-escape]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-national]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-binary]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-hex]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-dollar]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-tagged]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-adjacent]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unknown]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_conflicting_lock_atomically
+25 failed, 245 deselected in 54.79s
+EXIT STATUS: 1
+```
+
+#### red-round2
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/round2.sql /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k '(refuses_hidden and (sql-catalog-reg or computed-lookup or sql-literal)) or accepts_live_relationship or recreation_refuses'
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 82 targets: postgres, qa640_813_case_* x81
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unicode]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unicode-escape]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-national]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-binary]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-hex]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unknown]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[SELECT count(*) FROM public.items]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[DECLARE v public.item_type; BEGIN RETURN; END]
+65 failed, 16 passed, 189 deselected in 122.34s (0:02:02)
+EXIT STATUS: 1
+```
+
+#### red-catalog-round1
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/round1.sql /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k 'refuses_hidden and (sql-catalog-reg or computed-lookup)'
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 68 targets: postgres, qa640_813_case_* x67
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regtype-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regproc-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regprocedure-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoper-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-lookup]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-typed]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-call]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-suffix]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-lookup]
+65 failed, 2 passed, 205 deselected in 105.04s (0:01:45)
+EXIT STATUS: 1
+```
+
+#### pg-regressions
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k 'not regressions_work_from_post143_clone'
+```
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-call] PASSED [ 60%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-cast] PASSED [ 60%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-suffix] PASSED [ 61%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regoperator-computed-lookup] PASSED [ 62%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-typed] PASSED [ 62%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-call] PASSED [ 63%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-call] PASSED [ 64%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-cast] PASSED [ 65%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-suffix] PASSED [ 65%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regconfig-computed-lookup] PASSED [ 66%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-typed] PASSED [ 67%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-call] PASSED [ 67%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-call] PASSED [ 68%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-cast] PASSED [ 69%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-suffix] PASSED [ 69%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regdictionary-computed-lookup] PASSED [ 70%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-typed] PASSED [ 71%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-call] PASSED [ 72%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-call] PASSED [ 72%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-cast] PASSED [ 73%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-suffix] PASSED [ 74%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regnamespace-computed-lookup] PASSED [ 74%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-typed] PASSED [ 75%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-call] PASSED [ 76%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-call] PASSED [ 76%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-cast] PASSED [ 77%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-suffix] PASSED [ 78%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regrole-computed-lookup] PASSED [ 79%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-typed] PASSED [ 79%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-call] PASSED [ 80%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-call] PASSED [ 81%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-cast] PASSED [ 81%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-suffix] PASSED [ 82%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regcollation-computed-lookup] PASSED [ 83%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-ordinary] PASSED [ 83%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-escaped] PASSED [ 84%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unicode] PASSED [ 85%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unicode-escape] PASSED [ 86%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-national] PASSED [ 86%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-binary] PASSED [ 87%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-hex] PASSED [ 88%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-dollar] PASSED [ 88%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-tagged] PASSED [ 89%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-adjacent] PASSED [ 90%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unknown] PASSED [ 90%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_conflicting_lock_atomically PASSED [ 91%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names PASSED [ 92%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_surviving_catalog_casts PASSED [ 93%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_preserves_deferred_function_consumers PASSED [ 93%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_new_story_transition_after_migration_143 PASSED [ 94%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[SELECT count(*) FROM public.items-False] PASSED [ 95%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[SELECT count(*) FROM public.items-True] PASSED [ 95%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[DECLARE v public.item_type; BEGIN RETURN; END-False] PASSED [ 96%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[DECLARE v public.item_type; BEGIN RETURN; END-True] PASSED [ 97%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_pre143_fixture_refuses_partial_or_drifted_clone[partial-pre] PASSED [ 97%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_pre143_fixture_refuses_partial_or_drifted_clone[drifted-pre] PASSED [ 98%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_pre143_fixture_refuses_partial_or_drifted_clone[partial-post] PASSED [ 99%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_pre143_fixture_refuses_partial_or_drifted_clone[drifted-post] PASSED [100%]
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 144 targets: postgres, qa640_813_case_* x143
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=============== 143 passed, 129 deselected in 290.32s (0:04:50) ================
+EXIT STATUS: 0
+```
+
+#### pg-reconstruction
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k regressions_work_from_post143_clone
+```
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoper-typed] PASSED [ 55%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoper-call] PASSED [ 56%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoper-computed-call] PASSED [ 57%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoper-computed-cast] PASSED [ 58%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoper-computed-suffix] PASSED [ 58%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoper-computed-lookup] PASSED [ 59%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoperator-typed] PASSED [ 60%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoperator-call] PASSED [ 61%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoperator-computed-call] PASSED [ 62%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoperator-computed-cast] PASSED [ 62%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoperator-computed-suffix] PASSED [ 63%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regoperator-computed-lookup] PASSED [ 64%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regconfig-typed] PASSED [ 65%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regconfig-call] PASSED [ 65%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regconfig-computed-call] PASSED [ 66%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regconfig-computed-cast] PASSED [ 67%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regconfig-computed-suffix] PASSED [ 68%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regconfig-computed-lookup] PASSED [ 68%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regdictionary-typed] PASSED [ 69%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regdictionary-call] PASSED [ 70%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regdictionary-computed-call] PASSED [ 71%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regdictionary-computed-cast] PASSED [ 72%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regdictionary-computed-suffix] PASSED [ 72%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regdictionary-computed-lookup] PASSED [ 73%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regnamespace-typed] PASSED [ 74%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regnamespace-call] PASSED [ 75%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regnamespace-computed-call] PASSED [ 75%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regnamespace-computed-cast] PASSED [ 76%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regnamespace-computed-suffix] PASSED [ 77%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regnamespace-computed-lookup] PASSED [ 78%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regrole-typed] PASSED [ 79%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regrole-call] PASSED [ 79%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regrole-computed-call] PASSED [ 80%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regrole-computed-cast] PASSED [ 81%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regrole-computed-suffix] PASSED [ 82%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regrole-computed-lookup] PASSED [ 82%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regcollation-typed] PASSED [ 83%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regcollation-call] PASSED [ 84%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regcollation-computed-call] PASSED [ 85%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regcollation-computed-cast] PASSED [ 86%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regcollation-computed-suffix] PASSED [ 86%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-catalog-regcollation-computed-lookup] PASSED [ 87%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-ordinary] PASSED [ 88%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-escaped] PASSED [ 89%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-unicode] PASSED [ 89%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-unicode-escape] PASSED [ 90%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-national] PASSED [ 91%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-binary] PASSED [ 92%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-hex] PASSED [ 93%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-dollar] PASSED [ 93%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-tagged] PASSED [ 94%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-adjacent] PASSED [ 95%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-unknown] PASSED [ 96%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[lock] PASSED [ 96%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[relationship] PASSED [ 97%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[catalog] PASSED [ 98%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[deferred] PASSED [ 99%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[transition] PASSED [100%]
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 130 targets: postgres, qa640_813_case_* x129
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=============== 129 passed, 143 deselected in 315.41s (0:05:15) ================
+EXIT STATUS: 0
+```
+
+#### pg-ordered-files
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_schema_documentation_pg.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py tests/test_orrery/test_retrograde_constraints_pg.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+...................................................F.................... [ 27%]
+........................................................................ [ 54%]
+........................................................................ [ 82%]
+...............................................                          [100%]
+=================================== FAILURES ===================================
+_________________ test_migration_sequence_has_only_known_gaps __________________
+
+    def test_migration_sequence_has_only_known_gaps() -> None:
+        """A new hole or a reused historical hole in the numbering fails."""
+    
+        versions = _on_disk_versions()
+        head = max(int(version) for version in versions)
+        missing = {f"{number:03d}" for number in range(1, head + 1)} - set(versions)
+    
+        assert min(versions) == "001"
+>       assert missing == KNOWN_GAPS
+E       AssertionError: assert {'013', '119', '141', '142'} == frozenset({'013', '119'})
+E         
+E         Extra items in the left set:
+E         '141'
+E         '142'
+E         Use -v to get more diff
+
+tests/test_orrery/test_migrate.py:266: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 26 targets: nexus_m10_fresh_test_16340, nexus_m10_template_test_16340, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_issue601_* x4, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps
+1 failed, 262 passed in 39.20s
+EXIT STATUS: 1
+```
+
+#### fleet-clones
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k drops_only_manifest_on_each_fleet_clone
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 272 items / 266 deselected / 6 selected
+
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template] PASSED [ 16%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01] PASSED [ 33%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02] PASSED [ 50%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03] PASSED [ 66%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04] PASSED [ 83%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05] PASSED [100%]
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 7 targets: postgres, qa640_813_case_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+================= 6 passed, 266 deselected in 81.06s (0:01:21) =================
+EXIT STATUS: 0
+```
+
+#### offline-root-audited
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util --ignore=tests/proofs
+```
+
+```text
+.............sss....................................................ssss [ 39%]
+ss.................ss................................................... [ 43%]
+........................................................................ [ 46%]
+........ss..ss................................ssssssssssss.............. [ 49%]
+............................................ssssssssssssssssssssssssssss [ 52%]
+ssssssssssssssssssssss.................................................. [ 55%]
+..............................sssssssssssssssss......................... [ 58%]
+................................s.ssssss................................ [ 61%]
+........................................................................ [ 64%]
+....s.....ssssssssssssssssss........s...ss.....................s........ [ 67%]
+..................sssssssssssssssssssssss......................sss...... [ 70%]
+.............s..................................................ssssss.. [ 73%]
+......................................................ssssssssssssssss.s [ 76%]
+s...........................sssss....................................... [ 79%]
+...................ssssssssssssssssssssssssssssssssss................... [ 83%]
+........................................................................ [ 86%]
+.................ss..................................................... [ 89%]
+......................................s..s.............................s [ 92%]
+sss.................sssss...................................sssss....... [ 95%]
+............sss.................ssss.................................... [ 98%]
+..........sssssssssssssssssssssssssss                                    [100%]
+=================================== FAILURES ===================================
+_______________________ test_repository_migrations_pass ________________________
+
+    def test_repository_migrations_pass() -> None:
+        """The real tree passes, and the command-line gate agrees."""
+>       assert check_migrations(REPO_ROOT / "migrations") == []
+E       assert [Finding(path...be verified")] == []
+E         
+E         Left contains one more item: Finding(path=PosixPath('/Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata/migrations/143_drop_dead_schema_s...), line=1092, message="EXECUTE 'f.definition' runs a command built at run time; its schema changes cannot be verified")
+E         Use -v to get more diff
+
+tests/test_migration_comment_lint.py:1268: AssertionError
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_memnon_cross_encoder_artifact.py::test_qwen3_loads_its_local_folder_and_scores
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/tokenization_utils_base.py:2718: UserWarning: `max_length` is ignored when `padding`=`True` and there is no truncation strategy. To pad to max length, use `padding='max_length'`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_migration_comment_lint.py::test_repository_migrations_pass
+1 failed, 1932 passed, 410 skipped, 8 warnings in 355.09s (0:05:55)
+EXIT STATUS: 1
+```
+
+#### offline-directories
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util tests/config tests/proofs
+```
+
+```text
+E         Left contains 4 more items, first extra item: 'nexus/api/wizard_chat.py:1168: baseline growth forbidden: nexus/api/wizard_chat.py|new_story_chat_stream_endpoint.wizard_events|2e26b6145d23378bbe531f8663edbfc55460043d18da997bc263bca43ef00e4b|1'
+E         Use -v to get more diff
+
+tests/test_scripts/test_check_exception_dispositions.py:636: AssertionError
+----------------------------- Captured stderr call -----------------------------
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_scripts/test_check_exception_dispositions.py::test_repository_tree_matches_committed_baseline
+1 failed, 906 passed, 70 skipped, 7 warnings in 76.16s (0:01:16)
+EXIT STATUS: 1
+```
+
+#### offline-api-orrery
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_api tests/test_orrery
+```
+
+```text
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 60%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 63%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 65%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 68%]
+sssssssssssssssssssssssssss....................s........................ [ 70%]
+sssssssssssssssssssssssssss..s.........sss...........ssss............... [ 73%]
+.........sss.....ssssssssssssssssssssss......sssss..s................... [ 75%]
+ssssssssssssssssssssssssssssssssssssss.................................. [ 78%]
+........................................................................ [ 80%]
+..ssssssss.............................................................. [ 83%]
+.......................s.................sssss...s...................... [ 85%]
+............................sssssssssssssssssssssssss................... [ 88%]
+.....................................sssssssssssss.s......s............. [ 90%]
+......s....ssssssssss.......ss...............ssss....................... [ 93%]
+...............ss....sssssssssss........................................ [ 95%]
+.......................................sssssssssss...................... [ 98%]
+..sssssssssssssss.............sssss..........s.                          [100%]
+=================================== FAILURES ===================================
+_________________ test_migration_sequence_has_only_known_gaps __________________
+
+    def test_migration_sequence_has_only_known_gaps() -> None:
+        """A new hole or a reused historical hole in the numbering fails."""
+    
+        versions = _on_disk_versions()
+        head = max(int(version) for version in versions)
+        missing = {f"{number:03d}" for number in range(1, head + 1)} - set(versions)
+    
+        assert min(versions) == "001"
+>       assert missing == KNOWN_GAPS
+E       AssertionError: assert {'013', '119', '141', '142'} == frozenset({'013', '119'})
+E         
+E         Extra items in the left set:
+E         '141'
+E         '142'
+E         Use -v to get more diff
+
+tests/test_orrery/test_migrate.py:266: AssertionError
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps
+1 failed, 1830 passed, 1024 skipped, 7 warnings in 31.84s
+EXIT STATUS: 1
+```
+
+#### reachability
+
+```sh
+env -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_reachability.py
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+......................................................                   [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+54 passed in 9.69s
+EXIT STATUS: 0
+```
+
+#### black-final
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+4 files would be left unchanged.
+EXIT STATUS: 0
+```
+
+#### flake-final
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+nexus/agents/logon/apex_schema.py:305:89: E501 line too long (92 > 88 characters)
+nexus/api/new_story_db_mapper.py:12:1: F401 'typing.List' imported but unused
+nexus/api/new_story_db_mapper.py:12:1: F401 'typing.Tuple' imported but unused
+nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.datetime' imported but unused
+nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.timezone' imported but unused
+nexus/api/new_story_db_mapper.py:15:1: F401 'nexus.api.new_story_schemas.SpecificLocation' imported but unused
+nexus/api/new_story_db_mapper.py:107:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:211:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:265:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:315:89: E501 line too long (91 > 88 characters)
+nexus/api/new_story_db_mapper.py:318:89: E501 line too long (102 > 88 characters)
+nexus/api/new_story_db_mapper.py:545:89: E501 line too long (118 > 88 characters)
+nexus/api/new_story_db_mapper.py:552:89: E501 line too long (100 > 88 characters)
+nexus/api/new_story_db_mapper.py:562:89: E501 line too long (93 > 88 characters)
+nexus/api/new_story_db_mapper.py:563:89: E501 line too long (90 > 88 characters)
+nexus/api/new_story_db_mapper.py:566:89: E501 line too long (91 > 88 characters)
+nexus/api/new_story_db_mapper.py:687:89: E501 line too long (91 > 88 characters)
+EXIT STATUS: 1
+```
+
+#### flake-main
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/agents/logon/apex_schema.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/agents/logon/apex_enums.py
+```
+
+```text
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/agents/logon/apex_schema.py:305:89: E501 line too long (92 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:12:1: F401 'typing.List' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:12:1: F401 'typing.Tuple' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.datetime' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.timezone' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:15:1: F401 'nexus.api.new_story_schemas.SpecificLocation' imported but unused
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:107:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:211:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:265:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:315:89: E501 line too long (91 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:318:89: E501 line too long (102 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:545:89: E501 line too long (118 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:552:89: E501 line too long (100 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:562:89: E501 line too long (93 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:563:89: E501 line too long (90 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:566:89: E501 line too long (91 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py:689:89: E501 line too long (91 > 88 characters)
+EXIT STATUS: 1
+```
+
+#### mypy-branch
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases --cache-dir /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/mypy-branch nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+Success: no issues found in 4 source files
+EXIT STATUS: 0
+```
+
+#### mypy-main
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases --cache-dir /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/mypy-main /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/api/new_story_db_mapper.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/agents/logon/apex_schema.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/origin-main/nexus/agents/logon/apex_enums.py
+```
+
+```text
+Success: no issues found in 3 source files
+EXIT STATUS: 0
+```
+
+#### comments
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+Found 1 schema documentation finding(s):
+  migrations/143_drop_dead_schema_strata.sql:1092: EXECUTE 'f.definition' runs a command built at run time; its schema changes cannot be verified
+
+New tables, columns, enums, functions, procedures, and views need a non-blank COMMENT ON in the same migration (docs/database.md).
+EXIT STATUS: 1
+```
+
+#### commit-attempt
+
+```sh
+git commit --file /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/commit-message.txt
+```
+
+```text
+Regenerate Orrery package catalog............................................Passed
+Validate NEXUS config and model-ID drift.....................................Passed
+Require COMMENT ON for new migration objects.................................Failed
+- hook id: check-migration-comments
+- exit code: 1
+
+Found 1 schema documentation finding(s):
+  migrations/143_drop_dead_schema_strata.sql:1092: EXECUTE 'f.definition' runs a command built at run time; its schema changes cannot be verified
+
+New tables, columns, enums, functions, procedures, and views need a non-blank COMMENT ON in the same migration (docs/database.md).
+
+Require dispositions for swallowing exception handlers.......................Passed
+EXIT STATUS: 1
+```
+
+#### cleanup
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/cleanup.py
+```
+
+```text
+admin identity: ('postgres', 'on')
+remaining qa640_813_case clones: []
+EXIT STATUS: 0
+```
+
+
+### Development Probes and Interrupted Runs (Not Gates)
+
+The first smoke run found the unrelated %TYPE column had been classified as a
+declaration; that was corrected, and the full 272-case proof passes it. Two
+subsequent smoke collections caught malformed Python string wrapping, corrected
+before the passing smoke/full proofs. The initial flake8 output found two added
+long strings, corrected with unchanged AST. These tails and the interrupted
+commands are retained below for completeness, never counted as passing gates.
+
+
+#### smoke
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k 'accepts_live_relationship or accepts_surviving_catalog or recreation_refuses or (refuses_hidden and (sql-literal-unicode or sql-catalog-regclass-call or sql-catalog-regclass-computed-call))'
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 270 items / 262 deselected / 8 selected
+
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-call] PASSED [ 12%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-catalog-regclass-computed-call] PASSED [ 25%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unicode] PASSED [ 37%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unicode-escape] PASSED [ 50%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names FAILED [ 62%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_surviving_catalog_casts PASSED [ 75%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[SELECT count(*) FROM public.items] PASSED [ 87%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[DECLARE v public.item_type; BEGIN RETURN; END] PASSED [100%]
+
+=================================== FAILURES ===================================
+__________ test_migration_143_accepts_live_relationship_column_names ___________
+
+archives = {'NEXUS_template': PosixPath('/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scrat...4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/pytest-of-pythagor/pytest-2/813-archives0/save_03.dump'), ...}
+tmp_path = PosixPath('/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/pytest-of-pythagor/pytest-2/test_migration_143_accepts_liv0')
+
+    def test_migration_143_accepts_live_relationship_column_names(
+        archives: dict[str, Path], tmp_path: Path
+    ) -> None:
+        """Keep varchar fields, diagnostic strings, and the real deriving trigger."""
+        with _clone(archives, tmp_path) as dbname:
+            _load_fixture(dbname)
+            _column_consumers(dbname)
+            before = _snapshot(dbname, surviving=True)
+>           assert _apply(dbname)
+E           AssertionError: assert False
+E            +  where False = _apply('qa640_813_case_83488890a78d')
+
+tests/test_orrery/test_migration_dead_strata_pg.py:935: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_percent() refuses: target public.emotional_valence: unsupported or unresolved body identifier character_relationships.emotional_valence
+CONTEXT:  PL/pgSQL function inline_code_block line 627 at RAISE
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 9 targets: postgres, qa640_813_case_* x8
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names
+================= 1 failed, 7 passed, 262 deselected in 25.87s =================
+EXIT STATUS: 1
+```
+
+#### smoke2
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k 'accepts_live_relationship or accepts_surviving_catalog or recreation_refuses'
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+_____ ERROR collecting tests/test_orrery/test_migration_dead_strata_pg.py ______
+../../../.venv/lib/python3.11/site-packages/_pytest/python.py:493: in importtestmodule
+    mod = import_path(
+../../../.venv/lib/python3.11/site-packages/_pytest/pathlib.py:587: in import_path
+    importlib.import_module(module_name)
+../../../../.pyenv/versions/3.11.12/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+../../../.venv/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:176: in exec_module
+    source_stat, co = _rewrite_test(fn, self.config)
+../../../.venv/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:356: in _rewrite_test
+    tree = ast.parse(source, filename=strfn)
+../../../../.pyenv/versions/3.11.12/lib/python3.11/ast.py:50: in parse
+    return compile(source, filename, mode, flags,
+E     File "/Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata/tests/test_orrery/test_migration_dead_strata_pg.py", line 769
+E       "COMMENT ON FUNCTION public.probe813_shadow() IS '813 effective search path'; "REVOKE ALL ON FUNCTION public.probe813_where() FROM PUBLIC; "
+E                                                                                                                                                  ^
+E   SyntaxError: unterminated string literal (detected at line 769)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+ERROR tests/test_orrery/test_migration_dead_strata_pg.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.13s ===============================
+EXIT STATUS: 2
+```
+
+#### smoke3
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k 'accepts_live_relationship or accepts_surviving_catalog or recreation_refuses'
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+_____ ERROR collecting tests/test_orrery/test_migration_dead_strata_pg.py ______
+../../../.venv/lib/python3.11/site-packages/_pytest/python.py:493: in importtestmodule
+    mod = import_path(
+../../../.venv/lib/python3.11/site-packages/_pytest/pathlib.py:587: in import_path
+    importlib.import_module(module_name)
+../../../../.pyenv/versions/3.11.12/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+../../../.venv/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:176: in exec_module
+    source_stat, co = _rewrite_test(fn, self.config)
+../../../.venv/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:356: in _rewrite_test
+    tree = ast.parse(source, filename=strfn)
+../../../../.pyenv/versions/3.11.12/lib/python3.11/ast.py:50: in parse
+    return compile(source, filename, mode, flags,
+E     File "/Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata/tests/test_orrery/test_migration_dead_strata_pg.py", line 771
+E       "GRANT EXECUTE ON FUNCTION public.probe813_where() TO CURRENT_USER"",
+E                                                                          ^
+E   SyntaxError: unterminated string literal (detected at line 771)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+ERROR tests/test_orrery/test_migration_dead_strata_pg.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.13s ===============================
+EXIT STATUS: 2
+```
+
+#### smoke4
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p tests.dbname_audit tests/test_orrery/test_migration_dead_strata_pg.py -k 'accepts_live_relationship or accepts_surviving_catalog or recreation_refuses'
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 270 items / 266 deselected / 4 selected
+
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names PASSED [ 25%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_surviving_catalog_casts PASSED [ 50%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[SELECT count(*) FROM public.items] PASSED [ 75%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_recreation_refuses_without_scanner[DECLARE v public.item_type; BEGIN RETURN; END] PASSED [100%]
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_813_case_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+====================== 4 passed, 266 deselected in 20.35s ======================
+EXIT STATUS: 0
+```
+
+#### offline-core
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+```
+
+```text
+........................................................................ [  2%]
+.........................................................s.............. [  4%]
+........................sssssss...ssss.................................. [  6%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 13%]
+................
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/selectors.py:415: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+436 passed, 14 skipped, 7 warnings in 175.24s (0:02:55)
+EXIT STATUS: 2
+```
+
+#### offline-root
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util
+```
+
+```text
+........s......................................sssssss...ssss........... [  3%]
+........................................................................ [  6%]
+.
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/threading.py:327: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+133 passed, 14 skipped, 7 warnings in 16.04s
+EXIT STATUS: 2
+```
+
+#### flake-branch
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+nexus/agents/logon/apex_schema.py:305:89: E501 line too long (92 > 88 characters)
+nexus/api/new_story_db_mapper.py:12:1: F401 'typing.List' imported but unused
+nexus/api/new_story_db_mapper.py:12:1: F401 'typing.Tuple' imported but unused
+nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.datetime' imported but unused
+nexus/api/new_story_db_mapper.py:13:1: F401 'datetime.timezone' imported but unused
+nexus/api/new_story_db_mapper.py:15:1: F401 'nexus.api.new_story_schemas.SpecificLocation' imported but unused
+nexus/api/new_story_db_mapper.py:107:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:211:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:265:89: E501 line too long (94 > 88 characters)
+nexus/api/new_story_db_mapper.py:315:89: E501 line too long (91 > 88 characters)
+nexus/api/new_story_db_mapper.py:318:89: E501 line too long (102 > 88 characters)
+nexus/api/new_story_db_mapper.py:545:89: E501 line too long (118 > 88 characters)
+nexus/api/new_story_db_mapper.py:552:89: E501 line too long (100 > 88 characters)
+nexus/api/new_story_db_mapper.py:562:89: E501 line too long (93 > 88 characters)
+nexus/api/new_story_db_mapper.py:563:89: E501 line too long (90 > 88 characters)
+nexus/api/new_story_db_mapper.py:566:89: E501 line too long (91 > 88 characters)
+nexus/api/new_story_db_mapper.py:687:89: E501 line too long (91 > 88 characters)
+tests/test_orrery/test_migration_dead_strata_pg.py:833:89: E501 line too long (97 > 88 characters)
+tests/test_orrery/test_migration_dead_strata_pg.py:870:89: E501 line too long (92 > 88 characters)
+EXIT STATUS: 1
+```
+
+#### black
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/api/new_story_db_mapper.py nexus/agents/logon/apex_schema.py nexus/agents/logon/apex_enums.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+4 files would be left unchanged.
+EXIT STATUS: 0
+```
+
+### Final Handoff
+
+The existing PR body was patched, not its branch/history. A fresh read verifies
+that the body exactly matches the expected JSON payload, its original footer is
+intact, and both local and PR HEAD remain fc7d298ecfd2b38f702a3139dff61ecf38ba973a.
+
+```sh
+gh api -X PATCH repos/pythagorakase/nexus/pulls/1098 --input /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r2/pr-patch.json --jq '{url:.html_url,head:.head.sha}'
+```
+
+```text
+{"head":"fc7d298ecfd2b38f702a3139dff61ecf38ba973a","url":"https://github.com/pythagorakase/nexus/pull/1098"}
+EXIT STATUS: 0
+```
+
+`git diff --cached --check` reports trailing whitespace only inside the captured
+failure-tail blocks. It is retained because the order requires verbatim tails;
+source Python/SQL has no whitespace finding. This optional whitespace check is
+not being used to waive the mandatory migration-comment rejection.
+
+The staged patch is backed up at after-review-r2/pending-r2.patch. No commit was
+created, and no push was attempted after the failed commit hook. No command started by this fixer is
+running. The code is ready for coordinator review, but the mandatory checker
+contract must be resolved before this patch can become the PR head.
+
+Authored by Codex, running GPT-6.
+
+## Coordinator Resolution: Language Validators Replace Re-Creation
+
+Date 2026-10-01. The stop-report's conflict is accepted as a rule conflict and
+resolved by changing the mechanism, not the checker: `check_migration_comments.py`
+is right to refuse run-time-built DDL it cannot inspect, and the ordered
+`EXECUTE pg_get_functiondef(oid)` re-creation was such DDL. The second line of
+defense now calls PostgreSQL's SQL-callable language validators,
+`pg_catalog.fmgr_sql_validator(oid)` and `pg_catalog.plpgsql_validator(oid)`,
+under `SET LOCAL check_function_bodies = on` and each routine's effective
+`search_path`. These are the functions `CREATE FUNCTION` itself invokes: a SQL
+body is parsed and analyzed against the live (post-drop) catalog, a PLpgSQL body
+is compiled with its declared types resolved, and nothing is created, replaced
+or altered, so OIDs, ownership, ACLs and comments are untouched by construction.
+The validator dispatches on `pg_language.lanname` (PostgreSQL refuses a validator
+called for the wrong language), and the routine selection now mirrors the
+scanner's: every non-system schema, excluding extension members
+(`pg_depend.deptype = 'e'`). The residual-risk statement in the header is
+unchanged: PLpgSQL expression-level references are late-bound and no body check
+covers them.
+
+The test exercising the second line is renamed from
+`test_migration_143_recreation_refuses_without_scanner` to
+`test_migration_143_validation_refuses_without_scanner`; its assertions are
+unchanged (the scanner invocation is removed from a scratch copy; the SQL target
+query and the PLpgSQL target declaration must still refuse with `post-drop` and
+`probe813` in the runner log; snapshots, routine catalog and stamps unchanged).
+Earlier tails in this document carry the old name.
+
+### Mechanism Probe (Disposable Database, Fresh Session)
+
+A `qa640_coord_probe_*` database was created, given a table `t`, an enum `mood`,
+an old-style SQL function reading `t`, a PLpgSQL function declaring a `mood`
+variable, two late-bound PLpgSQL functions, and a clean SQL function; `t` and
+`mood` were dropped (RESTRICT succeeds: string bodies record no dependency).
+From a second session (no cached PLpgSQL compilation), the validators and the
+previous CREATE OR REPLACE path gave identical verdicts:
+
+```text
+--- fresh session validators:
+SET
+ERROR:  relation "t" does not exist
+LINE 1: SELECT count(*)::int FROM t
+QUERY:  SELECT count(*)::int FROM t
+ERROR:  type "mood" does not exist
+LINE 1:  DECLARE m mood; BEGIN m := 'a'; END
+ f_plpgsql_ref | (passes: late-bound table reference)
+ f_plpgsql_cast | (passes: late-bound expression cast)
+ f_ok | (passes)
+--- same fresh-session check through CREATE OR REPLACE for comparison:
+NOTICE:  f_sql REFUSED: relation "t" does not exist
+NOTICE:  f_plpgsql_type REFUSED: type "mood" does not exist
+NOTICE:  f_plpgsql_ref re-created ok
+NOTICE:  f_plpgsql_cast re-created ok
+NOTICE:  f_ok re-created ok
+```
+
+Same-session note: a validator run right after `CREATE FUNCTION` in the same
+session reuses the cached PLpgSQL compilation and does not refuse; the migration
+runs in its own session, where no such cache exists, and the test below proves
+the refusal through the real runner.
+
+### Migration-Comment Lint
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+LINT EXIT=0
+```
+
+### Second Line and Fleet Clones
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k "validation_refuses_without_scanner or drops_only_manifest_on_each_fleet_clone"
+```
+
+```text
+..........                                                               [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 11 targets: postgres, qa640_813_case_* x10
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+10 passed, 262 deselected in 86.93s (0:01:26)
+```
+
+### Full Module, Runner and Schema-Documentation Suites
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py tests/test_owner_target_guard.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 284 targets: postgres, qa640_813_case_* x272, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps
+1 failed, 461 passed in 616.26s (0:10:16)
+```
+
+The single failure is the allowed sequencing failure: `assert {'013', '119', '141', '142'} == frozenset({'013', '119'})`; migrations 141 and 142 land with batch B before this PR. All 272 dead-strata cases pass under the validator second line.
