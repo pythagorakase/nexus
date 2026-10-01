@@ -1260,6 +1260,11 @@ class LORERetrievalSettings(BaseModel):
         ge=1,
         description="Maximum MEMNON queries to execute during LORE deep-query pass",
     )
+    deep_query_k: int = Field(
+        default=15,
+        ge=1,
+        description="Results MEMNON returns for each LORE deep query before deduplication",
+    )
 
 
 class PresenceAuditSettings(BaseModel):

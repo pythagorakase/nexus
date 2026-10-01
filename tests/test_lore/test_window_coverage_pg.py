@@ -1,14 +1,24 @@
 """PostgreSQL proof that post-render coverage excludes trimmed Pass-2 chunks."""
 
+import asyncio
+from pathlib import Path
+
 import pytest
 from sqlalchemy import text
 
+from nexus.agents.lore.lore import LORE
+from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.memnon.memnon import MEMNON
 from nexus.config import load_settings
 from nexus.database import database_url
 from nexus.memory import ContextMemoryManager
+from nexus.memory.context_state import memory_identity
 from nexus.memory.entity_detector import EntityMatch
-from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 from tests.test_lore.window_helpers import window_logon
 
 pytestmark = pytest.mark.requires_postgres
@@ -198,3 +208,76 @@ def test_historical_coverage_matches_rendered_prefix(limit: int, repeats: int) -
             )
         finally:
             memnon.close()
+
+
+@pytest.mark.requires_corpus
+@pytest.mark.parametrize("k", [3, 15])
+def test_configured_k_bounds_the_deep_query_pool(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    k: int,
+) -> None:
+    """Real corpus retrieval from narrative_chunks honors configured breadth."""
+    config = tmp_path / "nexus.toml"
+    config.write_text(
+        Path("nexus.toml")
+        .read_text()
+        .replace("deep_query_k = 15", f"deep_query_k = {k}")
+    )
+    with disposable_slot_database(
+        "qa640_756_deep_query",
+        source_db="ref_codex_bakeoff_2026_07",
+        include_data=True,
+    ) as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        lore = LORE(
+            settings_path=str(config),
+            enable_logon=False,
+            debug=False,
+            dbname=dbname,
+            model_override="TEST",
+        )
+        try:
+            assert lore.memnon is not None
+            assert lore.turn_manager is not None
+            with lore.memnon.db_manager.engine.connect() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT id, raw_text FROM narrative_chunks "
+                        "WHERE raw_text IS NOT NULL AND btrim(raw_text) <> '' "
+                        "ORDER BY id LIMIT 1"
+                    )
+                ).first()
+            assert row is not None
+            chunk_id, raw_text = row
+            query = " ".join(raw_text.split()[:32])
+            assert query
+            broad = lore.memnon.query_memory(query=query, k=30, use_hybrid=True)
+            broad_count = len(broad["results"])
+            assert broad_count > 15
+            context = TurnContext(
+                turn_id="756-deep-query-count",
+                user_input=query,
+                start_time=0,
+                warm_slice=[{"id": chunk_id, "is_target": True, "full_text": query}],
+            )
+            asyncio.run(lore.turn_manager.execute_deep_queries(context))
+            state = context.phase_states["deep_queries"]
+            with capsys.disabled():
+                print(
+                    f"756-S2: k={k}; chunk_id={chunk_id}; query={query!r}; "
+                    f"broad_count={broad_count}; "
+                    f"results_retrieved={state['results_retrieved']}; "
+                    f"pool_count={len(context.retrieved_passages)}"
+                )
+            assert state["queries_executed"] == 1
+            assert state["results_retrieved"] == k
+            assert len(context.retrieved_passages) == k
+            identities = [
+                memory_identity(result) for result in context.retrieved_passages
+            ]
+            assert all(identity is not None for identity in identities)
+            assert len(set(identities)) == k
+        finally:
+            lore.close()

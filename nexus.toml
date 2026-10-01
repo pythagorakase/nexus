@@ -263,6 +263,7 @@ character_tags = 8
 
 [lore.retrieval]
 max_deep_queries = 5
+deep_query_k = 15  # Results MEMNON returns per deep query, before deduplication
 
 [lore.token_budget]
 # Context window limits for APEX generation

@@ -17,6 +17,7 @@ from nexus.config import (
 )
 from nexus.config.settings_models import (
     APIModelEntry,
+    LORERetrievalSettings,
     ModelConfig,
     ProviderModels,
     RuntimeCliSettings,
@@ -25,6 +26,7 @@ from nexus.config.settings_models import (
     Settings,
     materialize_model_selections,
 )
+from nexus.memory.baseline_compat import pass2_baseline_config_fingerprint
 from tests.settings_helpers import renamed_test_model_config
 
 
@@ -989,3 +991,59 @@ def test_gateway_cors_origins_reject_wildcard() -> None:
 
     with pytest.raises(ValidationError, match="exact HTTP\\(S\\) origins"):
         Settings(**raw)
+
+
+def test_deep_query_k_ships_at_todays_value() -> None:
+    """The shipped key and both validated defaults preserve fifteen results."""
+    assert _nexus_toml_dict()["lore"]["retrieval"]["deep_query_k"] == 15
+    assert load_settings("nexus.toml").lore.retrieval.deep_query_k == 15
+    assert LORERetrievalSettings().deep_query_k == 15
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_deep_query_k_rejects_values_below_one(tmp_path: Path, value: int) -> None:
+    """Invalid result counts fail at the typed leaf through the TOML loader."""
+    config = tmp_path / "nexus.toml"
+    config.write_text(
+        Path("nexus.toml")
+        .read_text()
+        .replace("deep_query_k = 15", f"deep_query_k = {value}")
+    )
+    with pytest.raises(ValidationError) as exc:
+        load_settings(config)
+    assert any(
+        error["loc"] == ("lore", "retrieval", "deep_query_k")
+        and error["type"] == "greater_than_equal"
+        for error in exc.value.errors()
+    )
+
+
+def test_deep_query_k_rejects_misspelled_setting(tmp_path: Path) -> None:
+    """A misspelled key cannot silently fall back to the default count."""
+    config = tmp_path / "nexus.toml"
+    config.write_text(
+        Path("nexus.toml")
+        .read_text()
+        .replace("deep_query_k = 15", "deep_query_count = 15")
+    )
+    with pytest.raises(ValidationError) as exc:
+        load_settings(config)
+    assert any(
+        error["loc"] == ("lore", "retrieval", "deep_query_count")
+        and error["type"] == "extra_forbidden"
+        for error in exc.value.errors()
+    )
+
+
+def test_deep_query_k_change_preserves_pass2_fingerprint(tmp_path: Path) -> None:
+    """Deep-query breadth stays outside the stored Pass-2 fingerprint."""
+    fingerprints = []
+    for value in (3, 15):
+        config = tmp_path / f"nexus-{value}.toml"
+        config.write_text(
+            Path("nexus.toml")
+            .read_text()
+            .replace("deep_query_k = 15", f"deep_query_k = {value}")
+        )
+        fingerprints.append(pass2_baseline_config_fingerprint(load_settings(config)))
+    assert fingerprints[0] == fingerprints[1]
