@@ -46,3 +46,9 @@ repos:
           .github/workflows/migration-comment-check.yml runs the same check in
           CI, and the PostgreSQL ratchet in tests/test_schema_documentation_pg.py
           covers the live catalog.
+      - id: check-exception-dispositions
+        name: Require dispositions for swallowing exception handlers
+        entry: poetry run python -S scripts/check_exception_dispositions.py
+        language: system
+        pass_filenames: false
+        always_run: true
