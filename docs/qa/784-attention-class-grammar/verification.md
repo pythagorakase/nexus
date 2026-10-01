@@ -1,7 +1,7 @@
 # 784-S1 Verification: Attention-Class Wire Grammar and Card Blocks
 
 - Date: 2026-10-01
-- Probe commit: `a3e6d109` (the `commit` field of the JSON below; the later commits on the branch add only the reachability classification and this file)
+- Probe commit: `a3e6d109` (the `commit` field of the JSON below). Commit `9039988f` later moved the card-block rendering into `card_block_arms` and tightened its test, and did not change the output: a rerun on `9039988f` printed this JSON except `header.commit` (see Review Fix). The other later commits add only the reachability classification and this file.
 - Base: `origin/main` at `56c884e7`
 - Command: `PYTHONPATH=$PWD $PY scripts/qa_shift/attention_class_grammar_probe.py > probe.json` with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset; exit status 0. Stderr carried only the two `INFO Replaying cards and exposures on <corpus>` lines.
 - Model and tokenizer: `gpt-6-astra` for both seats (`apex.gaia_model` is unset), `o200k_base`.
