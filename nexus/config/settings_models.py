@@ -1263,7 +1263,9 @@ class LORERetrievalSettings(BaseModel):
     deep_query_k: int = Field(
         default=15,
         ge=1,
-        description="Results MEMNON returns for each LORE deep query before deduplication",
+        description=(
+            "Results MEMNON returns for each LORE deep query before deduplication"
+        ),
     )
 
 

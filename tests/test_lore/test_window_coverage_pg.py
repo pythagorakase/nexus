@@ -227,7 +227,7 @@ def test_configured_k_bounds_the_deep_query_pool(
     )
     with disposable_slot_database(
         "qa640_756_deep_query",
-        source_db="ref_codex_bakeoff_2026_07",
+        source_db="save_01",
         include_data=True,
     ) as dbname:
         route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
