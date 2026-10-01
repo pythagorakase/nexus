@@ -398,3 +398,118 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 
 `hist_before.txt` was taken at `043d664e` before these edits and is
 byte-identical to the snapshot taken before the original change.
+
+## After the Third Review
+
+The second independent pass found one P1 and three P2 in the round-2 `EXPLAIN`
+handling and recursive wrapper reading at `cad24cfb`. Commit `8012b084` applies
+the coordinator's decision: the lint stops parsing `EXPLAIN` options. This
+change opened no database.
+
+- **No recursion (P1).** `_query_tokens` called itself once per `EXPLAIN`
+  prefix and once per parenthesized `WITH` main statement, so
+  `"EXPLAIN ANALYZE " * 1100 + "("` and 1,100 nested `WITH a AS (SELECT 1) (`
+  wrappers raised `RecursionError`. It is now one bounded pass: at most one
+  `EXPLAIN` prefix, one rebase through leading parentheses, one `WITH` list
+  (with its `SEARCH`/`CYCLE` clauses), and, when the main statement opens with
+  `(`, one more rebase and `WITH` list; a further parenthesized main statement
+  yields nothing. A statement whose brackets do not balance (PostgreSQL
+  rejects it) is read by its depth-0 tokens, which is how `cb5c500c` read every
+  statement, so the malformed cases below match `cb5c500c` exactly.
+- **`EXPLAIN` is reported, never parsed (P2 x3).** `_explain_runs` and
+  `_explained` are deleted. `_after_explain` strips `EXPLAIN` and either one
+  parenthesized option list or the grammar's `ANALYZE`/`ANALYSE` and `VERBOSE`
+  keywords, without reading them; the rest is checked like any other
+  statement. The keywords are stripped as well as the option list so that
+  `EXPLAIN ANALYZE (SELECT 1 INTO t)` stays reported. A `SELECT INTO` behind
+  any `EXPLAIN` now gets the normal `SELECT INTO ... declares no column list`
+  finding, although a plain `EXPLAIN` creates nothing: the lint does not model
+  which `EXPLAIN` forms execute, and no migration should `EXPLAIN`. The module
+  docstring and `docs/database.md` say so.
+  `EXPLAIN (SELECT 1 INTO t)` is read as an option list, as PostgreSQL's
+  grammar reads it, and passes (unchanged).
+
+`test_select_into_is_found_past_search_cycle_and_explain_analyze` is renamed
+`test_select_into_is_found_past_search_cycle_and_explain`. Its plain
+`EXPLAIN`, `EXPLAIN VERBOSE`, and `EXPLAIN (ANALYZE false, VERBOSE)` cases are
+now positives, and `EXPLAIN ("analyze") SELECT 1 INTO quoted_option;`,
+`EXPLAIN (ANALYZE true, ANALYZE false) SELECT 1 INTO repeated_option;`, and
+`EXPLAIN (ANALYZE "false") SELECT 1 INTO quoted_value;` are added; each
+reports exactly one finding at its `INTO` line (lines 17-22). The SEARCH/CYCLE,
+parenthesized-main, and real-`DELETE` cases are unchanged. New test
+`test_select_into_reading_is_bounded` runs the 1,100-prefix `EXPLAIN ANALYZE`
+chain ending in `(`, a 1,100-deep parenthesis nest around
+`SELECT 1 INTO deep`, a bare `(`, an empty statement, and 1,100 nested `WITH`
+wrappers, and asserts the full list: only the nest's `SELECT INTO public.deep`
+finding.
+
+Both tests fail on `cad24cfb` (a scratch copy of
+`git show cad24cfb:scripts/check_migration_comments.py` beside the new test
+file, `-k "bounded or search_cycle_and_explain"`):
+
+```
+E       AssertionError: assert ['130_clauses...erified', ...] == ['130_clauses...erified', ...]
+test_lint_copy.py:1113: AssertionError
+E       RecursionError: maximum recursion depth exceeded in comparison
+scripts/check_migration_comments.py:704: RecursionError
+FAILED test_lint_copy.py::test_select_into_is_found_past_search_cycle_and_explain
+FAILED test_lint_copy.py::test_select_into_reading_is_bounded - RecursionErro...
+2 failed, 37 deselected in 4.14s
+```
+
+Each case alone, through `check_migrations`, against scratch copies of
+`cb5c500c` and `cad24cfb` and against `8012b084` (each file also holds
+`COMMENT ON TABLE t`; findings counted, `RecursionError` caught by the probe):
+
+| Case | `cb5c500c` | `cad24cfb` | `8012b084` |
+| --- | --- | --- | --- |
+| `"EXPLAIN ANALYZE " * 1100 + "("` | 0 | RecursionError | 0 |
+| 1,100-deep `(...(SELECT 1 INTO deep)...)` | 0 | 2 | 2 |
+| `(` | 0 | 0 | 0 |
+| empty statement | 0 | 0 | 0 |
+| 1,100 nested `WITH a AS (SELECT 1) (` | 0 | RecursionError | 0 |
+| `EXPLAIN ("analyze") SELECT 1 INTO t` | 1 | 0 | 1 |
+| `EXPLAIN (ANALYZE true, ANALYZE false) SELECT 1 INTO t` | 1 | 1 | 1 |
+| `EXPLAIN (ANALYZE "false") SELECT 1 INTO t` | 1 | 1 | 1 |
+| `EXPLAIN SELECT 1 INTO t` | 1 | 0 | 1 |
+| `EXPLAIN VERBOSE SELECT 1 INTO t` | 1 | 0 | 1 |
+| `EXPLAIN (ANALYZE false) SELECT 1 INTO t` | 1 | 0 | 1 |
+| `EXPLAIN ANALYZE (SELECT 1 INTO t)` | 0 | 1 | 1 |
+| `EXPLAIN (SELECT 1 INTO t)` | 0 | 0 | 0 |
+| `(SELECT 1 INTO t` (unbalanced) | 0 | 1 | 0 |
+
+The quoted option name (`EXPLAIN ("analyze")`) was silent on `cad24cfb`. The
+nest's two findings are its `SELECT INTO public.deep` finding and a missing
+`COMMENT ON TABLE` for `deep` (the probe documents only `t`); the test documents
+`deep` and expects one.
+
+On `8012b084`, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT`
+unset:
+
+```
+$ black --check
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+exit=0
+$ flake8
+exit=0
+$ mypy
+Success: no issues found in 2 source files
+$ pytest lint
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+39 passed, 5 warnings in 0.84s
+$ real tree
+OK: every object created after migration 129 has a comment.
+exit=0
+$ cmp hist_before.txt hist_after.txt
+exit=0
+     405
+     405
+$ reachability
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 10.92s
+```
+
+`hist_before.txt` was taken at `cad24cfb` before these edits and is
+byte-identical to the round-2 snapshot (and so to the one taken before the
+original change).
