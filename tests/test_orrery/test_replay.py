@@ -2405,6 +2405,7 @@ def test_chunk_clock_verify_covers_outside_checkpoint_windows(
 def test_replay_cli_reports_clean_played_clock(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """Real TEST acceptance boundaries pass both command modes and JSON output."""
     with disposable_slot_database("qa640_778s6a_played") as dbname:
@@ -2424,7 +2425,18 @@ def test_replay_cli_reports_clean_played_clock(
             report = chunk_clock_report_sync(cur)
         assert report["chunks"] > 0
         assert report["findings"] == []
-        assert _run_replay_cli(monkeypatch, "--chunk", str(last)) == 0
+        output_path = tmp_path / "clean-clock.json"
+        assert (
+            _run_replay_cli(
+                monkeypatch, "--chunk", str(last), "--output", str(output_path)
+            )
+            == 0
+        )
+        document = json.loads(output_path.read_text())
+        assert datetime.fromisoformat(document["world_time"]) == (
+            datetime(2100, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=7)
+        )
+        assert document["clock_drifts"] == []
         reconstruction = capsys.readouterr().out
         assert "world_time: 2100-01-01 00:07:00+00:00" in reconstruction
         assert "clock_drifts: 0 finding(s)" in reconstruction
@@ -2432,6 +2444,41 @@ def test_replay_cli_reports_clean_played_clock(
         assert f"chunk clocks: {report['chunks']} checked row(s), 0 finding(s)" in (
             capsys.readouterr().out
         )
+
+
+def test_replay_cli_exposes_corrupt_clock_in_json(
+    chunk_clock_db: tuple[str, list[int]],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """A corrupted stored clock exits 1 after exposing the computed JSON instant."""
+    dbname, ids = chunk_clock_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+    expected = CLOCK_BASE + timedelta(minutes=7)
+    actual = expected + timedelta(seconds=1)
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+            (actual, ids[-1]),
+        )
+    output_path = tmp_path / "corrupt-clock.json"
+    assert (
+        _run_replay_cli(
+            monkeypatch, "--chunk", str(ids[-1]), "--output", str(output_path)
+        )
+        == 1
+    )
+    finding = asdict(
+        Drift("chunk_metadata", str(ids[-1]), "world_time", "value", expected, actual)
+    )
+    serialized = json.loads(json.dumps(finding, default=str))
+    document = json.loads(output_path.read_text())
+    assert datetime.fromisoformat(document["world_time"]) == expected
+    assert document["clock_drifts"] == [serialized]
+    output = capsys.readouterr().out
+    assert f"world_time: {expected}" in output
+    assert json.dumps(finding, default=str) in output
 
 
 def test_chunk_clock_reconstruction_reports_missing_metadata(
