@@ -796,9 +796,22 @@ class Supervisor:
             "log": str(self.log_path(name)),
             "log_writer_pid": writer_pid,
         }
-        self._write_pidfile(name, record)
+        try:
+            self._write_pidfile(name, record)
+        except Exception as exc:
+            # Until the record exists, this start alone owns the spawned pids.
+            try:
+                self._abandon_service(name, pid, writer_pid)
+            except Exception as teardown_exc:
+                raise teardown_exc from exc
+            raise
         self._await_healthy(name, service, pid, writer_pid)
         return record
+
+    def _abandon_service(self, name: str, pid: int, writer_pid: int) -> None:
+        """Stop this invocation's service and wait out its capture writer."""
+        self._stop_pid(pid)
+        self._await_writer(name, writer_pid)
 
     # ------------------------------------------------------------------
     # Public verbs
@@ -831,16 +844,17 @@ class Supervisor:
 
         started: Dict[str, Any] = {}
         enabled = self.enabled_services()
-        # Records that predate this call belong to an earlier run (a running
-        # stack refused as "already running", or a stale record whose writer
-        # could not be waited out); the teardown below never stops those.
-        earlier = {name: self._read_pidfile(name) for name in enabled}
+        spawned: list[tuple[str, int, int]] = []
         try:
             for name, service in enabled.items():
                 record = self._start_service(
                     name, service, resolved_slot, detached=not foreground
                 )
                 started[name] = record
+                if not record.get("attached") and not record.get("skipped"):
+                    spawned.append(
+                        (name, int(record["pid"]), int(record["log_writer_pid"]))
+                    )
                 if echo and record.get("attached"):
                     print(
                         f"attached to existing {name} on "
@@ -854,16 +868,14 @@ class Supervisor:
                         f"http://{service.host}:{service.port}"
                     )
         except Exception as exc:
-            # Partial starts are torn down so up() is all-or-nothing: every
-            # enabled service this call left a record for, including one whose
-            # failed start kept its record because its writer outlived the
-            # wait. A teardown failure is attached to the original error.
-            for name in enabled:
-                leftover = self._read_pidfile(name)
-                if leftover is None or leftover == earlier[name]:
-                    continue
+            # Roll back only pids this invocation spawned. A concurrent start's
+            # record is never evidence of ownership by this invocation.
+            for name, pid, writer_pid in spawned:
                 try:
-                    self._stop_service(name)
+                    self._abandon_service(name, pid, writer_pid)
+                    leftover = self._read_pidfile(name)
+                    if leftover is not None and int(leftover["pid"]) == pid:
+                        self._pidfile(name).unlink(missing_ok=True)
                 except Exception as teardown_exc:
                     exc.add_note(f"Teardown of '{name}' also failed: {teardown_exc}")
             raise
@@ -1286,6 +1298,17 @@ class Supervisor:
                 print("shutting down...")
             self.down()
 
+    def _child_capture_state(self, name: str, record: Dict[str, Any]) -> str:
+        """Classify a dead writer only after rechecking its service's liveness."""
+        pid = int(record["pid"])
+        if not process_running(pid):
+            return "exited"
+        writer = record.get("log_writer_pid")
+        if writer is None or self._writer_alive(name, int(writer)):
+            return "running"
+        # The service may have exited normally while its writer drained.
+        return "capture-failed" if process_running(pid) else "exited"
+
     def _check_children(
         self,
         services: Dict[str, RuntimeServiceSettings],
@@ -1300,22 +1323,18 @@ class Supervisor:
             if record is None:
                 continue
             pid = int(record["pid"])
-            # Reap first: a foreground service is this process's child, and an
-            # exited child answers kill(pid, 0) until it is reaped. Only a
-            # running child, or a pid that is not ours and still answers, is
-            # a live service.
-            if process_running(pid):
-                # A live service whose writer died writes into a broken pipe
-                # (a logging handler swallows the errors): a capture failure.
-                writer = record.get("log_writer_pid")
-                if writer is not None and not self._writer_alive(name, int(writer)):
-                    self._stop_pid(pid)
-                    self._pidfile(name).unlink(missing_ok=True)
-                    failures.append(
-                        f"Log writer for '{name}' (pid {writer}) died while the "
-                        f"service (pid {pid}) was running; its output had nowhere "
-                        "to go. Stopped the service."
-                    )
+            state = self._child_capture_state(name, record)
+            if state == "capture-failed":
+                writer = record["log_writer_pid"]
+                self._stop_pid(pid)
+                self._pidfile(name).unlink(missing_ok=True)
+                failures.append(
+                    f"Log writer for '{name}' (pid {writer}) died while the "
+                    f"service (pid {pid}) was running; its output had nowhere "
+                    "to go. Stopped the service."
+                )
+                continue
+            if state == "running":
                 continue
             # Wait out the writer before the record that names it goes, on
             # every path: a later spawn must never start a second writer on

@@ -16,10 +16,12 @@ import pytest
 import tomlkit
 
 from nexus import cli
+from nexus.config.settings_models import RuntimeServiceSettings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime import supervisor as supervisor_module
 from nexus.runtime.log_capture import (
     WriterProbeError,
+    process_running,
     spawn_captured,
     wait_for_writer,
     writer_error_path,
@@ -32,6 +34,8 @@ from nexus.runtime.supervisor import (
     _tail_lines,
     rotated_segment,
 )
+from tests.test_runtime import test_supervisor_live as live_helpers
+from tests.test_runtime.test_supervisor_live import ephemeral_ports  # noqa: F401
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -1388,10 +1392,9 @@ def test_failed_start_keeps_the_record_when_the_writer_probe_cannot_run(
         assert record is not None
         writer_pid = int(record["log_writer_pid"])
         assert f"pid {writer_pid}" in str(raised.value)
-        assert any(
-            note.startswith("Teardown of 'echo' also failed: Cannot tell")
-            for note in getattr(raised.value, "__notes__", [])
-        )
+        # This start never returned its record, so up() does not own a
+        # successful start to roll back or retry the failed writer probe.
+        assert not getattr(raised.value, "__notes__", [])
         deadline = time.monotonic() + 10
         while not log_path.read_text(encoding="utf-8").endswith("\n"):
             assert time.monotonic() < deadline, "the holding child never printed"
@@ -1430,3 +1433,222 @@ def test_failed_child_spawn_waits_out_its_writer(tmp_path: Path) -> None:
 
     assert _live_writers(capture) == []
     assert writer_error_path(capture).read_bytes() == b""
+
+
+# ---------------------------------------------------------------------------
+# After the third independent review (#842): ownership and exit races
+# ---------------------------------------------------------------------------
+
+
+def _managed_echo(tmp_path: Path) -> Supervisor:
+    """An isolated health-serving echo on the fixture's OS-assigned port."""
+    supervisor = _logging_supervisor(
+        tmp_path,
+        max_bytes=1000,
+        backup_count=2,
+        command=ONE_LINE_CHILD,
+        stop_grace_seconds=1,
+        poll_interval_seconds=0.05,
+    )
+    _only_echo_enabled(supervisor, ONE_LINE_CHILD)
+    service = supervisor.runtime.services["echo"]
+    service.port = live_helpers.GATEWAY_PORT
+    service.env["ECHO_MARKER"] = str(tmp_path / "marker")
+    (tmp_path / "marker").touch()
+    return supervisor
+
+
+def test_up_abandons_a_service_whose_pidfile_cannot_be_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real failed write leaves neither spawned process running nor a record."""
+    supervisor = _managed_echo(tmp_path)
+    log_path = supervisor.log_path("echo")
+    log_path.write_bytes(b"")
+    writer_error_path(log_path).write_bytes(b"")
+    spawned: list[tuple[int, int]] = []
+    spawn = supervisor._spawn
+
+    def observe_spawn(
+        name: str, service: RuntimeServiceSettings, slot: int, detached: bool
+    ) -> tuple[int, int]:
+        pids = spawn(name, service, slot, detached)
+        spawned.append(pids)
+        return pids
+
+    monkeypatch.setattr(supervisor, "_spawn", observe_spawn)
+    supervisor.state_dir.chmod(0o555)
+    try:
+        with pytest.raises(PermissionError):
+            supervisor.up(slot=5, echo=False)
+        assert len(spawned) == 1
+        pid, writer_pid = spawned[0]
+        assert not process_running(pid), f"service pid {pid} is still running"
+        assert not process_running(
+            writer_pid
+        ), f"writer pid {writer_pid} is still running"
+        assert _ps_state(pid) == ""
+        assert _ps_state(writer_pid) == ""
+        assert not supervisor._pidfile("echo").exists()
+    finally:
+        supervisor.state_dir.chmod(0o755)
+        for pids in spawned:
+            for pid in pids:
+                _kill_quietly(pid)
+                _reap_quietly(pid)
+
+
+@pytest.mark.parametrize("concurrent", (False, True), ids=("existing", "concurrent"))
+def test_refused_up_preserves_another_invocations_stack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, concurrent: bool
+) -> None:
+    """Refusal preserves even a record created after this up() began."""
+    refused = _managed_echo(tmp_path)
+    owner = Supervisor.from_config(refused.config_path)
+    owner.runtime.services = {
+        name: service.model_copy(deep=True)
+        for name, service in refused.runtime.services.items()
+    }
+    original_start = refused._start_service
+    record: dict[str, Any] | None = None
+
+    def start_after_owner(
+        name: str, service: RuntimeServiceSettings, slot: int, detached: bool
+    ) -> dict[str, Any]:
+        nonlocal record
+        # Deterministic interleaving at the real _start_service boundary.
+        # Under the old rollback, the earlier snapshot has already been taken.
+        owner.up(slot=5, echo=False)
+        record = owner._read_pidfile("echo")
+        return original_start(name, service, slot, detached)
+
+    try:
+        if concurrent:
+            monkeypatch.setattr(refused, "_start_service", start_after_owner)
+        else:
+            owner.up(slot=5, echo=False)
+            record = owner._read_pidfile("echo")
+        with pytest.raises(RuntimeError_, match="'echo' is already running"):
+            refused.up(slot=5, echo=False)
+        assert record is not None
+        assert refused._read_pidfile("echo") == record
+        assert process_running(int(record["pid"]))
+        assert owner._writer_alive("echo", int(record["log_writer_pid"]))
+        assert owner._probe(f"http://127.0.0.1:{live_helpers.GATEWAY_PORT}/health")
+    finally:
+        if record is not None:
+            owner._abandon_service(
+                "echo", int(record["pid"]), int(record["log_writer_pid"])
+            )
+            owner._pidfile("echo").unlink(missing_ok=True)
+            _reap_quietly(int(record["pid"]))
+
+
+def test_up_rolls_back_only_its_successfully_started_pids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second service's startup failure cleans it and rolls back the first."""
+    supervisor = _managed_echo(tmp_path)
+    service = supervisor.runtime.services["echo"].model_copy(deep=True)
+    service.command = list(EXITS_AT_ONCE)
+    service.port = live_helpers.MOCK_PORT
+    supervisor.runtime.services["fails"] = service
+    spawned: dict[str, tuple[int, int]] = {}
+    spawn = supervisor._spawn
+
+    def observe_spawn(
+        name: str, service: RuntimeServiceSettings, slot: int, detached: bool
+    ) -> tuple[int, int]:
+        pids = spawn(name, service, slot, detached)
+        spawned[name] = pids
+        return pids
+
+    monkeypatch.setattr(supervisor, "_spawn", observe_spawn)
+    try:
+        with pytest.raises(RuntimeError_, match="'fails' exited during startup"):
+            supervisor.up(slot=5, echo=False)
+        assert set(spawned) == {"echo", "fails"}
+        for name, (pid, writer_pid) in spawned.items():
+            assert not process_running(pid)
+            assert not process_running(writer_pid)
+            assert not supervisor._pidfile(name).exists()
+    finally:
+        for pids in spawned.values():
+            for pid in pids:
+                _kill_quietly(pid)
+                _reap_quietly(pid)
+
+
+def test_check_children_restarts_a_service_that_exits_during_the_writer_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real exit after the first liveness check still reaches autorestart."""
+    supervisor = _managed_echo(tmp_path)
+    service = supervisor.runtime.services["echo"]
+    service.autorestart = "on-failure"
+    service.autorestart_max_retries = 1
+    release = tmp_path / "release"
+    # The first child waits until the writer probe releases it. The restarted
+    # child takes the other branch and serves the real health endpoint.
+    first_run = tmp_path / "first-run"
+    service.env["FIRST_RUN"] = str(first_run)
+    service.env["RELEASE"] = str(release)
+    service.command = [
+        "{python}",
+        "-c",
+        "import os, pathlib, time\n"
+        "first = pathlib.Path(os.environ['FIRST_RUN'])\n"
+        "if not first.exists():\n"
+        "    first.touch()\n"
+        "    print('one-line', flush=True)\n"
+        "    while not pathlib.Path(os.environ['RELEASE']).exists():\n"
+        "        time.sleep(0.01)\n"
+        "else:\n"
+        f"    exec({ONE_LINE_CHILD[2]!r})\n",
+        "{port}",
+    ]
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=False)
+    _write_spawn_record(supervisor, pid, writer_pid)
+    real_writer_alive = supervisor._writer_alive
+    restarted: dict[str, Any] | None = None
+    checked = False
+
+    def probe_after_exit(name: str, writer: int) -> bool:
+        nonlocal checked
+        assert writer == writer_pid
+        checked = True
+        # _child_capture_state already checked the still-running child.
+        release.touch()
+        _wait_for_zombie(pid)
+        _wait_for_zombie(writer_pid)
+        return real_writer_alive(name, writer)
+
+    monkeypatch.setattr(supervisor, "_writer_alive", probe_after_exit)
+    try:
+        restarts: dict[str, int] = {}
+        supervisor._check_children({"echo": service}, 5, restarts, echo=False)
+        assert checked
+        assert restarts == {"echo": 1}
+        restarted = supervisor._read_pidfile("echo")
+        assert restarted is not None
+        assert restarted["pid"] != pid
+        assert process_running(int(restarted["pid"]))
+        deadline = time.monotonic() + supervisor.runtime.health.stop_grace_seconds
+        while list(supervisor.logs("echo", lines=2)) != ["one-line", "one-line"]:
+            assert time.monotonic() < deadline, "the restarted writer never drained"
+            time.sleep(supervisor.runtime.health.poll_interval_seconds)
+        assert list(supervisor.logs("echo", lines=2)) == ["one-line", "one-line"]
+    finally:
+        # On a red run _check_children raises after deleting the old record.
+        current = supervisor._read_pidfile("echo")
+        if current is not None and int(current["pid"]) != pid:
+            restarted = current
+        if restarted is not None:
+            supervisor._abandon_service(
+                "echo", int(restarted["pid"]), int(restarted["log_writer_pid"])
+            )
+            supervisor._pidfile("echo").unlink(missing_ok=True)
+            _reap_quietly(int(restarted["pid"]))
+        for process in (pid, writer_pid):
+            _kill_quietly(process)
+            _reap_quietly(process)

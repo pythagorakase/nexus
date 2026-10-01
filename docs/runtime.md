@@ -242,14 +242,19 @@ in `docs/cli.md`).
 - A service's pidfile is written as soon as it is spawned, before the health
   wait. A failed start removes it only once its writer is gone, so a start
   whose writer cannot be waited out leaves the record, and the next start
-  waits for that writer instead of starting a second one. The rollback of a
-  failed `nexus up` stops every service that call left a pidfile for; a
-  rollback failure is attached to the original error as a note. When a
+  waits for that writer instead of starting a second one. If the pidfile
+  write itself fails, the start stops its spawned service and waits out its
+  writer before raising. The rollback of a failed `nexus up` stops only the
+  service and writer pids successfully started by that invocation, and
+  removes a record only if it still names that service pid; a rollback
+  failure is attached to the original error as a note. When a
   service cannot be started at all, its writer is waited for (and killed
   after the grace) before the error is reported.
 - The foreground supervisor reaps an exited service before it decides
   whether the service is live, so an ordinary exit reaches `autorestart`
-  rather than reading as a live service that lost its writer.
+  rather than reading as a live service that lost its writer. A dead writer
+  triggers another service-liveness check before classification: a service
+  that exited during the writer check also reaches the ordinary exit path.
 - A writer counts as gone only when it has exited or when a `ps` probe ran
   and its command line does not name the file. A probe that cannot run (no
   `ps` on `PATH`, a non-zero exit while the pid is alive, or no answer within
