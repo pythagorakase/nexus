@@ -407,11 +407,17 @@ def test_http_command_unanswered_request_exits_four(
     The legacy handlers once caught the read timeout as a domain failure
     (exit 1); every HTTP command now reports it like an unreachable API.
     ``regenerate``'s scheduling POST is bounded by
-    ``[runtime.cli].turn_request_timeout_seconds``, once a 120 s literal.
+    ``[runtime.cli].turn_request_timeout_seconds``, once a 120 s literal. Its
+    short-request budgets stay at 30 s, so only the turn budget can produce
+    ``read timeout=0.5``.
     """
     cli_settings = {"request_timeout_seconds": 0.5, "inspect_timeout_seconds": 0.5}
     if argv[0] == "regenerate":
-        cli_settings["turn_request_timeout_seconds"] = 0.5
+        cli_settings = {
+            "request_timeout_seconds": 30.0,
+            "inspect_timeout_seconds": 30.0,
+            "turn_request_timeout_seconds": 0.5,
+        }
     config = _config(tmp_path, profile="local", cli_settings=cli_settings)
     gateway = Gateway(stall=True)
     with _serve(gateway) as base_url:
@@ -759,6 +765,30 @@ def test_access_rejection_is_a_config_error(
     assert [request[:2] for request in gateway.requests] == [
         ("GET", "/api/slot/5/state")
     ]
+
+
+def test_followed_redirect_loop_is_a_domain_failure() -> None:
+    """A request that gets no usable answer is a domain failure, not a traceback.
+
+    Without a runtime credential the redirect is followed, so a route that
+    redirects to itself ends in too many redirects: no answer to classify,
+    which the generation waiter also reports as a domain failure.
+    """
+    route = ("GET", "/api/slot/5/state")
+    gateway = Gateway(routes={route: (302, Raw("", headers={"Location": route[1]}))})
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "load", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+        )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "domain_failure"
+    assert envelope["error"].startswith(f"Could not read {base_url}: ")
+    assert "redirects" in envelope["error"]
+    assert envelope["partial"] == {}
+    assert len(gateway.requests) > 1
+    assert {request[:2] for request in gateway.requests} == {route}
 
 
 def test_remote_up_against_a_closed_port_exits_four(tmp_path: Path) -> None:

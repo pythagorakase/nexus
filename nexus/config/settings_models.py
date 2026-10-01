@@ -912,8 +912,7 @@ class RuntimeCliSettings(BaseModel):
             "Per-request HTTP timeout of the CLI's model-turn requests: wizard "
             "chat, trait toggles, phase introductions, and the POSTs that "
             "schedule continue, retry, regenerate and the seed's opening turn; "
-            "a finite number of seconds greater than 0. A request without an "
-            "answer in time exits 4 (API unreachable)"
+            "a finite number of seconds greater than 0"
         ),
     )
     poll_interval_seconds: float = Field(

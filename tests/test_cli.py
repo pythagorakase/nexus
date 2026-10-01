@@ -2021,7 +2021,11 @@ def test_cli_requests_take_no_literal_timeout() -> None:
 
 
 def test_http_handlers_have_no_broad_except() -> None:
-    """The HTTP handlers catch no Exception and use no bare except."""
+    """The HTTP handlers catch no Exception and use no bare except.
+
+    A tuple of types and a qualified name (``builtins.Exception``) are checked
+    element by element.
+    """
     handlers = {
         node.name: node
         for node in _cli_tree().body
@@ -2034,9 +2038,17 @@ def test_http_handlers_have_no_broad_except() -> None:
             if not isinstance(node, ast.ExceptHandler):
                 continue
             caught = node.type
-            if caught is None or (
-                isinstance(caught, ast.Name)
-                and caught.id in {"Exception", "BaseException"}
-            ):
+            if caught is None:
                 broad.append(f"{name} at line {node.lineno}")
+                continue
+            types = caught.elts if isinstance(caught, ast.Tuple) else [caught]
+            for type_node in types:
+                if isinstance(type_node, ast.Name):
+                    type_name = type_node.id
+                elif isinstance(type_node, ast.Attribute):
+                    type_name = type_node.attr
+                else:
+                    continue
+                if type_name in {"Exception", "BaseException"}:
+                    broad.append(f"{name} at line {node.lineno}")
     assert broad == []

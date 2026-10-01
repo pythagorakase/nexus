@@ -2705,7 +2705,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     return {
                         "success": False,
                         "error": (
-                            "Dev mode is not supported for trait selection " "toggles."
+                            "Dev mode is not supported for trait selection toggles."
                         ),
                     }
                 # Trait toggle/confirm mode: choice 0 = confirm, 1-10 = toggle
@@ -2767,7 +2767,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     return {
                         "success": False,
                         "error": (
-                            f"Choice {args.choice} out of range " f"(1-{len(choices)})"
+                            f"Choice {args.choice} out of range (1-{len(choices)})"
                         ),
                     }
 
@@ -6060,6 +6060,11 @@ def main() -> int:
             exc.message,
             {} if exc.status_code is None else {"status_code": exc.status_code},
         )
+    except requests.exceptions.RequestException as exc:
+        # Any other failed request is not an answer (a followed redirect loop,
+        # a body it cannot decode, a malformed header): a domain failure, as
+        # the generation waiter classifies it.
+        return _fail(args, "domain_failure", f"Could not read {get_api_url()}: {exc}")
     if isinstance(outcome, int):
         return outcome
     result = outcome

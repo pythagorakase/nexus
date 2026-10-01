@@ -78,18 +78,34 @@ refused, are a `config_error` when the first request is sent. Every HTTP
 command reports these, and an API that refuses or drops the connection or
 does not answer in time (exit 4), the same way.
 
-Every HTTP command classifies the API's answers the same way too:
+The play and slot commands (`load`, `continue`, `retry`, `undo`,
+`regenerate`, `clear`, `lock`, `unlock`, `model --set`/`--clear`) and every
+`inspect` verb classify the API's answers the same way:
 
-- A non-2xx answer is `api_error`, with the answer's HTTP status in
-  `partial.status_code`. The legacy play and slot commands keep their message
-  (`API error: <body>`, or their own wording where they had one).
+- A non-2xx answer is `api_error`.
 - A 401, a 403, or a redirect that is not followed is `config_error`. The
   gateway itself answers none of them, so an edge in front of it, such as
-  Cloudflare Access, rejected the request; the error names the URL, the
-  status, a redirect's `Location`, and `[runtime.remote.cloudflare_access]`.
-  Requests follow redirects unless they carry a runtime credential, so a
-  redirect is reported only when one was sent.
+  Cloudflare Access, rejected the request. Requests follow redirects unless
+  they carry a runtime credential, so a redirect is reported only when one
+  was sent.
+- When a command's own read rejects the answer, `partial.status_code` carries
+  the HTTP status. A non-2xx answer's error is `API error: <body>` (an
+  `inspect` verb names the URL and the status instead), and an access
+  rejection's error names the URL, the status, a redirect's `Location`, and
+  `[runtime.remote.cloudflare_access]`.
+- The steps that keep their own wording report the same code with their own
+  message and `partial`, and name no Access setting: wizard setup and the
+  transition to narrative (the answer's body), the wizard's `--weird` and
+  character-revision requests (the body, with `partial.status_code`), the
+  wizard's artifact confirmations and phase introductions (the body, with a
+  recovery command), the seed transition (the status in
+  `transition_error.status_code`), the opening turn (`bootstrap_error`), and
+  the generation wait (`generation_error`); the last two name the URL and the
+  status in their detail.
 - The `inspect` verbs report a 404 as `not_found`, before either rule above.
+- Any other failed request, one that got no usable answer (a followed
+  redirect loop, a body whose content encoding is broken), is a domain
+  failure.
 - A handler's read of a 2xx body that is not a JSON object is
   `invalid_response`; an unusable body during a generation wait, or of the
   opening turn's schedule answer, stays a domain failure with
