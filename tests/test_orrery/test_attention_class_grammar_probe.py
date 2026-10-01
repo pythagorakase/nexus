@@ -163,65 +163,97 @@ def test_card_block_arms_on_a_seeded_snapshot() -> None:
     caps = OrreryPromptSettings(max_rendered_proposals=5)
     estimator = _gaia_estimator()
 
+    arm_lines = probe.card_block_arms(snapshot, caps)
     rows = probe.card_block_rows("seeded", snapshot, caps, estimator)
     arms = {(row["roster"], row["arm"]): row for row in rows}
+    expected_arm_keys = [(None, "head")] + [
+        (roster, arm)
+        for roster in ("R1", "R2")
+        for arm in ("drop_only", "refill", "head_marked", "refill_marked")
+    ]
+    assert list(arm_lines) == expected_arm_keys
+    assert [(row["roster"], row["arm"]) for row in rows] == expected_arm_keys
 
-    def expected_lines(cards: list[dict[str, Any]]) -> list[str]:
+    def expected_pairs(cards: list[dict[str, Any]]) -> list[tuple[dict, str]]:
+        """Render ``cards`` as the turn prompt does; positions index ``cards``."""
+
         selection = rendered_selection({"resolutions": cards}, caps)
         handles = proposal_handles(selection)
         by_key = {card_key(card): (index, card) for index, card in enumerate(cards)}
-        lines = []
+        pairs = []
         for item in selection:
             index, card = by_key[item["proposal_id"]]
-            lines.append(
-                _orrery_card_line(
+            pairs.append(
+                (
                     card,
-                    handles[item["proposal_id"]],
-                    position=index,
-                    description=card["branch_label"],
+                    _orrery_card_line(
+                        card,
+                        handles[item["proposal_id"]],
+                        position=index,
+                        description=card["branch_label"],
+                    ),
                 )
             )
-        return lines
+        return pairs
 
-    head_lines = expected_lines(resolutions)
-    assert [line.split(" ")[2].split(":")[0] for line in head_lines] == list(order[:5])
-    head = arms[(None, "head")]
-    assert head["lines"] == 5
-    assert head["proposal_ids"] == [card_key(card) for card in resolutions[:5]]
-    assert head["tokens"] == estimator("\n".join(head_lines))
+    def check_arm(
+        key: tuple[Any, str], pairs: list[tuple[dict, str]], count: int
+    ) -> None:
+        cards, lines = arm_lines[key]
+        expected_ids = [card_key(card) for card, _ in pairs]
+        expected_text = [line for _, line in pairs]
+        # Line text, not only token totals: a wrong position or marker shows here.
+        assert lines == expected_text, key
+        assert [card_key(card) for card in cards] == expected_ids, key
+        row = arms[key]
+        assert row["lines"] == count, key
+        assert row["proposal_ids"] == expected_ids, key
+        assert row["tokens"] == estimator("\n".join(expected_text)), key
+
+    head_pairs = expected_pairs(resolutions)
+    assert [card["template_id"] for card, _ in head_pairs] == list(order[:5])
+    assert [line.split(" ")[1] for _, line in head_pairs] == [
+        f"[{index}]" for index in range(5)
+    ]
+    check_arm((None, "head"), head_pairs, 5)
 
     for roster, drop_count, refill_count in (("R1", 3, 5), ("R2", 2, 4)):
         members = probe.ROSTERS[roster]
-        kept = [
-            line
-            for line, card in zip(head_lines, resolutions)
-            if card["template_id"] not in members
-        ]
-        drop = arms[(roster, "drop_only")]
-        assert drop["lines"] == drop_count
-        assert drop["tokens"] == estimator("\n".join(kept))
+
+        def marked(pairs: list[tuple[dict, str]]) -> list[tuple[dict, str]]:
+            return [
+                (
+                    card,
+                    f"{line} · "
+                    + (
+                        "background" if card["template_id"] in members else "meaningful"
+                    ),
+                )
+                for card, line in pairs
+            ]
+
+        kept = [pair for pair in head_pairs if pair[0]["template_id"] not in members]
+        check_arm((roster, "drop_only"), kept, drop_count)
 
         filtered = [card for card in resolutions if card["template_id"] not in members]
-        refill_lines = expected_lines(filtered)
-        refill = arms[(roster, "refill")]
-        assert refill["lines"] == refill_count
-        assert refill["proposal_ids"][-2:] == [
+        refill_pairs = expected_pairs(filtered)
+        # Refill positions index the filtered list, so they differ from head's.
+        assert [line.split(" ")[1] for _, line in refill_pairs] == [
+            f"[{index}]" for index in range(refill_count)
+        ]
+        assert [card_key(card) for card, _ in refill_pairs][-2:] == [
             card_key(resolutions[5]),
             card_key(resolutions[6]),
         ]
-        assert refill["tokens"] == estimator("\n".join(refill_lines))
+        check_arm((roster, "refill"), refill_pairs, refill_count)
 
-        head_marked = [
-            f"{line} · "
-            + ("background" if card["template_id"] in members else "meaningful")
-            for line, card in zip(head_lines, resolutions)
+        head_marked = marked(head_pairs)
+        assert [line.rsplit(" · ", 1)[1] for _, line in head_marked] == [
+            "background" if template in members else "meaningful"
+            for template in order[:5]
         ]
-        assert arms[(roster, "head_marked")]["tokens"] == estimator(
-            "\n".join(head_marked)
-        )
-        assert arms[(roster, "refill_marked")]["tokens"] == estimator(
-            "\n".join(f"{line} · meaningful" for line in refill_lines)
-        )
+        check_arm((roster, "head_marked"), head_marked, 5)
+        check_arm((roster, "refill_marked"), marked(refill_pairs), refill_count)
 
 
 @pytest.fixture(scope="module")

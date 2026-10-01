@@ -517,27 +517,27 @@ def _marked(card: Mapping[str, Any], line: str, roster: Sequence[str]) -> str:
     return f"{line} · {label}"
 
 
-def card_block_rows(
-    corpus: str,
+CardBlockArms = dict[tuple[Optional[str], str], tuple[list[dict[str, Any]], list[str]]]
+
+
+def card_block_arms(
     snapshot: Mapping[str, Any],
     caps: OrreryPromptSettings,
-    estimator: Callable[[str], int],
     rosters: Mapping[str, Sequence[str]] = ROSTERS,
-) -> list[dict[str, Any]]:
-    """Replay the head card block and each roster's arms on one snapshot."""
+) -> CardBlockArms:
+    """Return each card-block arm's cards and rendered lines on one snapshot.
+
+    Keys are ``(roster, arm)``, with ``roster`` ``None`` for ``head``. The
+    lines are the exact text the arm would place in the prompt, so a test can
+    compare them line by line; :func:`card_block_rows` reduces them to the JSON
+    rows, which carry only counts, tokens and proposal ids.
+    """
 
     snapshot = strip_rendered_cards(snapshot)
     head = rendered_resolution_cards(snapshot, caps)
-    rows = [
-        _arm(
-            corpus,
-            None,
-            "head",
-            [card for card, _ in head],
-            [line for _, line in head],
-            estimator,
-        )
-    ]
+    arms: CardBlockArms = {
+        (None, "head"): ([card for card, _ in head], [line for _, line in head])
+    }
     for name, roster in rosters.items():
         dropped = [(c, line) for c, line in head if c["template_id"] not in roster]
         filtered = dict(snapshot)
@@ -553,13 +553,30 @@ def card_block_rows(
             ("head_marked", head, True),
             ("refill_marked", refill, True),
         ):
-            lines = [
-                _marked(card, line, roster) if marked else line for card, line in pairs
-            ]
-            rows.append(
-                _arm(corpus, name, arm, [c for c, _ in pairs], lines, estimator)
+            arms[(name, arm)] = (
+                [card for card, _ in pairs],
+                [
+                    _marked(card, line, roster) if marked else line
+                    for card, line in pairs
+                ],
             )
-    return rows
+    return arms
+
+
+def card_block_rows(
+    corpus: str,
+    snapshot: Mapping[str, Any],
+    caps: OrreryPromptSettings,
+    estimator: Callable[[str], int],
+    rosters: Mapping[str, Sequence[str]] = ROSTERS,
+) -> list[dict[str, Any]]:
+    """Replay the head card block and each roster's arms on one snapshot."""
+
+    arms = card_block_arms(snapshot, caps, rosters)
+    return [
+        _arm(corpus, roster, arm, cards, lines, estimator)
+        for (roster, arm), (cards, lines) in arms.items()
+    ]
 
 
 def card_line_rows(
