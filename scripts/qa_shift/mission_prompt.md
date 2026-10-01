@@ -97,11 +97,12 @@ issue, dry-well, wall-clock, and token settings.
    - Otherwise reset only the configured slot through
      `scripts/new_story_setup.py --force`.
 
-   Before starting the isolated gateway, record the source log's byte offset
-   (zero if it does not yet exist). Start the gateway, record its PID and UTC
-   startup time, and verify its health and effective model. Save the commands
-   and outputs. These markers define the current-run log slice; persistent
-   gateway logs can contain earlier shifts and must not be mined as one run.
+   Before starting the isolated gateway, record the gateway log's mark with
+   `nexus logs gateway --mark` in a shell that sourced `runtime_env.sh`. Start
+   the gateway, record its PID and UTC startup time, and verify its health and
+   effective model. Save the commands and outputs. These markers define the
+   current-run log slice; persistent gateway logs can contain earlier shifts
+   and must not be mined as one run.
 
 If any preflight step fails, write the blocker into the mission report, perform
 the applicable teardown, and stop.
@@ -245,8 +246,9 @@ publication succeeds.
 
 Always complete teardown, including early exits:
 
-1. Capture one final read-only public load/state response and copy the isolated
-   gateway log into the archive before stopping that lane.
+1. Capture one final read-only public load/state response and save the output
+   of `nexus logs gateway --since MARK` (the preflight mark) in the archive as
+   `gateway_slice.log` before stopping that lane.
 2. Stop only the configured QA gateway. Do not restore the disposable slot
    automatically; preserve its final state for follow-up and retain the
    checksummed pre-shift dump.
@@ -255,8 +257,8 @@ Always complete teardown, including early exits:
    --exit-condition CONDITION`, selecting the truthful configured condition.
 4. Mine the current run's structured-output rejection ledger. `finish` writes
    `rejection_ledger.json` from the authoritative `usage_start.json` to
-   `usage_end.json` event delta. Use only the gateway-log slice after the
-   recorded byte/PID/time boundary to add validation details. For every
+   `usage_end.json` event delta. Use only `gateway_slice.log`, after the
+   recorded PID/time boundary, to add validation details. For every
    `outcome=rejected_validation` event, record family/command, timestamp, exact
    seat, attempt, token cost, validation class, matching issue, and disposition
    in `probe_ledger.md`. Never count older lines copied into the persistent log.

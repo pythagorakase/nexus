@@ -1429,8 +1429,7 @@ turn_request_timeout_seconds = 120.0 # per wizard chat, trait toggle, phase intr
 poll_interval_seconds = 1.0
 
 [runtime.logs]
-# The supervisor is the single log-file and rotation owner: it captures each
-# service's stdout+stderr in <state_dir>/<service>.log and rotates at spawn.
+# One log-writer process per captured stream owns its file and rotation (nexus/runtime/log_capture.py).
 tail_lines = 100          # default for `nexus logs`
 follow_poll_seconds = 0.5 # poll interval for `nexus logs -f`
 max_tail_bytes = 262144   # most log text one `nexus logs` tail reads, across segments
@@ -1438,7 +1437,7 @@ max_tail_bytes = 262144   # most log text one `nexus logs` tail reads, across se
 # uvicorn.access stays at INFO, where uvicorn logs every response.
 level = "INFO"            # DEBUG | INFO | WARNING | ERROR | CRITICAL
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-max_bytes = 10485760      # rotate <service>.log at the next spawn once this large
+max_bytes = 10485760      # a new segment starts before a line would pass this size
 backup_count = 5          # keep <service>.log.1 .. .5; `nexus logs -n` reads across them
 # Successful (<400) access records for these exact paths are dropped; every
 # 4xx/5xx is kept. Query strings are ignored when matching.

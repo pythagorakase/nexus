@@ -927,6 +927,42 @@ def _check_seat_secrets(ctx: ReadinessContext) -> Outcome:
     )
 
 
+def _check_log_writers(ctx: ReadinessContext) -> Outcome:
+    """No live supervised service runs without its recorded log writer (#842)."""
+    from nexus.runtime.supervisor import RuntimeError_, Supervisor
+
+    settings = ctx.require_settings()
+    runtime = ctx.require_runtime()
+    if runtime.profile != "local":
+        return _passed(f"profile {runtime.profile}: no supervised local services")
+    try:
+        # A copy: the supervisor applies NEXUS_GATEWAY_PORT to its settings.
+        supervisor = Supervisor(
+            settings.model_copy(deep=True), ctx.require_home().config_path
+        )
+    except (
+        RuntimeError_
+    ) as exc:  # nexus-exception-disposition: fail; reason=config; safety=failed check
+        return _failed(one_line(exc), "Correct [runtime] in nexus.toml.")
+    try:
+        dead = supervisor.dead_writers()
+    except (
+        RuntimeError_
+    ) as exc:  # nexus-exception-disposition: fail; reason=probe; safety=failed check
+        return _failed(
+            one_line(exc),
+            "Make ps runnable on PATH, then run nexus doctor again.",
+        )
+    if not dead:
+        return _passed("no live service runs without its log writer")
+    observed = ", ".join(
+        f"{name} (pid {pid}) runs without its log writer (pid {writer})"
+        for name, (pid, writer) in dead.items()
+    )
+    restarts = "; ".join(f"nexus restart {name}" for name in dead)
+    return _failed(observed, f"Restart the service by name: {restarts}")
+
+
 # ---------------------------------------------------------------------------
 # Owner client
 # ---------------------------------------------------------------------------
@@ -1119,6 +1155,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
     ),
     CheckSpec("ui.bundle", _HOST, (), _check_ui_bundle, gateway_evaluable=True),
     CheckSpec("secrets.seat_providers", _HOST, ("config.valid",), _check_seat_secrets),
+    CheckSpec("runtime.log_writers", _HOST, ("config.valid",), _check_log_writers),
     CheckSpec(
         "gateway.reachable",
         ("owner-client",),
