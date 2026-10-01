@@ -1720,6 +1720,31 @@ class OrreryRouteGraphSettings(BaseModel):
     max_edges_per_query: int = Field(default=5000, ge=1)
 
 
+class OrreryTravelModeTable(BaseModel):
+    """One positive, finite value per ``orrery_travel_mode`` label."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    walking: float = Field(..., gt=0, allow_inf_nan=False)
+    vehicle: float = Field(..., gt=0, allow_inf_nan=False)
+    rail: float = Field(..., gt=0, allow_inf_nan=False)
+    water: float = Field(..., gt=0, allow_inf_nan=False)
+    air: float = Field(..., gt=0, allow_inf_nan=False)
+    covert: float = Field(..., gt=0, allow_inf_nan=False)
+    mixed: float = Field(..., gt=0, allow_inf_nan=False)
+
+
+class OrreryTravelSettings(BaseModel):
+    """The per-mode speed and detour factor that route estimates and graph routes
+    use.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    speed_kmh: OrreryTravelModeTable
+    detour_factor: OrreryTravelModeTable
+
+
 class OrreryNarrationSettings(BaseModel):
     """Durable queue settings for deterministic off-screen descriptor records."""
 
@@ -3116,6 +3141,7 @@ class OrrerySettings(BaseModel):
     route_graph: OrreryRouteGraphSettings = Field(
         default_factory=OrreryRouteGraphSettings
     )
+    travel: OrreryTravelSettings
     narration: OrreryNarrationSettings
     experiences: OrreryExperienceSettings
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
