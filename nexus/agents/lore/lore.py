@@ -566,40 +566,33 @@ class LORE:
         search_progress: List[Dict[str, Any]] = []
 
         for q in queries:
-            try:
-                result = self.memnon.query_memory(q, filters=None, k=8, use_hybrid=True)
-                search_progress.append(
-                    {
-                        "query": q,
-                        "result_count": result.get("metadata", {}).get(
-                            "result_count", 0
-                        ),
-                    }
-                )
-                for item in result.get("results", []):
-                    identity = memory_identity(item)
-                    if identity is None:
-                        continue
-                    if identity not in aggregated_results:
-                        aggregated_results[identity] = dict(item)
-                        aggregated_results[identity].update(
-                            {
-                                "text": item.get("text", ""),
-                                "metadata": item.get("metadata", {}),
-                                "score": float(item.get("score", 0.0)),
-                            }
-                        )
-                        if not is_retrograde_summary(item):
-                            aggregated_results[identity].setdefault(
-                                "chunk_id", identity
-                            )
-                    else:
-                        aggregated_results[identity]["score"] = max(
-                            aggregated_results[identity]["score"],
-                            float(item.get("score", 0.0)),
-                        )
-            except Exception as e:
-                qa_logger.error(f"Search error for query '{q}': {e}")
+            result = self.memnon.query_memory(q, filters=None, k=8, use_hybrid=True)
+            search_progress.append(
+                {
+                    "query": q,
+                    "result_count": result.get("metadata", {}).get("result_count", 0),
+                }
+            )
+            for item in result.get("results", []):
+                identity = memory_identity(item)
+                if identity is None:
+                    continue
+                if identity not in aggregated_results:
+                    aggregated_results[identity] = dict(item)
+                    aggregated_results[identity].update(
+                        {
+                            "text": item.get("text", ""),
+                            "metadata": item.get("metadata", {}),
+                            "score": float(item.get("score", 0.0)),
+                        }
+                    )
+                    if not is_retrograde_summary(item):
+                        aggregated_results[identity].setdefault("chunk_id", identity)
+                else:
+                    aggregated_results[identity]["score"] = max(
+                        aggregated_results[identity]["score"],
+                        float(item.get("score", 0.0)),
+                    )
 
         # Sort results by score and prepare for synthesis
         sorted_results = sorted(

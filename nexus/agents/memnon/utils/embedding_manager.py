@@ -232,7 +232,21 @@ class EmbeddingManager:
             if self.model_active_status.get(name, False)
         ]
 
-    def generate_embedding(self, text: str, model_key: str) -> Optional[List[float]]:
+    def _loaded_model(self, model_key: str) -> SentenceTransformer:
+        """Return the loaded, active model ``model_key`` or raise.
+
+        Raises:
+            RuntimeError: When ``model_key`` is not a loaded, active model.
+        """
+        model = self.get_model(model_key)
+        if model is None:
+            raise RuntimeError(
+                f"Embedding model '{model_key}' is not loaded; loaded models: "
+                f"{self.get_available_models()}"
+            )
+        return model
+
+    def generate_embedding(self, text: str, model_key: str) -> List[float]:
         """
         Generate an embedding for the given text using the specified model.
 
@@ -241,35 +255,30 @@ class EmbeddingManager:
             model_key: Key of the model to use (must be initialized).
 
         Returns:
-            Embedding as a list of floats, or None if the model is not found or
-            embedding fails.
+            Embedding as a list of floats.
+
+        Raises:
+            RuntimeError: When ``model_key`` is not a loaded, active model, or
+                the model fails to encode the text (chained from the error).
+            ValueError: When ``text`` is empty, blank or not a string.
         """
-        model = self.get_model(model_key)
-        if not model:
-            # get_model already logged warning if inactive
-            return None
-
+        model = self._loaded_model(model_key)
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError(
+                f"Embedding model '{model_key}' was given empty or non-string "
+                f"text: {text!r}"
+            )
         try:
-            # Ensure text is not empty
-            if not text or not isinstance(text, str) or not text.strip():
-                logger.warning(
-                    "Attempted to generate embedding for empty or invalid text "
-                    f"with model {model_key}. Returning None."
-                )
-                return None
-
             embedding = model.encode(text)
-            return embedding.tolist()
-        except Exception as e:
-            logger.error(f"Error generating embedding with model '{model_key}': {e}")
-            import traceback
-
-            logger.debug(f"Traceback: {traceback.format_exc()}")
-            return None
+        except Exception as exc:
+            raise RuntimeError(
+                f"Embedding model '{model_key}' failed to encode: {exc}"
+            ) from exc
+        return embedding.tolist()
 
     def generate_embeddings_batch(
         self, texts: List[str], model_key: str
-    ) -> Optional[List[List[float]]]:
+    ) -> List[List[float]]:
         """
         Generate embeddings for a batch of texts using the specified model.
 
@@ -278,37 +287,32 @@ class EmbeddingManager:
             model_key: Key of the model to use.
 
         Returns:
-            List of embeddings, or None if the model is not found or embedding fails.
+            One embedding per input text, in input order; an empty list for an
+            empty ``texts``.
+
+        Raises:
+            RuntimeError: When ``model_key`` is not a loaded, active model, or
+                the model fails to encode the batch (chained from the error).
+            ValueError: When any text is empty, blank or not a string; the
+                message names the indexes.
         """
-        model = self.get_model(model_key)
-        if not model:
-            # get_model already logged warning if inactive
-            return None
-
-        # Filter out empty texts before sending to model
-        valid_texts = [
-            text for text in texts if text and isinstance(text, str) and text.strip()
-        ]
-        if not valid_texts:
-            logger.warning(
-                "generate_embeddings_batch called with no valid texts for model "
-                f"{model_key}. Returning empty list."
-            )
+        model = self._loaded_model(model_key)
+        if not texts:
             return []
-        if len(valid_texts) < len(texts):
-            logger.warning(
-                f"Filtered out {len(texts) - len(valid_texts)} empty/invalid texts "
-                f"from batch for model {model_key}."
+        invalid = [
+            index
+            for index, text in enumerate(texts)
+            if not isinstance(text, str) or not text.strip()
+        ]
+        if invalid:
+            raise ValueError(
+                f"Embedding model '{model_key}' was given empty or non-string "
+                f"texts at indexes {invalid}"
             )
-
         try:
-            embeddings = model.encode(valid_texts)
-            return [emb.tolist() for emb in embeddings]
-        except Exception as e:
-            logger.error(
-                f"Error generating batch embeddings with model '{model_key}': {e}"
-            )
-            import traceback
-
-            logger.debug(f"Traceback: {traceback.format_exc()}")
-            return None
+            embeddings = model.encode(texts)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Embedding model '{model_key}' failed to encode: {exc}"
+            ) from exc
+        return [emb.tolist() for emb in embeddings]
