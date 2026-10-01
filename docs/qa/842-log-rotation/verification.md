@@ -1130,3 +1130,326 @@ waits the full grace before SIGKILL. Round 3 explicitly forbids changing
 No round-3 P2 was left unfixed. No new tunable, migration, paid call or
 owner database write. Landing notes remain restart-by-name, writer status,
 no client change and no UI rebuild.
+
+
+## After the Fourth Independent Review
+
+Round-4 order `1065-astra-fix-r4.md`, reviewer `review-1065d.out.md`, frozen
+head `9712e0fd32fd1b0b8c8e560bf6f0230ab8e3196a`.
+`origin/main` at `5b977eabcba5f7aedf1a64a6ee20c021ab290911` was merged first
+as `5b9958a136c175417b9a63bac5138db6a1cae6f5`, without conflicts or history
+rewriting. Import proof before testing printed
+`/Users/pythagor/nexus/.claude/worktrees/842-log-rotation/nexus/__init__.py`.
+
+### Writer Lifecycle Rules
+
+- **One start at a time per state directory.** `_start_lock`
+  (`nexus/runtime/supervisor.py:509`) opens `supervisor.lock` once per instance
+  and uses exclusive nonblocking `fcntl.flock`, polling under the existing
+  `startup_deadline_seconds` and `poll_interval_seconds`. The error names the
+  path and deadline. `_start_service` (`:763`) locks the existing-record,
+  free-port, spawn and record-write sequence, and releases in `finally` before
+  `_await_healthy`. A contender then sees the recorded live pid and is refused
+  as already running.
+- **Unlink only your own record.** `_unlink_own_record` (`:534`) reads the
+  record, deletes it only when its pid matches the owned pid, and raises with
+  `record now names pid N; left in place` otherwise. Both startup-health
+  failure branches (`:719`) and `_abandon_service` (`:854`) use it; rollback
+  routes through `_abandon_service` and keeps its error-note treatment.
+  `_check_children` is unchanged.
+
+### Real-Process Regression Coverage
+
+`tests/test_runtime/test_supervisor.py:1666` starts two supervisor instances
+from two threads on the same temporary state directory and one fixture-owned
+OS-assigned port. The first is held at spawn with its real advisory lock
+acquired; the second's real nonblocking flock reports contention. Exactly
+one invocation succeeds and one raises already-running; the record names the
+only service/writer pair, the service serves HTTP health, and real `/bin/ps`
+finds exactly one writer for that capture.
+
+`:1760` holds the real lock in a test thread and proves the second instance
+raises the named bounded-lock error at its configured deadline without a
+capture, record or writer. `:1799` verifies a foreign record survives helper,
+startup-exit and abandonment cleanup, with the required error text; `:1830`
+checks the health-deadline failure as well, including both owned pids gone.
+
+The earlier read-only-directory regression initially failed before spawn:
+the new lock could not be created after chmod. Its setup now opens the lock
+before chmod (alongside the already-created captures), preserving the intended
+real pidfile-write failure after spawn. The first failed tail and corrected
+passing run are both recorded below.
+
+### Test Commands and Verbatim Tails
+
+All commands ran from this worktree. `PY=/Users/pythagor/nexus/.venv/bin/python`;
+`SP=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/842-B-fix4`.
+The foreground runner `$PY $SP/run_gate.py LABEL ...` supplied
+`PYTHONPATH=$PWD`, `TMPDIR=$SP`, `NEXUS_DBNAME_AUDIT=1`, unset gateway/API
+URLs and live-LLM/secret-store opt-ins, used a 590-second deadline and a
+120-second silence limit, and waited for completion. Only `postgres-proof`
+had `NEXUS_RUN_POSTGRES=1`; the offline runs had it unset. `--basetemp`
+keeps all test-created state inside this order's scratch directory. Each
+invocation below is the runner's actual argv, with the above substitutions.
+
+The required red run replaced `_start_lock` with an unlocked context manager
+at the worktree source path, using `$SP/red_run.py` and backup
+`$SP/supervisor-green.py`. The deterministic test let the contender reach its
+spawn while the first remained held; it failed with `the contender spawned
+inside the startup window`. Cleanup completed, and the green source was
+restored in `finally` and byte-compared before the full proof gates.
+
+**focused (exit 1)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_runtime/test_supervisor.py -k 'concurrent_starts or start_lock or preserves_a_record or up_abandons' --basetemp=$SP/focused-tmp`:
+
+```text
+            return pids
+    
+        monkeypatch.setattr(supervisor, "_spawn", observe_spawn)
+        supervisor.state_dir.chmod(0o555)
+        try:
+            with pytest.raises(PermissionError):
+                supervisor.up(slot=5, echo=False)
+>           assert len(spawned) == 1
+E           assert 0 == 1
+E            +  where 0 = len([])
+
+tests/test_runtime/test_supervisor.py:1484: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_supervisor.py::test_up_abandons_a_service_whose_pidfile_cannot_be_written
+1 failed, 4 passed, 61 deselected in 5.60s
+```
+
+**focused-final (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_runtime/test_supervisor.py -k 'concurrent_starts or start_lock or preserves_a_record or up_abandons' --basetemp=$SP/focused-final-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+5 passed, 61 deselected in 6.79s
+```
+
+**red-unlocked (exit 1)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_runtime/test_supervisor.py::test_concurrent_starts_share_one_service_and_writer --basetemp=$SP/red-tmp`:
+
+```text
+            assert decision.wait(5), "the contender neither blocked nor spawned"
+            release.set()
+            for thread in threads:
+                thread.join(10)
+                assert not thread.is_alive(), "a concurrent start did not finish"
+>           assert blocked.is_set(), "the contender spawned inside the startup window"
+E           AssertionError: the contender spawned inside the startup window
+E           assert False
+E            +  where False = is_set()
+E            +    where is_set = <threading.Event at 0x10f7501d0: unset>.is_set
+
+tests/test_runtime/test_supervisor.py:1734: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_supervisor.py::test_concurrent_starts_share_one_service_and_writer
+1 failed in 1.71s
+```
+
+**postgres-proof (exit 0)**
+
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_runtime tests/test_runtime_home.py tests/test_api/test_local_inference.py tests/test_api/test_local_models_endpoints.py tests/test_owner_target_guard.py --basetemp=$SP/postgres-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+361 passed, 7 warnings in 149.84s (0:02:29)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+**offline-root (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/test_config --ignore=tests/test_util --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --basetemp=$SP/root-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2049 passed, 387 skipped, 8 warnings in 389.67s (0:06:29)
+```
+
+**offline-support (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_config tests/test_util tests/test_ir_eval_v2 --basetemp=$SP/support-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+101 passed, 2 warnings in 4.42s
+```
+
+**offline-lore-memnon (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_lore tests/test_memnon --basetemp=$SP/lore-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+454 passed, 53 skipped, 5 warnings in 27.14s
+```
+
+**offline-runtime (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_runtime --basetemp=$SP/runtime-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+166 passed, 18 skipped in 55.53s
+```
+
+**offline-api (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_api --basetemp=$SP/api-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+654 passed, 238 skipped, 7 warnings in 37.12s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+**offline-orrery (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_orrery --basetemp=$SP/orrery-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1188 passed, 508 skipped, 2 warnings in 11.07s
+```
+
+**reachability (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_reachability.py --basetemp=$SP/reachability-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+54 passed in 10.52s
+```
+
+### Python Checks
+
+`$PY -m black --check nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py`:
+
+```text
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+```
+
+`$PY -m flake8 nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py`:
+
+```text
+(no output; exit 0)
+```
+
+`$PY -m mypy nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py`:
+
+```text
+nexus/runtime/supervisor.py:33: error: Library stubs not installed for "requests"  [import-untyped]
+nexus/runtime/supervisor.py:33: note: Hint: "python3 -m pip install types-requests"
+nexus/runtime/supervisor.py:33: note: (or run "mypy --install-types" to install all missing stub packages)
+nexus/runtime/supervisor.py:33: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+tests/test_runtime/test_supervisor_live.py: error: Source file found twice under different module names: "test_runtime" and "tests.test_runtime"
+Found 2 errors in 2 files (errors prevented further checking)
+```
+
+`$PY -m mypy --explicit-package-bases nexus/runtime/supervisor.py tests/test_runtime/test_supervisor.py`:
+
+```text
+nexus/runtime/supervisor.py:33: error: Library stubs not installed for "requests"  [import-untyped]
+nexus/runtime/supervisor.py:33: note: Hint: "python3 -m pip install types-requests"
+nexus/runtime/supervisor.py:33: note: (or run "mypy --install-types" to install all missing stub packages)
+nexus/runtime/supervisor.py:33: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+nexus/runtime/supervisor.py:622: error: Module has no attribute "CREATE_NEW_PROCESS_GROUP"  [attr-defined]
+nexus/runtime/supervisor.py:622: error: Module has no attribute "DETACHED_PROCESS"  [attr-defined]
+nexus/runtime/supervisor.py:943: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:944: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:945: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:962: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+nexus/runtime/supervisor.py:1085: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:1087: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+Found 9 errors in 1 file (checked 2 source files)
+```
+
+Scratch plant of `git show HEAD:nexus/runtime/supervisor.py` (the pre-fix merge
+head), checked as `$PY -m mypy --explicit-package-bases nexus/runtime/supervisor.py`:
+
+```text
+nexus/runtime/supervisor.py:31: error: Library stubs not installed for "requests"  [import-untyped]
+nexus/runtime/supervisor.py:31: note: Hint: "python3 -m pip install types-requests"
+nexus/runtime/supervisor.py:31: note: (or run "mypy --install-types" to install all missing stub packages)
+nexus/runtime/supervisor.py:31: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+nexus/runtime/supervisor.py:580: error: Module has no attribute "CREATE_NEW_PROCESS_GROUP"  [attr-defined]
+nexus/runtime/supervisor.py:580: error: Module has no attribute "DETACHED_PROCESS"  [attr-defined]
+nexus/runtime/supervisor.py:902: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:903: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:904: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "mock_openai_url"  [union-attr]
+nexus/runtime/supervisor.py:921: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+nexus/runtime/supervisor.py:1044: error: Item "None" of "RuntimeExternalSettings | None" has no attribute "gateway_url"  [union-attr]
+nexus/runtime/supervisor.py:1046: error: Item "None" of "RuntimeRemoteSettings | None" has no attribute "base_url"  [union-attr]
+Found 9 errors in 1 file (checked 1 source file)
+```
+
+The nine diagnostics match exactly after line-number normalization; the changed
+test file has no errors with explicit package bases. The green source was
+restored and byte-compared. No dependency installation or diagnostic suppression.
+Black, flake8 and `git diff --check` pass; no `nexus.toml` change.
+
+### Deferred and Landing Notes
+
+No round-4 P2 remains unfixed. The nine pre-existing mypy diagnostics and the
+standard invocation's module-name collision remain outside this scoped fix.
+P3 for #842 remains explicitly deferred: an exited foreground child still
+answers `_pid_alive` until reaped, so `_stop_pid` waits its full grace before
+SIGKILL. `_stop_pid` is unchanged.
+
+No new tunable, schema change, paid call, or owner database write. No owner
+service signalled. Landing notes remain restart by name (`nexus restart
+gateway`, then `nexus restart mock_openai`), `nexus status` shows each service's
+writer, no client change and no UI rebuild. The coordinator owns merge and
+any whole-tree PostgreSQL gate.

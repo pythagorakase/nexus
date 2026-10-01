@@ -15,6 +15,7 @@ Profiles (configured in nexus.toml [runtime]):
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import signal
@@ -24,6 +25,7 @@ import subprocess
 import sys
 import time
 import zlib
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, Iterator, List, Optional, Set, Tuple
@@ -421,6 +423,8 @@ class Supervisor:
             self.state_dir = self.state_dir / f"gateway-{gateway.port}"
             self.logs_dir = self.logs_dir / f"gateway-{gateway.port}"
 
+        self._start_lock_file: Optional[BinaryIO] = None
+
     @classmethod
     def from_config(cls, config_path: Optional[Path] = None) -> "Supervisor":
         """Build a supervisor from the config the runtime-home locators select.
@@ -500,6 +504,44 @@ class Supervisor:
                 "Pass --slot explicitly."
             )
         return next(iter(slots), None)
+
+    @contextmanager
+    def _start_lock(self) -> Iterator[None]:
+        """Serialize check/spawn/record across supervisors with a bounded wait."""
+        path = self.state_dir / "supervisor.lock"
+        if self._start_lock_file is None:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            self._start_lock_file = path.open("ab")
+        health = self.runtime.health
+        deadline = time.monotonic() + health.startup_deadline_seconds
+        while True:
+            try:
+                fcntl.flock(self._start_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError_(
+                        f"Could not acquire supervisor lock {path} within "
+                        f"{health.startup_deadline_seconds}s."
+                    )
+                time.sleep(min(health.poll_interval_seconds, remaining))
+        try:
+            yield
+        finally:
+            fcntl.flock(self._start_lock_file, fcntl.LOCK_UN)
+
+    def _unlink_own_record(self, name: str, pid: int) -> None:
+        """Remove only this failure path's record; report changed ownership."""
+        record = self._read_pidfile(name)
+        if record is None:
+            return
+        if int(record["pid"]) != pid:
+            raise RuntimeError_(
+                f"Service '{name}' cleanup for pid {pid}: record now names pid "
+                f"{record['pid']}; left in place."
+            )
+        self._pidfile(name).unlink(missing_ok=True)
 
     def _write_pidfile(self, name: str, record: Dict[str, Any]) -> None:
         self._pidfile(name).write_text(json.dumps(record, indent=2))
@@ -695,7 +737,7 @@ class Supervisor:
             if not process_running(pid):
                 # The excerpt holds the last lines only once the writer drained.
                 self._await_writer(name, writer_pid)
-                self._pidfile(name).unlink(missing_ok=True)
+                self._unlink_own_record(name, pid)
                 excerpt = self._startup_excerpt(name)
                 raise RuntimeError_(
                     f"Service '{name}' exited during startup. Last log lines:\n"
@@ -709,7 +751,7 @@ class Supervisor:
             if time.monotonic() > deadline:
                 self._stop_pid(pid)
                 self._await_writer(name, writer_pid)
-                self._pidfile(name).unlink(missing_ok=True)
+                self._unlink_own_record(name, pid)
                 excerpt = self._startup_excerpt(name)
                 raise RuntimeError_(
                     f"Service '{name}' failed to become healthy at {url} within "
@@ -725,86 +767,87 @@ class Supervisor:
         slot: int,
         detached: bool,
     ) -> Dict[str, Any]:
-        existing = self._read_pidfile(name)
-        if existing and _pid_alive(int(existing["pid"])):
-            raise RuntimeError_(
-                f"Service '{name}' is already running (pid {existing['pid']}). "
-                f"Use 'nexus restart' or 'nexus down' first."
-            )
-        if existing:
-            # A stale pidfile from a dead process: its writer may still be
-            # draining into the file the new writer is about to open.
-            if existing.get("log_writer_pid") is not None:
-                self._await_writer(name, int(existing["log_writer_pid"]))
-            self._pidfile(name).unlink()
-        if self._gateway_port_override is not None and name != "gateway":
-            # Fixed-port siblings (the mock provider) belong to the default
-            # instance. An override instance borrows one only when the
-            # default state ledger proves the listener is the managed
-            # sibling — pidfile alive, same port, healthy — and never
-            # spawns its own, so a later default `nexus up` always finds
-            # its ports either free or owned by its own pidfiles.
-            if self._sibling_owned_by_default(name, service) and self._probe(
-                f"http://{service.host}:{service.port}{service.health_path}"
-            ):
-                return {
-                    "attached": True,
-                    "service": name,
-                    "port": service.port,
-                    "host": service.host,
-                }
-            if not _port_open(service.host, service.port):
-                return {
-                    "skipped": True,
-                    "service": name,
-                    "port": service.port,
-                    "host": service.host,
-                    "reason": (
-                        "fixed-port sibling is not running; start the "
-                        "default stack if this instance needs it"
-                    ),
-                }
-            # Port open but not verifiably ours: fall through to the
-            # unmanaged-port refusal below.
-        if _port_open(service.host, service.port):
-            occupant = _describe_port_occupant(service.port)
-            listener = f" Listener: {occupant}." if occupant else ""
-            raise RuntimeError_(
-                f"Port {service.port} is already in use by an unmanaged process; "
-                f"refusing to spawn '{name}'. Adjust [runtime.services.{name}] "
-                f"port or stop the other process.{listener} If the listener is "
-                "a stale NEXUS service from a dead session, kill that pid. "
-                f"Agent/test shells should export {GATEWAY_PORT_ENV} to run on "
-                "a separate port with isolated state."
-            )
-        if name == "gateway":
-            from nexus.api.choice_recovery import recover_active_slot_choice
+        with self._start_lock():
+            existing = self._read_pidfile(name)
+            if existing and _pid_alive(int(existing["pid"])):
+                raise RuntimeError_(
+                    f"Service '{name}' is already running (pid {existing['pid']}). "
+                    f"Use 'nexus restart' or 'nexus down' first."
+                )
+            if existing:
+                # A stale pidfile from a dead process: its writer may still be
+                # draining into the file the new writer is about to open.
+                if existing.get("log_writer_pid") is not None:
+                    self._await_writer(name, int(existing["log_writer_pid"]))
+                self._pidfile(name).unlink()
+            if self._gateway_port_override is not None and name != "gateway":
+                # Fixed-port siblings (the mock provider) belong to the default
+                # instance. An override instance borrows one only when the
+                # default state ledger proves the listener is the managed
+                # sibling — pidfile alive, same port, healthy — and never
+                # spawns its own, so a later default `nexus up` always finds
+                # its ports either free or owned by its own pidfiles.
+                if self._sibling_owned_by_default(name, service) and self._probe(
+                    f"http://{service.host}:{service.port}{service.health_path}"
+                ):
+                    return {
+                        "attached": True,
+                        "service": name,
+                        "port": service.port,
+                        "host": service.host,
+                    }
+                if not _port_open(service.host, service.port):
+                    return {
+                        "skipped": True,
+                        "service": name,
+                        "port": service.port,
+                        "host": service.host,
+                        "reason": (
+                            "fixed-port sibling is not running; start the "
+                            "default stack if this instance needs it"
+                        ),
+                    }
+                # Port open but not verifiably ours: fall through to the
+                # unmanaged-port refusal below.
+            if _port_open(service.host, service.port):
+                occupant = _describe_port_occupant(service.port)
+                listener = f" Listener: {occupant}." if occupant else ""
+                raise RuntimeError_(
+                    f"Port {service.port} is already in use by an unmanaged process; "
+                    f"refusing to spawn '{name}'. Adjust [runtime.services.{name}] "
+                    f"port or stop the other process.{listener} If the listener is "
+                    "a stale NEXUS service from a dead session, kill that pid. "
+                    f"Agent/test shells should export {GATEWAY_PORT_ENV} to run on "
+                    "a separate port with isolated state."
+                )
+            if name == "gateway":
+                from nexus.api.choice_recovery import recover_active_slot_choice
 
-            recover_active_slot_choice(slot)
-        pid, writer_pid = self._spawn(name, service, slot, detached=detached)
-        # The record exists before the health wait: a startup failure whose
-        # writer cannot be waited out leaves the record that names it, so the
-        # next start waits for that writer instead of spawning a second one.
-        record = {
-            "pid": pid,
-            "service": name,
-            "port": service.port,
-            "host": service.host,
-            "slot": slot,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "command": self._service_argv(service),
-            "log": str(self.log_path(name)),
-            "log_writer_pid": writer_pid,
-        }
-        try:
-            self._write_pidfile(name, record)
-        except Exception as exc:
-            # Until the record exists, this start alone owns the spawned pids.
+                recover_active_slot_choice(slot)
+            pid, writer_pid = self._spawn(name, service, slot, detached=detached)
+            # The record exists before the health wait: a startup failure whose
+            # writer cannot be waited out leaves the record that names it, so the
+            # next start waits for that writer instead of spawning a second one.
+            record = {
+                "pid": pid,
+                "service": name,
+                "port": service.port,
+                "host": service.host,
+                "slot": slot,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "command": self._service_argv(service),
+                "log": str(self.log_path(name)),
+                "log_writer_pid": writer_pid,
+            }
             try:
-                self._abandon_service(name, pid, writer_pid)
-            except Exception as teardown_exc:
-                raise teardown_exc from exc
-            raise
+                self._write_pidfile(name, record)
+            except Exception as exc:
+                # Until the record exists, this start alone owns the spawned pids.
+                try:
+                    self._abandon_service(name, pid, writer_pid)
+                except Exception as teardown_exc:
+                    raise teardown_exc from exc
+                raise
         self._await_healthy(name, service, pid, writer_pid)
         return record
 
@@ -812,6 +855,7 @@ class Supervisor:
         """Stop this invocation's service and wait out its capture writer."""
         self._stop_pid(pid)
         self._await_writer(name, writer_pid)
+        self._unlink_own_record(name, pid)
 
     # ------------------------------------------------------------------
     # Public verbs
@@ -873,9 +917,6 @@ class Supervisor:
             for name, pid, writer_pid in spawned:
                 try:
                     self._abandon_service(name, pid, writer_pid)
-                    leftover = self._read_pidfile(name)
-                    if leftover is not None and int(leftover["pid"]) == pid:
-                        self._pidfile(name).unlink(missing_ok=True)
                 except Exception as teardown_exc:
                     exc.add_note(f"Teardown of '{name}' also failed: {teardown_exc}")
             raise

@@ -1477,6 +1477,10 @@ def test_up_abandons_a_service_whose_pidfile_cannot_be_written(
         return pids
 
     monkeypatch.setattr(supervisor, "_spawn", observe_spawn)
+    # Open this instance's lock before making the directory read-only, so
+    # the test still reaches the intended pidfile write failure after spawn.
+    with supervisor._start_lock():
+        pass
     supervisor.state_dir.chmod(0o555)
     try:
         with pytest.raises(PermissionError):
@@ -1652,3 +1656,197 @@ def test_check_children_restarts_a_service_that_exits_during_the_writer_check(
         for process in (pid, writer_pid):
             _kill_quietly(process)
             _reap_quietly(process)
+
+
+# ---------------------------------------------------------------------------
+# After the fourth independent review (#842): serialize the startup window
+# ---------------------------------------------------------------------------
+
+
+def test_concurrent_starts_share_one_service_and_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A contender blocks before checking state, then refuses the owner's pid."""
+    owner = _managed_echo(tmp_path)
+    contender = Supervisor.from_config(owner.config_path)
+    contender.runtime.services = {
+        name: service.model_copy(deep=True)
+        for name, service in owner.runtime.services.items()
+    }
+    spawning = threading.Event()
+    release = threading.Event()
+    decision = threading.Event()
+    blocked = threading.Event()
+    spawned: list[tuple[int, int]] = []
+    outcomes: dict[str, Any] = {}
+    real_spawn = owner._spawn
+    real_flock = supervisor_module.fcntl.flock
+
+    def observe_flock(file: Any, operation: int) -> None:
+        try:
+            real_flock(file, operation)
+        except BlockingIOError:
+            blocked.set()
+            decision.set()
+            raise
+
+    def owner_spawn(
+        name: str, service: RuntimeServiceSettings, slot: int, detached: bool
+    ) -> tuple[int, int]:
+        # Hold the real startup lock before the first child exists. Without
+        # the lock, the contender reaches its own spawn on the same free port.
+        spawning.set()
+        assert release.wait(5), "the test never released the first spawn"
+        pids = real_spawn(name, service, slot, detached)
+        spawned.append(pids)
+        return pids
+
+    def contender_spawn(
+        name: str, service: RuntimeServiceSettings, slot: int, detached: bool
+    ) -> tuple[int, int]:
+        decision.set()
+        pids = real_spawn(name, service, slot, detached)
+        spawned.append(pids)
+        return pids
+
+    def start(label: str, supervisor: Supervisor) -> None:
+        try:
+            outcomes[label] = supervisor.up(slot=5, echo=False)
+        except Exception as exc:
+            outcomes[label] = exc
+
+    monkeypatch.setattr(supervisor_module.fcntl, "flock", observe_flock)
+    monkeypatch.setattr(owner, "_spawn", owner_spawn)
+    monkeypatch.setattr(contender, "_spawn", contender_spawn)
+    threads = [
+        threading.Thread(target=start, args=("owner", owner)),
+        threading.Thread(target=start, args=("contender", contender)),
+    ]
+    try:
+        threads[0].start()
+        assert spawning.wait(5)
+        threads[1].start()
+        assert decision.wait(5), "the contender neither blocked nor spawned"
+        release.set()
+        for thread in threads:
+            thread.join(10)
+            assert not thread.is_alive(), "a concurrent start did not finish"
+        assert blocked.is_set(), "the contender spawned inside the startup window"
+        assert outcomes["owner"]["success"]
+        error = outcomes["contender"]
+        assert isinstance(error, RuntimeError_)
+        assert "'echo' is already running" in str(error)
+        assert len(spawned) == 1
+        record = owner._read_pidfile("echo")
+        assert record is not None
+        pid, writer_pid = spawned[0]
+        assert (record["pid"], record["log_writer_pid"]) == (pid, writer_pid)
+        assert process_running(pid)
+        assert owner._writer_alive("echo", writer_pid)
+        assert _live_writers(owner.log_path("echo")) == [writer_pid]
+        assert owner._probe(f"http://127.0.0.1:{live_helpers.GATEWAY_PORT}/health")
+    finally:
+        release.set()
+        for thread in threads:
+            if thread.ident is not None:
+                thread.join(10)
+        for pid, writer_pid in spawned:
+            owner._stop_pid(pid)
+            owner._await_writer("echo", writer_pid)
+            _reap_quietly(pid)
+        owner._pidfile("echo").unlink(missing_ok=True)
+
+
+def test_start_lock_contention_has_a_deadline_and_spawns_nothing(
+    tmp_path: Path,
+) -> None:
+    """A held real advisory lock times out the other instance before spawning."""
+    owner = _managed_echo(tmp_path)
+    contender = Supervisor.from_config(owner.config_path)
+    contender.runtime.health.startup_deadline_seconds = 0.3
+    acquired = threading.Event()
+    release = threading.Event()
+
+    def hold_lock() -> None:
+        with owner._start_lock():
+            acquired.set()
+            assert release.wait(5), "the test never released its lock"
+
+    thread = threading.Thread(target=hold_lock)
+    thread.start()
+    try:
+        assert acquired.wait(5)
+        started = time.monotonic()
+        with pytest.raises(
+            RuntimeError_, match="Could not acquire supervisor lock"
+        ) as e:
+            contender._start_service(
+                "echo", owner.runtime.services["echo"], slot=5, detached=True
+            )
+        elapsed = time.monotonic() - started
+        assert 0.3 <= elapsed < 0.3 + contender.runtime.health.poll_interval_seconds + 1
+        assert str(owner.state_dir / "supervisor.lock") in str(e.value)
+        assert "within 0.3s" in str(e.value)
+        assert not owner._pidfile("echo").exists()
+        assert not owner.log_path("echo").exists()
+        assert _live_writers(owner.log_path("echo")) == []
+    finally:
+        release.set()
+        thread.join(5)
+        assert not thread.is_alive()
+
+
+def test_failure_cleanup_preserves_a_record_that_now_names_another_pid(
+    tmp_path: Path,
+) -> None:
+    """The helper and both health failures report and preserve changed ownership."""
+    supervisor = _managed_echo(tmp_path)
+    record = {"pid": os.getpid(), "log_writer_pid": os.getpid()}
+    supervisor._write_pidfile("echo", record)
+    with pytest.raises(RuntimeError_, match=f"record now names pid {os.getpid()}"):
+        supervisor._unlink_own_record("echo", -1)
+    assert supervisor._read_pidfile("echo") == record
+
+    service = supervisor.runtime.services["echo"]
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=True)
+    try:
+        # Startup exit branch: reap our own service, leaving the foreign record.
+        supervisor._stop_pid(pid)
+        _reap_quietly(pid)
+        with pytest.raises(RuntimeError_, match="left in place"):
+            supervisor._await_healthy("echo", service, pid, writer_pid)
+        assert supervisor._read_pidfile("echo") == record
+        with pytest.raises(RuntimeError_, match="left in place"):
+            supervisor._abandon_service("echo", pid, writer_pid)
+        assert supervisor._read_pidfile("echo") == record
+    finally:
+        _kill_quietly(pid)
+        _reap_quietly(pid)
+        _kill_quietly(writer_pid)
+        _reap_quietly(writer_pid)
+        supervisor._pidfile("echo").unlink(missing_ok=True)
+
+
+def test_startup_deadline_preserves_a_record_that_now_names_another_pid(
+    tmp_path: Path,
+) -> None:
+    """The deadline branch waits out its writer without unlinking another pid."""
+    supervisor = _managed_echo(tmp_path)
+    supervisor.runtime.health.startup_deadline_seconds = 0.3
+    service = supervisor.runtime.services["echo"]
+    service.command = ["{python}", "-c", "import time; time.sleep(30)"]
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=True)
+    record = {"pid": os.getpid(), "log_writer_pid": os.getpid()}
+    supervisor._write_pidfile("echo", record)
+    try:
+        with pytest.raises(RuntimeError_, match="left in place"):
+            supervisor._await_healthy("echo", service, pid, writer_pid)
+        assert supervisor._read_pidfile("echo") == record
+        assert not process_running(pid)
+        assert not process_running(writer_pid)
+    finally:
+        _kill_quietly(pid)
+        _reap_quietly(pid)
+        _kill_quietly(writer_pid)
+        _reap_quietly(writer_pid)
+        supervisor._pidfile("echo").unlink(missing_ok=True)
