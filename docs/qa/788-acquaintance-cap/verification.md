@@ -1,34 +1,52 @@
-# 788-S7 Verification and Stop-Report
+# 788-S7 Verification Record
 
-**STOP-REPORT: the required flake8 and mypy gates are not green.** The implementation
-is preserved locally at `8b8568fe580d377205ad287a6a2814f4a68d2564` on `claude/788-acquaintance-cap-setting`.
-No push, PR, merge, or rebase was performed. Rebase onto the newest `origin/main`
-is still required before any eventual push. The order's code premise and LG-Q1
-release are true; the blocker is the unexempted baseline quality gates.
+Refs #788. Verified 2026-10-01 under the resumed frozen order.
 
-Refs #788.
+**The no-new-diagnostics gate passes.** The branch and origin/main each produce
+7 flake8 diagnostics and 38 mypy errors; every diagnostic maps to an unchanged
+line with the identical message. The diagnostics remain unfixed as instructed.
+The prior PostgreSQL and offline gates are green, and their exact commands,
+exit statuses, tails, and reverted mutation proofs remain below.
 
 ## Authority and Inspected Revisions
 
-Read in the requested order: `_common_codex.md`, `788-S7.md`, the issue snapshot,
-then `gh issue view 788 --repo pythagorakase/nexus --comments`. The coordinator's
-[LG-Q1 record](https://github.com/pythagorakase/nexus/issues/788#issuecomment-5927063156),
-posted 2026-10-01T07:44:27Z, says **B. Release all three now**. The default remains 1.
-This is only the existing same-place source's cap (788-R9), not a feature slice.
+Re-read in order: `_common_codex.md` (including "Static Checks: No New Diagnostics"),
+`788-S7.md`, and the complete stop-report in this file. The coordinator's rule
+resolves the prior gate question: pre-existing diagnostics are reported rather
+than fixed; the branch must add none. The dated stop-report is preserved below.
 
-The initial branch was clean at `5b977eabcba5f7aedf1a64a6ee20c021ab290911`.
-All implementation citations below were re-read at `8b8568fe580d377205ad287a6a2814f4a68d2564`; test results
-were measured on the identical source before that commit. Its hooks passed.
-The baseline diagnostic snapshots came from `git show 5b977eab:<path>` into this
-order's scratch directory, without changing another checkout.
+LG-Q1: **B. Release all three now**, recorded in
+https://github.com/pythagorakase/nexus/issues/788#issuecomment-5927063156.
+This order covers only 788-R9, the shipped same-place cap. The default stays 1.
 
-The common rules say: "When the proof gates pass, ... push ... and open a PR" and
-"if honest attempts cannot satisfy a rule or a gate, STOP and write a stop-report".
-The only named failure exemption is #885's slot-5 tests. Neither the seven lint
-errors nor the 38 type errors is that exemption. No unrelated cleanup, suppression,
-new exemption, or altered gate was applied.
+`git fetch origin` returned origin/main at
+`5b977eabcba5f7aedf1a64a6ee20c021ab290911`. `git rebase origin/main` succeeded:
+
+```text
+Current branch claude/788-acquaintance-cap-setting is up to date.
+```
+
+There were no conflicts or rewritten commits. Implementation commit `8b8568fe`
+and stop-report commit `237c8e5f` remain intact. All source citations and prior
+passing tests refer to the unchanged implementation at
+`8b8568fe580d377205ad287a6a2814f4a68d2564`; resumed static checks inspected HEAD
+`237c8e5f` after the no-op rebase. Only this evidence file changes on resumption.
+A live `gh pr view 1068 --json state,title,mergedAt` confirmed #1068 (785-S2) is
+still OPEN with no mergedAt value; its neighboring changes are not on main yet.
+
+The import proof was repeated with `PYTHONPATH=$PWD` and the shared interpreter:
+
+```sh
+PY=/Users/pythagor/nexus/.venv/bin/python
+PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
+```
+
+```text
+/Users/pythagor/nexus/.claude/worktrees/788-acquaintance-cap-setting/nexus/__init__.py
+```
 
 ## Verified Behavior and Scope
+
 
 - Baseline `nexus/agents/orrery/resolver.py:1591-1662` had no cap argument and used
   `used_entity_ids` to reject either already-used endpoint (1645-1658).
@@ -68,54 +86,240 @@ new exemption, or altered gate was applied.
   The two old direct calls gain only the required cap argument at
   `tests/test_orrery/test_resolver.py:2682,2735`; all old assertions remain.
 
-## Measured Outcome and Blocker
+## Measured Outcome
 
-The final focused PostgreSQL proof passed **297 tests**; the new file alone passed
-**6 tests** after all plants were reverted. Every audited PostgreSQL invocation,
-including expected-failure plants, printed the secret-store guard and
-`dbname audit: owner targets: none`. The audit reports its limitation:
-`psycopg2.extensions.ReplicationConnection` is unaudited. As documented by the
-fixture, template cloning reads `NEXUS_template` through subprocess tools; the
-Python-driver audit does not cover those tools. No fleet migration or owner
-service operation was invoked; no paid-provider opt-in was set.
+The focused PostgreSQL proof passed **297 tests**. The new file passed **6 tests**
+after all six scratch plants were reverted. Each plant failed on the required
+route/binding assertion. Every audited run printed the secret-store guard and
+`dbname audit: owner targets: none`. Audit limitations remain explicitly recorded
+in the historical environment and tails below.
 
-All offline partitions completed; the first root partition had two import-path
-failures, both resolved by rerunning its unchanged file with `PYTHONPATH=$PWD`.
-The offline skips are not claimed as PostgreSQL coverage. The requested dedicated
-reachability command passed 54 tests. Black passed on all five Python files.
+All offline partitions completed. Two initial foreign-directory import failures
+were resolved by rerunning the unchanged database-contract file with
+`PYTHONPATH=$PWD`; both attempts remain recorded. Reachability passed 54 tests.
+These gates were not repeated on resumption: the user confirmed them green and
+the no-op rebase changed no tested source. Black was repeated and passed.
+The validate-config hook passed on the implementation commit and was explicitly
+rerun on resumption against the product/config paths; it passed again.
 
-The final flake8 command reports seven E501 errors. Its baseline run reports the
-same seven messages on the same unchanged source lines. The final mypy command
-reports 38 errors across three existing files; a baseline `--shadow-file` run
-reports the same 38 errors. A line-by-line comparison maps each final diagnostic
-to an unchanged baseline line and asserts equal diagnostic multisets. No new
-lint/type diagnostic remains in this slice. These are measured baseline failures,
-not green gates.
+No paid call, provider opt-in, owner database write, fleet migration, or owner
+service operation was performed. No app gateway was started.
 
-Two added test helpers initially lacked a None assertion for `settings.orrery`;
-those were corrected. Mypy went from 40 to the baseline 38 errors, and the full
-focused PostgreSQL proof was rerun after that correction.
+## Pre-existing diagnostics
 
-## Attempts Retained
+The comparison uses freshly extracted `git show origin/main:<path>` snapshots
+under `scratchpad/788-S7/resume-origin-main/` for the four pre-existing changed
+Python files. The new PostgreSQL test exists only on the branch and is included
+in its five-file checks. Flake8 checks the snapshot paths directly. Mypy uses
+`--explicit-package-bases` on both sides and `--shadow-file` to substitute those
+exact snapshots at their canonical module paths, retaining the same import
+context without editing any checkout. No suppression or new ignore is added.
 
-1. The first focused run had `296 passed` plus the owner-target AST guard's failure:
-   `_seeded_clone(3)` and `_seeded_clone(4)` looked like literal slot cloning to its
-   name-based rule. Renaming the character-count helper to `_seeded_characters`
-   resolved it; no guard change or exemption was added.
-2. The combined offline-other command was deliberately terminated (child exit -15,
-   wrapper exit 124) to split the long run. It is not counted as a pass. Its timeout
-   field is null because this was manual splitting, not the silence watchdog.
-3. Root batch 0 reported these unchanged-file failures:
-   `tests/test_database_contract.py::test_postgres_installer_helper_from_foreign_directory[False]`
-   and `[True]`. Their foreign-directory subprocess imported
-   `/Users/pythagor/nexus/nexus/config/loader.py` through the shared interpreter and
-   rejected the new key as extra. Repeating the entire file with `PYTHONPATH=$PWD`
-   produced `24 passed, 2 skipped`; no source change was made to that file.
-4. All six scratch plants failed specifically on route/binding assertions with
-   exit 1. The resolver was restored in a `finally` block after each invocation.
-   The unmodified six-test file then passed. Patches and assertion excerpts follow.
+The comparison script maps branch line numbers to origin/main using only equal
+source blocks, then compares the full diagnostic multisets (including notes and
+columns). It asserts that no diagnostic is on a changed/added line. Both tools
+exit 1 because of pre-existing debt; the comparison gate exits 0:
 
-## Execution Environment
+```text
+flake8: branch=7, origin/main=7, new=0; all diagnostics match unchanged lines
+mypy: branch=38, origin/main=38, new=0; all diagnostics match unchanged lines
+```
+
+Full outputs from **both** versions follow, including mypy's seven matching
+notes. The baseline is `5b977eabcba5f7aedf1a64a6ee20c021ab290911`.
+The exact commands below ran from this worktree through the retained
+`run_gate.py` runner with `PYTHONPATH=$PWD`; TMPDIR was the order's scratch `tmp/`.
+
+### resume-flake8-branch
+
+Exit status: `1`.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m flake8 nexus/agents/orrery/resolver.py nexus/config/settings_models.py tests/test_orrery/test_acquaintance_cap_pg.py tests/test_orrery/test_config.py tests/test_orrery/test_resolver.py
+```
+
+```text
+nexus/agents/orrery/resolver.py:1350:89: E501 line too long (133 > 88 characters)
+nexus/config/settings_models.py:79:89: E501 line too long (89 > 88 characters)
+nexus/config/settings_models.py:126:89: E501 line too long (90 > 88 characters)
+nexus/config/settings_models.py:141:89: E501 line too long (101 > 88 characters)
+nexus/config/settings_models.py:149:89: E501 line too long (91 > 88 characters)
+nexus/config/settings_models.py:2463:89: E501 line too long (93 > 88 characters)
+nexus/config/settings_models.py:4399:89: E501 line too long (131 > 88 characters)
+```
+
+### resume-flake8-main
+
+Exit status: `1`.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m flake8 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/agents/orrery/resolver.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/tests/test_orrery/test_config.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/tests/test_orrery/test_resolver.py
+```
+
+```text
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/agents/orrery/resolver.py:1347:89: E501 line too long (133 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py:79:89: E501 line too long (89 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py:126:89: E501 line too long (90 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py:141:89: E501 line too long (101 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py:149:89: E501 line too long (91 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py:2461:89: E501 line too long (93 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py:4397:89: E501 line too long (131 > 88 characters)
+```
+
+### resume-mypy-branch
+
+Exit status: `1`.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases nexus/agents/orrery/resolver.py nexus/config/settings_models.py tests/test_orrery/test_acquaintance_cap_pg.py tests/test_orrery/test_config.py tests/test_orrery/test_resolver.py
+```
+
+```text
+nexus/config/settings_models.py:130: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:130: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:131: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:131: error: Unsupported operand types for < ("int" and "None")  [operator]
+nexus/config/settings_models.py:131: error: Unsupported left operand type for > ("None")  [operator]
+nexus/config/settings_models.py:131: note: Both left and right operands are unions
+nexus/config/settings_models.py:138: error: Unsupported operand types for + ("int" and "None")  [operator]
+nexus/config/settings_models.py:138: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:138: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4397: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4397: note: Right operand is of type "int | None"
+nexus/agents/orrery/resolver.py:2776: error: Argument "key" to "sorted" has incompatible type "Callable[[OrreryJointBeat], int | None]"; expected "Callable[[OrreryJointBeat], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+nexus/agents/orrery/resolver.py:2776: error: Value of type variable "SupportsRichComparisonT" of "min" cannot be "int | None"  [type-var]
+nexus/agents/orrery/resolver.py:2776: error: Incompatible return value type (got "int | None", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")  [return-value]
+nexus/agents/orrery/resolver.py:2844: error: Argument "key" to "sorted" has incompatible type "Callable[[OrreryResolutionDraft], float | None]"; expected "Callable[[OrreryResolutionDraft], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+nexus/agents/orrery/resolver.py:2844: error: Incompatible return value type (got "float | None", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")  [return-value]
+nexus/agents/orrery/resolver.py:2862: error: Argument 1 to "get" of "Mapping" has incompatible type "int | None"; expected "int"  [arg-type]
+tests/test_orrery/test_config.py:47: error: Item "None" of "OrrerySettings | None" has no attribute "dashboard"  [union-attr]
+tests/test_orrery/test_config.py:192: error: Argument "dyad_tiers" to "OrreryContagionSettings" has incompatible type "dict[str, str]"; expected "OrreryContagionDyadTierSettings"  [arg-type]
+tests/test_orrery/test_config.py:248: error: Dict entry 0 has incompatible type "str": "int"; expected "str": "Decimal"  [dict-item]
+tests/test_orrery/test_config.py:265: error: Dict entry 0 has incompatible type "str": "float"; expected "str": "Decimal"  [dict-item]
+tests/test_orrery/test_config.py:272: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:285: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:340: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:351: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:360: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:376: error: Item "None" of "OrrerySettings | None" has no attribute "recall"  [union-attr]
+tests/test_orrery/test_config.py:399: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:406: error: Argument "project_milestone_delta" to "OrreryDriftSettings" has incompatible type "int"; expected "Decimal"  [arg-type]
+tests/test_orrery/test_config.py:411: error: Dict entry 0 has incompatible type "str": "int"; expected "str": "Decimal"  [dict-item]
+tests/test_orrery/test_config.py:416: error: Dict entry 0 has incompatible type "str": "int"; expected "str": "Decimal"  [dict-item]
+tests/test_orrery/test_config.py:421: error: Unexpected keyword argument "copresence_rate_per_hour" for "OrreryDriftSettings"  [call-arg]
+tests/test_orrery/test_config.py:440: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:458: error: Item "None" of "OrrerySettings | None" has no attribute "retrograde"  [union-attr]
+tests/test_orrery/test_config.py:542: error: Argument "low" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:543: error: Argument "medium" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:544: error: Argument "high" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:553: error: Argument "low" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:554: error: Argument "medium" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:555: error: Argument "high" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:562: error: Item "None" of "OrrerySettings | None" has no attribute "retrograde"  [union-attr]
+tests/test_orrery/test_config.py:572: error: Item "None" of "OrrerySettings | None" has no attribute "retrograde"  [union-attr]
+tests/test_orrery/test_resolver.py:245: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_orrery/test_resolver.py:246: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_orrery/test_resolver.py:247: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+Found 38 errors in 3 files (checked 5 source files)
+```
+
+### resume-mypy-main
+
+Exit status: `1`.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases --shadow-file nexus/agents/orrery/resolver.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/agents/orrery/resolver.py --shadow-file nexus/config/settings_models.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py --shadow-file tests/test_orrery/test_config.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/tests/test_orrery/test_config.py --shadow-file tests/test_orrery/test_resolver.py /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/tests/test_orrery/test_resolver.py nexus/agents/orrery/resolver.py nexus/config/settings_models.py tests/test_orrery/test_config.py tests/test_orrery/test_resolver.py
+```
+
+```text
+nexus/config/settings_models.py:130: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:130: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:131: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:131: error: Unsupported operand types for < ("int" and "None")  [operator]
+nexus/config/settings_models.py:131: error: Unsupported left operand type for > ("None")  [operator]
+nexus/config/settings_models.py:131: note: Both left and right operands are unions
+nexus/config/settings_models.py:138: error: Unsupported operand types for + ("int" and "None")  [operator]
+nexus/config/settings_models.py:138: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:138: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4395: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4395: note: Right operand is of type "int | None"
+nexus/agents/orrery/resolver.py:2747: error: Argument "key" to "sorted" has incompatible type "Callable[[OrreryJointBeat], int | None]"; expected "Callable[[OrreryJointBeat], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+nexus/agents/orrery/resolver.py:2747: error: Value of type variable "SupportsRichComparisonT" of "min" cannot be "int | None"  [type-var]
+nexus/agents/orrery/resolver.py:2747: error: Incompatible return value type (got "int | None", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")  [return-value]
+nexus/agents/orrery/resolver.py:2815: error: Argument "key" to "sorted" has incompatible type "Callable[[OrreryResolutionDraft], float | None]"; expected "Callable[[OrreryResolutionDraft], SupportsDunderLT[Any] | SupportsDunderGT[Any]]"  [arg-type]
+nexus/agents/orrery/resolver.py:2815: error: Incompatible return value type (got "float | None", expected "SupportsDunderLT[Any] | SupportsDunderGT[Any]")  [return-value]
+nexus/agents/orrery/resolver.py:2833: error: Argument 1 to "get" of "Mapping" has incompatible type "int | None"; expected "int"  [arg-type]
+tests/test_orrery/test_config.py:47: error: Item "None" of "OrrerySettings | None" has no attribute "dashboard"  [union-attr]
+tests/test_orrery/test_config.py:192: error: Argument "dyad_tiers" to "OrreryContagionSettings" has incompatible type "dict[str, str]"; expected "OrreryContagionDyadTierSettings"  [arg-type]
+tests/test_orrery/test_config.py:248: error: Dict entry 0 has incompatible type "str": "int"; expected "str": "Decimal"  [dict-item]
+tests/test_orrery/test_config.py:265: error: Dict entry 0 has incompatible type "str": "float"; expected "str": "Decimal"  [dict-item]
+tests/test_orrery/test_config.py:272: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:285: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:340: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:351: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:360: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:376: error: Item "None" of "OrrerySettings | None" has no attribute "recall"  [union-attr]
+tests/test_orrery/test_config.py:399: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:406: error: Argument "project_milestone_delta" to "OrreryDriftSettings" has incompatible type "int"; expected "Decimal"  [arg-type]
+tests/test_orrery/test_config.py:411: error: Dict entry 0 has incompatible type "str": "int"; expected "str": "Decimal"  [dict-item]
+tests/test_orrery/test_config.py:416: error: Dict entry 0 has incompatible type "str": "int"; expected "str": "Decimal"  [dict-item]
+tests/test_orrery/test_config.py:421: error: Unexpected keyword argument "copresence_rate_per_hour" for "OrreryDriftSettings"  [call-arg]
+tests/test_orrery/test_config.py:440: error: Item "None" of "OrrerySettings | None" has no attribute "model_dump"  [union-attr]
+tests/test_orrery/test_config.py:458: error: Item "None" of "OrrerySettings | None" has no attribute "retrograde"  [union-attr]
+tests/test_orrery/test_config.py:542: error: Argument "low" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:543: error: Argument "medium" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:544: error: Argument "high" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:553: error: Argument "low" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:554: error: Argument "medium" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:555: error: Argument "high" to "OrreryRetrogradeWeirdGenreBands" has incompatible type "dict[str, float]"; expected "OrreryRetrogradeWeirdBandSettings"  [arg-type]
+tests/test_orrery/test_config.py:562: error: Item "None" of "OrrerySettings | None" has no attribute "retrograde"  [union-attr]
+tests/test_orrery/test_config.py:572: error: Item "None" of "OrrerySettings | None" has no attribute "retrograde"  [union-attr]
+tests/test_orrery/test_resolver.py:245: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_orrery/test_resolver.py:246: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_orrery/test_resolver.py:247: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+Found 38 errors in 3 files (checked 4 source files)
+```
+
+### resume-comparison
+
+Exit status: `0`.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/compare_resume.py
+```
+
+```text
+flake8: branch=7, origin/main=7, new=0; all diagnostics match unchanged lines
+mypy: branch=38, origin/main=38, new=0; all diagnostics match unchanged lines
+```
+
+### resume-black
+
+Exit status: `0`.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check nexus/agents/orrery/resolver.py nexus/config/settings_models.py tests/test_orrery/test_acquaintance_cap_pg.py tests/test_orrery/test_config.py tests/test_orrery/test_resolver.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+5 files would be left unchanged.
+```
+
+### resume-validate-config
+
+Exit status: `0`.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pre_commit run validate-config --files nexus.toml nexus/agents/orrery/resolver.py nexus/config/settings_models.py
+```
+
+```text
+Validate NEXUS config and model-ID drift.................................Passed
+```
+
+## Execution Environment of the Original Proofs
+
 
 Every command ran from the assigned worktree. The interpreter was
 `/Users/pythagor/nexus/.venv/bin/python`. Scratch artifacts, JSON command receipts,
@@ -139,22 +343,28 @@ contain no `test_*.py` files. No failing test was skipped.
 
 ## Landing and Coordinator Questions
 
-No migration number, fleet application, or UI rebuild is needed for this slice.
-After any eventual authorized landing, the coordinator runs the whole-tree
-PostgreSQL gate at the final commit and restarts the owner gateway by name with
-`nexus restart gateway`. This implementer did neither. The issue stays open.
+No migration number or fleet application. Product code and `nexus.toml` change,
+so after pulling the coordinator restarts the owner service **by name** with
+`nexus restart gateway`. No client bundle changes and no UI rebuild. The
+coordinator runs the whole-tree PostgreSQL gate at the final commit. This
+implementer does not merge or perform those landing operations. Issue #788
+remains open.
 
-Deferred: rebasing onto the newest `origin/main`, resolving any neighboring changes
-from #1068/756-S2 while keeping both, then revalidation and publication once the
-quality-gate blocker is resolved. The live merge state of #1068 was not assumed.
-All other named 788 slices, owner questions Q2/Q4, future cap kinds, templates,
-prompts, save data, migrations, UI, and shared fixture changes remain out of scope.
+PR #1068 (785-S2) remains a deferred neighbor; preserve both changes if its
+settings/resolver edits produce neighboring-line conflicts at landing.
+All other 788 slices, owner questions Q2/Q4, future cap kinds, templates,
+prompts, save data, migrations, UI, and shared fixtures remain out of scope.
 
-**Coordinator question:** Should the existing flake8/mypy debt be fixed in a
-separate order, or should a revised frozen order explicitly exempt these exact
-baseline diagnostics? This is a gate/scope question, not a new product question.
+Open questions for the coordinator: **none**. The prior static-check question is
+resolved by the common rules' no-new-diagnostics gate. Publication is authorized
+once this verification record is committed; do not merge.
 
-## Exact Commands, Exit Statuses, and Verbatim Tails
+## Original Proof Commands, Exit Statuses, and Verbatim Tails
+
+The following are the retained measurements from implementation commit
+`8b8568fe`, including failed attempts and their successful resolutions. Historical
+static invocations are superseded by the explicit-package-bases comparison above.
+
 
 ### Initial Formatting
 
@@ -1818,5 +2028,174 @@ Require COMMENT ON for new migration objects.........(no files to check)Skipped
   }
 }
 ```
+
+
+## Dated Stop-Report — 2026-10-01 (Resolved)
+
+The original stop-report narrative from `237c8e5f` is retained verbatim below;
+its blocker and coordinator question were resolved by the revised common rules.
+The associated command evidence remains in the preceding section.
+
+<details>
+<summary>Original Stop-Report Narrative</summary>
+
+# 788-S7 Verification and Stop-Report
+
+**STOP-REPORT: the required flake8 and mypy gates are not green.** The implementation
+is preserved locally at `8b8568fe580d377205ad287a6a2814f4a68d2564` on `claude/788-acquaintance-cap-setting`.
+No push, PR, merge, or rebase was performed. Rebase onto the newest `origin/main`
+is still required before any eventual push. The order's code premise and LG-Q1
+release are true; the blocker is the unexempted baseline quality gates.
+
+Refs #788.
+
+## Authority and Inspected Revisions
+
+Read in the requested order: `_common_codex.md`, `788-S7.md`, the issue snapshot,
+then `gh issue view 788 --repo pythagorakase/nexus --comments`. The coordinator's
+[LG-Q1 record](https://github.com/pythagorakase/nexus/issues/788#issuecomment-5927063156),
+posted 2026-10-01T07:44:27Z, says **B. Release all three now**. The default remains 1.
+This is only the existing same-place source's cap (788-R9), not a feature slice.
+
+The initial branch was clean at `5b977eabcba5f7aedf1a64a6ee20c021ab290911`.
+All implementation citations below were re-read at `8b8568fe580d377205ad287a6a2814f4a68d2564`; test results
+were measured on the identical source before that commit. Its hooks passed.
+The baseline diagnostic snapshots came from `git show 5b977eab:<path>` into this
+order's scratch directory, without changing another checkout.
+
+The common rules say: "When the proof gates pass, ... push ... and open a PR" and
+"if honest attempts cannot satisfy a rule or a gate, STOP and write a stop-report".
+The only named failure exemption is #885's slot-5 tests. Neither the seven lint
+errors nor the 38 type errors is that exemption. No unrelated cleanup, suppression,
+new exemption, or altered gate was applied.
+
+## Verified Behavior and Scope
+
+- Baseline `nexus/agents/orrery/resolver.py:1591-1662` had no cap argument and used
+  `used_entity_ids` to reject either already-used endpoint (1645-1658).
+  Baseline `nexus.toml:338-343` enabled the source without a cap, while
+  `nexus/config/settings_models.py:1333-1341` forbade extra keys without this field.
+- Now `nexus/config/settings_models.py:1333-1343` retains `extra="forbid"` and adds
+  `Field(default=1, ge=1)` without an upper bound. `nexus.toml:338-346` adds only
+  the requested comments and `acquaintance_introductions_per_entity_per_tick = 1`.
+- `nexus/agents/orrery/resolver.py:1594-1622` requires keyword-only
+  `introductions_per_entity`, documents it, and raises the specified ValueError
+  before any query for a value below 1. Lines 1623-1651 preserve the SQL selecting
+  active, co-located characters with non-NULL locations and the present-actor
+  exclusions. Lines 1653-1673 count both admitted endpoints, iterate canonical
+  pairs in sorted order, and preserve hydrated-actor orientation and output shape.
+  At cap 1, a positive count has exactly the old set-membership meaning; both
+  endpoints are marked at the same admission step, so the selection is unchanged.
+- `resolver.py:1907-1919` reads typed settings or validates mappings through the
+  composition model; other types raise TypeError. Lines 2229-2244 retain the source
+  enablement logic and forward the cap. Lines 2260-2269 sort routes by oriented
+  actor/target pair.
+- Unchanged `nexus/agents/lore/utils/turn_cycle.py:763-765,791` dumps the validated
+  Orrery section and forwards composition. `resolver.py:493-515` still validates
+  resolver settings separately. The legacy partial-mapping test remains at
+  `tests/test_orrery/test_resolver.py:2686-2695`.
+- Unchanged `nexus/agents/orrery/templates.py:4305-4311` independently requires
+  co-location and rejects existing relationships/social contact. Lines 4338-4340
+  write mutual `contact:social` on acceptance. Those package gates were not edited.
+- `tests/test_orrery/test_acquaintance_cap_pg.py:42-112` owns two uniquely named
+  `qa640_788s7_acquaintance_*` clones, seeds a bounded New York zone, a place, the
+  clock before characters, and three/four active co-located characters. Each test
+  uses a rolled-back SQLAlchemy session. Lines 158-241 exercise the shipped default,
+  repeat calls, cap 2 wiring and saturation, both orientations, omitted/typed
+  settings, and invalid values. A real session with autobegin disabled proves the
+  direct invalid-cap error precedes a query, without a mock.
+- `tests/test_orrery/test_config.py:608-633` checks the model default, actual loader
+  rejection of 0/-1/1.5 at the cap field, and a shipped TOML copy omitting the key.
+  The two old direct calls gain only the required cap argument at
+  `tests/test_orrery/test_resolver.py:2682,2735`; all old assertions remain.
+
+## Measured Outcome and Blocker
+
+The final focused PostgreSQL proof passed **297 tests**; the new file alone passed
+**6 tests** after all plants were reverted. Every audited PostgreSQL invocation,
+including expected-failure plants, printed the secret-store guard and
+`dbname audit: owner targets: none`. The audit reports its limitation:
+`psycopg2.extensions.ReplicationConnection` is unaudited. As documented by the
+fixture, template cloning reads `NEXUS_template` through subprocess tools; the
+Python-driver audit does not cover those tools. No fleet migration or owner
+service operation was invoked; no paid-provider opt-in was set.
+
+All offline partitions completed; the first root partition had two import-path
+failures, both resolved by rerunning its unchanged file with `PYTHONPATH=$PWD`.
+The offline skips are not claimed as PostgreSQL coverage. The requested dedicated
+reachability command passed 54 tests. Black passed on all five Python files.
+
+The final flake8 command reports seven E501 errors. Its baseline run reports the
+same seven messages on the same unchanged source lines. The final mypy command
+reports 38 errors across three existing files; a baseline `--shadow-file` run
+reports the same 38 errors. A line-by-line comparison maps each final diagnostic
+to an unchanged baseline line and asserts equal diagnostic multisets. No new
+lint/type diagnostic remains in this slice. These are measured baseline failures,
+not green gates.
+
+Two added test helpers initially lacked a None assertion for `settings.orrery`;
+those were corrected. Mypy went from 40 to the baseline 38 errors, and the full
+focused PostgreSQL proof was rerun after that correction.
+
+## Attempts Retained
+
+1. The first focused run had `296 passed` plus the owner-target AST guard's failure:
+   `_seeded_clone(3)` and `_seeded_clone(4)` looked like literal slot cloning to its
+   name-based rule. Renaming the character-count helper to `_seeded_characters`
+   resolved it; no guard change or exemption was added.
+2. The combined offline-other command was deliberately terminated (child exit -15,
+   wrapper exit 124) to split the long run. It is not counted as a pass. Its timeout
+   field is null because this was manual splitting, not the silence watchdog.
+3. Root batch 0 reported these unchanged-file failures:
+   `tests/test_database_contract.py::test_postgres_installer_helper_from_foreign_directory[False]`
+   and `[True]`. Their foreign-directory subprocess imported
+   `/Users/pythagor/nexus/nexus/config/loader.py` through the shared interpreter and
+   rejected the new key as extra. Repeating the entire file with `PYTHONPATH=$PWD`
+   produced `24 passed, 2 skipped`; no source change was made to that file.
+4. All six scratch plants failed specifically on route/binding assertions with
+   exit 1. The resolver was restored in a `finally` block after each invocation.
+   The unmodified six-test file then passed. Patches and assertion excerpts follow.
+
+## Execution Environment
+
+Every command ran from the assigned worktree. The interpreter was
+`/Users/pythagor/nexus/.venv/bin/python`. Scratch artifacts, JSON command receipts,
+logs, baseline copies, and the temporary pytest root are exclusively under:
+
+`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7`
+
+`run_gate.py` runs one foreground child with a 570-second deadline and a
+120-second no-output watchdog; each yielded tool session was awaited before the
+next operation. It captures exact argv, exit status, log tail, and (for later
+receipts) PYTHONPATH/TMPDIR. No deadline or silence timeout fired. The first broad
+run was split manually. Gate commands below are the exact child commands; the
+runner supplied `TMPDIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/tmp`. Receipts marked as pinned additionally used
+`PYTHONPATH=$PWD`. The initial import proof used that assignment as instructed;
+foreign-directory child imports required preserving it for subsequent gates.
+
+The non-API/Orrery partition comprises all 131 root `test_*.py` files (sorted
+batches of 25, last batch 6), `tests/test_lore`, and the six smaller test
+directories. API and Orrery were run separately. `tests/fixtures` and `tests/proofs`
+contain no `test_*.py` files. No failing test was skipped.
+
+## Landing and Coordinator Questions
+
+No migration number, fleet application, or UI rebuild is needed for this slice.
+After any eventual authorized landing, the coordinator runs the whole-tree
+PostgreSQL gate at the final commit and restarts the owner gateway by name with
+`nexus restart gateway`. This implementer did neither. The issue stays open.
+
+Deferred: rebasing onto the newest `origin/main`, resolving any neighboring changes
+from #1068/756-S2 while keeping both, then revalidation and publication once the
+quality-gate blocker is resolved. The live merge state of #1068 was not assumed.
+All other named 788 slices, owner questions Q2/Q4, future cap kinds, templates,
+prompts, save data, migrations, UI, and shared fixture changes remain out of scope.
+
+**Coordinator question:** Should the existing flake8/mypy debt be fixed in a
+separate order, or should a revised frozen order explicitly exempt these exact
+baseline diagnostics? This is a gate/scope question, not a new product question.
+
+
+</details>
 
 Prepared by Codex running GPT-6 Astra.
