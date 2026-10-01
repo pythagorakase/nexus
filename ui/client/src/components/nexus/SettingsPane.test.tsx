@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FontProvider, KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
@@ -45,6 +45,26 @@ const STATUSES: SecretStatus[] = [
     required_by: [],
   },
 ];
+
+const STATUS_URL = "/api/secrets/status?slot=4";
+const STATUS_CALL = `GET ${STATUS_URL}`;
+
+/** A fresh status answer: a Response body can be read only once. */
+function statusResponse(rows: SecretStatus[]): Response {
+  return new Response(JSON.stringify(rows), { status: 200 });
+}
+
+function isStatusGet(input: unknown, init?: RequestInit): boolean {
+  return (init?.method ?? "GET") === "GET" && String(input) === STATUS_URL;
+}
+
+/** The pane re-reads key status on open; wait until that read has settled. */
+async function statusSettled(queryClient: QueryClient, calls: string[]) {
+  await waitFor(() => {
+    expect(calls[0]).toBe(STATUS_CALL);
+    expect(queryClient.isFetching()).toBe(0);
+  });
+}
 
 function renderPane(
   settings: SettingsPayload = SETTINGS,
@@ -192,13 +212,15 @@ describe("SettingsPane API keys", () => {
     const calls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      if (isStatusGet(input, init)) return statusResponse(SEAT_STATUSES);
       const body =
         init?.method === "POST"
           ? { provider: "openrouter", verified: true, detail: "Models endpoint reachable." }
           : replaced;
       return new Response(JSON.stringify(body), { status: 200 });
     });
-    renderPane(SETTINGS, false, undefined, SEAT_STATUSES);
+    const queryClient = renderPane(SETTINGS, false, undefined, SEAT_STATUSES);
+    await statusSettled(queryClient, calls);
 
     fireEvent.click(screen.getByTestId("key-verify-openrouter"));
     await waitFor(() =>
@@ -219,9 +241,152 @@ describe("SettingsPane API keys", () => {
     expect(screen.getByTestId("key-status-openrouter")).not.toHaveClass("verified");
     expect(screen.getByTestId("key-row-openrouter")).toHaveClass("required");
     expect(calls).toEqual([
+      STATUS_CALL,
       "POST /api/secrets/openrouter/verify",
       "PUT /api/secrets/openrouter?slot=4",
     ]);
+  });
+
+  it("fetches key status again when the pane opens", async () => {
+    const fresh: SecretStatus[] = [
+      { ...STATUSES[0], last4: "9876" },
+      { ...STATUSES[1], present: true, last4: "5432" },
+    ];
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return statusResponse(fresh);
+    });
+    renderPane();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("key-input-openai")).toHaveAttribute(
+        "placeholder",
+        "••••••••9876",
+      ),
+    );
+    expect(screen.getByTestId("key-status-anthropic")).toHaveClass("present");
+    expect(screen.getByTestId("key-input-anthropic")).toHaveAttribute(
+      "placeholder",
+      "••••••••5432",
+    );
+    expect(calls).toEqual([STATUS_CALL]);
+  });
+
+  it("a status refresh clears the verified mark even when the last four match", async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      if (init?.method === "POST") {
+        return new Response(
+          JSON.stringify({ provider: "openai", verified: true, detail: "Models endpoint reachable." }),
+          { status: 200 },
+        );
+      }
+      return statusResponse(STATUSES);
+    });
+    const queryClient = renderPane();
+    await statusSettled(queryClient, calls);
+
+    fireEvent.click(screen.getByTestId("key-verify-openai"));
+    await waitFor(() =>
+      expect(screen.getByTestId("key-status-openai")).toHaveClass("verified"),
+    );
+
+    // The refresh lands in a later millisecond, answered with an identical row.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 60_000);
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: secretsQueryKey(4) });
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await waitFor(() =>
+      expect(screen.getByTestId("key-status-openai")).not.toHaveClass("verified"),
+    );
+    expect(screen.getByTestId("key-status-openai")).toHaveClass("present");
+    expect(screen.getByTestId("key-input-openai")).toHaveAttribute(
+      "placeholder",
+      "••••••••wxyz",
+    );
+    expect(calls).toEqual([STATUS_CALL, "POST /api/secrets/openai/verify", STATUS_CALL]);
+  });
+
+  it("a verification started before a refresh does not mark the refreshed row", async () => {
+    const rotated: SecretStatus[] = [{ ...STATUSES[0], last4: "rot8" }, STATUSES[1]];
+    let releaseVerify: (response: Response) => void = () => {};
+    const heldVerify = new Promise<Response>((resolve) => {
+      releaseVerify = resolve;
+    });
+    let statusReads = 0;
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      if (init?.method === "POST") return heldVerify;
+      statusReads += 1;
+      return statusResponse(statusReads === 1 ? STATUSES : rotated);
+    });
+    const queryClient = renderPane();
+    await statusSettled(queryClient, calls);
+
+    fireEvent.click(screen.getByTestId("key-verify-openai"));
+    await waitFor(() => expect(screen.getByTestId("key-verify-openai")).toBeDisabled());
+
+    // The store is rotated outside the app; the refresh lands in a later millisecond.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 60_000);
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: secretsQueryKey(4) });
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() =>
+      expect(screen.getByTestId("key-input-openai")).toHaveAttribute(
+        "placeholder",
+        "••••••••rot8",
+      ),
+    );
+
+    // The answer for the key that was replaced arrives late.
+    await act(async () => {
+      releaseVerify(
+        new Response(
+          JSON.stringify({ provider: "openai", verified: true, detail: "Models endpoint reachable." }),
+          { status: 200 },
+        ),
+      );
+      await heldVerify;
+    });
+    await waitFor(() => expect(screen.getByTestId("key-verify-openai")).not.toBeDisabled());
+
+    expect(screen.getByTestId("key-status-openai")).toHaveClass("present");
+    expect(screen.getByTestId("key-status-openai")).not.toHaveClass("verified");
+    expect(screen.queryByTestId("keys-error")).not.toBeInTheDocument();
+    expect(calls).toEqual([STATUS_CALL, "POST /api/secrets/openai/verify", STATUS_CALL]);
+  });
+
+  it("shows an unreadable store in the card's existing alert", async () => {
+    const detail =
+      "The login keychain refused to read account 'openai' (security exit 36). " +
+      "Unlock the login keychain (Keychain Access, or security unlock-keychain) and retry.";
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return new Response(JSON.stringify({ detail }), { status: 503 });
+    });
+    renderPane();
+
+    const alert = await screen.findByTestId("keys-error");
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toHaveTextContent(detail);
+    expect(document.getElementById("set-keys")).toContainElement(alert);
+    expect(screen.queryByTestId(/^key-row-/)).not.toBeInTheDocument();
+    expect(calls).toEqual([STATUS_CALL]);
   });
 });
 
@@ -442,15 +607,17 @@ describe("SettingsPane model IDs", () => {
       },
     ];
     const calls: string[] = [];
+    const statusAnswers = [before, after];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      if (isStatusGet(input, init)) return statusResponse(statusAnswers.shift()!);
       return new Response(JSON.stringify(
-        String(input).startsWith("/api/secrets/status")
-          ? after
-          : { skald_model: "vendor/model-next", gaia_model: null, apex_context_window: null },
+        { skald_model: "vendor/model-next", gaia_model: null, apex_context_window: null },
       ));
     });
-    renderPane(settings, false, undefined, before);
+    const queryClient = renderPane(settings, false, undefined, before);
+    expect(screen.getByTestId("key-row-openrouter")).toHaveClass("optional");
+    await statusSettled(queryClient, calls);
     expect(screen.getByTestId("key-row-openrouter")).toHaveClass("optional");
 
     fireEvent.click(screen.getByRole("button", { name: "Model Next" }));
@@ -461,7 +628,11 @@ describe("SettingsPane model IDs", () => {
     expect(within(screen.getByTestId("key-row-openrouter")).getByText("openrouter"))
       .toHaveAttribute("title", "Skald · World State");
     expect(screen.getByTestId("key-row-openai")).toHaveClass("optional");
-    expect(calls).toEqual(["PATCH /api/slot/4/settings", "GET /api/secrets/status?slot=4"]);
+    expect(calls).toEqual([
+      "GET /api/secrets/status?slot=4",
+      "PATCH /api/slot/4/settings",
+      "GET /api/secrets/status?slot=4",
+    ]);
   });
 
   it("shows a key status failure in its card and keeps the Model card usable", async () => {
@@ -485,8 +656,10 @@ describe("SettingsPane model IDs", () => {
   });
 
   it("restores the confirmed Gaia selection when the server rejects a write", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("Write rejected", { status: 422 }),
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) =>
+      isStatusGet(input, init)
+        ? statusResponse(STATUSES)
+        : new Response("Write rejected", { status: 422 }),
     );
     vi.spyOn(console, "error").mockImplementation(() => {});
     renderPane(settings, false, settingsQueryClient);
@@ -515,6 +688,7 @@ describe("preference save failures (#961)", () => {
     const calls: string[] = [];
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      if (isStatusGet(input, init)) return statusResponse(STATUSES);
       return new Response("PermissionError: [Errno 13] Permission denied", { status: 500 });
     });
     renderPane();
@@ -526,21 +700,26 @@ describe("preference save failures (#961)", () => {
     expect(alert).toHaveTextContent("500: PermissionError: [Errno 13] Permission denied");
     expect(screen.getByRole("button", { name: "Spectral" })).toHaveClass("on");
     expect(screen.getByRole("button", { name: "Cormorant Garamond" })).not.toHaveClass("on");
-    expect(calls).toEqual(["PATCH /api/preferences"]);
+    expect(calls).toEqual([STATUS_CALL, "PATCH /api/preferences"]);
 
     // Storage recovers: the same action succeeds, clears the error, and the
     // saved matrix now carries the new font.
-    fetchSpy.mockImplementation(async () =>
-      preferencesResponse({ fonts: { ...KEEPERS, veil: { ...KEEPERS.veil, body: "Cormorant Garamond" } } }));
+    fetchSpy.mockImplementation(async (input, init) =>
+      isStatusGet(input, init)
+        ? statusResponse(STATUSES)
+        : preferencesResponse({ fonts: { ...KEEPERS, veil: { ...KEEPERS.veil, body: "Cormorant Garamond" } } }));
     fireEvent.click(screen.getByRole("button", { name: "Cormorant Garamond" }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Cormorant Garamond" })).toHaveClass("on"));
     expect(screen.queryByTestId("font-save-error")).not.toBeInTheDocument();
-    expect(calls.filter((c) => !c.startsWith("PATCH /api/preferences"))).toEqual([]);
+    expect(calls.filter((c) => !c.startsWith("PATCH /api/preferences"))).toEqual([STATUS_CALL]);
   });
 
   it("shows the rejection for a network failure and keeps the saved theme", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (isStatusGet(input, init)) return statusResponse(STATUSES);
+      throw new TypeError("Failed to fetch");
+    });
     renderPane();
     fireEvent.click(screen.getByTestId("theme-gilded"));
 
@@ -551,7 +730,8 @@ describe("preference save failures (#961)", () => {
     expect(screen.getByTestId("theme-gilded")).toHaveAttribute("aria-pressed", "false");
     expect(document.documentElement.classList.contains("theme-gilded")).toBe(false);
 
-    fetchSpy.mockResolvedValue(preferencesResponse({ theme: "gilded" }));
+    fetchSpy.mockImplementation(async (input, init) =>
+      isStatusGet(input, init) ? statusResponse(STATUSES) : preferencesResponse({ theme: "gilded" }));
     fireEvent.click(screen.getByTestId("theme-gilded"));
     await waitFor(() => expect(screen.getByTestId("theme-gilded")).toHaveAttribute("aria-pressed", "true"));
     expect(screen.queryByTestId("theme-save-error")).not.toBeInTheDocument();
@@ -575,7 +755,10 @@ describe("stale theme save errors from other theme switchers (#961 review)", () 
     queryClient.setQueryData(["/api/slot/4/settings"], { skald_model: null, gaia_model: null, apex_context_window: null });
     queryClient.setQueryData(secretsQueryKey(4), STATUSES);
     queryClient.setQueryData(["/api/dev/backstage/health"], false);
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (isStatusGet(input, init)) return statusResponse(STATUSES);
+      throw new TypeError("Failed to fetch");
+    });
     const tree = (withPane: boolean) => (
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>

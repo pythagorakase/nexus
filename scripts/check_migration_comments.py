@@ -9,7 +9,8 @@ runs offline at commit time and covers every object kind a migration adds.
 For each migrations/NNN_*.sql file, and each SQL string literal in an
 NNN_*.py migration, numbered above WATERMARK, the lint finds:
 
-* CREATE TABLE: the table and every column declared in its body;
+* CREATE TABLE and CREATE FOREIGN TABLE: the table and every column declared
+  in its body;
 * ALTER TABLE ... ADD [COLUMN]: each added column;
 * CREATE TYPE ... AS ENUM;
 * CREATE [OR REPLACE] FUNCTION and PROCEDURE, one per argument signature;
@@ -17,16 +18,18 @@ NNN_*.py migration, numbered above WATERMARK, the lint finds:
 
 including DDL inside DO blocks and EXECUTE commands (``||`` operands are
 joined, with ``{}`` standing for each operand that is not a literal), and
-requires a non-blank COMMENT ON TABLE/COLUMN/TYPE/FUNCTION/PROCEDURE/VIEW/
-MATERIALIZED VIEW for each in the same file (COMMENT ON ROUTINE documents a
-function or a procedure). Unqualified names resolve to ``public``, or to the
-schema a CREATE SCHEMA statement creates for its own elements; unquoted
-identifiers fold to lower case, quoted identifiers keep their exact spelling.
-Temporary tables and views are exempt because they end with the migration
-session. Not seen: SQL a Python migration does not spell as a string literal in
-its own file (an imported constant such as ``from nexus.x import DDL;
-cur.execute(DDL)``, names joined only at run time such as
-``cur.execute(A + B)``, a file it reads, or a bytes literal).
+requires a non-blank COMMENT ON TABLE/FOREIGN TABLE/COLUMN/TYPE/FUNCTION/
+PROCEDURE/VIEW/MATERIALIZED VIEW for each in the same file (COMMENT ON ROUTINE
+documents a function or a procedure; a foreign table is documented only by
+COMMENT ON FOREIGN TABLE, which is the one form PostgreSQL accepts for it).
+ALTER FOREIGN TABLE ... ADD COLUMN is not checked. Unqualified names resolve
+to ``public``, or to the schema a CREATE SCHEMA statement creates for its own
+elements; unquoted identifiers fold to lower case, quoted identifiers keep
+their exact spelling. Temporary tables and views are exempt because they end
+with the migration session. Not seen: SQL a Python migration does not spell as
+a string literal in its own file (an imported constant such as
+``from nexus.x import DDL; cur.execute(DDL)``, names joined only at run time
+such as ``cur.execute(A + B)``, a file it reads, or a bytes literal).
 
 A routine comment documents the overload PostgreSQL resolves it to. Argument
 types compare after parameter names, modes, and DEFAULT clauses are dropped,
@@ -47,10 +50,27 @@ format('%I')), including a Python string passed straight to execute() whose
 command starts with a placeholder; an EXECUTE whose command does not start
 with literal text, such as EXECUTE of a variable; a CREATE, ALTER, or ALTER
 TABLE that names no object kind or action, which can only be a fragment of a
-command assembled at run time; and columns a statement does not declare
+command assembled at run time; columns a statement does not declare
 (CREATE TABLE ... AS without a column list, PARTITION OF, OF type, INHERITS,
-LIKE whose options, applied left to right, do not include COMMENTS). A
-COMMENT that is NULL or blank is reported as removed documentation.
+or LIKE whose options, applied left to right, do not include COMMENTS);
+IMPORT FOREIGN SCHEMA; and SELECT ... INTO outside PL/pgSQL, including one in
+parentheses, after up to 64 nested WITH lists (more is reported as SQL the lint
+cannot parse), or behind EXPLAIN. An ``into`` after ``.`` or AS is a column or
+alias name, not the clause, and a TEMP, TEMPORARY, UNLOGGED, GLOBAL, or LOCAL
+after INTO is the target's name unless a name follows it, so
+``SELECT 1 INTO temp FROM ...`` is reported. SELECT ... INTO written as a
+PL/pgSQL statement in a DO body assigns a variable, creates nothing, and is not
+checked; one inside an EXECUTE command is still reported (PostgreSQL refuses
+EXECUTE of SELECT ... INTO at run time). EXPLAIN of a SELECT ... INTO, with or
+without ANALYZE, is reported although a plain EXPLAIN creates nothing: the lint
+strips EXPLAIN and its options without reading them, does not model which
+EXPLAIN forms execute, and no migration should EXPLAIN. ``EXPLAIN (`` is
+always read as an option list, so an EXPLAIN whose statement opens with a
+parenthesis, such as ``EXPLAIN (SELECT 1 INTO t)``, passes; it cannot execute,
+because no ANALYZE precedes the statement. PREPARE ... AS
+SELECT ... INTO is reported although it creates nothing by itself, because an
+EXECUTE of the prepared statement runs it. A COMMENT that is NULL or blank is
+reported as removed documentation.
 
 Usage
 -----
@@ -88,13 +108,43 @@ _RAW_TOKEN = re.compile(r'(?:"(?:[^"]|"")*"|%\(\w+\)[sIL]|[^\s(),;"])+')
 _NAME_END = frozenset(" \t\r\n\f\v(),;*")
 _PLAIN_NAME = re.compile(r"[a-z_][a-z0-9_$]*")
 _IDENT_CHAR = re.compile(r"[A-Za-z0-9_$]")
+# PostgreSQL's decinteger: digits, with single "_" separators since PG 16.
+_DECINTEGER = re.compile(r"[0-9](?:_?[0-9])*")
+_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 _DOLLAR_TAG = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
 
 _CREATE_TABLE = re.compile(
-    r"\bCREATE\s+(?:(?:GLOBAL|LOCAL)\s+)?(?:(?P<temp>TEMP|TEMPORARY)\s+|UNLOGGED\s+)?"
+    r"\bCREATE\s+(?:(?:GLOBAL|LOCAL)\s+)?"
+    r"(?:(?P<temp>TEMP|TEMPORARY)\s+|UNLOGGED\s+|(?P<foreign>FOREIGN)\s+)?"
     r"TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?",
     _I,
 )
+# PostgreSQL 17's reserved key words (Appendix C). None of them can name a
+# table without quotes, so one that follows a SELECT INTO's TEMP, UNLOGGED,
+# GLOBAL, or LOCAL shows that word to be the target's name.
+_RESERVED_WORDS = frozenset(
+    """
+    ALL ANALYSE ANALYZE AND ANY ARRAY AS ASC ASYMMETRIC BOTH CASE CAST CHECK
+    COLLATE COLUMN CONSTRAINT CREATE CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE
+    CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER DEFAULT DEFERRABLE DESC DISTINCT
+    DO ELSE END EXCEPT FALSE FETCH FOR FOREIGN FROM GRANT GROUP HAVING IN
+    INITIALLY INTERSECT INTO LATERAL LEADING LIMIT LOCALTIME LOCALTIMESTAMP NOT
+    NULL OFFSET ON ONLY OR ORDER PLACING PRIMARY REFERENCES RETURNING SELECT
+    SESSION_USER SOME SYMMETRIC SYSTEM_USER TABLE THEN TO TRAILING TRUE UNION
+    UNIQUE USER USING VARIADIC WHEN WHERE WINDOW WITH
+    """.split()
+)
+# How many nested WITH lists (each but the last followed by a parenthesized
+# main statement) the SELECT INTO rule reads through before it reports the
+# statement as SQL it cannot parse.
+_WITH_NESTING_LIMIT = 64
+# Words that decide whether a statement is a SELECT INTO: the first of them at
+# the statement's base depth (after its leading parentheses and any WITH list)
+# names the command, and a later INTO at that depth names its target.
+_DML_VERBS = frozenset({"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"})
+# A statement's leading parentheses, as in ``(SELECT 1 INTO t) UNION ...``.
+_LEADING_PARENS = re.compile(r"[\s(]*")
+_IMPORT_FOREIGN_SCHEMA = re.compile(r"\bIMPORT\s+FOREIGN\s+SCHEMA\b", _I)
 _ALTER_TABLE = re.compile(
     r"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(?!ALL\s+IN\b)", _I
 )
@@ -115,8 +165,8 @@ _CREATE_MATVIEW = re.compile(
     r"\bCREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?", _I
 )
 _COMMENT_ON = re.compile(
-    r"\bCOMMENT\s+ON\s+(?P<kind>MATERIALIZED\s+VIEW|TABLE|COLUMN|TYPE|FUNCTION"
-    r"|PROCEDURE|ROUTINE|VIEW)\s+",
+    r"\bCOMMENT\s+ON\s+(?P<kind>MATERIALIZED\s+VIEW|FOREIGN\s+TABLE|TABLE|COLUMN"
+    r"|TYPE|FUNCTION|PROCEDURE|ROUTINE|VIEW)\s+",
     _I,
 )
 _IS = re.compile(r"\s*IS\b", _I)
@@ -147,6 +197,7 @@ _CREATE_MODIFIERS = {
     "TEMP",
     "TEMPORARY",
     "UNLOGGED",
+    "FOREIGN",
     "RECURSIVE",
     "MATERIALIZED",
     "UNIQUE",
@@ -175,7 +226,9 @@ _PY_SQL_HINT = re.compile(
     rf"|\b(?:CREATE|ALTER)\s+(?:\w+\s+){{0,3}}{_PLACEHOLDER_SOURCE}"
     r"|\bALTER\s+TABLE\b|\bADD\s+COLUMN\b|\bCOMMENT\s+ON\b"
     r"|\bDO\s+(?:LANGUAGE\s+\w+\s+)?(?:\$|E?')"
-    r"|\bEXECUTE\s+(?:format\s*\(\s*)?(?:\$|E?')",
+    r"|\bEXECUTE\s+(?:format\s*\(\s*)?(?:\$|E?')"
+    r"|\bIMPORT\s+FOREIGN\s+SCHEMA\b"
+    r"|\bSELECT\b[\s\S]*?\bINTO\b",
     _I,
 )
 # A placeholder before DDL words ("{} TABLE t") marks SQL only alongside a DDL
@@ -199,6 +252,7 @@ def _looks_like_sql(rendered: str) -> bool:
 # Obligation kind -> the COMMENT ON object type that documents it.
 _COMMENT_KINDS = {
     "table": "TABLE",
+    "foreign table": "FOREIGN TABLE",
     "column": "COLUMN",
     "enum": "TYPE",
     "function": "FUNCTION",
@@ -662,6 +716,260 @@ def _quoted_end(text: str, index: int) -> int:
         close += 2
 
 
+def _depth_tokens(text: str) -> Iterator[tuple[int, str, int]]:
+    """Yield (offset, token, depth) for each word, quoted name, bracket, and comma.
+
+    Unquoted words are upper-cased; a quoted identifier keeps its quotes and
+    spelling. A word, quoted identifier, or comma reports the depth it sits
+    at; an opening bracket the depth before it and a closing bracket the depth
+    after it, so both brackets of a group report the depth around the group.
+    """
+    depth, index = 0, 0
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            end = _quoted_end(text, index)
+            yield index, text[index:end], depth
+            index = end
+            continue
+        if char in "([":
+            yield index, char, depth
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+            yield index, char, depth
+        elif char == ",":
+            yield index, char, depth
+        elif index == 0 or not _IDENT_CHAR.match(text[index - 1]):
+            word = _WORD.match(text, index)
+            if word:
+                yield index, word.group().upper(), depth
+                index = word.end()
+                continue
+        index += 1
+
+
+def _base_depth_tokens(statement: str, begin: int = 0) -> list[tuple[int, str]]:
+    """Return (offset, token) for each token at the base depth of a query.
+
+    The query starts at offset begin of statement. Its base depth is the depth
+    after its leading parentheses, so ``(SELECT 1 INTO t)`` reads as
+    ``SELECT 1 INTO t`` does. Tokens deeper than the base are skipped, and the
+    first token shallower than the base ends the list: in
+    ``(SELECT 1 INTO t) UNION ALL SELECT 2`` nothing after the ``)`` is read.
+    Offsets are relative to statement.
+    """
+    lead = _LEADING_PARENS.match(statement, begin)
+    assert lead is not None  # the pattern matches the empty string
+    base = lead.group().count("(")
+    tokens: list[tuple[int, str]] = []
+    for offset, token, depth in _depth_tokens(statement[begin:]):
+        offset += begin
+        if offset < lead.end():
+            continue
+        if depth < base:
+            break
+        if depth == base:
+            tokens.append((offset, token))
+    return tokens
+
+
+def _after_search_cycle(tokens: list[tuple[int, str]], index: int) -> int:
+    """Return the index past the SEARCH and CYCLE clauses that start at index.
+
+    A recursive CTE's query group may be followed by
+    ``SEARCH {BREADTH | DEPTH} FIRST BY col [, ...] SET name`` and then by
+    ``CYCLE col [, ...] SET name [TO value DEFAULT value] USING name``. Their
+    column names (which may be ``update`` or ``delete``) are not the main
+    statement.
+    """
+    if index < len(tokens) and tokens[index][1] == "SEARCH":
+        # SEARCH, BREADTH or DEPTH, FIRST, BY, then the first column.
+        index += 5
+        while index < len(tokens) and tokens[index][1] == ",":
+            index += 2
+        # SET and the sequence column's name.
+        index += 2
+    if index < len(tokens) and tokens[index][1] == "CYCLE":
+        # USING is reserved, so the first one ends the clause; its name follows.
+        using = next(
+            (i for i in range(index, len(tokens)) if tokens[i][1] == "USING"),
+            len(tokens),
+        )
+        index = using + 2
+    return min(index, len(tokens))
+
+
+def _after_with_list(tokens: list[tuple[int, str]]) -> int | None:
+    """Return the index of the main statement's first token after a WITH list.
+
+    tokens are base-depth tokens that start with WITH. Every token up to the
+    first closing parenthesis belongs to the first CTE (RECURSIVE, its name,
+    AS, MATERIALIZED). After each group that closes, and after any SEARCH or
+    CYCLE clause that follows it (_after_search_cycle), a ``,`` starts the next
+    CTE, AS follows a CTE's column list, and any other token starts the main
+    statement. A CTE may be named ``delete`` or ``update``, which would
+    otherwise read as the statement's verb.
+    """
+    index = 1
+    while index < len(tokens):
+        if tokens[index][1] != ")":
+            index += 1
+            continue
+        index = _after_search_cycle(tokens, index + 1)
+        if index < len(tokens) and tokens[index][1] in (",", "AS"):
+            index += 1
+            continue
+        return index if index < len(tokens) else None
+    return None
+
+
+def _balanced(statement: str) -> bool:
+    """Whether every bracket in statement closes, and none closes unopened."""
+    after = 0
+    for _, token, depth in _depth_tokens(statement):
+        # An opening bracket reports the depth before it.
+        after = depth + 1 if token in ("(", "[") else depth
+        if after < 0:
+            return False
+    return after == 0
+
+
+def _after_explain(tokens: list[tuple[int, str]]) -> int | None:
+    """Return the offset just past an EXPLAIN prefix, or None if nothing follows.
+
+    tokens are base-depth tokens that start with EXPLAIN. The prefix is
+    EXPLAIN with either one parenthesized option list or the keywords
+    ``ANALYZE`` (or ``ANALYSE``) and ``VERBOSE``. The options are stripped,
+    never read: the lint does not model which EXPLAIN forms execute their
+    statement, so a SELECT INTO behind EXPLAIN is reported. A ``(`` right
+    after EXPLAIN is always read as an option list, although PostgreSQL also
+    accepts a parenthesized statement there; so ``EXPLAIN (SELECT 1 INTO t)``
+    is stripped to nothing and passes. That form cannot execute, because no
+    ANALYZE precedes the statement.
+    """
+    index = 1
+    if index < len(tokens) and tokens[index][1] == "(":
+        # Inner brackets are deeper than the base, so the next base-depth
+        # ``)`` closes the option list.
+        close = next(
+            (offset for offset, token in tokens[index + 1 :] if token == ")"),
+            None,
+        )
+        return None if close is None else close + 1
+    if index < len(tokens) and tokens[index][1] in ("ANALYZE", "ANALYSE"):
+        index += 1
+    if index < len(tokens) and tokens[index][1] == "VERBOSE":
+        index += 1
+    return tokens[index][0] if index < len(tokens) else None
+
+
+def _query_tokens(statement: str) -> list[tuple[int, str]] | None:
+    """Return the base-depth tokens of the command a statement runs.
+
+    A bounded loop, with no recursion: strip at most one EXPLAIN prefix
+    (_after_explain) and read the rest past its leading parentheses
+    (_base_depth_tokens). Then, while the tokens open with WITH, skip that
+    WITH list with its SEARCH and CYCLE clauses (_after_with_list); a main
+    statement that opens with a parenthesis, as in ``WITH a AS (...)
+    (SELECT 1 INTO t)``, is read again past its own leading parentheses, and
+    any other main statement ends the loop. A WITH list with no main command
+    yields nothing. More than _WITH_NESTING_LIMIT WITH lists yield None, which
+    the caller reports as SQL it cannot parse. A statement whose brackets do
+    not balance, which PostgreSQL rejects, is read by its tokens at depth 0,
+    as the rule read every statement before it looked past parentheses.
+    """
+    if not _balanced(statement):
+        return [
+            (offset, token)
+            for offset, token, depth in _depth_tokens(statement)
+            if depth == 0
+        ]
+    tokens = _base_depth_tokens(statement)
+    if tokens and tokens[0][1] == "EXPLAIN":
+        begin = _after_explain(tokens)
+        if begin is None:
+            return []
+        tokens = _base_depth_tokens(statement, begin)
+    skipped = 0
+    while tokens and tokens[0][1] == "WITH":
+        if skipped == _WITH_NESTING_LIMIT:
+            return None
+        skipped += 1
+        main = _after_with_list(tokens)
+        if main is None:
+            return []
+        if tokens[main][1] != "(":
+            return tokens[main:]
+        tokens = _base_depth_tokens(statement, tokens[main][0])
+    return tokens
+
+
+def _is_into_clause(statement: str, tokens: list[tuple[int, str]], index: int) -> bool:
+    """Whether the base-depth INTO at tokens[index] starts a SELECT INTO clause.
+
+    ``into`` is a key word PostgreSQL also accepts as a qualified attribute
+    name after ``.`` (``src.into``) and as an output alias after AS
+    (``SELECT 1 AS into``); neither is the clause. A ``.`` that ends a
+    numeric literal, as in ``SELECT 1. INTO t`` or ``SELECT 1_000. INTO t``,
+    is not a qualifier.
+    """
+    if index > 0 and tokens[index - 1][1] == "AS":
+        return False
+    before = tokens[index][0] - 1
+    while before >= 0 and statement[before].isspace():
+        before -= 1
+    if before < 0 or statement[before] != ".":
+        return True
+    run = before
+    while run > 0 and _IDENT_CHAR.match(statement[run - 1]):
+        run -= 1
+    return _DECINTEGER.fullmatch(statement[run:before]) is not None
+
+
+def _names_target(statement: str, pos: int) -> bool:
+    """Whether a table name, or TABLE and a name, starts at or after pos.
+
+    A name is a quoted identifier, a placeholder (``%s``, ``%(name)s``, or
+    the ``{}`` an interpolated value renders as), or a word that is not
+    reserved (_RESERVED_WORDS); ``FROM``, ``;``, ``)``, and the end of the
+    statement are not names.
+    """
+    offset, raw = _next_token(statement, pos)
+    if _is_keyword(raw, {"TABLE"}):
+        _, raw = _next_token(statement, offset + len(raw))
+    if raw[:1] in ('"', "%", "{"):
+        return True
+    word = _WORD.match(raw)
+    return word is not None and word.group().upper() not in _RESERVED_WORDS
+
+
+def _select_into_target(statement: str, pos: int) -> tuple[int, bool]:
+    """Read what follows a SELECT INTO's INTO, as CREATE TABLE spells it.
+
+    Return the offset of the target's name and whether the target is
+    temporary. ``GLOBAL`` or ``LOCAL``, then ``TEMP``, ``TEMPORARY``, or
+    ``UNLOGGED``, then ``TABLE`` are skipped, but each of the first five
+    words is a modifier only when a name follows it (_names_target);
+    otherwise it is the name, as in ``SELECT 1 INTO temp FROM ...``, which
+    creates a table named ``temp``.
+    """
+    temporary = False
+    offset, raw = _next_token(statement, pos)
+    if _is_keyword(raw, {"GLOBAL", "LOCAL"}) and _names_target(
+        statement, offset + len(raw)
+    ):
+        offset, raw = _next_token(statement, offset + len(raw))
+    if _is_keyword(raw, {"TEMP", "TEMPORARY", "UNLOGGED"}) and _names_target(
+        statement, offset + len(raw)
+    ):
+        temporary = raw.upper() != "UNLOGGED"
+        offset, raw = _next_token(statement, offset + len(raw))
+    if _is_keyword(raw, {"TABLE"}):
+        offset, _ = _next_token(statement, offset + len(raw))
+    return offset, temporary
+
+
 def _argument_words(text: str) -> list[str]:
     """Split one argument into words, stopping at its DEFAULT or ``=`` clause.
 
@@ -794,12 +1102,19 @@ def _routine_arguments(
 
 
 class _SqlScanner:
-    """Scan one SQL source: a file, a Python literal, or a DO/EXECUTE body."""
+    """Scan one SQL source: a file, a Python literal, or a DO/EXECUTE body.
 
-    def __init__(self, sql: str, first_line: int, scan: _Scan) -> None:
+    ``plpgsql`` marks a DO body, where SELECT INTO assigns a variable instead
+    of creating a table.
+    """
+
+    def __init__(
+        self, sql: str, first_line: int, scan: _Scan, *, plpgsql: bool = False
+    ) -> None:
         self.sql = sql
         self.first_line = first_line
         self.scan = scan
+        self.plpgsql = plpgsql
         self.masked, self.literals = _lex(sql)
         self.schema = "public"
 
@@ -835,6 +1150,8 @@ class _SqlScanner:
             self._create_table(statement, start)
             self._alter_table(statement, start)
             self._create_named(statement, start)
+            self._import_foreign_schema(statement, start)
+            self._select_into(statement, start)
             self._comments(statement, start)
             for match in _DO.finditer(statement):
                 literal = self._literal_at(start + match.end())
@@ -843,6 +1160,7 @@ class _SqlScanner:
                         literal.text(self.sql),
                         self.line_at(literal.content_start),
                         self.scan,
+                        plpgsql=True,
                     )
             for match in _EXECUTE.finditer(statement):
                 self._execute(statement, start, match)
@@ -966,14 +1284,18 @@ class _SqlScanner:
         for match in _CREATE_TABLE.finditer(statement):
             if match.group("temp"):
                 continue
+            # PostgreSQL documents a foreign table only with COMMENT ON FOREIGN
+            # TABLE; COMMENT ON TABLE rejects it as "not a table".
+            kind = "foreign table" if match.group("foreign") else "table"
+            statement_label = f"CREATE {kind.upper()}"
             offset = start + match.start()
             raw, parts, pos = _read_name(statement, match.end())
             table = _qualify(parts, 1, self.schema)
             if table is None:
-                self.unresolvable(offset, "CREATE TABLE", raw)
+                self.unresolvable(offset, statement_label, raw)
                 continue
-            self.require("table", table, offset)
-            label = f"CREATE TABLE {_display(table)}"
+            self.require(kind, table, offset)
+            label = f"{statement_label} {_display(table)}"
             while pos < len(statement) and statement[pos].isspace():
                 pos += 1
             close = (
@@ -1010,6 +1332,74 @@ class _SqlScanner:
                 self.finding(
                     offset, f"{label} INHERITS columns that cannot be verified"
                 )
+
+    def _import_foreign_schema(self, statement: str, start: int) -> None:
+        """IMPORT FOREIGN SCHEMA creates tables whose names the migration omits."""
+        for match in _IMPORT_FOREIGN_SCHEMA.finditer(statement):
+            self.finding(
+                start + match.start(),
+                "IMPORT FOREIGN SCHEMA creates foreign tables it does not name; "
+                "their columns cannot be verified",
+            )
+
+    def _select_into(self, statement: str, start: int) -> None:
+        """Report SELECT INTO, which creates a table without a column list.
+
+        A statement is a SELECT INTO when the first SELECT, INSERT, UPDATE,
+        DELETE, or MERGE at the base depth of the command it runs
+        (_query_tokens: past an EXPLAIN prefix, leading parentheses, and any
+        WITH list) is SELECT and a later INTO at that depth follows it, other
+        than an ``into`` after ``.`` or AS (_is_into_clause). A temporary
+        target is exempt, as CREATE TEMP TABLE is; TEMP is a modifier only
+        when a name follows it (_select_into_target). In a DO body
+        (``plpgsql``) SELECT INTO assigns a variable and creates nothing, so the
+        rule does not apply there. ``PREPARE p AS SELECT ... INTO t`` creates
+        nothing by itself but is reported, because an EXECUTE of p runs it. A
+        statement nested past _WITH_NESTING_LIMIT WITH lists is reported as
+        SQL the lint cannot parse.
+        """
+        if self.plpgsql:
+            return
+        tokens = _query_tokens(statement)
+        if tokens is None:
+            self.finding(
+                start + len(statement) - len(statement.lstrip()),
+                "cannot parse SQL: a statement nests more than "
+                f"{_WITH_NESTING_LIMIT} WITH lists",
+            )
+            return
+        verb = next(
+            (index for index, (_, token) in enumerate(tokens) if token in _DML_VERBS),
+            None,
+        )
+        if verb is None or tokens[verb][1] != "SELECT":
+            return
+        into = next(
+            (
+                tokens[index][0]
+                for index in range(verb + 1, len(tokens))
+                if tokens[index][1] == "INTO"
+                and _is_into_clause(statement, tokens, index)
+            ),
+            None,
+        )
+        if into is None:
+            return
+        name, temporary = _select_into_target(statement, into + len("INTO"))
+        if temporary:
+            return
+        offset = start + into
+        raw, parts, _ = _read_name(statement, name)
+        table = _qualify(parts, 1, self.schema)
+        if table is None:
+            self.unresolvable(offset, "SELECT INTO", raw)
+            return
+        self.require("table", table, offset)
+        self.finding(
+            offset,
+            f"SELECT INTO {_display(table)} declares no column list; its columns "
+            "cannot be verified",
+        )
 
     def _alter_table(self, statement: str, start: int) -> None:
         for match in _ALTER_TABLE.finditer(statement):
@@ -1137,10 +1527,13 @@ class _SqlScanner:
                 self.scan.comments.add((_DOCUMENTED_KINDS[label], key))
 
 
-def _scan_sql(sql: str, first_line: int, scan: _Scan) -> None:
-    """Scan one SQL source whose first character is on first_line."""
+def _scan_sql(sql: str, first_line: int, scan: _Scan, *, plpgsql: bool = False) -> None:
+    """Scan one SQL source whose first character is on first_line.
+
+    ``plpgsql`` is true only for a DO body (see _SqlScanner).
+    """
     try:
-        scanner = _SqlScanner(sql, first_line, scan)
+        scanner = _SqlScanner(sql, first_line, scan, plpgsql=plpgsql)
     except _LexError as error:
         line = first_line + sql.count("\n", 0, error.offset)
         scan.findings.append((line, f"cannot parse SQL: {error.message}"))

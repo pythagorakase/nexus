@@ -4529,6 +4529,15 @@ class Settings(BaseModel):
             f"[global.model.api_models.*].models"
         )
 
+    def is_test_model(self, model_id: str) -> bool:
+        """Return whether a concrete model ID belongs to the TEST provider.
+
+        TEST identity is the registry provider ``test``, never a model ID, so
+        a renamed TEST entry keeps its identity. An unregistered ID raises
+        ``ValueError`` (from ``provider_for_model``).
+        """
+        return self.provider_for_model(model_id) == "test"
+
     def resolve_model_ref(self, ref: str) -> str:
         """Validate a concrete model ID against the registry and return it."""
         return _validate_model_id(

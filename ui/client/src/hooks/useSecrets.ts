@@ -20,11 +20,17 @@ function slotQuery(slot: number | null): string {
   return slot === null ? "" : `?slot=${slot}`;
 }
 
+/**
+ * Key status for the API KEYS card. The server re-reads the store on every
+ * request, so the pane asks again each time it opens instead of serving the
+ * cached rows (the client defaults keep data fresh forever).
+ */
 export function useSecretsQuery(slot: number | null) {
   return useQuery<SecretStatus[]>({
     queryKey: secretsQueryKey(slot),
     queryFn: async () =>
       (await apiRequest("GET", `/api/secrets/status${slotQuery(slot)}`)).json(),
+    refetchOnMount: "always",
   });
 }
 

@@ -45,6 +45,7 @@ from nexus.cli_contract import (
     partial_fields,
 )
 from nexus.config import load_settings
+from nexus.util.secret_manager import InMemorySecretBackend, keychain_read_error
 
 ROOT = Path(__file__).resolve().parents[1]
 SLOT_STATE = {
@@ -595,6 +596,93 @@ def test_http_command_refuses_plaintext_credentials_as_a_config_error(
     envelope = _failure(completed)
     assert envelope["code"] == "config_error"
     assert "Refusing to send NEXUS_AUTH over plaintext" in envelope["error"]
+
+
+def _run_in_process(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *argv: str,
+    env: dict[str, str],
+) -> tuple[int, str, str]:
+    """Run ``cli.main()`` in this process, so an injected store reaches it.
+
+    A child process cannot use the backend a fixture injects, so these tests
+    call the real entry point here, with the isolated environment ``_run``
+    gives a child.
+    """
+    for name in _ISOLATED_ENV:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(sys, "argv", ["nexus", *argv])
+    exit_code = cli.main()
+    captured = capsys.readouterr()
+    return exit_code, captured.out, captured.err
+
+
+def _locked_access_store_message() -> str:
+    """The message the unreadable store gives for the Access client id read."""
+    return str(
+        keychain_read_error(
+            "cloudflare_access_client_id",
+            subprocess.CalledProcessError(
+                36, ["security"], stderr="STDERR-SENTINEL-821"
+            ),
+        )
+    )
+
+
+def test_http_command_unreadable_access_store_is_a_config_error(
+    unreadable_secret_store: InMemorySecretBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A locked store under the remote profile is a config error, not a crash."""
+    config = _config(tmp_path, profile="remote")
+    exit_code, out, err = _run_in_process(
+        monkeypatch,
+        capsys,
+        "inspect",
+        "slot",
+        "--slot",
+        "5",
+        "--json",
+        env={"NEXUS_RUNTIME_CONFIG": str(config)},
+    )
+
+    assert exit_code == ExitCode.DOMAIN_FAILURE
+    assert out == ""
+    envelope = json.loads(err)
+    assert envelope["code"] == "config_error"
+    assert envelope["error"] == _locked_access_store_message()
+    assert "security unlock-keychain" in envelope["error"]
+    assert "STDERR-SENTINEL-821" not in err
+
+
+def test_runtime_status_names_an_unreadable_access_store(
+    unreadable_secret_store: InMemorySecretBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """nexus status reports the locked store's message; nothing escapes."""
+    config = _config(tmp_path, profile="remote")
+    exit_code, out, err = _run_in_process(
+        monkeypatch,
+        capsys,
+        "status",
+        "--config",
+        str(config),
+        "--json",
+        env={},
+    )
+
+    assert exit_code == ExitCode.DOMAIN_FAILURE
+    assert out == ""
+    envelope = json.loads(err)
+    assert envelope["error"] == _locked_access_store_message()
+    assert "STDERR-SENTINEL-821" not in err
 
 
 # ---------------------------------------------------------------------------

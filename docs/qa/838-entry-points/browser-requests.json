@@ -1,0 +1,82 @@
+[
+  {
+    "method": "PUT",
+    "path": "/api/story/new/weird",
+    "request": {
+      "slot": 4,
+      "weird_level": "low"
+    },
+    "status": 200,
+    "response": {
+      "status": "recorded",
+      "slot": 4,
+      "weird_level": "low"
+    }
+  },
+  {
+    "method": "PUT",
+    "path": "/api/story/new/weird",
+    "request": {
+      "slot": 4,
+      "weird_level": "medium"
+    },
+    "status": 200,
+    "response": {
+      "status": "recorded",
+      "slot": 4,
+      "weird_level": "medium"
+    }
+  },
+  {
+    "method": "PUT",
+    "path": "/api/story/new/weird",
+    "request": {
+      "slot": 4,
+      "weird_level": "high"
+    },
+    "status": 200,
+    "response": {
+      "status": "recorded",
+      "slot": 4,
+      "weird_level": "high"
+    }
+  },
+  {
+    "method": "PUT",
+    "path": "/api/story/new/weird",
+    "request": {
+      "slot": 4,
+      "weird_level": "low"
+    },
+    "status": 200,
+    "response": {
+      "status": "recorded",
+      "slot": 4,
+      "weird_level": "low"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/story/new/transition",
+    "request": {
+      "slot": 4,
+      "weird_level": "low"
+    },
+    "status": 200,
+    "response": {
+      "status": "transitioned",
+      "character_id": 1,
+      "place_id": 1,
+      "layer_id": 1,
+      "zone_id": 1,
+      "message": "Welcome to Neon Palimpsest. Your story begins.",
+      "retrograde": {
+        "enabled": false,
+        "skip_reason": "mock_wizard_model"
+      },
+      "trait_inputs": {
+        "derived": false
+      }
+    }
+  }
+]
