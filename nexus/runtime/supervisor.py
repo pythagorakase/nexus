@@ -269,7 +269,9 @@ def _open_segments(
         for segment in paths:
             try:
                 handles.append(open(segment, "rb"))
-            except FileNotFoundError:
+            except (
+                FileNotFoundError
+            ):  # nexus-exception-disposition: retry; reason=segment gap; safety=bounded
                 break
         beyond = [segment for segment in paths[len(handles) :] if segment.exists()]
         try:
