@@ -108,6 +108,8 @@ _RAW_TOKEN = re.compile(r'(?:"(?:[^"]|"")*"|%\(\w+\)[sIL]|[^\s(),;"])+')
 _NAME_END = frozenset(" \t\r\n\f\v(),;*")
 _PLAIN_NAME = re.compile(r"[a-z_][a-z0-9_$]*")
 _IDENT_CHAR = re.compile(r"[A-Za-z0-9_$]")
+# PostgreSQL's decinteger: digits, with single "_" separators since PG 16.
+_DECINTEGER = re.compile(r"[0-9](?:_?[0-9])*")
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 _DOLLAR_TAG = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
 
@@ -909,7 +911,8 @@ def _is_into_clause(statement: str, tokens: list[tuple[int, str]], index: int) -
     ``into`` is a key word PostgreSQL also accepts as a qualified attribute
     name after ``.`` (``src.into``) and as an output alias after AS
     (``SELECT 1 AS into``); neither is the clause. A ``.`` that ends a
-    numeric literal, as in ``SELECT 1. INTO t``, is not a qualifier.
+    numeric literal, as in ``SELECT 1. INTO t`` or ``SELECT 1_000. INTO t``,
+    is not a qualifier.
     """
     if index > 0 and tokens[index - 1][1] == "AS":
         return False
@@ -921,7 +924,7 @@ def _is_into_clause(statement: str, tokens: list[tuple[int, str]], index: int) -
     run = before
     while run > 0 and _IDENT_CHAR.match(statement[run - 1]):
         run -= 1
-    return statement[run:before].isdigit()
+    return _DECINTEGER.fullmatch(statement[run:before]) is not None
 
 
 def _names_target(statement: str, pos: int) -> bool:

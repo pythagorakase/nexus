@@ -1182,7 +1182,8 @@ def test_into_after_a_dot_or_as_is_a_name(tmp_path: Path) -> None:
 
     Neither starts the SELECT INTO clause, so the INTO after them is found and
     a statement with no other INTO creates nothing. A ``.`` that ends a
-    numeric literal does not make the next INTO a name.
+    numeric literal, digit separators included (``1_000.``, PostgreSQL 16 and
+    later), does not make the next INTO a name.
     """
     _migration(
         tmp_path,
@@ -1193,9 +1194,11 @@ SELECT src.into FROM (VALUES (1)) AS src("into");
 SELECT 1 AS into;
 SELECT src . into AS into INTO spaced FROM (VALUES (1)) AS src("into");
 SELECT 1. INTO numbered;
+SELECT 1_000. INTO separated;
 COMMENT ON TABLE escaped IS 'Past an attribute named into.';
 COMMENT ON TABLE spaced IS 'Past a spaced attribute and an alias named into.';
 COMMENT ON TABLE numbered IS 'After a numeric literal ending in a dot.';
+COMMENT ON TABLE separated IS 'After a separated numeric literal ending in a dot.';
 """,
     )
 
@@ -1204,6 +1207,7 @@ COMMENT ON TABLE numbered IS 'After a numeric literal ending in a dot.';
         f"{NEXT}_into_names.sql:1: SELECT INTO public.escaped {no_columns}",
         f"{NEXT}_into_names.sql:4: SELECT INTO public.spaced {no_columns}",
         f"{NEXT}_into_names.sql:5: SELECT INTO public.numbered {no_columns}",
+        f"{NEXT}_into_names.sql:6: SELECT INTO public.separated {no_columns}",
     ]
 
 
