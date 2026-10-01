@@ -64,6 +64,9 @@ reason = "Bounded before/after card identity proof for issue 781 on a qa640_* cl
 target = "scripts/qa_shift/long_absence_turn.py:main"
 reason = "Long-absence probe turn driver from issue 909; CLI generation, acceptance, and evidence capture on the clone."
 [[operators]]
+target = "scripts/qa_shift/rearm_grammar_weight.py:main"
+reason = "Read-only rearm grammar weight report for 781-Q2; offline except one read-only registry build (issue 781)."
+[[operators]]
 target = "nexus/agents/orrery/worker.py:main"
 reason = "README.md and docs/orrery_design_plan.md background worker."
 [[operators]]
@@ -343,6 +346,7 @@ paths = [
     { path = "scripts/qa_shift/prose_metrics.py", class = "operator", reason = "operator root scripts/qa_shift/prose_metrics.py:main" },
     { path = "scripts/qa_shift/qa_shift.py", class = "operator", reason = "operator root scripts/qa_shift/qa_shift.py:main" },
     { path = "scripts/qa_shift/qa_shift.toml", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
+    { path = "scripts/qa_shift/rearm_grammar_weight.py", class = "operator", reason = "operator root scripts/qa_shift/rearm_grammar_weight.py:main" },
     { path = "scripts/qa_shift/reference_corpora.toml", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
     { path = "scripts/qa_shift/travel_reachability.py", class = "operator", reason = "operator root scripts/qa_shift/travel_reachability.py:main" },
     { path = "scripts/qa_shift/world_clock.py", class = "operator", reason = "operator root scripts/qa_shift/world_clock.py:main" },
