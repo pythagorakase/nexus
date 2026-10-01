@@ -863,6 +863,7 @@ def _write_capture_config(
     *,
     llama_command: str | None = None,
     stop_grace_seconds: float | None = None,
+    timeout_seconds: float | None = None,
 ) -> Path:
     """A real runtime config: tiny rotation limits, a stub llama-server."""
     port = _free_port()
@@ -881,6 +882,8 @@ def _write_capture_config(
     llama["command"] = command
     if stop_grace_seconds is not None:
         runtime["health"]["stop_grace_seconds"] = stop_grace_seconds
+    if timeout_seconds is not None:
+        runtime["health"]["timeout_seconds"] = timeout_seconds
     config = tmp_path / "nexus.toml"
     config.write_text(tomlkit.dumps(document))
     for name in ("NEXUS_HOME", "NEXUS_GATEWAY_PORT", "NEXUS_API_URL"):
@@ -1168,3 +1171,141 @@ def test_cancel_releases_a_lost_download_record_only_after_the_writer(
         _kill_pid(grandchild)
         sleeper.kill()
         sleeper.wait()
+
+
+# ---------------------------------------------------------------------------
+# An unanswered ownership probe is an error, never "not ours" (#842, verify)
+# ---------------------------------------------------------------------------
+
+# Each stub stands in for ``ps`` on PATH. "slow" answers after 1.5 s: past the
+# 1 s ownership-probe timeout, inside the 4 s writer grace, so a probe failure
+# read as a verdict would wait out the live writer and kill it.
+PS_STUBS = {
+    "slow": '#!/bin/sh\n/bin/sleep 1.5\nexec /bin/ps "$@"\n',
+    "exits-1": "#!/bin/sh\nexit 1\n",
+    "missing": None,
+}
+
+
+def _install_ps_stub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """Put the ``kind`` stub (or no ``ps`` at all) first on PATH."""
+    stub_dir = tmp_path / f"ps-{kind}"
+    stub_dir.mkdir()
+    body = PS_STUBS[kind]
+    if body is None:
+        monkeypatch.setenv("PATH", str(stub_dir))
+        return
+    stub = stub_dir / "ps"
+    stub.write_text(body)
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{stub_dir}{os.pathsep}{os.environ['PATH']}")
+
+
+@pytest.mark.parametrize("kind", sorted(PS_STUBS))
+def test_active_raises_when_the_ownership_probe_goes_unanswered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """A failed llama-server probe raises; the writer and the record stay."""
+    _write_capture_config(
+        tmp_path, monkeypatch, stop_grace_seconds=4, timeout_seconds=1
+    )
+    state_path = tmp_path / "state" / local_inference.STATE_FILENAME
+    gguf = _llama_gguf(tmp_path / "model.gguf")
+    result = local_inference.activate(str(gguf))
+    stopped = False
+    try:
+        record_text = state_path.read_text()
+        writer_pid = json.loads(record_text)["log_writer_pid"]
+        real_path = os.environ["PATH"]
+        _install_ps_stub(tmp_path, monkeypatch, kind)
+
+        started = time.monotonic()
+        with pytest.raises(
+            local_inference.LocalInferenceError,
+            match=f"Cannot tell whether pid {result['pid']} is the managed",
+        ):
+            local_inference.active()
+
+        assert time.monotonic() - started < 4
+        assert os.waitpid(writer_pid, os.WNOHANG) == (0, 0)
+        assert pid_alive(result["pid"])
+        assert state_path.read_text() == record_text
+
+        monkeypatch.setenv("PATH", real_path)
+        stopped = local_inference.deactivate()["stopped"]
+        assert stopped is True
+        assert not pid_alive(writer_pid)
+    finally:
+        if not stopped:
+            _kill_group(result["pid"])
+
+
+@pytest.mark.parametrize("kind", sorted(PS_STUBS))
+def test_download_status_raises_when_the_ownership_probe_goes_unanswered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """A failed download-worker probe raises; the writer and the record stay."""
+    _write_capture_config(
+        tmp_path, monkeypatch, stop_grace_seconds=4, timeout_seconds=1
+    )
+    settings = load_settings()
+    assert settings.runtime is not None
+    log_path = (
+        local_inference._logs_dir(settings) / local_inference.DOWNLOAD_LOG_FILENAME
+    )
+    record_path = local_inference._download_path(settings)
+    # A live process whose command line names the worker and the repository.
+    worker = local_inference.log_capture.spawn_captured(
+        [
+            sys.executable,
+            "-c",
+            "import time; time.sleep(30)",
+            "nexus.api.local_download_worker",
+            "--repo-id",
+            "qa842/none",
+        ],
+        log_path=log_path,
+        logs=settings.runtime.logs,
+        popen_kwargs={"start_new_session": True},
+    )
+    try:
+        record_path.write_text(
+            json.dumps(
+                {
+                    "pid": worker.pid,
+                    "family": "qa842",
+                    "quant": "Q4_K_M",
+                    "repo_id": "qa842/none",
+                    "local_dir": str(tmp_path / "models"),
+                    "files": ["none.gguf"],
+                    "total_bytes": 100,
+                    "started_at": "2026-10-01T00:00:00+00:00",
+                    "log_writer_pid": worker.writer_pid,
+                }
+            )
+        )
+        record_text = record_path.read_text()
+        real_path = os.environ["PATH"]
+        _install_ps_stub(tmp_path, monkeypatch, kind)
+
+        started = time.monotonic()
+        with pytest.raises(
+            local_inference.LocalInferenceError,
+            match=f"Cannot tell whether pid {worker.pid} is the local-model download",
+        ):
+            local_inference.download_status()
+
+        assert time.monotonic() - started < 4
+        assert os.waitpid(worker.writer_pid, os.WNOHANG) == (0, 0)
+        assert record_path.read_text() == record_text
+
+        monkeypatch.setenv("PATH", real_path)
+        status = local_inference.download_status()
+        assert status is not None
+        assert status["state"] == "downloading"
+    finally:
+        _kill_group(worker.pid)
+        os.waitpid(worker.pid, 0)
+        os.waitpid(worker.writer_pid, 0)

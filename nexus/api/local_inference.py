@@ -272,41 +272,63 @@ def _await_port_release(settings: Settings, host: str, port: int) -> bool:
     return True
 
 
-def _process_is_ours(settings: Settings, pid: int, gguf_path: str) -> bool:
-    """Verify a live PID still names our binary and exact recorded model path."""
+def _probe_command(settings: Settings, pid: int, role: str) -> str | None:
+    """Return ``pid``'s command line, or None once the probe shows it is gone.
+
+    Only a probe that ran certifies anything. A ``ps`` that cannot be started,
+    that outlasts ``[runtime.health].timeout_seconds``, or that exits non-zero
+    while the pid is still alive raises ``LocalInferenceError``: an unanswered
+    probe never reads as "this pid is not ours", because that verdict releases
+    the record, which waits out (and then kills) the capture's log writer.
+    """
     if settings.runtime is None:
         raise LocalInferenceError("[runtime] is required for process probe settings")
+    timeout = settings.runtime.health.timeout_seconds
+    failure = f"Cannot tell whether pid {pid} is the {role}"
     try:
         result = subprocess.run(
             ["ps", "-ww", "-p", str(pid), "-o", "command="],
             capture_output=True,
             check=False,
             text=True,
-            timeout=settings.runtime.health.timeout_seconds,
+            timeout=timeout,
         )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    command = result.stdout.strip()
-    return result.returncode == 0 and "llama-server" in command and gguf_path in command
+    except FileNotFoundError as exc:
+        raise LocalInferenceError(
+            f"{failure}: ps could not be started ({exc})."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise LocalInferenceError(
+            f"{failure}: ps did not answer within {timeout}s."
+        ) from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise LocalInferenceError(f"{failure}: ps could not be run ({exc}).") from exc
+    if result.returncode != 0:
+        if not _pid_alive(pid):
+            return None
+        raise LocalInferenceError(
+            f"{failure}: ps exited {result.returncode} while the pid is alive."
+        )
+    return str(result.stdout).strip()
+
+
+def _process_is_ours(settings: Settings, pid: int, gguf_path: str) -> bool:
+    """Verify a live PID still names our binary and exact recorded model path.
+
+    A probe that cannot run raises ``LocalInferenceError`` (``_probe_command``).
+    """
+    command = _probe_command(settings, pid, "managed llama-server")
+    return command is not None and "llama-server" in command and gguf_path in command
 
 
 def _download_process_is_ours(settings: Settings, pid: int, repo_id: str) -> bool:
-    """Verify a live PID still names the detached downloader and its repository."""
-    if settings.runtime is None:
-        raise LocalInferenceError("[runtime] is required for process probe settings")
-    try:
-        result = subprocess.run(
-            ["ps", "-ww", "-p", str(pid), "-o", "command="],
-            capture_output=True,
-            check=False,
-            text=True,
-            timeout=settings.runtime.health.timeout_seconds,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    command = result.stdout.strip()
+    """Verify a live PID still names the detached downloader and its repository.
+
+    A probe that cannot run raises ``LocalInferenceError`` (``_probe_command``).
+    """
+    command = _probe_command(settings, pid, "local-model download worker")
     return (
-        result.returncode == 0
+        command is not None
         and "local_download_worker" in command
         and repo_id in command
     )
