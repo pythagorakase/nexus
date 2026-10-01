@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -145,6 +146,7 @@ def _write_config(
     include_test_provider: bool = True,
     external_gateway_url: str | None = None,
     remote_base_url: str | None = None,
+    logs: dict[str, Any] | None = None,
 ) -> Path:
     gateway_port = GATEWAY_PORT if gateway_port is None else gateway_port
     mock_port = MOCK_PORT if mock_port is None else mock_port
@@ -174,6 +176,8 @@ def _write_config(
         doc["runtime"]["external"] = {"gateway_url": external_gateway_url}
     if remote_base_url:
         doc["runtime"]["remote"] = {"base_url": remote_base_url}
+    for key, value in (logs or {}).items():
+        doc["runtime"]["logs"][key] = value
     tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "nexus.toml"
     path.write_text(tomlkit.dumps(doc))
@@ -322,6 +326,70 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert not list(state_dir.glob("*.pid.json"))
         # Captured logs survive shutdown for postmortem reading.
         assert (state_dir / "gateway.log").exists()
+    finally:
+        _down(config)
+
+
+PROBE_PATTERN = re.compile(r"/qa842-probe/(\d+)\b")
+
+
+def _probe_indexes(lines: list[str]) -> list[int]:
+    """The probe numbers named in ``lines``, in the order they appear."""
+    return [int(match) for line in lines for match in PROBE_PATTERN.findall(line)]
+
+
+def test_live_gateway_rotates_and_keeps_every_line(tmp_path):
+    """A running gateway's capture rotates under the policy and loses no line."""
+    config = _write_config(tmp_path, logs={"max_bytes": 8192, "backup_count": 40})
+    state_dir = tmp_path / "state"
+    probes = list(range(300))
+    try:
+        # The call returns: no log writer holds the CLI's pipes.
+        up = _cli("up", config=config)
+        assert up["_returncode"] == 0, up
+        gateway_pid = up["services"]["gateway"]["pid"]
+        record = json.loads((state_dir / "gateway.pid.json").read_text())
+        writer_pid = record["log_writer_pid"]
+        assert _pid_alive(writer_pid)
+        marked = _cli("logs", "gateway", "--mark", config=config)
+        assert marked["_returncode"] == 0, marked
+        mark = marked["mark"]
+
+        base = f"http://127.0.0.1:{GATEWAY_PORT}"
+        with requests.Session() as session:
+            for index in probes:
+                session.get(f"{base}/qa842-probe/{index}", timeout=10)
+
+        deadline = time.monotonic() + 60
+        while not (state_dir / "gateway.log.2").exists():
+            assert _pid_alive(gateway_pid), "the gateway exited"
+            assert time.monotonic() < deadline, "the live capture never rotated"
+            time.sleep(0.2)
+        # The last access record reaches the file shortly after its response.
+        while True:
+            since = _cli("logs", "gateway", "--since", mark, config=config)
+            assert since["_returncode"] == 0, since
+            if probes[-1] in _probe_indexes(since["lines"]):
+                break
+            assert time.monotonic() < deadline, "the last probe never reached the log"
+            time.sleep(0.2)
+        assert _pid_alive(gateway_pid)
+        assert _probe_indexes(since["lines"]) == probes
+
+        tail = _cli("logs", "gateway", "-n", "2000", config=config)
+        assert tail["_returncode"] == 0, tail
+        assert _probe_indexes(tail["lines"]) == probes
+
+        down = _cli("down", config=config)
+        assert down["_returncode"] == 0, down
+        assert not _pid_alive(writer_pid)
+        segments = sorted(state_dir.glob("gateway.log*"))
+        assert (state_dir / "gateway.log.writer-error").read_bytes() == b""
+        for segment in segments:
+            if segment.name.endswith(".writer-error"):
+                continue
+            data = segment.read_bytes()
+            assert len(data) <= 8192 or data.count(b"\n") <= 1, segment.name
     finally:
         _down(config)
 
