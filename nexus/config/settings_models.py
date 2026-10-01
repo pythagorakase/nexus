@@ -4570,6 +4570,26 @@ def _validate_model_id(
     return value
 
 
+class BoundaryCatchupSettings(BaseModel):
+    """Read-only boundary catch-up QA windows, loaded from qa_shift.toml."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skip_minutes: List[int] = Field(min_length=1)
+
+    @field_validator("skip_minutes")
+    @classmethod
+    def validate_skip_minutes(cls, value: List[int]) -> List[int]:
+        """Reject negative, duplicate, or unsorted skip lengths."""
+        if any(minutes < 0 for minutes in value):
+            raise ValueError(f"skip_minutes must not be negative: {value}")
+        if len(set(value)) != len(value):
+            raise ValueError(f"skip_minutes must not repeat a value: {value}")
+        if value != sorted(value):
+            raise ValueError(f"skip_minutes must be sorted ascending: {value}")
+        return value
+
+
 class ProseMetricsSettings(BaseModel):
     """Read-only QA metrics tuning, loaded from qa_shift.toml, not runtime."""
 
