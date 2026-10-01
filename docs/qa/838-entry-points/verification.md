@@ -1,6 +1,6 @@
 # Strangeness Entry Points Verification
 
-Work order 838-S3; issue #838; branch `claude/838-zero-spend-entry-checks`, cut from `origin/main` at `9fff6a75`. Run on 2026-10-01 from 2026-10-01T05:01:29Z to 2026-10-01T05:02:01Z (UTC). No migration, no product code change, no paid call.
+Work order 838-S3; issue #838; branch `claude/838-zero-spend-entry-checks`, cut from `origin/main` at `9fff6a75`, where the exported run below was made. The branch was later rebased onto `6d551b7a` (#1066, CSS only), the client was rebuilt, and the proof was rerun without re-exporting the evidence; that rerun's tail is under "Rerun After the Rebase". Exported run on 2026-10-01 from 2026-10-01T05:01:29Z to 2026-10-01T05:02:01Z (UTC). No migration, no product code change, no paid call.
 
 ## Lane and Sequencing Checks
 
@@ -34,6 +34,20 @@ dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 2 passed, 2 warnings in 30.92s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+### Rerun After the Rebase
+
+Same command on the branch rebased onto `6d551b7a` (#1066, CSS only), with the client rebuilt; the proof file is the one in `3f83d966`, and `dee4bc38` adds only this evidence. Evidence not re-exported: the tables, transcripts, and screenshots below are from the exported run at `9fff6a75`.
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 4 targets: mock, postgres, qa640_838_browser_*, qa640_838_cli_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2 passed, 2 warnings in 34.86s
 sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
 
