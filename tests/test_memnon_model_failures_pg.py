@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path
-from typing import Any, Callable, Iterator, Tuple
+from typing import Any, Callable, Iterator, Tuple, cast
 
 import psycopg2.errors
 import pytest
@@ -26,11 +26,13 @@ import tomlkit
 
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.utils.turn_context import TurnContext
+from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.memnon.memnon import MEMNON
 from nexus.agents.memnon.utils import continuous_temporal_search, db_access
 from nexus.agents.memnon.utils import cross_encoder
 from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.database import database_url
+from nexus.memory import ContextMemoryManager
 from tests.pg_fixtures import (
     disposable_slot_database,
     route_slot_to_disposable,
@@ -94,7 +96,7 @@ def write_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ConfigWrite
         if not reranker_missing:
             write_tiny_cross_encoder(reranker_dir)
 
-        document = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+        document = cast(Any, tomlkit.parse((REPO_ROOT / "nexus.toml").read_text()))
         for name, model in document["memnon"]["models"].items():
             model["is_active"] = name == EMBEDDER
         document["memnon"]["models"][EMBEDDER]["local_path"] = str(embedder_dir)
@@ -249,10 +251,24 @@ def lore_on_clone(write_config: ConfigWriter, clone: str) -> Iterator[LORE]:
         lore.close()
 
 
+def _memory(lore: LORE) -> ContextMemoryManager:
+    """The LORE memory manager, which a built LORE always has."""
+
+    assert lore.memory_manager is not None
+    return lore.memory_manager
+
+
+def _turns(lore: LORE) -> TurnCycleManager:
+    """The LORE turn manager, which a built LORE always has."""
+
+    assert lore.turn_manager is not None
+    return lore.turn_manager
+
+
 def _stage_baseline(lore: LORE) -> None:
     """Stage a Pass-1 baseline so Pass 2 runs its raw-input retrieval."""
 
-    lore.memory_manager.handle_storyteller_response(
+    _memory(lore).handle_storyteller_response(
         narrative="Alex searches the barn while Emilia keeps watch.",
         warm_slice=[{"chunk_id": 1, "text": SEEDED_TEXT}],
         retrieved_passages=[],
@@ -266,13 +282,11 @@ def _stage_baseline(lore: LORE) -> None:
 
 
 def _raw_input(lore: LORE) -> Any:
-    return lore.memory_manager.incremental.retrieve_from_raw_input(LONG, budget=10_000)
+    return _memory(lore).incremental.retrieve_from_raw_input(LONG, budget=10_000)
 
 
 def _gap_context(lore: LORE) -> Any:
-    return lore.memory_manager.incremental.retrieve_gap_context(
-        {LONG: "gap"}, budget=10_000
-    )
+    return _memory(lore).incremental.retrieve_gap_context({LONG: "gap"}, budget=10_000)
 
 
 def _retrieve_context(lore: LORE) -> Any:
@@ -286,7 +300,7 @@ def _deep_queries(lore: LORE) -> Any:
         start_time=time.time(),
     )
     ctx.warm_slice = [{"id": 1, "is_target": True, "full_text": LONG}]
-    return asyncio.run(lore.turn_manager.execute_deep_queries(ctx))
+    return asyncio.run(_turns(lore).execute_deep_queries(ctx))
 
 
 def _process_user_input(lore: LORE) -> Any:
@@ -296,7 +310,7 @@ def _process_user_input(lore: LORE) -> Any:
         user_input=LONG,
         start_time=time.time(),
     )
-    return asyncio.run(lore.turn_manager.process_user_input(ctx))
+    return asyncio.run(_turns(lore).process_user_input(ctx))
 
 
 @pytest.mark.parametrize(
@@ -322,6 +336,6 @@ def test_retrieval_layer_propagates_an_encode_failure(
 def test_blank_raw_input_runs_no_query(lore_on_clone: LORE) -> None:
     """Blank raw input runs no query, so it never reaches the embedder."""
 
-    assert lore_on_clone.memory_manager.incremental.retrieve_from_raw_input(
+    assert _memory(lore_on_clone).incremental.retrieve_from_raw_input(
         "   ", budget=10_000
     ) == ([], 0)

@@ -667,54 +667,54 @@ def execute_multi_model_hybrid_search(
 
             # First, run text search to get initial text scores
             text_search_sql_tsquery = f"""
-            SELECT
-                nc.id,
-                nc.raw_text,
-                cm.season,
-                cm.episode,
-                cm.scene as scene_number,
-                nv.world_time,
-                ts_rank(to_tsvector('english', nc.raw_text),
-                        to_tsquery('english', %s)) AS text_score
-            FROM
-                narrative_chunks nc
-            JOIN
-                chunk_metadata cm ON nc.id = cm.chunk_id
-            LEFT JOIN
-                narrative_view nv ON nc.id = nv.id
-            WHERE
-                to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
-                AND {playable_narrative_predicate()}
-                {filter_sql}
-            ORDER BY
-                text_score DESC
-            LIMIT %s
-            """
+                SELECT
+                    nc.id,
+                    nc.raw_text,
+                    cm.season,
+                    cm.episode,
+                    cm.scene as scene_number,
+                    nv.world_time,
+                    ts_rank(to_tsvector('english', nc.raw_text),
+                            to_tsquery('english', %s)) AS text_score
+                FROM
+                    narrative_chunks nc
+                JOIN
+                    chunk_metadata cm ON nc.id = cm.chunk_id
+                LEFT JOIN
+                    narrative_view nv ON nc.id = nv.id
+                WHERE
+                    to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
+                    AND {playable_narrative_predicate()}
+                    {filter_sql}
+                ORDER BY
+                    text_score DESC
+                LIMIT %s
+                """
 
             text_search_sql_websearch = f"""
-            SELECT
-                nc.id,
-                nc.raw_text,
-                cm.season,
-                cm.episode,
-                cm.scene as scene_number,
-                nv.world_time,
-                ts_rank(to_tsvector('english', nc.raw_text),
-                        websearch_to_tsquery('english', %s)) AS text_score
-            FROM
-                narrative_chunks nc
-            JOIN
-                chunk_metadata cm ON nc.id = cm.chunk_id
-            LEFT JOIN
-                narrative_view nv ON nc.id = nv.id
-            WHERE
-                to_tsvector('english', nc.raw_text) @@ websearch_to_tsquery('english', %s)
-                AND {playable_narrative_predicate()}
-                {filter_sql}
-            ORDER BY
-                text_score DESC
-            LIMIT %s
-            """
+                SELECT
+                    nc.id,
+                    nc.raw_text,
+                    cm.season,
+                    cm.episode,
+                    cm.scene as scene_number,
+                    nv.world_time,
+                    ts_rank(to_tsvector('english', nc.raw_text),
+                            websearch_to_tsquery('english', %s)) AS text_score
+                FROM
+                    narrative_chunks nc
+                JOIN
+                    chunk_metadata cm ON nc.id = cm.chunk_id
+                LEFT JOIN
+                    narrative_view nv ON nc.id = nv.id
+                WHERE
+                    to_tsvector('english', nc.raw_text) @@ websearch_to_tsquery('english', %s)
+                    AND {playable_narrative_predicate()}
+                    {filter_sql}
+                ORDER BY
+                    text_score DESC
+                LIMIT %s
+                """
 
             text_rows = []
             text_query_kind = ""
@@ -821,23 +821,23 @@ def execute_multi_model_hybrid_search(
                 )
                 cursor.execute(
                     f"""
-                    SELECT
-                        rs.id,
-                        rs.summary_text,
-                        rs.world_event_id,
-                        rs.recorded_at_chunk_id,
-                        rs.chronology,
-                        rs.created_at,
-                        ts_rank(
-                            to_tsvector('english', rs.summary_text),
-                            {summary_query_function}('english', %s)
-                        ) AS text_score
-                    FROM retrograde_summaries rs
-                    WHERE to_tsvector('english', rs.summary_text)
-                          @@ {summary_query_function}('english', %s)
-                    ORDER BY text_score DESC
-                    LIMIT %s
-                    """,
+                        SELECT
+                            rs.id,
+                            rs.summary_text,
+                            rs.world_event_id,
+                            rs.recorded_at_chunk_id,
+                            rs.chronology,
+                            rs.created_at,
+                            ts_rank(
+                                to_tsvector('english', rs.summary_text),
+                                {summary_query_function}('english', %s)
+                            ) AS text_score
+                        FROM retrograde_summaries rs
+                        WHERE to_tsvector('english', rs.summary_text)
+                              @@ {summary_query_function}('english', %s)
+                        ORDER BY text_score DESC
+                        LIMIT %s
+                        """,
                     (summary_query_value, summary_query_value, top_k * 3),
                 )
                 for row in cursor.fetchall():
@@ -889,25 +889,25 @@ def execute_multi_model_hybrid_search(
                 single = (query_text or "").strip()
                 if single and len(single.split()) == 1:
                     like_sql = f"""
-                    SELECT 
-                        nc.id, 
-                        nc.raw_text,
-                        cm.season, 
-                        cm.episode, 
-                        cm.scene as scene_number,
-                        nv.world_time
-                    FROM 
-                        narrative_chunks nc
-                    JOIN 
-                        chunk_metadata cm ON nc.id = cm.chunk_id
-                    LEFT JOIN
-                        narrative_view nv ON nc.id = nv.id
-                    WHERE 
-                        nc.raw_text ILIKE '%%' || %s || '%%'
-                        AND {playable_narrative_predicate()}
-                        {filter_sql}
-                    LIMIT %s
-                    """
+                        SELECT 
+                            nc.id, 
+                            nc.raw_text,
+                            cm.season, 
+                            cm.episode, 
+                            cm.scene as scene_number,
+                            nv.world_time
+                        FROM 
+                            narrative_chunks nc
+                        JOIN 
+                            chunk_metadata cm ON nc.id = cm.chunk_id
+                        LEFT JOIN
+                            narrative_view nv ON nc.id = nv.id
+                        WHERE 
+                            nc.raw_text ILIKE '%%' || %s || '%%'
+                            AND {playable_narrative_predicate()}
+                            {filter_sql}
+                        LIMIT %s
+                        """
                     cursor.execute(like_sql, (single, top_k * 3))
                     for row in cursor.fetchall():
                         (
@@ -939,17 +939,17 @@ def execute_multi_model_hybrid_search(
                     ) and _retrograde_summaries_exist(cursor):
                         cursor.execute(
                             """
-                            SELECT
-                                id,
-                                summary_text,
-                                world_event_id,
-                                recorded_at_chunk_id,
-                                chronology,
-                                created_at
-                            FROM retrograde_summaries
-                            WHERE summary_text ILIKE '%%' || %s || '%%'
-                            LIMIT %s
-                            """,
+                                SELECT
+                                    id,
+                                    summary_text,
+                                    world_event_id,
+                                    recorded_at_chunk_id,
+                                    chronology,
+                                    created_at
+                                FROM retrograde_summaries
+                                WHERE summary_text ILIKE '%%' || %s || '%%'
+                                LIMIT %s
+                                """,
                             (single, top_k * 3),
                         )
                         for row in cursor.fetchall():
@@ -989,24 +989,24 @@ def execute_multi_model_hybrid_search(
                     if _embedding_table_exists(cursor, summary_table):
                         cursor.execute(
                             f"""
-                            SELECT
-                                rs.id,
-                                rs.summary_text,
-                                rs.world_event_id,
-                                rs.recorded_at_chunk_id,
-                                rs.chronology,
-                                rs.created_at,
-                                1 - (
-                                    rse.embedding
-                                    <=> %s::vector({dimensions})
-                                ) AS vector_score
-                            FROM retrograde_summaries rs
-                            JOIN {summary_table} rse
-                              ON rs.id = rse.summary_id
-                            WHERE rse.model = %s
-                            ORDER BY vector_score DESC
-                            LIMIT %s
-                            """,
+                                SELECT
+                                    rs.id,
+                                    rs.summary_text,
+                                    rs.world_event_id,
+                                    rs.recorded_at_chunk_id,
+                                    rs.chronology,
+                                    rs.created_at,
+                                    1 - (
+                                        rse.embedding
+                                        <=> %s::vector({dimensions})
+                                    ) AS vector_score
+                                FROM retrograde_summaries rs
+                                JOIN {summary_table} rse
+                                  ON rs.id = rse.summary_id
+                                WHERE rse.model = %s
+                                ORDER BY vector_score DESC
+                                LIMIT %s
+                                """,
                             (embedding_str, model_key, top_k * 3),
                         )
                         for row in cursor.fetchall():
@@ -1036,11 +1036,11 @@ def execute_multi_model_hybrid_search(
                                 )
                                 cursor.execute(
                                     f"""
-                                    SELECT ts_rank(
-                                        to_tsvector('english', %s),
-                                        {summary_query_function}('english', %s)
-                                    )
-                                    """,
+                                        SELECT ts_rank(
+                                            to_tsvector('english', %s),
+                                            {summary_query_function}('english', %s)
+                                        )
+                                        """,
                                     (summary_text, summary_query_value),
                                 )
                                 fetched = cursor.fetchone()
@@ -1080,23 +1080,23 @@ def execute_multi_model_hybrid_search(
 
                 # Use proper vector search with cosine similarity
                 vector_sql = f"""
-                SELECT 
-                    nc.id, 
-                    1 - (ce.embedding <=> %s::vector({dimensions})) as vector_score  -- Cosine similarity (1 - distance)
-                FROM 
-                    narrative_chunks nc
-                JOIN 
-                    {table_name} ce ON nc.id = ce.chunk_id
-                JOIN 
-                    chunk_metadata cm ON nc.id = cm.chunk_id
-                WHERE 
-                    ce.model = %s
-                    AND {playable_narrative_predicate()}
-                    {filter_sql}
-                ORDER BY
-                    vector_score DESC
-                LIMIT %s
-                """
+                    SELECT 
+                        nc.id, 
+                        1 - (ce.embedding <=> %s::vector({dimensions})) as vector_score  -- Cosine similarity (1 - distance)
+                    FROM 
+                        narrative_chunks nc
+                    JOIN 
+                        {table_name} ce ON nc.id = ce.chunk_id
+                    JOIN 
+                        chunk_metadata cm ON nc.id = cm.chunk_id
+                    WHERE 
+                        ce.model = %s
+                        AND {playable_narrative_predicate()}
+                        {filter_sql}
+                    ORDER BY
+                        vector_score DESC
+                    LIMIT %s
+                    """
 
                 # Execute vector search for this model
                 cursor.execute(vector_sql, (embedding_str, model_key, top_k * 3))
@@ -1114,18 +1114,18 @@ def execute_multi_model_hybrid_search(
                         # For chunks not found in text search, get full details
                         cursor.execute(
                             f"""
-                        SELECT 
-                            nc.raw_text, 
-                            cm.season, 
-                            cm.episode, 
-                            cm.scene as scene_number
-                        FROM 
-                            narrative_chunks nc
-                        JOIN 
-                            chunk_metadata cm ON nc.id = cm.chunk_id
-                        WHERE 
-                            nc.id = %s
-                        """,
+                            SELECT 
+                                nc.raw_text, 
+                                cm.season, 
+                                cm.episode, 
+                                cm.scene as scene_number
+                            FROM 
+                                narrative_chunks nc
+                            JOIN 
+                                chunk_metadata cm ON nc.id = cm.chunk_id
+                            WHERE 
+                                nc.id = %s
+                            """,
                             (chunk_id,),
                         )
 
@@ -1139,21 +1139,21 @@ def execute_multi_model_hybrid_search(
                                 if text_query_kind == "websearch_to_tsquery":
                                     cursor.execute(
                                         """
-                                    SELECT ts_rank(to_tsvector('english', raw_text),
-                                            websearch_to_tsquery('english', %s)) AS text_score
-                                    FROM narrative_chunks
-                                    WHERE id = %s
-                                    """,
+                                        SELECT ts_rank(to_tsvector('english', raw_text),
+                                                websearch_to_tsquery('english', %s)) AS text_score
+                                        FROM narrative_chunks
+                                        WHERE id = %s
+                                        """,
                                         (text_query_value, chunk_id),
                                     )
                                 else:
                                     cursor.execute(
                                         """
-                                    SELECT ts_rank(to_tsvector('english', raw_text),
-                                            to_tsquery('english', %s)) AS text_score
-                                    FROM narrative_chunks
-                                    WHERE id = %s
-                                    """,
+                                        SELECT ts_rank(to_tsvector('english', raw_text),
+                                                to_tsquery('english', %s)) AS text_score
+                                        FROM narrative_chunks
+                                        WHERE id = %s
+                                        """,
                                         (text_query_value, chunk_id),
                                     )
 
