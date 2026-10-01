@@ -158,7 +158,10 @@ class CrossedBoundary:
     ``subject_key`` names what changes; its first element is the subject kind
     (``"entity_tag"``, ``"claim_hop"``, ``"travel"``, ``"project"``).
     ``owner_issue`` names the issue that owns materializing the crossing when
-    another slice does.
+    another slice does. ``detail`` takes part in equality but not in the
+    hash (it is held as a read-only mapping, which cannot be hashed), so a
+    crossing hashes on its producer, subject, instant, class, precedence and
+    owner issue.
     """
 
     producer: str
@@ -167,7 +170,7 @@ class CrossedBoundary:
     boundary_class: BoundaryClass
     precedence: int
     owner_issue: int | None
-    detail: Mapping[str, Any] = field(default_factory=dict)
+    detail: Mapping[str, Any] = field(default_factory=dict, hash=False)
 
     def __post_init__(self) -> None:
         _require_aware(self.occurs_at_world_time, "occurs_at_world_time")

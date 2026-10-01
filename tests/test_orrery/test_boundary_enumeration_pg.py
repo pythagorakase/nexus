@@ -93,6 +93,8 @@ settings = _orrery_settings().model_copy(
 TAG_A_AT = T0 + timedelta(minutes=30)
 TAG_B_AT = T0 + timedelta(hours=48)
 STALE_TAG_AT = T0 - timedelta(minutes=10)
+# Applied before it expired: a tag that really lapsed at T0-10m, still uncleared.
+STALE_TAG_APPLIED_AT = STALE_TAG_AT - timedelta(hours=1)
 P1_DUE = T0 + timedelta(hours=2)
 P2_DUE = T0 + timedelta(hours=5)
 P2_STALLS = 3
@@ -131,7 +133,9 @@ class BoundaryClone(NamedTuple):
     traveler: int
 
 
-def _insert_expiring_tag(cur: Any, entity_id: int, expires_at: datetime) -> int:
+def _insert_expiring_tag(
+    cur: Any, entity_id: int, expires_at: datetime, applied_at: datetime = T0
+) -> int:
     cur.execute(
         """
         INSERT INTO entity_tags (
@@ -142,7 +146,7 @@ def _insert_expiring_tag(cur: Any, entity_id: int, expires_at: datetime) -> int:
         FROM tags WHERE tag = %s AND NOT deprecated
         RETURNING id
         """,
-        (entity_id, T0, expires_at, TAG_TEXT),
+        (entity_id, applied_at, expires_at, TAG_TEXT),
     )
     row = cur.fetchone()
     assert row is not None and cur.rowcount == 1
@@ -237,7 +241,12 @@ def boundary_clone() -> Iterator[BoundaryClone]:
                 require_transaction_target(cur)
                 tag_a = _insert_expiring_tag(cur, entities["tag-a"], TAG_A_AT)
                 tag_b = _insert_expiring_tag(cur, entities["tag-b"], TAG_B_AT)
-                _insert_expiring_tag(cur, entities["tag-stale"], STALE_TAG_AT)
+                _insert_expiring_tag(
+                    cur,
+                    entities["tag-stale"],
+                    STALE_TAG_AT,
+                    applied_at=STALE_TAG_APPLIED_AT,
+                )
                 p1 = _insert_project(cur, entities["p1"], P1_DUE, 0, clock_chunk_id)
                 p2 = _insert_project(
                     cur, entities["p2"], P2_DUE, P2_STALLS, clock_chunk_id
