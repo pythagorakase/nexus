@@ -92,11 +92,76 @@ pre-rebase head (`cfe930ba` on `9fff6a75`), where the clones went from 138 to
 
 ## Comments on a Migrated Clone
 
-Read from `qa640_778s1a_04` after migration with `obj_description` (function,
-trigger, constraint, view) and `col_description` (columns). A script parsed
-each `COMMENT ON ... IS '...'` literal from
-`migrations/140_world_clock_primary_layer.sql`, undoubled `''`, and compared it
-with the live text:
+Rerun at head `a4f64d1c` on `qa640_778s1a_cmt`: `createdb -T template0`,
+`pg_restore --exit-on-error --no-owner --no-acl` of a custom-format
+`pg_dump` of `save_04` (read-only), then `PYTHONPATH=$PWD $PY
+scripts/migrate.py --dbname qa640_778s1a_cmt` (`Applied:
+140_world_clock_primary_layer`; `137 migration stamps; level 140`), then
+`dropdb`. The listing query, run with `psql -X -A -t -F ' | '`:
+
+```sql
+SELECT 'FUNCTION public.refresh_world_time_from_chunk()' AS object,
+       obj_description('public.refresh_world_time_from_chunk()'::regprocedure, 'pg_proc') AS comment
+UNION ALL
+SELECT 'FUNCTION public.refresh_world_time_from_chunk_trigger()',
+       obj_description('public.refresh_world_time_from_chunk_trigger()'::regprocedure, 'pg_proc')
+UNION ALL
+SELECT 'TRIGGER trg_chunk_metadata_refresh_world_time ON public.chunk_metadata',
+       obj_description(t.oid, 'pg_trigger')
+  FROM pg_trigger t
+ WHERE t.tgrelid = 'public.chunk_metadata'::regclass
+   AND t.tgname = 'trg_chunk_metadata_refresh_world_time'
+UNION ALL
+SELECT 'CONSTRAINT chunk_metadata_time_delta_nonnegative ON public.chunk_metadata',
+       obj_description(c.oid, 'pg_constraint')
+  FROM pg_constraint c
+ WHERE c.conrelid = 'public.chunk_metadata'::regclass
+   AND c.conname = 'chunk_metadata_time_delta_nonnegative'
+UNION ALL
+SELECT 'COLUMN public.chunk_metadata.time_delta',
+       col_description('public.chunk_metadata'::regclass,
+                       (SELECT attnum FROM pg_attribute WHERE attrelid = 'public.chunk_metadata'::regclass AND attname = 'time_delta'))
+UNION ALL
+SELECT 'COLUMN public.chunk_metadata.world_time',
+       col_description('public.chunk_metadata'::regclass,
+                       (SELECT attnum FROM pg_attribute WHERE attrelid = 'public.chunk_metadata'::regclass AND attname = 'world_time'))
+UNION ALL
+SELECT 'VIEW public.narrative_view',
+       obj_description('public.narrative_view'::regclass, 'pg_class')
+UNION ALL
+SELECT 'COLUMN public.narrative_view.world_time',
+       col_description('public.narrative_view'::regclass,
+                       (SELECT attnum FROM pg_attribute WHERE attrelid = 'public.narrative_view'::regclass AND attname = 'world_time'))
+UNION ALL
+SELECT 'COLUMN public.orrery_resolutions.tick_chunk_id',
+       col_description('public.orrery_resolutions'::regclass,
+                       (SELECT attnum FROM pg_attribute WHERE attrelid = 'public.orrery_resolutions'::regclass AND attname = 'tick_chunk_id'))
+UNION ALL
+SELECT 'COLUMN public.world_events.tick_chunk_id',
+       col_description('public.world_events'::regclass,
+                       (SELECT attnum FROM pg_attribute WHERE attrelid = 'public.world_events'::regclass AND attname = 'tick_chunk_id'));
+```
+
+Raw output (`object | comment`):
+
+```text
+FUNCTION public.refresh_world_time_from_chunk() | Recomputes chunk_metadata.world_time for every chunk as global_variables.base_timestamp (now() if absent) plus the running sum, in chunk_id order, of the time_delta of primary-layer chunks (NULL counts as zero), so a chunk of any other layer, or with a NULL world_layer, carries the mainline clock at its position. Raises when the bootstrap chunk (the lowest chunk_id) has a time_delta other than zero or NULL, because base_timestamp is the clock at its end. Writes only rows whose world_time changes; a world_time written by the inserter is overwritten.
+FUNCTION public.refresh_world_time_from_chunk_trigger() | Statement trigger function for trg_chunk_metadata_refresh_world_time (AFTER INSERT OR UPDATE OF time_delta, world_layer on chunk_metadata): calls refresh_world_time_from_chunk(); commit_handler_sync reads the resulting trigger-authored world_time after insertion.
+TRIGGER trg_chunk_metadata_refresh_world_time ON public.chunk_metadata | Restamps chunk_metadata.world_time through refresh_world_time_from_chunk() after every INSERT statement and every UPDATE statement with time_delta or world_layer in its SET list, even one that inserts or changes no row. A DELETE or TRUNCATE does not fire it.
+CONSTRAINT chunk_metadata_time_delta_nonnegative ON public.chunk_metadata | Story time never runs backward within a chunk: time_delta is NULL or at least zero.
+COLUMN public.chunk_metadata.time_delta | Story time elapsing during this chunk, NULL or at least zero. Only a primary-layer delta advances the mainline clock, and world_time is that clock at the chunk's end; a delta on any other layer leaves the mainline clock unchanged. The bootstrap chunk (lowest chunk_id) carries zero or NULL, because base_timestamp is the clock at its end.
+COLUMN public.chunk_metadata.world_time | The canonical story clock is chunk_metadata.world_time: for a primary-layer chunk, the mainline clock at the end of the chunk; for a chunk of any other layer, the mainline clock at its position. Only primary-layer time_delta advances it; base_timestamp is the clock at the end of the bootstrap chunk. It is stored as timestamptz whose UTC face is the story clock face.
+VIEW public.narrative_view | The canonical story clock is chunk_metadata.world_time: for a primary-layer chunk, the mainline clock at the end of the chunk; for a chunk of any other layer, the mainline clock at its position. Only primary-layer time_delta advances it; base_timestamp is the clock at the end of the bootstrap chunk. It is stored as timestamptz whose UTC face is the story clock face.
+COLUMN public.narrative_view.world_time | The canonical story clock is chunk_metadata.world_time: for a primary-layer chunk, the mainline clock at the end of the chunk; for a chunk of any other layer, the mainline clock at its position. Only primary-layer time_delta advances it; base_timestamp is the clock at the end of the bootstrap chunk. It is stored as timestamptz whose UTC face is the story clock face.
+COLUMN public.orrery_resolutions.tick_chunk_id | Tick chunk under which the resolution was applied. Ticks are the turn clock, which serves ordering, replay, exposure fairness, habituation, and narration cadence; the story time at this tick is chunk_metadata.world_time of this chunk.
+COLUMN public.world_events.tick_chunk_id | Tick chunk attributed to the event by its writer. Ticks are the turn clock, which serves ordering, replay, exposure fairness, habituation, and narration cadence; the event's story time is world_events.world_time, and a NULL world_time inherits chunk_metadata.world_time of this chunk.
+```
+
+The comparison script, `scratchpad/778-S1a/fix/compare_comments.py`, drops
+the `--` header lines of `migrations/140_world_clock_primary_layer.sql`,
+parses each `COMMENT ON <target> IS '<literal>';` statement, undoubles `''`,
+requires the same ten targets as the listing, and compares the UTF-8 bytes of
+each literal with the listed text. Its output:
 
 ```text
 MATCH FUNCTION public.refresh_world_time_from_chunk()
@@ -111,9 +176,10 @@ MATCH COLUMN public.orrery_resolutions.tick_chunk_id
 MATCH COLUMN public.world_events.tick_chunk_id
 ```
 
-The same script confirmed that each comment text in the work order (items
-2.1-2.8) and the Two Clocks section of `docs/database.md` appear verbatim.
-Catalog state on the clone:
+At the earlier head `c5c593c6`, on `qa640_778s1a_04`, a comparison also
+confirmed that each comment text in the work order (items 2.1-2.8) and the
+Two Clocks section of `docs/database.md` appear verbatim. Catalog state on
+that clone:
 
 ```text
 CREATE TRIGGER trg_chunk_metadata_refresh_world_time AFTER INSERT OR UPDATE OF time_delta, world_layer ON public.chunk_metadata FOR EACH STATEMENT EXECUTE FUNCTION refresh_world_time_from_chunk_trigger()|O
@@ -252,19 +318,49 @@ dbname audit: owner targets: none
 866 passed, 3 skipped, 9 warnings in 212.91s (0:03:32)
 ```
 
-Top-level `tests/*.py` (`tests --ignore=` every subdirectory):
+Top-level `tests/*.py` (`tests --ignore=` every subdirectory). The two
+failures, by their failure-section headers in the raw log, were
+`tests/test_dbname_audit.py::test_owner_session_starts_no_owner_backend` and
+`tests/test_idf_dictionary_pg.py::test_source_lock_precedes_world_time_refresh`.
+Raw tail (`pg_toplevel.log`):
 
 ```text
-FAILED tests/test_dbname_audit.py::test_owner_session_starts_no_owner_backend
-FAILED tests/test_idf_dictionary_pg.py::test_source_lock_precedes_world_time_refresh
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: <N> targets: ... (target list elided here; full line in the raw log)
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:57345 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:57351 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[0] at local:57817 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[1] at local:57823 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[0] at local:57842 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard; two_clusters[1] at local:57847 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard
+dbname audit: owner names admitted on registered clusters: save_04@local:57345 (psycopg2), save_04@local:57351 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [1] tests/live_seed_schema_test.py:24: Set NEXUS_RUN_LIVE_LLM=1 to run live seed schema tests.
+SKIPPED [1] tests/live_set_designer_test.py:38: Set NEXUS_RUN_LIVE_LLM=1 to run live set designer tests.
+SKIPPED [1] tests/test_correspondence_live.py: Set NEXUS_CONSPIRACY_E2E=1 for the live correspondence gate.
+SKIPPED [8] tests/test_golden_path_live.py: Set NEXUS_GOLDEN_PATH_E2E=1 to run the expensive golden-path gate.
+SKIPPED [1] tests/test_issue_601_wizard_live.py:125: Set NEXUS_ISSUE_601_LIVE=1 to run the live trait-confirmation proof.
+SKIPPED [1] tests/test_local_skald_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_memnon_cross_encoder_dependencies.py:28: Local DeBERTa cross-encoder model is not available
+SKIPPED [3] tests/test_model_registry_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [2] tests/test_new_story_integration.py:21: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [2] tests/test_new_story_schemas.py:756: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [2] tests/test_new_story_schemas.py:775: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [2] tests/test_secret_store_integration.py: Set NEXUS_RUN_SECRET_STORE=1 to run disposable platform secret-store integration tests.
+SKIPPED [1] tests/test_skald_wire.py:2110: Set NEXUS_639_PRESENCE_E2E=1 for the live writer presence gate.
+SKIPPED [8] tests/test_wizard_live.py:244: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [5] tests/test_wizard_live.py:294: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_wizard_live.py:433: Set NEXUS_ISSUE_600_LIVE=1 to run the live seed-repair proof.
 2 failed, 2168 passed, 40 skipped, 10 warnings in 783.40s (0:13:03)
 ```
 
 The 40 skips are live-LLM, live-E2E, secret-store, and local cross-encoder
 opt-ins. `test_source_lock_precedes_world_time_refresh` is the bootstrap
-case fixed above; the file rerun after the fix:
+case fixed above; the file rerun after the fix (`idf.log`):
 
 ```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: <N> targets: ... (target list elided here; full line in the raw log)
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 19 passed in 27.37s
 ```
@@ -287,17 +383,59 @@ dbname audit: owner targets: none
 874 passed, 4 skipped, 9 warnings in 455.17s (0:07:35)
 ```
 
-`tests/test_orrery`, in three alphabetical parts of 45, 45 and 44 files:
+`tests/test_orrery`, in three alphabetical parts of 45, 45 and 44 files.
+Part one (`pg_orrery_aa.log`):
 
 ```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: <N> targets: ... (target list elided here; full line in the raw log)
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_orrery/test_card_identity.py:121: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [18] tests/test_orrery/test_claim_propagation_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_orrery/test_claim_propagation_live.py:1075: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [4] tests/test_orrery/test_composition_sources_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [4] tests/test_orrery/test_composition_sources_live.py:546: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
 553 passed, 29 skipped, 2 warnings in 111.47s (0:01:51)
-FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps   (139 missing; expected at that base)
-1 failed, 421 passed, 4 skipped, 2 warnings in 106.88s (0:01:46)
-667 passed, 9 skipped in 71.86s (0:01:11)
 ```
 
-Each part printed `secret-store guard: active; nexus-api: denied` and
-`dbname audit: owner targets: none`.
+Part two (`pg_orrery_ab.log`). Its one failure was
+`tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps`
+(`AssertionError: assert {'013', '119', '139'} == frozenset({'013', '119'})`:
+139 missing, expected at that base):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: <N> targets: ... (target list elided here; full line in the raw log)
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_orrery/test_gaia_registry_schema_pg.py:347: Set NEXUS_638_ENUM_E2E=1 for the live Gaia enum-schema gate.
+SKIPPED [1] tests/test_orrery/test_live_cycle.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_orrery/test_projects.py:609: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [1] tests/test_orrery/test_recruit_ally_projects.py:808: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+1 failed, 421 passed, 4 skipped, 2 warnings in 106.88s (0:01:46)
+```
+
+Part three (`pg_orrery_ac.log`):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: <N> targets: ... (target list elided here; full line in the raw log)
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_orrery/test_retrograde_live.py:29: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_orrery/test_retrograde_maturation_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_orrery/test_retrograde_retrieval_live.py: NEXUS_RETROGRADE_RETRIEVAL_TEST_DB_URL is not configured
+SKIPPED [1] tests/test_orrery/test_retrograde_wizard_live.py: Set NEXUS_RETROGRADE_WIZARD_E2E=1 to run the live cold-start proof.
+SKIPPED [5] tests/test_orrery/test_stage2a_status_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+667 passed, 9 skipped in 71.86s (0:01:11)
+```
 
 ### Offline Suites (Final Head)
 
@@ -311,6 +449,8 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 `$PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`:
 
 ```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
 FAILED tests/test_cli_generation_http.py::test_cli_prints_each_genesis_stage_once_while_transition_runs[seed-confirm]
 1 failed, 2666 passed, 434 skipped, 8 warnings in 391.49s (0:06:31)
 ```
@@ -328,8 +468,38 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 `$PY -m pytest -q tests/test_reachability.py`:
 
 ```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
 54 passed, 5 warnings in 9.52s
 ```
+
+### Review Fixes (Head `a4f64d1c`)
+
+`a4f64d1c` changes comments only: the lock paragraph of
+`migrations/140_world_clock_primary_layer.sql` (DROP TRIGGER takes ACCESS
+EXCLUSIVE, CREATE TRIGGER takes SHARE ROW EXCLUSIVE) and the lock-order
+comment in `tests/test_idf_dictionary_pg.py::test_source_lock_precedes_world_time_refresh`.
+The raw logs above are in the session scratchpad under `778-S1a/`; the
+rerun log is `778-S1a/fix/fix_pg.log`. Covering PostgreSQL rerun:
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit
+tests/test_idf_dictionary_pg.py tests/test_world_clock_contract_pg.py
+tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py
+tests/test_migration_comment_lint.py` (139 is on `main` at this base, so
+`test_migration_sequence_has_only_known_gaps` passes):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 41 targets: postgres, qa640_clock_* x7, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa762_corpus_copy_*, qa762_fresh_*, qa762_idf_* x19, qa762_other_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+177 passed in 48.95s
+```
+
+`PYTHONPATH=$PWD $PY scripts/check_migration_comments.py`: `OK: every object
+created after migration 129 has a comment.` `black --check
+tests/test_idf_dictionary_pg.py`: `1 file would be left unchanged.`
+`flake8 tests/test_idf_dictionary_pg.py`: 7 findings, the same 7 E501 as
+`main`.
 
 ### Black, flake8, mypy (Changed Python Files)
 
