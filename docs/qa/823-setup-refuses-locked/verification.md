@@ -123,9 +123,11 @@ target was dropped and recreated (a new oid) even though it was read-only.
 
 ## Offline Suites
 
-These runs predate the rebase onto f8dd073c. #1070 touches none of the files
-they cover; it only adds new files (its two travel-reachability test files were
-not in these runs).
+The two whole-directory runs below predate the rebase onto f8dd073c. #1070 adds
+new files and edits two existing ones: `config/reachability.toml` (read by
+`tests/test_reachability.py` through `scripts/check_reachability.py`) and
+`scripts/qa_shift/README.md`. Its two new travel-reachability test files were
+not in these runs.
 
 ```
 $ $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
@@ -135,10 +137,15 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 $ $PY -m pytest -q tests/test_api tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 1820 passed, 743 skipped, 7 warnings in 34.93s
+```
 
+`tests/test_reachability.py` was rerun at the branch head, 93a4f573 (after the
+rebase onto f8dd073c):
+
+```
 $ $PY -m pytest -q tests/test_reachability.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-54 passed, 5 warnings in 10.45s
+54 passed, 5 warnings in 9.97s
 ```
 
 The skips are the PostgreSQL-backed tests, which need `NEXUS_RUN_POSTGRES=1`.
