@@ -140,10 +140,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # The writer ends only at EOF, so it never drops a buffered line.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    parser = argparse.ArgumentParser(
-        prog=f"python -m {WRITER_MODULE}",
-        description="Write stdin to a captured log, rotating it under the policy.",
-    )
+    parser = argparse.ArgumentParser(prog=f"python -m {WRITER_MODULE}")
     parser.add_argument("--path", required=True)
     parser.add_argument("--max-bytes", required=True, type=int)
     parser.add_argument("--backup-count", required=True, type=int)
