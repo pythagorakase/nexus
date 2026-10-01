@@ -1205,7 +1205,7 @@ restored in `finally` and byte-compared before the full proof gates.
 
 ```text
             return pids
-    
+
         monkeypatch.setattr(supervisor, "_spawn", observe_spawn)
         supervisor.state_dir.chmod(0o555)
         try:
@@ -1453,3 +1453,11 @@ service signalled. Landing notes remain restart by name (`nexus restart
 gateway`, then `nexus restart mock_openai`), `nexus status` shows each service's
 writer, no client change and no UI rebuild. The coordinator owns merge and
 any whole-tree PostgreSQL gate.
+
+The round-four fix commit is `4f546608a89b4bd828574e00cf5ad38624295659`. Its pre-commit hooks reported:
+
+```text
+Regenerate Orrery package catalog........................................Passed
+Validate NEXUS config and model-ID drift.................................Passed
+Require COMMENT ON for new migration objects.........(no files to check)Skipped
+```
