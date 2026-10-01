@@ -21,10 +21,14 @@ uses, then proves the replayer inverts it:
 
 from __future__ import annotations
 
+from contextlib import closing
+from dataclasses import asdict
 import json
-from datetime import datetime, timedelta
+import runpy
+import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, cast
 
 import pytest
 
@@ -43,7 +47,10 @@ from nexus.agents.orrery.reconstruction import (
     set_commit_chunk_attribution_sync,
 )
 from nexus.agents.orrery.replay import (
+    Drift,
+    chunk_clock_report_sync,
     reconstruct_state_at_sync,
+    verify_chunk_clocks_sync,
     verify_checkpoints_sync,
 )
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
@@ -53,8 +60,18 @@ from nexus.agents.orrery.retrograde_persistence import (
 )
 from nexus.agents.orrery.substrate import ProjectPolicy
 from nexus.agents.orrery.tag_writer import _insert_entity_tag
-from nexus.api.commit_handler_sync import apply_state_updates_sync
-from tests.pg_fixtures import connect, disposable_slot_database
+from nexus.api.commit_handler_sync import (
+    apply_state_updates_sync,
+    insert_chunk_metadata_sync,
+)
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+    seed_played_story,
+    seed_accepted_turn,
+)
 from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
 
 pytestmark = pytest.mark.requires_postgres
@@ -2252,3 +2269,191 @@ def test_pg_round_matches_postgres_numeric_storage() -> None:
     assert _pg_round(0.5, 0) == 1.0
     assert _pg_round(0.35125, 4) == 0.3513
     assert round(2.675, 2) != 2.68, "if this fails, Python changed rounding"
+
+
+CLOCK_BASE = datetime(2189, 10, 17, 18, tzinfo=timezone.utc)
+
+
+@pytest.fixture()
+def chunk_clock_db() -> Iterator[tuple[str, list[int]]]:
+    """Seed six metadata rows via the real writer, with a bootstrap checkpoint."""
+    with disposable_slot_database("qa640_778s6a_replay") as dbname:
+        seed_protagonist(dbname, base_timestamp=CLOCK_BASE.isoformat())
+        ids = []
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            for scene, (layer, minutes) in enumerate(
+                [
+                    ("primary", 0),
+                    ("primary", 7),
+                    ("flashback", 3),
+                    ("retrograde", 0),
+                    (None, 2),
+                    ("primary", None),
+                ],
+                start=1,
+            ):
+                cur.execute(
+                    "INSERT INTO narrative_chunks (raw_text) VALUES (%s) "
+                    "RETURNING id",
+                    (f"Clock probe {scene}",),
+                )
+                chunk_id = int(cur.fetchone()[0])
+                ids.append(chunk_id)
+                insert_chunk_metadata_sync(
+                    cur,
+                    chunk_id=chunk_id,
+                    season=1,
+                    episode=1,
+                    scene=scene,
+                    world_layer=cast(str, layer),
+                    time_delta=None if minutes is None else timedelta(minutes=minutes),
+                    generation_date=CLOCK_BASE,
+                    slug=f"S01E01_{scene:03d}",
+                    generation_model="TEST",
+                    scene_weather=None,
+                )
+                if scene == 1:
+                    capture_state_checkpoint_sync(
+                        cur, chunk_id=chunk_id, label="manual"
+                    )
+        yield dbname, ids
+
+
+def test_chunk_clock_replay_uses_primary_deltas(
+    chunk_clock_db: tuple[str, list[int]],
+) -> None:
+    """Non-primary deltas are allowed but never advance the reconstructed clock."""
+    dbname, ids = chunk_clock_db
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        report = chunk_clock_report_sync(cur)
+        assert [row["expected_world_time"] for row in report["rows"]] == [
+            CLOCK_BASE + timedelta(minutes=m) for m in (0, 7, 7, 7, 7, 7)
+        ]
+        assert report["nonprimary_contributions"] == 0
+        assert report["findings"] == []
+        assert reconstruct_state_at_sync(cur, ids[-1]).world_time == (
+            CLOCK_BASE + timedelta(minutes=7)
+        )
+        assert chunk_clock_report_sync(cur, ids[1])["chunks"] == 2
+
+
+def test_chunk_clock_verify_detects_column_corruption(
+    chunk_clock_db: tuple[str, list[int]],
+) -> None:
+    """A column/view agreement cannot conceal corruption from the independent sum."""
+    dbname, ids = chunk_clock_db
+    expected = CLOCK_BASE + timedelta(minutes=7)
+    actual = expected + timedelta(seconds=1)
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+            (actual, ids[-1]),
+        )
+        cur.execute(
+            "SELECT cm.world_time, nv.world_time FROM chunk_metadata cm "
+            "JOIN narrative_view nv ON nv.id = cm.chunk_id WHERE cm.chunk_id = %s",
+            (ids[-1],),
+        )
+        assert cur.fetchone() == (actual, actual)
+        finding = Drift(
+            "chunk_metadata", str(ids[-1]), "world_time", "value", expected, actual
+        )
+        assert verify_chunk_clocks_sync(cur) == [finding]
+        result = reconstruct_state_at_sync(cur, ids[-1])
+        assert result.world_time == expected
+        assert result.clock_drifts == [finding]
+
+
+def _run_replay_cli(monkeypatch: pytest.MonkeyPatch, *args: str) -> int:
+    """Run the genuine command after the caller has routed the slot."""
+    monkeypatch.setattr(sys, "argv", ["scripts/replay_state.py", "--slot", "4", *args])
+    with pytest.raises(SystemExit) as exited:
+        runpy.run_module("scripts.replay_state", run_name="__main__")
+    return int(exited.value.code or 0)
+
+
+@pytest.mark.parametrize("checkpoints", [0, 1, 2])
+def test_chunk_clock_verify_covers_outside_checkpoint_windows(
+    chunk_clock_db: tuple[str, list[int]],
+    checkpoints: int,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every clock is audited before the CLI's insufficient-checkpoints return."""
+    dbname, ids = chunk_clock_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM state_checkpoints")
+        for chunk_id in ids[1 : 1 + checkpoints]:
+            capture_state_checkpoint_sync(cur, chunk_id=chunk_id, label="manual")
+        for chunk_id in (ids[0], ids[-1]):
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = world_time + "
+                "interval '1 second' WHERE chunk_id = %s",
+                (chunk_id,),
+            )
+        findings = verify_chunk_clocks_sync(cur)
+    assert _run_replay_cli(monkeypatch, "--verify") == 1
+    output = capsys.readouterr().out
+    assert "chunk clocks: 6 checked row(s)" in output
+    assert all(
+        json.dumps(asdict(finding), default=str) in output for finding in findings
+    )
+    assert {finding.row_key for finding in findings} >= {str(ids[0]), str(ids[-1])}
+
+
+def test_replay_cli_reports_clean_played_clock(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Real TEST acceptance boundaries pass both command modes and JSON output."""
+    with disposable_slot_database("qa640_778s6a_played") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        first = seed_played_story(dbname, turns=1, slot=4)[-1]
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            capture_state_checkpoint_sync(cur, chunk_id=first, label="manual")
+        last = seed_accepted_turn(
+            dbname,
+            slot=4,
+            user_text="Continue.",
+            storyteller_text="You wait in the plaza.",
+            time_delta=timedelta(minutes=7),
+        )
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            capture_state_checkpoint_sync(cur, chunk_id=last, label="manual")
+            report = chunk_clock_report_sync(cur)
+        assert report["chunks"] > 0
+        assert report["findings"] == []
+        assert _run_replay_cli(monkeypatch, "--chunk", str(last)) == 0
+        reconstruction = capsys.readouterr().out
+        assert "world_time: 2100-01-01 00:07:00+00:00" in reconstruction
+        assert "clock_drifts: 0 finding(s)" in reconstruction
+        assert _run_replay_cli(monkeypatch, "--verify") == 0
+        assert f"chunk clocks: {report['chunks']} checked row(s), 0 finding(s)" in (
+            capsys.readouterr().out
+        )
+
+
+def test_chunk_clock_reconstruction_reports_missing_metadata(
+    chunk_clock_db: tuple[str, list[int]],
+) -> None:
+    """Missing target metadata is an explicit clock finding, never a wall clock."""
+    dbname, _ = chunk_clock_db
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO narrative_chunks (raw_text) VALUES ('No metadata') "
+            "RETURNING id"
+        )
+        target = cur.fetchone()[0]
+        result = reconstruct_state_at_sync(cur, target)
+        assert result.world_time is None
+        assert result.clock_drifts == [
+            Drift(
+                "chunk_metadata",
+                str(target),
+                "world_time",
+                "missing_row",
+                "metadata row",
+                None,
+            )
+        ]

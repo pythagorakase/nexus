@@ -301,3 +301,36 @@ reports numbers only:
 PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49
 PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49 --markdown
 ```
+
+## Clock Contract
+
+Run the independent primary-clock audit in an enforced read-only,
+repeatable-read transaction:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/clock_contract.py --slot 4
+```
+
+Repeat `--slot` to select several slots; a fleet run defaults to all five.
+Slot 2's time data is contaminated evidence, never calibration evidence.
+An empty slot's zero counters prove only empty-state behavior.
+
+The `clock_contract` JSON family reports six integer fields per slot:
+
+- `chunks`: number of metadata rows checked.
+- `disagreements`: stored clocks distinct from base plus inclusive primary deltas,
+  including NULL differences.
+- `primary_regressions`: non-NULL primary clocks earlier than the preceding
+  non-NULL primary clock (or the base for the first primary row).
+- `missing_base`: one when metadata exists and the singleton base is NULL.
+- `nonprimary_contributions`: non-primary clocks (including NULL layers) distinct
+  from the immediately preceding metadata clock (or base for the first row).
+- `bootstrap_nonzero`: one when the lowest metadata row's delta is nonzero;
+  NULL counts as zero.
+
+Exit 1 means at least one of the five violation counters is nonzero; otherwise
+exit 0. Missing schema, missing singleton, and database errors raise loudly.
+After transaction setup every statement is SELECT-only; the family asserts
+`transaction_read_only=on` and never repairs data, migrates, configures a pool,
+starts a gateway, or calls a provider. The existing `world_clock` family and
+its JSON and exit contract remain separate.

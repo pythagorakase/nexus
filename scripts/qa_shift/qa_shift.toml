@@ -1,3 +1,4 @@
+# Available read-only clock_contract family: PYTHONPATH=$PWD "$PY" scripts/qa_shift/clock_contract.py --slot 4
 [shift]
 # Slot 4 and port 8012 are the disposable QA lane. Never point this utility at
 # the normal port-8002 runtime.

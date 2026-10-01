@@ -46,6 +46,10 @@ target = "scripts/qa_shift/prose_metrics.py:main"
 reason = "Read-only reference-corpus metrics CLI documented in scripts/qa_shift/README.md; issue 765."
 
 [[operators]]
+target = "scripts/qa_shift/clock_contract.py:main"
+reason = "Read-only primary-clock contract QA family documented in scripts/qa_shift/README.md; issue 778."
+
+[[operators]]
 target = "scripts/qa_shift/world_clock.py:main"
 reason = "Read-only clock identity QA family documented in scripts/qa_shift/README.md; issue 778."
 [[operators]]
@@ -365,6 +369,7 @@ paths = [
     { path = "scripts/qa_shift/reference_corpora.toml", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
     { path = "scripts/qa_shift/routine_delta_grammar_probe.py", class = "operator", reason = "operator root scripts/qa_shift/routine_delta_grammar_probe.py:main" },
     { path = "scripts/qa_shift/travel_reachability.py", class = "operator", reason = "operator root scripts/qa_shift/travel_reachability.py:main" },
+    { path = "scripts/qa_shift/clock_contract.py", class = "operator", reason = "operator root scripts/qa_shift/clock_contract.py:main" },
     { path = "scripts/qa_shift/world_clock.py", class = "operator", reason = "operator root scripts/qa_shift/world_clock.py:main" },
     { path = "scripts/query_narratives.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/query_narratives_simple.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
