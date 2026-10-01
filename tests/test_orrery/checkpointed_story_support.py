@@ -28,7 +28,7 @@ from tests.pg_fixtures import (
     seed_zone,
 )
 
-BASE_TIMESTAMP = datetime(2073, 7, 31, 12, 0, tzinfo=timezone.utc)
+# The first story-clock instant: base_timestamp and the bootstrap head chunk.
 HEAD_WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
 
 
@@ -62,10 +62,12 @@ def seed_checkpointed_story(dbname: str) -> CheckpointedStory:
     version with no source chunk when its ``created_at`` is later than the
     target chunk's (``replay.py`` gap 2), so rows seeded after the head chunk
     would vanish from a reconstruction at the head that the checkpoint still
-    holds. The protagonist sets ``base_timestamp`` first (the need-clock
-    anchor for the other characters and the tag), and ``seed_story_clock``
-    runs last, just before the checkpoint. Reconstruction at the head is then
-    asserted to hold the checkpoint's relationships.
+    holds. The protagonist sets ``base_timestamp`` to ``HEAD_WORLD_TIME``
+    first (the need-clock anchor for the other characters and the tag), and
+    ``seed_story_clock`` runs last, just before the checkpoint, seeding the
+    bootstrap chunk at that same instant: ``base_timestamp`` is the clock at
+    the end of the bootstrap chunk, which elapses no time. Reconstruction at
+    the head is then asserted to hold the checkpoint's relationships.
     """
 
     require_disposable_target(dbname)
@@ -86,7 +88,7 @@ def seed_checkpointed_story(dbname: str) -> CheckpointedStory:
     protagonist_character_id, protagonist_entity_id = seed_protagonist(
         dbname,
         name="Replay Protagonist",
-        base_timestamp=BASE_TIMESTAMP.isoformat(),
+        base_timestamp=HEAD_WORLD_TIME.isoformat(),
         current_location=home_place_id,
     )
     confidant_character_id, confidant_entity_id = seed_character(

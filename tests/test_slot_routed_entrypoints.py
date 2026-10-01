@@ -304,10 +304,9 @@ def test_import_leaves_the_root_logger_unconfigured(module: str) -> None:
 def entrypoint_clone() -> Iterator[str]:
     """A seeded disposable template clone serving the routed slot."""
     with disposable_slot_database("qa885_entrypoints") as dbname:
-        seed_protagonist(dbname)
-        seed_story_clock(
-            dbname, world_time=datetime(2100, 1, 1, 1, tzinfo=timezone.utc)
-        )
+        story_clock = datetime(2100, 1, 1, 1, tzinfo=timezone.utc)
+        seed_protagonist(dbname, base_timestamp=story_clock.isoformat())
+        seed_story_clock(dbname, world_time=story_clock)
         yield dbname
 
 

@@ -23,6 +23,9 @@ target = "scripts/character_identity_census.py:main"
 reason = "Read-only identity census documented in docs/qa/799-identity-before-minting/verification.md."
 
 [[operators]]
+target = "scripts/measure_place_coordinate_costs.py:main"
+reason = "Read-only place-coordinate cost report for 840-Q4; offline grammar weights plus read-only place counts (issue 840)."
+[[operators]]
 target = "scripts/migrate.py:main"
 reason = "CLAUDE.md schema migration workflow."
 [[operators]]
@@ -54,6 +57,9 @@ reason = "Read-only travel reachability probe for issue 785; session-enforced de
 [[operators]]
 target = "scripts/qa_shift/routine_delta_grammar_probe.py:main"
 reason = "Read-only routine-delta grammar weight probe for issue 783 (slice 783-S0); no provider calls."
+[[operators]]
+target = "scripts/measure_place_scale_grammar.py:main"
+reason = "Read-only place-scale grammar measurement for issue 788 (788-S0); session-enforced default_transaction_read_only."
 [[operators]]
 target = "scripts/qa_shift/long_absence_probe.py:main"
 reason = "Clone-only long-absence probe launcher from issue 909; writes only to a qa640_* clone."
@@ -297,7 +303,7 @@ paths = [
     { path = "scripts/custom_query.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/database_targets.py", class = "runtime", reason = "production root nexus/api/narrative.py:app" },
     { path = "scripts/edi", class = "dead", reason = "Wraps a client outside the repository (scripts/edi:5); no tracked file runs it." },
-    { path = "scripts/entity_reference_parity.py", class = "test-only", reason = "test root tests/test_entity_reference_parity_pg.py:<module>" },
+    { path = "scripts/entity_reference_parity.py", class = "operator", reason = "operator root scripts/measure_place_coordinate_costs.py:main" },
     { path = "scripts/estimate_time_delta.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/extract_scene_numbers.py", class = "documented", reason = "No root reaches it; named by docs/database.md:77" },
     { path = "scripts/extract_season_episode.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
@@ -321,6 +327,8 @@ paths = [
     { path = "scripts/map_builder_legacy.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/map_illustrator.md", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/map_illustrator_progress.md", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
+    { path = "scripts/measure_place_coordinate_costs.py", class = "operator", reason = "operator root scripts/measure_place_coordinate_costs.py:main" },
+    { path = "scripts/measure_place_scale_grammar.py", class = "operator", reason = "operator root scripts/measure_place_scale_grammar.py:main" },
     { path = "scripts/measure_presence_boost.py", class = "test-only", reason = "test root tests/test_presence_boost.py:<module>" },
     { path = "scripts/memnon_config.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/migrate.py", class = "runtime", reason = "production root nexus/api/narrative.py:app" },
