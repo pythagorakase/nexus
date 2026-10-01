@@ -212,8 +212,9 @@ def test_player_projection_keeps_reading_and_play_routes(
         assert "UI build not found" in shell.text
 
 
+@pytest.mark.requires_postgres
 def test_player_projection_paces_the_genesis_stage_waiter(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, offline_gate_db: str
 ) -> None:
     """The new-story wait screen needs nothing from the operator plane.
 
@@ -231,7 +232,7 @@ def test_player_projection_paces_the_genesis_stage_waiter(
     player = TestClient(build_player_app(_gateway(tmp_path, monkeypatch, built=False)))
 
     assert player.get("/api/settings").status_code in (404, 405)
-    status = player.get("/api/story/new/retrograde/status", params={"slot": 5})
+    status = player.get("/api/story/new/retrograde/status", params={"slot": 4})
     assert status.status_code == 200, status.text
     body = status.json()
     assert body["status_poll_interval_seconds"] == 2.5

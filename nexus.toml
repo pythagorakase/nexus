@@ -750,9 +750,6 @@ transition_timeout_seconds = 900
 # CLI/UI stage poll of GET /api/story/new/retrograde/status while the
 # transition request is in flight (the UI reads it from that route's answer).
 status_poll_interval_seconds = 1
-# NOTE: transition progress (GET /api/story/new/retrograde/status) lives in a
-# process-local registry. Run the API single-worker, or accept that status
-# polls answered by a non-writing worker report stage "idle" mid-transition.
 
 [orrery.retrograde.projects]
 # Wizard-time long-arc generation is opt-in in the model and enabled in the
