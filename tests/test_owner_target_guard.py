@@ -154,23 +154,6 @@ EXEMPTIONS: tuple[Exemption, ...] = (
             "slot_utils.slot_dbname(4)",
         )
     ),
-    *(
-        Exemption(
-            "test_memnon_db_access.py",
-            RULE_CONNECTION,
-            'database_url("save_04")',
-            "fake-backed label: the URL is handed to a monkeypatched "
-            "psycopg2.connect that returns a recording fake",
-        )
-        for _ in range(2)
-    ),
-    Exemption(
-        "test_memnon/test_source_embeddings.py",
-        RULE_CONNECTION,
-        'database.connect("save_05", dict_cursor=True)',
-        "fake-backed label: connect is a method of the test's own _Database "
-        "fake, which records statements and never reaches a driver",
-    ),
     Exemption(
         "test_idf_dictionary_pg.py",
         RULE_DATA_CLONE,
@@ -525,20 +508,22 @@ def test_an_exemption_admits_only_its_own_use() -> None:
     """A second use of an exempted rule in an exempted file is still a finding."""
 
     source = (
-        'database_url("save_04")\n'
-        'database_url("save_04")\n'
-        'psycopg2.connect(dbname="save_02")\n'
+        "module.slot_dbname(4)\n"
+        "module.slot_dbname(5)\n"
+        "module.slot_dbname(2)\n"
     )
-    findings = scan_source(source, "test_memnon_db_access.py")
-    assert [finding.rule for finding in findings] == [RULE_CONNECTION] * 3
-    # The two listed database_url uses are admitted; the new connect is not.
+    findings = scan_source(source, "test_scheduler_helpers_routing.py")
+    assert [finding.rule for finding in findings] == [RULE_SLOT_DBNAME] * 3
+    # The two listed slot_dbname uses are admitted; the new slot is not.
     assert [str(item) for item in unexempted(findings)] == [
-        "tests/test_memnon_db_access.py:3: connection-owner-literal: "
-        'psycopg2.connect(dbname="save_02")'
+        "tests/test_scheduler_helpers_routing.py:3: slot_dbname-literal-slot: "
+        "module.slot_dbname(2)"
     ]
-    # A third copy of an exempted source exceeds its listed count.
-    tripled = scan_source('database_url("save_04")\n' * 3, "test_memnon_db_access.py")
-    assert [finding.line for finding in unexempted(tripled)] == [3]
+    # A second copy of an exempted source exceeds its listed count.
+    doubled = scan_source(
+        "module.slot_dbname(4)\n" * 2, "test_scheduler_helpers_routing.py"
+    )
+    assert [finding.line for finding in unexempted(doubled)] == [2]
 
 
 @pytest.mark.parametrize(

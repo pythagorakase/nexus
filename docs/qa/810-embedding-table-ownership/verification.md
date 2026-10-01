@@ -1,3 +1,266 @@
+# STOP-REPORT: 810-S2 Amendment 2 (2026-10-01)
+
+## New Frozen-Fingerprint Failure
+
+Resumed from accepted checkpoint `b619d8d347d1e817ee82e5da1b6e1c902d7c1b56`
+on `claude/810-embedding-table-ownership`. All commands ran from the assigned
+worktree. `PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c
+'import nexus;print(nexus.__file__)'` printed this worktree's `nexus/__init__.py`.
+The common rules, including Static Checks, both amendments, original order,
+previous verification, and current issue #810 body/comments were read. The
+binding 810-Q3 decision remains unchanged.
+
+Amendment 2's guard update is complete and passes. The MEMNON offline split
+then fails in an unchanged file:
+
+`tests/test_memnon/test_ann_gate.py::test_ann_search_sql_matches_repaired_baseline[nexus/agents/memnon/utils/db_access.py]`
+
+The test at `tests/test_memnon/test_ann_gate.py:258-277` fingerprints every AST
+string matching `SELECT `, `WITH text_search`, or `<=>` in the entire module.
+Its fixture expects `f24ac6cf9aa8e45d4cbb5f85194fa8ed68b875bfb460cb80b2b277d0eb370ac9`.
+The branch computes `35ecf4de78ec08ff80f23f5d96037125e428d6a6597e18619aea5082317d5497`.
+Both starting main `2e70e9cb` and fetched `origin/main` `67256d15` compute the
+expected fingerprint. This is a new consequence of the ordered deletion,
+not an exempt #885 owner-slot failure or existing main diagnostic.
+
+A read-only AST multiset comparison shows **no added matching expression**.
+Exactly four expressions disappeared, all from the deleted
+`setup_database_indexes`: the vector-extension existence SELECT, the HNSW
+index existence f-string, and its two constant fragments. None of the search
+expressions changed. Raw comparison evidence is in the assigned scratch
+`ann-fingerprint-diagnosis.json`. The unchanged retrieval fingerprint test
+therefore also freezes schema-setup SQL that this order explicitly deletes.
+
+Verbatim failure excerpt:
+
+```text
+E       AssertionError: assert '35ecf4de78ec...a5082317d5497' == 'f24ac6cf9aa8...277d0eb370ac9'
+E
+E         - f24ac6cf9aa8e45d4cbb5f85194fa8ed68b875bfb460cb80b2b277d0eb370ac9
+E         + 35ecf4de78ec08ff80f23f5d96037125e428d6a6597e18619aea5082317d5497
+
+tests/test_memnon/test_ann_gate.py:275: AssertionError
+```
+
+The common rule binds: "Any other failure in a file you did not change: report
+the exact test id and the failure tail, do not fix it, do not skip it; the
+coordinator triages." STOP. Neither the test nor
+`tests/test_memnon/fixtures/ann_repaired_sql.json` was changed, and no setup SQL
+was restored to satisfy the frozen hash.
+
+## Authorized Changes and Remaining Gates
+
+Removed exactly three stale `connection-owner-literal` exemptions:
+
+- `test_memnon_db_access.py`, `database_url("save_04")`, two entries.
+- `test_memnon/test_source_embeddings.py`,
+  `database.connect("save_05", dict_cursor=True)`, one entry.
+
+The synthetic exemption test now uses the existing
+`test_scheduler_helpers_routing.py` slot-name exemptions. It proves a new
+unlisted source remains refused and a second duplicate exceeds its one listed
+use. No other guard behavior, allowlist, or exemption changed. Guard-only
+coverage passes all 80 tests; the root split containing the guard also passes.
+
+The broad offline-core run was deliberately interrupted to split its slow CLI
+coverage into bounded commands; its 476-passed partial result is not a gate
+pass. Root splits 1 through 6 and the config, test_config, test_ir_eval_v2 and
+LORE directories passed. The MEMNON split failed as above. Every tail and exact
+child command follows. A collection-only command built the complete 3259-node
+split plan; collection is not claimed as a proof gate.
+
+At STOP, runtime/util offline directories, API/Orrery offline suites, the
+standalone reachability command, Black/flake8/mypy comparison gates, and the
+amended PostgreSQL guard rerun remain unrun. Reachability did run as part of
+root split 5, whose result is preserved below. The prior accepted PostgreSQL
+proofs remain dated evidence, not fresh results from this resumption. No new
+disposable clone was created, so there are no new migration stamps to report.
+No paid call, owner database write, gateway action, main-checkout modification,
+or other-worktree modification was made. `git diff --check` passes.
+
+A fetch from this worktree observed `origin/main` at
+`67256d15e2c5cf395c4336bb63f4a42472493db0`. Both accepted checkpoints are
+preserved unchanged; no rebase, merge, push or PR was performed. A clarification
+was requested because rebasing these commits onto advanced main necessarily
+rewrites their IDs, while this resumption explicitly prohibits history rewrite.
+No response was received before the separate test failure required STOP.
+
+## Open Questions for the Coordinator
+
+1. Authorize updating the db_access fingerprint for the exact ordered setup
+   deletion, or narrow the frozen fingerprint to retrieval functions while
+   proving their AST expressions unchanged?
+2. Resolve newest-main synchronization: merge origin/main to keep both accepted
+   checkpoint commit IDs, or explicitly permit their IDs to change in a rebase?
+3. Resume this checkpoint after triage to finish the remaining gates and publish?
+
+Legacy importer issue #1091 remains deferred. No fresh corpus result or new
+#964 disposition is claimed. Landing remains no migration or fleet application;
+the coordinator restarts `nexus restart gateway` by name and owns the final
+whole-tree PostgreSQL gate. No UI rebuild is needed.
+
+## Exact Commands and Verbatim Tails for This Resumption
+
+The scratch foreground wrapper retains the 590-second command limit and
+120-second silence limit. The commands below are its exact child argv rendered
+as shell commands; full logs and `runs.jsonl` remain in the assigned scratch.
+Offline skips are preserved, not counted as PostgreSQL proof.
+
+### guard-amendment2 (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_owner_target_guard.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+80 passed, 5 warnings in 2.95s
+```
+
+### offline-core-amendment2 (Exit 2)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-core-amendment2 tests --ignore=tests/test_api --ignore=tests/test_orrery
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/selectors.py:415: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+476 passed, 15 skipped, 7 warnings in 244.09s (0:04:04)
+```
+
+### offline-root-1 (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-root-1 tests/test_backfill_review_packet.py tests/test_bootstrap_episode_pg.py tests/test_character_identity.py tests/test_character_name_reveals.py tests/test_character_name_reveals_pg.py tests/test_character_relationship_id_types_pg.py tests/test_character_tag_manifest.py tests/test_chunk_lifecycle_columns_migration_pg.py tests/test_cli.py tests/test_cli_choice_http.py tests/test_cli_contract.py tests/test_cli_generation_http.py tests/test_cli_inspect_pg.py tests/test_cli_model_selection.py tests/test_cli_session_wait.py tests/test_cli_wizard_confirmation.py tests/test_clock_face.py tests/test_commit_choice_presence_pg.py tests/test_commit_chronology.py tests/test_commit_handler_sync.py tests/test_connection_lifecycle.py tests/test_correspondence.py tests/test_correspondence_live.py tests/test_database_contract.py tests/test_db_converters.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+490 passed, 28 skipped, 5 warnings in 261.37s (0:04:21)
+```
+
+### offline-root-2 (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-root-2 tests/test_dbname_audit.py tests/test_doc_front_matter.py tests/test_embedding_artifacts.py tests/test_embedding_table_ownership_pg.py tests/test_entity_reference_parity_pg.py tests/test_entity_tag_manifest_apply.py tests/test_enum_column_comment_labels_pg.py tests/test_faction_table_audit.py tests/test_gis_scripts_live.py tests/test_golden_path_live.py tests/test_idf_dictionary_pg.py tests/test_inherited_slot_isolation_pg.py tests/test_intention_revision_weight.py tests/test_interaction_boundary.py tests/test_interactions_pg.py tests/test_issue_601_wizard_live.py tests/test_jobs_cli_pg.py tests/test_live_gate_clones_pg.py tests/test_local_skald_live.py tests/test_logon_mock_integration.py tests/test_lore_adapter_metadata.py tests/test_measure_place_coordinate_costs.py tests/test_measure_place_coordinate_costs_pg.py tests/test_measure_place_scale_grammar.py tests/test_measure_place_scale_grammar_pg.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+120 passed, 139 skipped, 5 warnings in 15.43s
+```
+
+### offline-root-3 (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-root-3 tests/test_memnon_cross_encoder.py tests/test_memnon_cross_encoder_artifact.py tests/test_memnon_cross_encoder_dependencies.py tests/test_memnon_db_access.py tests/test_memnon_embedding_cache.py tests/test_memnon_embedding_contract.py tests/test_memnon_model_failures_pg.py tests/test_memnon_runtime_config.py tests/test_memnon_script_model_loaders.py tests/test_migration_comment_lint.py tests/test_mock_openai.py tests/test_model_artifact_lock_committed.py tests/test_model_drift.py tests/test_model_registry_live.py tests/test_name_reveal_staged_bindings.py tests/test_name_reveal_staged_bindings_pg.py tests/test_name_reveal_tag_validation.py tests/test_name_reveal_tag_validation_pg.py tests/test_native_structured_output.py tests/test_new_story_cache.py tests/test_new_story_cli.py tests/test_new_story_integration.py tests/test_new_story_schemas.py tests/test_new_story_setup.py tests/test_new_story_setup_config.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+360 passed, 48 skipped, 8 warnings in 35.58s
+```
+
+### offline-root-4 (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-root-4 tests/test_openai_registry_capabilities.py tests/test_orrery_tag_validation.py tests/test_orrery_tag_validation_pg.py tests/test_owner_target_guard.py tests/test_pg_accepted_turn_factory.py tests/test_pg_adjudication_ledger_seed.py tests/test_pg_anchor_pair_tag_seeds.py tests/test_pg_character_pair_seed.py tests/test_pg_disposable_target.py tests/test_pg_legacy_faction_tag_seed.py tests/test_pg_target_contract.py tests/test_place_tag_manifest.py tests/test_player_identity_consumers_pg.py tests/test_postgres_tools.py tests/test_presence_audit.py tests/test_presence_boost.py tests/test_presence_boost_pg.py tests/test_presence_reconciliation.py tests/test_presence_roster.py tests/test_presence_roster_pg.py tests/test_prompt_lint.py tests/test_prompt_tag_vocabulary_pg.py tests/test_prose_metrics.py tests/test_prose_metrics_pg.py tests/test_qa_shift.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+457 passed, 130 skipped, 7 warnings in 36.49s
+```
+
+### offline-root-5 (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-root-5 tests/test_reachability.py tests/test_rebuild_memory_idf_pg.py tests/test_record_revelation_cli_pg.py tests/test_reentry_wire_ledger.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_register_drift_study.py tests/test_retrograde_summary_retrieval.py tests/test_routine_delta_grammar_probe_pg.py tests/test_runtime_home.py tests/test_scheduler_helpers_basetemp.py tests/test_scheduler_helpers_routing.py tests/test_schema_documentation_pg.py tests/test_secret_manager.py tests/test_secret_store_guard.py tests/test_secret_store_integration.py tests/test_skald_wire.py tests/test_slot_routed_entrypoints.py tests/test_slot_utils.py tests/test_summary_triggers.py tests/test_tags_audit_pg.py tests/test_trait_compiler.py tests/test_trait_compiler_integration.py tests/test_trait_input_derivation.py tests/test_trait_menu_docs.py tests/test_travel_reachability.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+442 passed, 76 skipped, 7 warnings in 44.54s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+### offline-root-6 (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-root-6 tests/test_travel_reachability_pg.py tests/test_turn_observation.py tests/test_unowned_index_adoption_pg.py tests/test_usage_recorder.py tests/test_wizard_agent.py tests/test_wizard_live.py tests/test_wizard_opening_presence_pg.py tests/test_world_clock_contract_pg.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+60 passed, 34 skipped, 7 warnings in 6.07s
+```
+
+### offline-config (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-config tests/config
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+121 passed, 5 warnings in 6.04s
+```
+
+### offline-test_config (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-test_config tests/test_config
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+82 passed, 5 warnings in 4.26s
+```
+
+### offline-test_ir_eval_v2 (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-test_ir_eval_v2 tests/test_ir_eval_v2
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+12 passed, 5 warnings in 2.56s
+```
+
+### offline-test_lore (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-test_lore tests/test_lore
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+406 passed, 50 skipped, 5 warnings in 21.20s
+```
+
+### offline-test_memnon (Exit 1)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-offline-test_memnon tests/test_memnon
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_memnon/test_ann_gate.py::test_ann_search_sql_matches_repaired_baseline[nexus/agents/memnon/utils/db_access.py]
+1 failed, 42 passed, 8 skipped, 5 warnings in 6.83s
+```
+
+Codex — GPT-6.
+
+---
+
+## Accepted Second Stop-Report (Checkpoint b619d8d3)
+
 # STOP-REPORT: 810-S2 Amendment 1 (2026-10-01)
 
 ## Required Guard Exemptions Are Stale
