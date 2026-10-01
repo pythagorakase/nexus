@@ -41,7 +41,7 @@
  * climate, terrain implies travel modes). The bundled Natural Earth
  * outline therefore renders for every slot.
  *
- * Design: theme-token colors only (--brass / --bronze / --bg-elev-* plus
+ * Design: theme-token colors only (--state-map-* / --bg-elev-* plus
  * the --map-* mixes on .mappane-canvas), menu-font labels — theme-aware
  * across Veil / Gilded / Vector with zero map-specific colors.
  */
@@ -547,10 +547,10 @@ export function MapPane({ slot }: MapPaneProps) {
 
   // Both pin surfaces and leaders share the fixed state-token mapping.
   const PIN_COLOR: Record<string, string> = {
-    current: "var(--brass-bright)",
-    selected: "var(--brass)",
-    hovered: "var(--map-hovered)",
-    rest: "var(--bronze)",
+    current: "var(--state-map-current)",
+    selected: "var(--state-map-selected)",
+    hovered: "var(--state-map-hovered)",
+    rest: "var(--state-map-rest)",
   };
 
   const dataError = (placesError ?? zonesError) as Error | null;

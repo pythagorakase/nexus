@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import postcss from "postcss";
@@ -52,13 +52,25 @@ const layoutCss = readFileSync(resolve(import.meta.dirname, "components/nexus/ne
 const mapSource = readFileSync(resolve(import.meta.dirname, "components/nexus/MapPane.tsx"), "utf8");
 const THEMES = ["Veil", "Gilded", "Vector"] as const;
 type Theme = typeof THEMES[number];
-const ROOTS = ["--brass", "--bronze", "--brass-bright", "--map-hovered", "--fg-muted", "--fg-dim", "--destructive"] as const;
+// Amendment 2 moves every mutable pigment into a dedicated static token.
+const BASE_ROOTS: Record<string, string> = {
+  "--state-map-rest": "--bronze", "--state-map-current": "--brass-bright",
+  "--state-map-selected": "--brass", "--state-map-hovered": "--brass-bright",
+  "--state-key-absent": "--fg-dim", "--state-key-missing": "--bronze",
+  "--state-key-present": "--fg-muted", "--state-key-verified": "--brass",
+  "--state-mem-normal": "--brass", "--state-mem-over": "--bronze",
+  "--state-delete-unarmed": "--fg-muted", "--state-delete-armed": "--destructive",
+};
+const ROOTS = Object.keys(BASE_ROOTS);
 const ANCHOR: Triple = [184 / 255, 61 / 255, 122 / 255];
 const ANCHOR_HUE = 330.2439024390244;
+// Amendment 3: this shared list is the sole declared global exemption.
+const VEIL_ANCHOR_TOKENS = ["--brass", "--magenta", "--primary", "--sidebar-primary", "--sidebar-ring", "--ring", "--chart-1"];
+const ANCHOR_HSL = "330.2439024390244 50.20408163265306% 48.03921568627451%";
 function tokens(css: string, theme: Theme): Record<string, string> {
   const result: Record<string, string> = {};
   postcss.parse(css).walkRules(rule => {
-    if (rule.parent?.type === "root" && (rule.selector === ".dark" || (theme !== "Veil" && rule.selector.includes(`.dark.theme-${theme.toLowerCase()}`))))
+    if (rule.parent?.type === "root" && (rule.selector === ":root" || rule.selector === ".dark" || (theme !== "Veil" && rule.selector.includes(`.dark.theme-${theme.toLowerCase()}`))))
       rule.walkDecls(decl => { result[decl.prop] = decl.value; });
   });
   return result;
@@ -142,7 +154,7 @@ const ringOpacity = Number(mapSource.match(/opacity: outline \? ([\d.]+)/)?.[1])
 if (!Number.isFinite(ringOpacity)) throw new Error("Missing production ring opacity");
 function contexts(): Context[] {
   const result: Context[] = [];
-  const pigment = (surface: Surface, state: string, p: Palette, before: boolean) => p[before && surface === "map" && state === "hovered" ? "--brass-bright" : MAPPINGS[surface][state]];
+  const pigment = (surface: Surface, state: string, p: Palette, before: boolean) => p[before ? BASE_ROOTS[MAPPINGS[surface][state]] : MAPPINGS[surface][state]];
   result.push({ surface: "memory", name: "fill", render: (s, p, b) => pigment("memory", s, p, b) });
   for (const row of ["ready", "ready-exceeds"])
     for (const interaction of ["rest", "hover", "focus"]) {
@@ -190,16 +202,22 @@ function contexts(): Context[] {
 }
 const CONTEXTS = contexts();
 function palette(css: string, theme: Theme): Palette {
-  return Object.fromEntries(Object.entries(tokens(css, theme)).filter(([root, value]) => ROOTS.includes(root as typeof ROOTS[number]) || /^--(?:bg(?:-elev-[123])?|border-faint)$/.test(root)).map(([root, value]) => [root, rgb(value)]));
+  return Object.fromEntries(Object.entries(tokens(css, theme))
+    .filter(([, value]) => value === "#b83d7a" || /^(?:hsl\()?([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/.test(value))
+    .map(([root, value]) => [root, rgb(value)]));
+}
+function baselineValue(theme: Theme, root: string): string {
+  return theme === "Veil" && BASE_ROOTS[root] === "--brass"
+    ? `hsl(${ANCHOR_HSL})` : tokens(baseCss, theme)[BASE_ROOTS[root]];
 }
 function candidates(theme: Theme, root: string): { value: string; rgb: Triple; changed: number }[] {
-  const base = tokens(baseCss, theme)[root === "--map-hovered" ? "--brass-bright" : root];
+  const base = baselineValue(theme, root);
   const old = rgb(base);
-  if (theme === "Veil" && root === "--brass") return [{ value: "#b83d7a", rgb: ANCHOR, changed: 1 }];
   let [h, s, l] = hsl(base);
-  if (theme === "Veil" && ["--brass-bright", "--map-hovered"].includes(root)) h = ANCHOR_HUE;
-  const sats = [...new Set(root === "--destructive" ? [80, 90, 100] : [s, Math.min(100, s + 10), Math.min(100, s + 20)])];
-  const lights = [...new Set(root === "--destructive" ? [50, 55, 60, 65] : [l, 30, 40, 50, 60, 70])];
+  if (theme === "Veil" && ["--brass", "--brass-bright"].includes(BASE_ROOTS[root])) h = ANCHOR_HUE;
+  const destructive = root === "--state-delete-armed";
+  const sats = [...new Set(destructive ? [80, 90, 100] : [s, Math.min(100, s + 10), Math.min(100, s + 20)])];
+  const lights = [...new Set(destructive ? [50, 55, 60, 65] : [l, 30, 40, 50, 60, 70])];
   return sats.flatMap(s => lights.map(l => {
     const next = hslRgb([h, s, l]);
     return { value: `hsl(${h} ${s}% ${l}%)`, rgb: next, changed: next.every((v, i) => Math.abs(v - old[i]) < 1e-12) ? 0 : 1 };
@@ -211,106 +229,78 @@ function measures(theme: Theme, p: Palette, before: boolean) {
     return { theme, surface: ctx.surface, context: ctx.name, states, rgb: colors, delta: ciede2000(deutanLab(colors[0]), deutanLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
   }));
 }
-/** Exhaustive finite-domain max-min via exact variable elimination.
- * For fixed brass/bronze/fg-muted, the map's current+hovered, key's fg-dim,
- * and delete's destructive are independent. Enumerate ALL assignments of
- * each factor, then combine their minima. This represents every full
- * Cartesian assignment exactly, without a heuristic or sampled search.
- * A second pass at the global optimum handles the fewest-changed-roots tie.
+/** Exact exhaustive factorization: fixed global backgrounds mean that the
+ * four surfaces share no mutable pigment. Each pair/context matrix visits all
+ * candidate pairs; each surface then visits its complete Cartesian product.
+ * The global optimum is the minimum of the four surface maxima. Choosing the
+ * fewest changes above that threshold in each factor gives the global tie-break.
+ * BigInt counts retain the exact size of the twelve-token Cartesian domain.
  */
 function jointSearch(theme: Theme) {
-  const domains = ROOTS.map(r => candidates(theme, r));
+  const domains = Object.fromEntries(ROOTS.map(r => [r, candidates(theme, r)]));
   const p = palette(shippedCss, theme);
-  const maxima = new Map<string, { maximum: number; count: number; witness: Record<string, string> }>();
-  const groups = [
-    { name: "map", roots: [0, 1, 2, 3], surfaces: ["map", "memory"] },
-    { name: "key", roots: [0, 1, 4, 5], surfaces: ["key"] },
-    { name: "delete", roots: [4, 6], surfaces: ["delete"] },
-  ];
-  type Entry = { minimum: number; ix: number[]; changed: number };
-  const tables: Map<string, Entry[]>[] = [];
-  const coverage: { roots: string[]; visited: number; unique: number; expected: number }[] = [];
-  for (const group of groups) {
-    const table = new Map<string, Entry[]>();
-    const ctxs = CONTEXTS.filter(c => group.surfaces.includes(c.surface));
-    // Cache the composited Lab per context/state/relevant candidate subset.
-    const labs = new Map<string, Triple>();
-    const ix: number[] = Array(7).fill(0);
+  const maxima: Record<string, { maximum: number; count: number; witness: Record<string, string> }> = {};
+  const factors = (Object.keys(STATE_PAIRS) as Surface[]).map(surface => {
+    const roots = Object.values(MAPPINGS[surface]);
+    const ctxs = CONTEXTS.filter(c => c.surface === surface);
+    const edges = STATE_PAIRS[surface].map(([a, b]) => {
+      const ra = MAPPINGS[surface][a], rb = MAPPINGS[surface][b];
+      const scores = domains[ra].map(() => domains[rb].map(() => Infinity));
+      for (const ctx of ctxs) {
+        const labs = [a, b].map(state => {
+          const root = MAPPINGS[surface][state];
+          return domains[root].map(c => { p[root] = c.rgb; return deutanLab(ctx.render(state, p, false)); });
+        });
+        let maximum = -Infinity, witness: Record<string, string> = {};
+        let count = 0;
+        for (let i = 0; i < domains[ra].length; i++)
+          for (let j = 0; j < domains[rb].length; j++) {
+            count++;
+            const delta = ciede2000(labs[0][i], labs[1][j]);
+            scores[i][j] = Math.min(scores[i][j], delta);
+            if (delta > maximum) { maximum = delta; witness = { [ra]: domains[ra][i].value, [rb]: domains[rb][j].value }; }
+          }
+        maxima[`${surface}/${ctx.name}/${a}/${b}`] = { maximum, count, witness };
+      }
+      return { ra, rb, scores };
+    });
+    const entries: { minimum: number; ix: Record<string, number>; changed: number }[] = [];
+    const ix: Record<string, number> = {};
+    const unique = new Set<string>();
     let visited = 0;
-    const assignments = new Set<string>();
-    const visit = (depth: number) => {
-      if (depth < group.roots.length) {
-        const root = group.roots[depth];
-        for (let i = 0; i < domains[root].length; i++) {
-          ix[root] = i; p[ROOTS[root]] = domains[root][i].rgb; visit(depth + 1);
-        }
+    function visit(depth: number) {
+      if (depth < roots.length) {
+        const root = roots[depth];
+        for (let i = 0; i < domains[root].length; i++) { ix[root] = i; visit(depth + 1); }
         return;
       }
       visited++;
-      assignments.add(group.roots.map(r => ix[r]).join(","));
-      let minimum = Infinity;
-      for (const ctx of ctxs) {
-        const colors = new Map<string, Triple>();
-        for (const state of new Set(STATE_PAIRS[ctx.surface].flat())) {
-          const root = ROOTS.indexOf(MAPPINGS[ctx.surface][state] as typeof ROOTS[number]);
-          // Only map-land/sidebar backgrounds depend on brass; key opacity
-          // and deletion parent background are fixed. Include brass for map.
-          const key = `${ctx.name}:${state}:${ix[root]}:${ctx.surface === "map" ? ix[0] : ""}`;
-          let lab = labs.get(key);
-          if (!lab) { lab = deutanLab(ctx.render(state, p, false)); labs.set(key, lab); }
-          colors.set(state, lab);
-        }
-        for (const [a, b] of STATE_PAIRS[ctx.surface]) {
-          const value = ciede2000(colors.get(a)!, colors.get(b)!);
-          minimum = Math.min(minimum, value);
-          const key = `${ctx.surface}/${ctx.name}/${a}/${b}`;
-          const prev = maxima.get(key);
-          if (!prev || value > prev.maximum) maxima.set(key, { maximum: value, count: 0, witness: Object.fromEntries(group.roots.map(r => [ROOTS[r], domains[r][ix[r]].value])) });
-        }
-      }
-      const key = group.name === "delete" ? `${ix[4]}` : group.name === "key" ? `${ix[0]},${ix[1]},${ix[4]}` : `${ix[0]},${ix[1]}`;
-      const entries = table.get(key) ?? [];
-      const leaves = group.name === "map" ? [2, 3] : group.name === "key" ? [5] : [6];
-      entries.push({ minimum, ix: [...ix], changed: leaves.reduce((n, r) => n + domains[r][ix[r]].changed, 0) });
-      table.set(key, entries);
-    };
-    visit(0);
-    tables.push(table);
-    const count = group.roots.reduce((n, r) => n * domains[r].length, 1);
-    if (visited !== count || assignments.size !== count) throw new Error(`${theme} ${group.name}: incomplete exhaustive factor search`);
-    coverage.push({ roots: group.roots.map(r => ROOTS[r]), visited, unique: assignments.size, expected: count });
-    for (const [key, entry] of maxima) if (group.surfaces.some(s => key.startsWith(`${s}/`))) entry.count = count;
-  }
-  let best = -Infinity, feasible = 0;
-  const cores: { a: number; b: number; f: number; lists: Entry[][]; minimum: number }[] = [];
-  for (let a = 0; a < domains[0].length; a++)
-    for (let b = 0; b < domains[1].length; b++)
-      for (let f = 0; f < domains[4].length; f++) {
-        const lists = [tables[0].get(`${a},${b}`)!, tables[1].get(`${a},${b},${f}`)!, tables[2].get(`${f}`)!];
-        const minimum = Math.min(...lists.map(list => Math.max(...list.map(e => e.minimum))));
-        best = Math.max(best, minimum);
-        feasible += lists.reduce((n, list) => n * list.filter(e => e.minimum >= 15).length, 1);
-        cores.push({ a, b, f, lists, minimum });
-      }
-  let changes = Infinity, witness: number[] = [];
-  for (const core of cores) {
-    if (core.minimum !== best) continue;
-    const chosen = core.lists.map(list => list.filter(e => e.minimum >= best).sort((a, b) => a.changed - b.changed)[0]);
-    const changed = [0, 1, 4].reduce((n, r, j) => n + domains[r][[core.a, core.b, core.f][j]].changed, 0) + chosen.reduce((n, e) => n + e.changed, 0);
-    if (changed < changes) {
-      changes = changed;
-      witness = [core.a, core.b, chosen[0].ix[2], chosen[0].ix[3], core.f, chosen[1].ix[5], chosen[2].ix[6]];
+      unique.add(roots.map(r => ix[r]).join(","));
+      entries.push({ minimum: Math.min(...edges.map(e => e.scores[ix[e.ra]][ix[e.rb]])), ix: { ...ix }, changed: roots.reduce((n, r) => n + domains[r][ix[r]].changed, 0) });
     }
-  }
-  const assignment = Object.fromEntries(ROOTS.map((r, i) => [r, domains[i][witness[i]].value]));
-  const shipped = { ...palette(shippedCss, theme), ...Object.fromEntries(ROOTS.map((r, i) => [r, domains[i][witness[i]].rgb])) };
-  return { theme, sizes: domains.map(d => d.length), count: domains.reduce((n, d) => n * d.length, 1), feasible, best, changes, assignment, coverage, maxima: Object.fromEntries(maxima), measurements: measures(theme, shipped, false) };
+    visit(0);
+    const expected = roots.reduce((n, r) => n * domains[r].length, 1);
+    if (visited !== expected || unique.size !== expected) throw new Error(`${theme} ${surface}: incomplete exhaustive factor search`);
+    return { roots, entries, best: entries.reduce((n, e) => Math.max(n, e.minimum), -Infinity), coverage: { surface, roots, visited, unique: unique.size, expected } };
+  });
+  const best = Math.min(...factors.map(f => f.best));
+  const chosen = factors.map(f => f.entries.filter(e => e.minimum >= best).sort((a, b) => a.changed - b.changed)[0]);
+  const assignment = Object.assign({}, ...chosen.map(e => Object.fromEntries(Object.entries(e.ix).map(([r, i]) => [r, domains[r][i].value])))) as Record<string, string>;
+  const shipped = { ...palette(shippedCss, theme), ...Object.fromEntries(ROOTS.map(r => [r, rgb(assignment[r])])) };
+  return {
+    theme, sizes: ROOTS.map(r => domains[r].length),
+    count: ROOTS.reduce((n, r) => n * BigInt(domains[r].length), 1n).toString(),
+    feasible: factors.reduce((n, f) => n * BigInt(f.entries.filter(e => e.minimum >= 15).length), 1n).toString(),
+    best, changes: chosen.reduce((n, e) => n + e.changed, 0), assignment,
+    coverage: factors.map(f => f.coverage), factorMaxima: factors.map(f => ({ surface: f.coverage.surface, best: f.best })),
+    maxima, measurements: measures(theme, shipped, false),
+  };
 }
 let searches: ReturnType<typeof jointSearch>[] | undefined;
 const searchAll = () => searches ??= THEMES.map(jointSearch);
 // Explicit one-theme exception manifests; exact context inventory is generated
 // from CSS, while shortfall IDs are committed and checked below.
-const exceptions = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/theme-exceptions.json"), "utf8")) as Record<Theme, string[]>;
+const exceptions = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json"), "utf8")) as Record<Theme, string[]>;
 describe("777-S2 state shades", () => {
   it("ciede2000_matches_published_reference_vectors", () => {
     expect(SHARMA).toHaveLength(34);
@@ -329,19 +319,12 @@ describe("777-S2 state shades", () => {
     }
   });
   it("reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures", () => {
-    expect(MAPPINGS).toEqual({ memory: { normal: "--brass", over: "--bronze" }, delete: { unarmed: "--fg-muted", armed: "--destructive" }, map: { rest: "--bronze", current: "--brass-bright", selected: "--brass", hovered: "--map-hovered" }, key: { "optional-absent": "--fg-dim", "required-missing": "--bronze", present: "--fg-muted", verified: "--brass" } });
-    for (const theme of THEMES) {
-      const after = tokens(shippedCss, theme), before = tokens(baseCss, theme);
-      for (const root of Object.keys(before).filter(r => r.startsWith("--bg") || r.includes("background"))) expect(after[root], `${theme} background ${root}`).toBe(before[root]);
-      expect(after["--destructive"]).not.toMatch(/^hsl/); // consumed as hsl(var(...))
-      const aliases: Record<string, string[]> = {
-        "--brass": ["--primary", "--sidebar-primary", "--sidebar-ring", "--ring", "--chart-1", ...(theme === "Veil" ? ["--magenta"] : [])],
-        "--fg-muted": ["--muted-foreground"],
-        "--bronze": ["--chart-2", ...(theme === "Veil" ? ["--accent", "--sidebar-accent", "--coral"] : [])],
-        "--brass-bright": theme === "Veil" ? ["--magenta-light"] : ["--accent"],
-      };
-      for (const [root, linked] of Object.entries(aliases)) for (const alias of linked) rgb(after[alias]).forEach((v, i) => expect(v, `${theme} ${alias}`).toBeCloseTo(rgb(after[root])[i], 12));
-    }
+    expect(MAPPINGS).toEqual({
+      memory: { normal: "--state-mem-normal", over: "--state-mem-over" },
+      delete: { unarmed: "--state-delete-unarmed", armed: "--state-delete-armed" },
+      map: { rest: "--state-map-rest", current: "--state-map-current", selected: "--state-map-selected", hovered: "--state-map-hovered" },
+      key: { "optional-absent": "--state-key-absent", "required-missing": "--state-key-missing", present: "--state-key-present", verified: "--state-key-verified" },
+    });
     const results = searchAll();
     if (process.env.STATE_SHADES_EVIDENCE_DIR) for (const result of results) writeFileSync(resolve(process.env.STATE_SHADES_EVIDENCE_DIR, `${result.theme.toLowerCase()}-joint.json`), JSON.stringify({ ...result, before: measures(result.theme, palette(baseCss, result.theme), true) }, null, 2) + "\n");
     for (const result of results) {
@@ -353,17 +336,114 @@ describe("777-S2 state shades", () => {
       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(result.best, 10);
       const shortfalls = shipped.filter(m => m.delta < 15);
       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${m.surface}/${m.context}/${m.states.join("/")}`));
-      expect(shortfalls.length > 0).toBe(result.feasible === 0);
+      expect(shortfalls.length > 0).toBe(result.feasible === "0");
       for (const m of shortfalls) expect(m.signatures[0]).not.toEqual(m.signatures[1]);
-      expect(result.count).toBe(result.sizes.reduce((n, s) => n * s, 1));
-      expect(ROOTS.filter(root => actual[root].some((v, i) => Math.abs(v - rgb(tokens(baseCss, result.theme)[root === "--map-hovered" ? "--brass-bright" : root])[i]) >= 1e-12))).toHaveLength(result.changes);
+      expect(result.count).toBe(result.sizes.reduce((n, s) => n * BigInt(s), 1n).toString());
+      expect(ROOTS.filter(root => actual[root].some((v, i) => Math.abs(v - rgb(baselineValue(result.theme, root))[i]) >= 1e-12))).toHaveLength(result.changes);
     }
   }, 120000);
+  it("global_tokens_are_unchanged_from_baseline", () => {
+    function otherGlobals(css: string): string[] {
+      const result: string[] = [];
+      postcss.parse(css).walkDecls(decl => {
+        if (!decl.prop.startsWith("--")) return;
+        const rule = decl.parent;
+        if (rule?.type === "rule" && rule.parent?.type === "root" &&
+          (rule.selector === ".dark" || rule.selector.includes(".dark.theme-gilded") || rule.selector.includes(".dark.theme-vector"))) return;
+        result.push(`${rule?.toString().split("{")[0].trim()}:${decl.prop}:${decl.value}`);
+      });
+      return result;
+    }
+    expect(otherGlobals(shippedCss)).toEqual(otherGlobals(baseCss));
+    for (const theme of THEMES) {
+      const before = tokens(baseCss, theme), after = tokens(shippedCss, theme);
+      expect(Object.keys(after).filter(r => r.startsWith("--state-")).sort()).toEqual([...ROOTS].sort());
+      expect(Object.keys(after).filter(r => !r.startsWith("--state-")).sort()).toEqual(Object.keys(before).sort());
+      for (const [root, value] of Object.entries(before)) {
+        // Identical expressions include backgrounds, alpha colors, shadows,
+        // fonts and computed aliases. Changed color syntax must resolve equally.
+        if (theme === "Veil" && VEIL_ANCHOR_TOKENS.includes(root))
+          rgb(after[root]).forEach((v, i) => expect(v, `${theme} anchor exemption ${root}`).toBeCloseTo(ANCHOR[i], 12));
+        else if (value !== after[root])
+          rgb(after[root]).forEach((v, i) => expect(v, `${theme} frozen ${root}`).toBeCloseTo(rgb(value)[i], 12));
+      }
+    }
+  });
+  it("state_surfaces_read_only_state_tokens", () => {
+    const allowed: Record<string, string[]> = {
+      ".topbar .mem-fill": ["--state-mem-normal"],
+      ".topbar .mem-fill.over": ["--state-mem-over"],
+      ".topbar .mem-over-glyph": ["--state-mem-over"],
+      ".lm-trash": ["--state-delete-unarmed"],
+      ".lm-trash.armed": ["--state-delete-armed"],
+      ".key-status": ["--state-key-absent"],
+      ".key-row.missing .key-status": ["--state-key-missing"],
+      ".key-status.present": ["--state-key-present"],
+      ".key-status.verified": ["--state-key-verified"],
+    };
+    for (const theme of ["gilded", "vector"]) for (const ancestor of [`.dark.theme-${theme}`, `.theme-${theme} .dark`]) {
+      allowed[`${ancestor} .topbar .mem-fill`] = ["--state-mem-normal"];
+      allowed[`${ancestor} .topbar .mem-fill.over`] = ["--state-mem-over"];
+    }
+    // Sweep every production CSS/TSX file, so a new consumer outside the
+    // state surfaces cannot quietly adopt one of the dedicated pigments.
+    function sweep(dir: string): void {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = resolve(dir, entry.name);
+        if (entry.isDirectory()) { sweep(path); continue; }
+        if (!/\.(css|tsx?)$/.test(path) || path.includes(".test.")) continue;
+        const source = readFileSync(path, "utf8");
+        if (path.endsWith(".css")) postcss.parse(source).walkDecls(decl => {
+          const refs = [...decl.value.matchAll(/var\((--state-[a-z-]+)\)/g)].map(m => m[1]);
+          if (!refs.length) return;
+          expect(path).toBe(resolve(import.meta.dirname, "components/nexus/nexus-layout.css"));
+          const rule = decl.parent;
+          if (rule?.type !== "rule") throw new Error("State pigment outside a surface rule");
+          for (const selector of rule.selectors) for (const ref of refs) expect(allowed[selector], selector).toContain(ref);
+        });
+        else if (source.includes("--state-")) {
+          expect(path).toBe(resolve(import.meta.dirname, "components/nexus/MapPane.tsx"));
+          const refs = [...source.matchAll(/var\((--state-[a-z-]+)\)/g)].map(m => m[1]);
+          expect(refs.sort()).toEqual(Object.values(MAPPINGS.map).sort());
+        }
+      }
+    }
+    sweep(import.meta.dirname);
+    for (const theme of THEMES) for (const root of ROOTS) {
+      const value = tokens(shippedCss, theme)[root];
+      expect(value, root).not.toContain("var(");
+      expect(() => rgb(value)).not.toThrow();
+    }
+    for (const [selector, refs] of Object.entries(allowed)) {
+      if (!selector.startsWith(".dark.") && !selector.startsWith(".theme-")) {
+        const color = declaration(selector, selector.includes("mem-fill") ? "background" : "color");
+        expect(rootOf(color), selector).toBe(refs[0]);
+      }
+      postcss.parse(layoutCss).walkRules(rule => {
+        if (!rule.selectors.includes(selector)) return;
+        rule.walkDecls(decl => {
+          if (["color", "background", "box-shadow", "filter"].includes(decl.prop))
+            for (const match of decl.value.matchAll(/var\((--[a-z-]+)\)/g)) expect(refs, `${selector} ${decl.prop}`).toContain(match[1]);
+        });
+      });
+    }
+    const topbar = readFileSync(resolve(import.meta.dirname, "components/nexus/TopBar.tsx"), "utf8");
+    const local = readFileSync(resolve(import.meta.dirname, "components/nexus/LocalModelRows.tsx"), "utf8");
+    const keys = readFileSync(resolve(import.meta.dirname, "components/nexus/SettingsPane.tsx"), "utf8");
+    expect(topbar).toContain('className={`mem-fill');
+    expect(topbar).toContain('className="mem-over-glyph"');
+    expect(local).toContain('className={`lm-trash');
+    expect(keys).toContain('className={`key-status ${status}`}');
+    expect(mapSource.match(/<MapStateGlyph/g)).toHaveLength(2);
+    expect(mapSource).toContain("color={PIN_COLOR[state]}");
+    expect(mapSource).toContain("color={pinColor}");
+    expect(mapSource).toContain("const pinColor = PIN_COLOR[state]");
+    expect(mapSource).toContain('stroke={PIN_COLOR[pinState(place)]}');
+    expect(shippedCss + layoutCss + mapSource).not.toContain("--map-hovered");
+  });
   it("veil_anchor_is_exact_b83d7a", () => {
     const veil = tokens(shippedCss, "Veil");
-    expect(veil["--brass"]).toBe("#b83d7a");
-    expect(veil["--magenta"]).toBe("#b83d7a");
-    for (const root of ["--primary", "--sidebar-primary", "--sidebar-ring", "--ring", "--chart-1"])
+    for (const root of VEIL_ANCHOR_TOKENS)
       rgb(veil[root]).forEach((v, i) => expect(v).toBeCloseTo(ANCHOR[i], 12));
   });
 });

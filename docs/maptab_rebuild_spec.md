@@ -115,10 +115,10 @@ is **current > selected > hovered > rest**:
 
 | State | Fill | Outline | Theme Token |
 |---|---|---|---|
-| Rest | Circle | None | `--bronze` |
-| Current | Circle | Circular ring (bullseye) | `--brass-bright` |
-| Selected | Square | Square ring | `--brass` |
-| Hovered | Diamond | Diamond ring | `--map-hovered` |
+| Rest | Circle | None | `--state-map-rest` |
+| Current | Circle | Circular ring (bullseye) | `--state-map-current` |
+| Selected | Square | Square ring | `--state-map-selected` |
+| Hovered | Diamond | Diamond ring | `--state-map-hovered` |
 
 Circle radius, square half-side and diamond vertex distance are
 `PIN_RADIUS_PX / zoom` on the canvas. The canvas fill glow blur also

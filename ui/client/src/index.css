@@ -443,7 +443,7 @@ html {
   --accent-foreground: 220 40% 6%;
 
   /* Destructive */
-  --destructive: 0 80% 50%;
+  --destructive: 0 65% 50%;
   --destructive-foreground: 0 0% 98%;
 
   /* Form elements */
@@ -478,18 +478,17 @@ html {
   --bg-overlay: rgba(9, 16, 28, 0.86);
   --fg: hsl(42 45% 77%);
   --fg-muted: hsl(42 30% 65%);
-  --fg-dim: hsl(42 20% 30%);
+  --fg-dim: hsl(42 20% 50%);
   --brass: #b83d7a;
   /* magenta rose — PRIMARY (legacy name from the Gilded era) */
-  --brass-bright: hsl(330.2439024390244 60% 30%);
-  --map-hovered: hsl(330.2439024390244 60% 70%);
+  --brass-bright: hsl(320 60% 60%);
   --brass-hot: hsl(15 80% 65%);
   --bronze: hsl(15 75% 60%);
   /* coral — ACCENT */
   --bronze-dark: hsl(27 45% 46%);
   /* copper — SECONDARY */
   --magenta: #b83d7a;
-  --magenta-light: hsl(330.2439024390244 60% 30%);
+  --magenta-light: hsl(320 60% 60%);
   --coral: hsl(15 75% 60%);
   --copper: hsl(27 45% 46%);
   --deep-violet: hsl(270 40% 28%);
@@ -521,6 +520,20 @@ html {
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
+  --state-map-rest: hsl(15 75% 60%);
+  --state-map-current: hsl(330.2439024390244 70% 50%);
+  --state-map-selected: hsl(330.2439024390244 50.20408163265306% 70%);
+  --state-map-hovered: hsl(330.2439024390244 60% 30%);
+  --state-key-absent: hsl(42 20% 50%);
+  --state-key-missing: hsl(15 75% 60%);
+  --state-key-present: hsl(42 50% 70%);
+  --state-key-verified: hsl(330.2439024390244 50.20408163265306% 48.03921568627451%);
+  --state-mem-normal: hsl(330.2439024390244 50.20408163265306% 48.03921568627451%);
+  --state-mem-over: hsl(15 75% 60%);
+  --state-delete-unarmed: hsl(42 30% 65%);
+  --state-delete-armed: hsl(0 80% 50%);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -559,12 +572,12 @@ html {
   --sidebar-background: 0 0% 5%;
   --sidebar-foreground: 45 20% 93%;
   --sidebar-border: 43 35% 25%;
-  --sidebar-primary: 43 74% 40%;
+  --sidebar-primary: 43 74% 47%;
   /* #c9a227 warm brass */
   --sidebar-primary-foreground: 0 0% 4%;
   --sidebar-accent: 43 40% 20%;
   --sidebar-accent-foreground: 45 20% 93%;
-  --sidebar-ring: 43 74% 40%;
+  --sidebar-ring: 43 74% 47%;
 
   /* Popover */
   --popover: 0 0% 8%;
@@ -572,7 +585,7 @@ html {
   --popover-border: 43 35% 25%;
 
   /* Primary - Warm Brass #c9a227 */
-  --primary: 43 74% 40%;
+  --primary: 43 74% 47%;
   --primary-foreground: 0 0% 4%;
 
   /* Secondary - Dark Bronze */
@@ -581,25 +594,25 @@ html {
 
   /* Muted - Subdued Brass */
   --muted: 35 20% 14%;
-  --muted-foreground: 43 40% 30%;
+  --muted-foreground: 43 40% 52%;
   /* #b59953 - warmer, less olive */
 
   /* Accent - Light Gold #e4c76b */
-  --accent: 45 55% 30%;
+  --accent: 45 55% 60%;
   --accent-foreground: 0 0% 4%;
 
   /* Destructive */
-  --destructive: 0 100% 50%;
+  --destructive: 0 70% 45%;
   --destructive-foreground: 0 0% 95%;
 
   /* Form elements */
   --input: 43 25% 18%;
-  --ring: 43 74% 40%;
+  --ring: 43 74% 47%;
 
   /* Charts - Gold/Bronze palette */
-  --chart-1: 43 74% 40%;
+  --chart-1: 43 74% 47%;
   /* brass */
-  --chart-2: 30 50% 60%;
+  --chart-2: 30 50% 45%;
   /* bronze */
   --chart-3: 45 60% 65%;
   /* light gold */
@@ -635,13 +648,12 @@ html {
   --bg-elev-3: hsl(0 0% 8%);
   --bg-overlay: rgba(10, 10, 11, 0.85);
   --fg: hsl(45 20% 93%);
-  --fg-muted: hsl(43 40% 30%);
-  --fg-dim: hsl(43 30% 70%);
-  --brass: hsl(43 74% 40%);
-  --brass-bright: hsl(45 55% 30%);
-  --map-hovered: hsl(45 75% 60%);
+  --fg-muted: hsl(43 40% 52%);
+  --fg-dim: hsl(43 30% 40%);
+  --brass: hsl(43 74% 47%);
+  --brass-bright: hsl(45 55% 60%);
   --brass-hot: hsl(45 80% 70%);
-  --bronze: hsl(30 50% 60%);
+  --bronze: hsl(30 50% 45%);
   --bronze-dark: hsl(35 40% 35%);
   --border-strong: hsl(43 40% 28%);
   --border-faint: hsl(43 30% 15%);
@@ -665,6 +677,22 @@ html {
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  /* Freeze the inherited Veil pigment at its starting value. */
+  --magenta: hsl(320 55% 48%);
+
+  /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
+  --state-map-rest: hsl(30 50% 70%);
+  --state-map-current: hsl(45 75% 40%);
+  --state-map-selected: hsl(43 84% 60%);
+  --state-map-hovered: hsl(45 55% 30%);
+  --state-key-absent: hsl(43 30% 30%);
+  --state-key-missing: hsl(30 50% 45%);
+  --state-key-present: hsl(43 40% 70%);
+  --state-key-verified: hsl(43 74% 47%);
+  --state-mem-normal: hsl(43 74% 47%);
+  --state-mem-over: hsl(30 50% 45%);
+  --state-delete-unarmed: hsl(43 40% 70%);
+  --state-delete-armed: hsl(0 90% 50%);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -717,10 +745,10 @@ html {
 
   /* Dark Slate Muted */
   --muted: 185 20% 12%;
-  --muted-foreground: 185 40% 50%;
+  --muted-foreground: 185 40% 55%;
 
   /* Electric Blue Accent */
-  --accent: 190 100% 40%;
+  --accent: 190 80% 60%;
   --accent-foreground: 180 30% 3%;
 
   /* Neon Pink Destructive */
@@ -731,7 +759,7 @@ html {
   --ring: 185 100% 50%;
 
   --chart-1: 185 100% 50%;
-  --chart-2: 200 100% 40%;
+  --chart-2: 200 90% 55%;
   --chart-3: 170 70% 50%;
   --chart-4: 260 60% 60%;
   --chart-5: 320 70% 60%;
@@ -751,14 +779,13 @@ html {
   --bg-elev-3: hsl(180 30% 6%);
   --bg-overlay: rgba(5, 12, 14, 0.85);
   --fg: hsl(180 30% 90%);
-  --fg-muted: hsl(185 40% 50%);
-  --fg-dim: hsl(185 30% 30%);
+  --fg-muted: hsl(185 40% 55%);
+  --fg-dim: hsl(185 30% 40%);
   --brass: hsl(185 100% 50%);
   /* neon cyan */
-  --brass-bright: hsl(190 100% 40%);
-  --map-hovered: hsl(190 80% 30%);
+  --brass-bright: hsl(190 80% 60%);
   --brass-hot: hsl(160 80% 60%);
-  --bronze: hsl(200 100% 40%);
+  --bronze: hsl(200 90% 55%);
   --bronze-dark: hsl(260 60% 60%);
   --border-strong: hsl(185 50% 28%);
   --border-faint: hsl(185 50% 14%);
@@ -794,6 +821,22 @@ html {
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  /* Freeze the inherited Veil pigment at its starting value. */
+  --magenta: hsl(320 55% 48%);
+
+  /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
+  --state-map-rest: hsl(200 100% 40%);
+  --state-map-current: hsl(190 100% 40%);
+  --state-map-selected: hsl(185 100% 50%);
+  --state-map-hovered: hsl(190 80% 30%);
+  --state-key-absent: hsl(185 30% 30%);
+  --state-key-missing: hsl(200 90% 55%);
+  --state-key-present: hsl(185 40% 55%);
+  --state-key-verified: hsl(185 100% 70%);
+  --state-mem-normal: hsl(185 100% 50%);
+  --state-mem-over: hsl(200 90% 55%);
+  --state-delete-unarmed: hsl(185 40% 55%);
+  --state-delete-armed: hsl(350 80% 55%);
 }
 
 /* Veil theme font variants: small-caps for mono, uppercase for display.
