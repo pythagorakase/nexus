@@ -609,14 +609,16 @@ def seed_protagonist(
     then add a head chunk after it. Refuses to move a clock that is already
     set (for example by ``seed_story_clock``): resetting ``base_timestamp``
     under stored chunks would desynchronize their ``world_time`` from the
-    summed deltas until the next ``chunk_metadata`` write re-stamps them.
+    summed primary-layer deltas until the next ``chunk_metadata`` write
+    re-stamps them.
 
     When the clock is first set under chunks that already exist, those chunks
     carry wall-clock ``world_time`` stamps (the refresh trigger falls back to
     ``now()`` while ``base_timestamp`` is NULL). The helper re-stamps them
     through the ``UPDATE OF time_delta`` statement trigger and asserts the
-    head clock is ``base_timestamp`` plus the summed deltas before the
-    character insert, so need clocks never anchor to wall time (#640/#645).
+    head clock is ``base_timestamp`` plus the summed primary-layer deltas
+    before the character insert, so need clocks never anchor to wall time
+    (#640/#645).
     """
 
     require_disposable_target(dbname)
@@ -669,14 +671,19 @@ def seed_committed_chunk(
     season: int = 1,
     episode: int = 1,
     scene: int = 1,
-    time_delta: timedelta = timedelta(minutes=1),
+    time_delta: timedelta | None = None,
 ) -> int:
     """Insert one committed chunk with its primary-layer metadata; return its ID.
 
-    ``time_delta`` is the story time elapsing during the chunk. The
+    ``time_delta`` is the story time elapsing during the chunk. ``None`` means
+    zero when the save has no ``chunk_metadata`` row, because the bootstrap
+    chunk elapses no time (``base_timestamp`` is the clock at its end, and the
+    refresh trigger raises on a non-zero bootstrap delta), and one minute
+    otherwise; an explicit value passes through unchanged. The
     statement-level ``trg_chunk_metadata_refresh_world_time`` trigger stamps
     ``chunk_metadata.world_time`` as ``base_timestamp`` plus the cumulative
-    deltas, so the chunk's clock is exact only once ``base_timestamp`` is set.
+    primary-layer deltas, so the chunk's clock is exact only once
+    ``base_timestamp`` is set.
 
     The chunk carries no ``authorial_directives``, so it satisfies
     ``playable_narrative_predicate`` (reconstruction.py) and counts toward the
@@ -685,6 +692,10 @@ def seed_committed_chunk(
 
     require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        if time_delta is None:
+            cur.execute("SELECT EXISTS (SELECT 1 FROM chunk_metadata)")
+            has_chunks = bool(cur.fetchone()[0])
+            time_delta = timedelta(minutes=1) if has_chunks else timedelta(0)
         cur.execute(
             "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
             "VALUES (%s, %s) RETURNING id",
@@ -719,7 +730,8 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     ``orrery_sync_character_need_states`` anchors need clocks at
     ``MAX(chunk_metadata.world_time)``, then at ``base_timestamp``. The anchor
     is exact only when ``base_timestamp`` is set and, if chunks exist, the head
-    ``world_time`` equals ``base_timestamp`` plus the summed deltas. Chunks
+    ``world_time`` equals ``base_timestamp`` plus the summed primary-layer
+    deltas. Chunks
     stamped while ``base_timestamp`` was NULL carry wall-clock ``world_time``
     and fail here rather than seeding wall-clock need clocks.
     """
@@ -732,6 +744,7 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
             (SELECT max(world_time) FROM chunk_metadata),
             gv.base_timestamp + COALESCE(
                 (SELECT sum(COALESCE(time_delta, interval '0'))
+                     FILTER (WHERE world_layer = 'primary')
                  FROM chunk_metadata),
                 interval '0'
             )
@@ -750,8 +763,8 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     assert chunk_count == 0 or head_world_time == expected_head, (
         f"{helper} found a wall-clock need-clock anchor: head world_time "
         f"{head_world_time} is not base_timestamp {base_timestamp} plus the "
-        f"summed deltas ({expected_head}); re-stamp chunk_metadata after "
-        "setting base_timestamp"
+        f"summed primary-layer deltas ({expected_head}); re-stamp "
+        "chunk_metadata after setting base_timestamp"
     )
 
 
@@ -774,9 +787,12 @@ def seed_story_clock(
     reads anchor on.
 
     When the save has no ``base_timestamp`` yet, ``world_time`` becomes the
-    bootstrap clock and the chunk elapses no time. Otherwise the chunk's
-    ``time_delta`` is the gap from the current head clock, which must not be
-    later than ``world_time``. The chunk is inserted through
+    bootstrap clock and the chunk elapses no time. When ``base_timestamp`` is
+    set and the save has no chunk, ``world_time`` must equal
+    ``base_timestamp`` (the bootstrap contract: ``base_timestamp`` is the
+    clock at the end of the bootstrap chunk, which elapses no time).
+    Otherwise the chunk's ``time_delta`` is the gap from the current head
+    clock, which must not be later than ``world_time``. The chunk is inserted through
     ``seed_committed_chunk``; the stored ``world_time`` is asserted exact and
     the chunk ID returned.
     """
@@ -794,10 +810,21 @@ def seed_story_clock(
                 (world_time,),
             )
             assert cur.rowcount == 1
+        else:
+            cur.execute("SELECT EXISTS (SELECT 1 FROM chunk_metadata)")
+            if not cur.fetchone()[0]:
+                assert world_time == row[0], (
+                    f"seed_story_clock would seed the bootstrap chunk at "
+                    f"{world_time}, but base_timestamp is {row[0]}: the bootstrap "
+                    "contract makes base_timestamp the clock at the end of the "
+                    "bootstrap chunk, which elapses no time; pass the same "
+                    "instant to seed_protagonist(base_timestamp=...)"
+                )
         cur.execute(
             """
             SELECT gv.base_timestamp + COALESCE(
                 (SELECT sum(COALESCE(time_delta, interval '0'))
+                     FILTER (WHERE world_layer = 'primary')
                  FROM chunk_metadata),
                 interval '0'
             )

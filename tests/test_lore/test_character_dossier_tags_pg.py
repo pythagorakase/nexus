@@ -36,7 +36,8 @@ def dossier_database() -> Iterator[tuple[str, int, int]]:
                 "INSERT INTO narrative_chunks (id, raw_text) VALUES (1, 'A quiet room.')"
             )
             cur.execute(
-                "INSERT INTO chunk_metadata (chunk_id, time_delta) VALUES (1, interval '1 hour')"
+                "INSERT INTO chunk_metadata (chunk_id, world_layer, time_delta) "
+                "VALUES (1, 'primary', interval '0')"
             )
             cur.execute("SELECT set_config('nexus.write_producer', 'manual', true)")
             cur.execute(
