@@ -88,8 +88,14 @@
 -- fleet (save_01 and save_02), so the rewrite lasts milliseconds once the
 -- locks are granted; the migration waits for any open transaction that
 -- touched characters, character_relationships or the three views, and while
--- it waits in the lock queue it blocks every new reader of characters. Apply
--- it with no turn in flight and no idle-in-transaction session on characters.
+-- it waits in the lock queue it blocks every new reader of characters. The
+-- lock_timeout below bounds each lock request, not the transaction: a run that
+-- meets an open transaction waits up to five seconds, new readers queue behind
+-- it for that long, and then the run fails, the queue drains, and the run is
+-- repeated later (as migration 138 does). Apply it with no turn in flight and
+-- no idle-in-transaction session on characters.
+
+SET LOCAL lock_timeout = '5s';
 
 CREATE TEMP TABLE m139_view_snapshot ON COMMIT DROP AS
 SELECT c.relname::text AS relname,
