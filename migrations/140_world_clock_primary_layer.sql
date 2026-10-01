@@ -65,8 +65,9 @@
 --
 -- Locks: ADD CONSTRAINT holds an ACCESS EXCLUSIVE lock on chunk_metadata
 -- while it scans every row to validate the CHECK (at most 1,425 rows, on
--- save_01 and save_02); DROP TRIGGER and CREATE TRIGGER take SHARE ROW
--- EXCLUSIVE on the same table, and the final refresh reads every row. The
+-- save_01 and save_02); DROP TRIGGER takes ACCESS EXCLUSIVE and CREATE
+-- TRIGGER takes SHARE ROW EXCLUSIVE on the same table (both already covered
+-- by the ALTER TABLE lock), and the final refresh reads every row. The
 -- runner applies the file in one transaction, so the ACCESS EXCLUSIVE lock is
 -- held until it commits. lock_timeout below bounds each lock request, not the
 -- transaction: a run that meets an open transaction on chunk_metadata waits up

@@ -637,8 +637,9 @@ def test_source_lock_precedes_world_time_refresh(idf_slot: str) -> None:
                         monotonic() < deadline
                     ), "Metadata writer did not reach corpus lock"
                     Event().wait(0.01)
-                # This production trigger updates every chunk_metadata row.
-                # If the waiter already owns B, owner->B->corpus->owner deadlocks.
+                # The refresh trigger rewrites every row whose clock moves; the
+                # +1 second on `first` moves `second`, so if the waiter already
+                # owns B, owner->B->corpus->owner deadlocks.
                 with owner.cursor() as cur:
                     cur.execute(
                         "UPDATE chunk_metadata SET time_delta=time_delta+interval '1 second' WHERE chunk_id=%s",
