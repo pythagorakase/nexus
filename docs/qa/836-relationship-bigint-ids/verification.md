@@ -202,6 +202,55 @@ dbname audit: owner targets: none
 
 (This run did not pass `-rs`, so its skip reasons were not printed.)
 
+### `tests/test_orrery` Rerun With Skip Reasons
+
+Rerun on commit `6e9491a5` (the same code as the run above) with `-rs`,
+split in two alphabetical halves so each piece stays under the ten-minute
+command limit; `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset.
+Together the halves give the same totals as the run above: 663 + 979 = 1642
+passed, 31 + 11 = 42 skipped.
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs -p tests.dbname_audit $(ls tests/test_orrery/test_[a-l]*.py)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 101 targets: ...
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_orrery/test_card_identity.py:121: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [18] tests/test_orrery/test_claim_propagation_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_orrery/test_claim_propagation_live.py:1075: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [4] tests/test_orrery/test_composition_sources_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [4] tests/test_orrery/test_composition_sources_live.py:546: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_orrery/test_gaia_registry_schema_pg.py:347: Set NEXUS_638_ENUM_E2E=1 for the live Gaia enum-schema gate.
+SKIPPED [1] tests/test_orrery/test_live_cycle.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+663 passed, 31 skipped, 2 warnings in 214.69s (0:03:34)
+
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs -p tests.dbname_audit $(ls tests/test_orrery/test_[m-z]*.py)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 119 targets: ...
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_orrery/test_projects.py:609: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [1] tests/test_orrery/test_recruit_ally_projects.py:808: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [1] tests/test_orrery/test_retrograde_live.py:29: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_orrery/test_retrograde_maturation_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_orrery/test_retrograde_retrieval_live.py: NEXUS_RETROGRADE_RETRIEVAL_TEST_DB_URL is not configured
+SKIPPED [1] tests/test_orrery/test_retrograde_wizard_live.py: Set NEXUS_RETROGRADE_WIZARD_E2E=1 to run the live cold-start proof.
+SKIPPED [5] tests/test_orrery/test_stage2a_status_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+979 passed, 11 skipped, 2 warnings in 194.44s (0:03:14)
+```
+
+The 42 `tests/test_orrery` skips by reason: live LLM opt-in
+(`NEXUS_RUN_LIVE_LLM`, 35), owner-corpus opt-in (`NEXUS_RUN_CORPUS`, 4), the
+live Gaia enum-schema gate (`NEXUS_638_ENUM_E2E`, 1), the live retrograde
+cold-start proof (`NEXUS_RETROGRADE_WIZARD_E2E`, 1), and an unset dedicated
+retrieval-test database URL (`NEXUS_RETROGRADE_RETRIEVAL_TEST_DB_URL`, 1).
+None is a `NEXUS_RUN_POSTGRES` skip. No failure and no error.
+
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rfEs -p tests.dbname_audit tests/test_api
 FAILED tests/test_api/test_scheduler_corpus_pg.py::test_scheduler_live_turn_starts_before_queued_render
