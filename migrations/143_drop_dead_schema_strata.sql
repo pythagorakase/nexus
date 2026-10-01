@@ -12,10 +12,13 @@
 --
 -- First line of defense: the catalog-aware scanner covers SQL/PLpgSQL relation
 -- and type names, casts, declarations, %TYPE/%ROWTYPE, arrays and constant EXECUTE.
--- Ordinary, E, U& (optional UESCAPE), B, X, N, dollar/tagged literals and newline
+-- Ordinary, E, B, X, N, dollar/tagged literals and newline
 -- literal concatenation (including -- comments, CR/LF) are single string tokens.
 -- Unknown prefixes/malformed literals refuse. PostgreSQL decodes only validated literal grammar, never a
--- computed operand. Diagnostic strings and comments are not identifier uses.
+-- computed operand. Unicode-escape literals/identifiers refuse as unclassifiable:
+-- raw source containing U&', U&" or UESCAPE (case-insensitive, even in comments
+-- and strings) refuses before tokenizing. Other diagnostic strings/comments
+-- are not identifier uses.
 -- Typed literals, ::, CAST AS and declarations are type contexts. Columns in
 -- SELECT/WHERE/HAVING/ON/GROUP BY/ORDER BY/RETURNING, arguments and UPDATE SET
 -- require catalog proof on resolved FROM/JOIN/UPDATE/INSERT targets or aliases;
@@ -29,12 +32,16 @@
 -- Constant EXECUTE supports literal concatenation and pg_catalog.format; fold
 -- then scan recursively. Variable/parameter expressions, non-SQL application
 -- languages, ambiguous paths, runtime search_path/role mutation, different
--- SECURITY DEFINER owners and Unicode-escape quoted identifiers refuse.
+-- SECURITY DEFINER owners refuse.
 -- Resolution uses each function's effective search_path, never a name allowlist.
 -- Second line of defense: after restrictive drops, before comments/stamping,
 -- run PostgreSQL's own language validators (fmgr_sql_validator, plpgsql_validator)
 -- over EVERY surviving application function/procedure with check_function_bodies=on
--- under every routine SET clause, applied/restored as CREATE FUNCTION applies it.
+-- under every routine SET clause. The environment is applied and unwound
+-- through PostgreSQL's GUC stack, as CREATE FUNCTION does: each validator runs
+-- in its own subtransaction, aborted by a dedicated success sentinel. Native
+-- unwind restores settings, including role/session_authorization, without
+-- fresh permission-checked assignments under a temporarily changed role.
 -- That is the check CREATE FUNCTION performs, against the
 -- post-drop catalog, with no DDL: nothing is re-created, so OIDs, ownership, ACLs
 -- and comments are untouched and a named failure rolls the transaction back.
@@ -42,7 +49,9 @@
 -- receive only a syntax check from fmgr_sql_validator, shared by re-creation.
 -- Other SQL bodies are parsed/analyzed; PLpgSQL syntax/declared types are validated.
 -- Neither defense completely covers late-bound PLpgSQL expression-level references.
--- The SET-clause environment is applied as CREATE FUNCTION applies it.
+-- SET values split at the first equals sign in one helper shared with the scanner.
+-- set_config uses GUC_ACTION_LOCAL; subtransaction abort restores natively,
+-- while CREATE FUNCTION uses GUC_ACTION_SAVE at a GUC nesting level.
 -- All catalog/scanner guards precede DROP. Post-drop validation remains within
 -- the runner's same atomic transaction. No persistent helper/debt remains.
 
@@ -64,6 +73,10 @@ DECLARE
     prefix text;
     suffix text;
 BEGIN
+    IF strpos(lower(body),'u&''')>0 OR strpos(lower(body),'u&"')>0
+        OR strpos(lower(body),'uescape')>0 THEN
+        RAISE EXCEPTION 'unicode-escape literal or identifier; edit the routine';
+    END IF;
     WHILE i <= length(body) LOOP
         ch := substr(body, i, 1);
         IF ch ~ '\s' THEN i := i + 1; CONTINUE; END IF;
@@ -81,13 +94,10 @@ BEGIN
             IF depth <> 0 THEN RAISE EXCEPTION 'unclosed comment'; END IF;
             CONTINUE;
         END IF;
-        IF lower(ch)='u' AND substr(body,i+1,2)='&"' THEN
-            RAISE EXCEPTION 'unsupported Unicode-escape quoted identifier';
-        END IF;
         start_at := i; value := ''; escaped := false;
-        prefix := substring(substr(body,i) FROM '^([a-zA-Z]+&?)''');
+        prefix := substring(substr(body,i) FROM '^([a-zA-Z]+)''');
         IF ch = '''' OR prefix IS NOT NULL THEN
-            IF prefix IS NOT NULL AND lower(prefix) NOT IN ('e','u&','b','x','n') THEN
+            IF prefix IS NOT NULL AND lower(prefix) NOT IN ('e','b','x','n') THEN
                 RAISE EXCEPTION 'unresolved string literal prefix %',prefix;
             END IF;
             escaped := lower(coalesce(prefix,''))='e';
@@ -111,13 +121,9 @@ BEGIN
                     END IF;
                 END IF;
             END LOOP;
-            IF lower(prefix)='u&' THEN
-                suffix := substring(substr(body,i) FROM '^([[:space:]]+[uU][eE][sS][cC][aA][pP][eE][[:space:]]+''(?:[^'']|'''')*'')');
-                IF suffix IS NOT NULL THEN i := i + length(suffix); END IF;
-            END IF;
             raw := substr(body,start_at,i-start_at);
             -- Only the fully delimited literal grammar above reaches EXECUTE.
-            -- PostgreSQL decodes escapes/UESCAPE; no caller expression executes.
+            -- PostgreSQL decodes escapes; no caller expression executes.
             BEGIN
                 EXECUTE 'SELECT ('||raw||')::text' INTO value;
             EXCEPTION WHEN OTHERS THEN
@@ -158,6 +164,13 @@ BEGIN
 END
 $lexer$;
 COMMENT ON FUNCTION pg_temp.dead143_tokens(text) IS 'Migration 143 transaction-local SQL lexer: distinguish identifiers from comments and diagnostic literals; removed before stamping.';
+
+CREATE FUNCTION pg_temp.dead143_setting(setting text) RETURNS text[]
+LANGUAGE sql IMMUTABLE AS $setting$
+    SELECT ARRAY[substr(setting,1,strpos(setting,'=')-1),
+                 substr(setting,strpos(setting,'=')+1)]
+$setting$;
+COMMENT ON FUNCTION pg_temp.dead143_setting(text) IS 'Migration 143 transaction-local proconfig parser: name before first equals, complete value after it, shared by scanner and validator; removed before stamping.';
 
 CREATE FUNCTION pg_temp.dead143_body(body text, function_oid oid, targets oid[], relation_targets oid[], names text[], nesting integer DEFAULT 0) RETURNS void
 LANGUAGE plpgsql AS $scanner$
@@ -1051,7 +1064,7 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
                 RAISE EXCEPTION 'unresolved SECURITY DEFINER owner/search_path context';
             END IF;
             IF f.lanname NOT IN ('sql','plpgsql') THEN RAISE EXCEPTION 'unsupported application body language %',f.lanname; END IF;
-            SELECT split_part(setting,'=',2) INTO effective_path FROM unnest(f.proconfig) setting WHERE setting LIKE 'search_path=%';
+            SELECT (pg_temp.dead143_setting(setting))[2] INTO effective_path FROM unnest(f.proconfig) setting WHERE setting LIKE 'search_path=%';
             PERFORM set_config('search_path',coalesce(effective_path,saved_path),true);
             PERFORM pg_temp.dead143_body(CASE WHEN f.prosqlbody IS NULL THEN f.prosrc ELSE pg_get_functiondef(f.oid) END,f.oid,targets,tables || ARRAY[to_regclass('public.items_id_seq')::oid,to_regclass('public.ai_notebook_id_seq')::oid],names);
         EXCEPTION WHEN OTHERS THEN
@@ -1088,9 +1101,7 @@ DO $validate$
 DECLARE
     f record;
     setting text;
-    setting_name text;
-    setting_value text;
-    saved_settings jsonb;
+    parsed_setting text[];
 BEGIN
     FOR f IN SELECT p.oid,p.proconfig,l.lanname,
         format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)) AS identity
@@ -1100,24 +1111,24 @@ BEGIN
         ORDER BY p.oid
     LOOP
         BEGIN
-            saved_settings := '{}';
             FOR setting IN SELECT unnest(f.proconfig) LOOP
-                -- GUC values may themselves contain '='; split only at the first.
-                setting_name := substr(setting,1,strpos(setting,'=')-1);
-                setting_value := substr(setting,strpos(setting,'=')+1);
-                saved_settings := saved_settings || jsonb_build_object(setting_name,current_setting(setting_name,true));
-                PERFORM set_config(setting_name,setting_value,true);
+                parsed_setting := pg_temp.dead143_setting(setting);
+                PERFORM set_config(parsed_setting[1],parsed_setting[2],true);
             END LOOP;
             CASE f.lanname
                 WHEN 'sql' THEN PERFORM pg_catalog.fmgr_sql_validator(f.oid);
                 WHEN 'plpgsql' THEN PERFORM pg_catalog.plpgsql_validator(f.oid);
                 ELSE RAISE EXCEPTION 'unsupported application body language %',f.lanname;
             END CASE;
-            FOR setting_name,setting_value IN SELECT key,value FROM jsonb_each_text(saved_settings) LOOP
-                PERFORM set_config(setting_name,setting_value,true);
-            END LOOP;
-        EXCEPTION WHEN OTHERS THEN
-            RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: %',f.identity,SQLERRM;
+            -- Abort even on success: PostgreSQL unwinds the entire GUC stack.
+            RAISE SQLSTATE 'D1430' USING MESSAGE='dead143 validation complete';
+        EXCEPTION
+            WHEN SQLSTATE 'D1430' THEN
+                IF SQLERRM <> 'dead143 validation complete' THEN
+                    RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: %',f.identity,SQLERRM;
+                END IF;
+            WHEN OTHERS THEN
+                RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: %',f.identity,SQLERRM;
         END;
     END LOOP;
 END
@@ -1125,3 +1136,4 @@ $validate$;
 COMMENT ON FUNCTION public.set_updated_at() IS 'BEFORE UPDATE trigger on characters and places (trg_characters_set_updated, trg_places_set_updated): stamps updated_at with now(), the transaction start time.';
 DROP FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], integer);
 DROP FUNCTION pg_temp.dead143_tokens(text);
+DROP FUNCTION pg_temp.dead143_setting(text);

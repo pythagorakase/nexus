@@ -1330,3 +1330,150 @@ def test_migration_143_round3_invalid_setting_refuses(
         assert _snapshot(dbname, surviving=False) == before
         assert _function_catalog(dbname) == functions
         assert _stamps(dbname) == stamps
+
+
+ROUND4_LITERALS = {
+    "unicode-gap": (
+        "BEGIN RETURN U&'public.items' /* gap */ UESCAPE 'z'::regclass::oid; END"
+    ),
+    "unicode-argument-gap": (
+        "BEGIN RETURN U&'public.items' UESCAPE /* gap */ 'z'::regclass::oid; END"
+    ),
+    "unicode-comment": "BEGIN /* uescape */ RETURN 'public.z'::regclass::oid; END",
+    "unicode-string": "BEGIN PERFORM 'uEsCaPe'; RETURN 'public.z'::regclass::oid; END",
+    "unicode-identifier": 'BEGIN RETURN (SELECT U&"id"::oid FROM public.z); END',
+    "escaped-unicode": r"BEGIN RETURN E'public.\u007a'::regclass::oid; END",
+}
+
+
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize("case", ROUND4_LITERALS)
+def test_migration_143_round4_unicode_forms(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+    post: bool,
+) -> None:
+    """Unicode forms refuse even in comments/data; E-string decoding stays valid."""
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        _sql(
+            dbname,
+            "CREATE TABLE public.z(id integer); "
+            "COMMENT ON TABLE public.z IS '813 surviving Unicode suffix'; "
+            "COMMENT ON COLUMN public.z.id IS '813 surviving probe value'; "
+            "INSERT INTO public.z VALUES (1); "
+            "CREATE FUNCTION public.probe813_unicode() RETURNS oid LANGUAGE plpgsql "
+            f"AS $probe${ROUND4_LITERALS[case]}$probe$; "
+            "COMMENT ON FUNCTION public.probe813_unicode() IS '813 raw-form refusal'",
+        )
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT public.probe813_unicode()")
+            actual = cur.fetchone()[0]
+            reference = "public.items" if case.endswith("gap") else "public.z"
+            if case == "unicode-identifier":
+                assert actual == 1
+            else:
+                cur.execute("SELECT %s::regclass::oid", (reference,))
+                assert cur.fetchone() == (actual,)
+        refuses = case != "escaped-unicode"
+        before = _snapshot(dbname, surviving=not refuses)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        if applied and refuses:
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT to_regclass('public.items'),to_regtype('public.item_type')"
+                )
+                print(
+                    "OLD DESTRUCTIVE VERDICT:",
+                    case,
+                    "applied; targets:",
+                    cur.fetchone(),
+                )
+        assert applied is not refuses, caplog.text
+        if refuses:
+            assert "probe813_unicode" in caplog.text, caplog.text
+            assert (
+                "unicode-escape literal or identifier; edit the routine" in caplog.text
+            )
+            assert _stamps(dbname) == stamps
+        else:
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                _post_state(cur)
+                cur.execute(
+                    "SELECT public.probe813_unicode(), 'public.z'::regclass::oid"
+                )
+                actual, expected = cur.fetchone()
+                assert actual == expected
+        assert _snapshot(dbname, surviving=not refuses) == before
+        assert _function_catalog(dbname) == functions
+
+
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize("case", ("session-authorization", "search-path"))
+def test_migration_143_round4_validator_scope(
+    archives: dict[str, Path], tmp_path: Path, case: str, post: bool
+) -> None:
+    """Native GUC unwind restores privilege and embedded-equals path settings."""
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        role = dbname + "_role"
+        created_role = False
+        try:
+            if case == "session-authorization":
+                _sql(dbname, f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER')
+                created_role = True
+                clauses = (
+                    "SET log_min_messages='notice' "
+                    f"SET session_authorization='{role}'"
+                )
+            else:
+                _sql(
+                    dbname,
+                    'CREATE SCHEMA "a=b"; '
+                    "COMMENT ON SCHEMA \"a=b\" IS '813 path probe'",
+                )
+                clauses = 'SET search_path="a=b",public'
+            _sql(
+                dbname,
+                "CREATE FUNCTION public.probe813_scope() RETURNS integer LANGUAGE sql "
+                f"{clauses} AS $$SELECT 1$$; "
+                "COMMENT ON FUNCTION public.probe813_scope() IS '813 SET scope probe'",
+            )
+            before = _snapshot(dbname, surviving=True)
+            functions = _function_catalog(dbname)
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                settings_sql = (
+                    "SELECT current_setting('session_authorization'),"
+                    "current_setting('role'),"
+                    "current_setting('log_min_messages'),current_setting('search_path')"
+                )
+                cur.execute(settings_sql)
+                settings = cur.fetchone()
+                cur.execute("SELECT public.probe813_scope()")
+                assert cur.fetchone() == (1,)
+                cur.execute(settings_sql)
+                assert cur.fetchone() == settings
+                # Load both validator libraries before the snapshot, so their
+                # GUC registration does not change the inventory being compared.
+                cur.execute("SELECT '[1]'::vector; DO $$BEGIN NULL; END$$")
+                # Include every maintenance-session GUC, not just named probes.
+                cur.execute("SELECT name,setting FROM pg_settings ORDER BY name")
+                all_settings = cur.fetchall()
+                conn.commit()
+                assert migrate.apply_migration(
+                    conn, "143", "drop_dead_schema_strata", MIGRATION
+                )
+                cur.execute(settings_sql)
+                assert cur.fetchone() == settings
+                cur.execute("SELECT name,setting FROM pg_settings ORDER BY name")
+                assert cur.fetchall() == all_settings
+                _post_state(cur)
+            assert _snapshot(dbname, surviving=True) == before
+            assert _function_catalog(dbname) == functions
+        finally:
+            if created_role:
+                _sql(dbname, f'DROP ROLE "{role}"')
