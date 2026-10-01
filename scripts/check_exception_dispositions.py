@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BASELINE_PATH = "scripts/exception_disposition_baseline.json"
+BASELINE_PATH = "config/exception_disposition_baseline.json"
 CHECKER_PATH = "scripts/check_exception_dispositions.py"
 SEED_REASON = (
     "Legacy swallowing handler inventoried by 806-S4; "

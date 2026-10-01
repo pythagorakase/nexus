@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Stdlib only; each interpreter checks the same committed baseline.
+      # Stdlib only; each interpreter checks config/exception_disposition_baseline.json.
       - name: Run exception disposition lint
         env:
           BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}

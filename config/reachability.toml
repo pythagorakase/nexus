@@ -309,7 +309,6 @@ paths = [
     { path = "scripts/edi", class = "dead", reason = "Wraps a client outside the repository (scripts/edi:5); no tracked file runs it." },
     { path = "scripts/entity_reference_parity.py", class = "operator", reason = "operator root scripts/measure_place_coordinate_costs.py:main" },
     { path = "scripts/estimate_time_delta.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
-    { path = "scripts/exception_disposition_baseline.json", class = "operator", reason = "Shrink-only debt baseline consumed by scripts/check_exception_dispositions.py (806-S4)." },
     { path = "scripts/extract_scene_numbers.py", class = "documented", reason = "No root reaches it; named by docs/database.md:77" },
     { path = "scripts/extract_season_episode.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/faction_faction_extra_data_schema.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },

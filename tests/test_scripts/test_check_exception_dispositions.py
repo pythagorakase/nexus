@@ -66,6 +66,7 @@ def repo(tmp_path: Path) -> Path:
 
 
 def _baseline(root: Path) -> dict[str, str]:
+    (root / lint.BASELINE_PATH).parent.mkdir(parents=True, exist_ok=True)
     debt = {
         h.identity: lint.SEED_REASON
         for h in lint.collect_handlers(root)

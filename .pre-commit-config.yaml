@@ -52,3 +52,6 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+        description: >
+          Check swallowing-handler contracts against the shrink-only baseline
+          in config/exception_disposition_baseline.json.
