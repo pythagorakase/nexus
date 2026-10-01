@@ -73,6 +73,9 @@ reason = "Long-absence probe turn driver from issue 909; CLI generation, accepta
 target = "scripts/qa_shift/rearm_grammar_weight.py:main"
 reason = "Read-only rearm grammar weight report for 781-Q2; offline except one read-only registry build (issue 781)."
 [[operators]]
+target = "scripts/qa_shift/intention_revision_weight.py:main"
+reason = "Offline Gaia revision grammar and listing measurement for issue 782; docs/orrery_intentions.md."
+[[operators]]
 target = "nexus/agents/orrery/worker.py:main"
 reason = "README.md and docs/orrery_design_plan.md background worker."
 [[operators]]
@@ -345,6 +348,7 @@ paths = [
     { path = "scripts/qa_shift/baselines/2026-09-23/save_04.codex_qa.json", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
     { path = "scripts/qa_shift/card_identity_probe.py", class = "operator", reason = "operator root scripts/qa_shift/card_identity_probe.py:main" },
     { path = "scripts/qa_shift/historical_passage_limit.py", class = "operator", reason = "operator root scripts/qa_shift/historical_passage_limit.py:main" },
+    { path = "scripts/qa_shift/intention_revision_weight.py", class = "operator", reason = "Offline Gaia revision grammar and listing measurement for issue 782; docs/orrery_intentions.md." },
     { path = "scripts/qa_shift/long_absence_probe.py", class = "operator", reason = "operator root scripts/qa_shift/long_absence_probe.py:main" },
     { path = "scripts/qa_shift/long_absence_turn.py", class = "operator", reason = "operator root scripts/qa_shift/long_absence_turn.py:main" },
     { path = "scripts/qa_shift/mission_prompt.md", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
