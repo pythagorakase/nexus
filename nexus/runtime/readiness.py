@@ -14,7 +14,8 @@ A machine plays one of three roles:
 Every check has a stable ID and returns one :class:`CheckResult`. A check
 whose dependency did not pass is skipped and names the failed check. Checks
 never create, migrate, lock, or write anything: database sessions are
-read-only, and secrets are reported as present or missing, never printed.
+read-only, and secrets are reported as present, missing, or unreadable, never
+printed.
 ``nexus doctor`` runs a role's checks; ``/runtime/status`` carries the subset
 the gateway answers in-process. Liveness (``/health``), this readiness report,
 and slot playability are separate answers.
@@ -373,10 +374,12 @@ def _check_postgres_reachable(ctx: ReadinessContext) -> Outcome:
     import psycopg2
 
     from nexus.database import connection_kwargs
-    from nexus.util.secret_manager import MissingSecretError
+    from nexus.util.secret_manager import MissingSecretError, SecretStoreAccessError
 
     try:
         params = connection_kwargs(MAINTENANCE_DATABASE)
+    except SecretStoreAccessError as exc:
+        return _failed(exc.failure, exc.remediation)
     except (ValueError, RuntimeError, MissingSecretError) as exc:
         return _failed(
             one_line(exc),
@@ -848,12 +851,21 @@ def _check_ui_bundle(ctx: ReadinessContext) -> Outcome:
 
 
 def _check_seat_secrets(ctx: ReadinessContext) -> Outcome:
-    """Every key the model seats in use read is present (never printed)."""
+    """Every key the model seats in use read is present (never printed).
+
+    An account whose macOS Keychain cannot be read is ``unreadable``, never
+    ``missing``; any unreadable account fails the check with the first one's
+    remediation, since storing a key cannot help while the store is shut.
+    """
     from nexus.api.secrets_endpoints import (
         SeatRequirementError,
         required_secret_accounts,
     )
-    from nexus.util.secret_manager import MissingSecretError, get_secret
+    from nexus.util.secret_manager import (
+        MissingSecretError,
+        SecretStoreAccessError,
+        get_secret,
+    )
 
     try:
         required = required_secret_accounts(ctx.require_settings())
@@ -867,11 +879,16 @@ def _check_seat_secrets(ctx: ReadinessContext) -> Outcome:
     env_only = os.environ.get("NEXUS_KEYRING_DISABLE") == "1"
     present: list[str] = []
     missing: list[str] = []
+    unreadable: list[str] = []
+    access_errors: list[SecretStoreAccessError] = []
     for account in sorted(required):
         try:
             get_secret(account)
         except MissingSecretError:
             missing.append(account)
+        except SecretStoreAccessError as exc:
+            unreadable.append(account)
+            access_errors.append(exc)
         else:
             present.append(account)
 
@@ -884,12 +901,16 @@ def _check_seat_secrets(ctx: ReadinessContext) -> Outcome:
     parts = [f"present: {listed(present)}"] if present else []
     if missing:
         parts.append(f"missing: {listed(missing)}")
+    if unreadable:
+        parts.append(f"unreadable: {listed(unreadable)}")
     source = (
         "environment only, NEXUS_KEYRING_DISABLE=1"
         if env_only
         else "platform secret store"
     )
     observed = f"{' | '.join(parts)} [{source}]"
+    if access_errors:
+        return _failed(observed, access_errors[0].remediation)
     if not missing:
         return _passed(observed)
     if env_only:
@@ -917,7 +938,7 @@ def _check_gateway_reachable(ctx: ReadinessContext) -> Outcome:
 
     from nexus.runtime.remote_auth import build_runtime_request_auth
     from nexus.runtime.supervisor import RuntimeError_, Supervisor
-    from nexus.util.secret_manager import MissingSecretError
+    from nexus.util.secret_manager import MissingSecretError, SecretStoreAccessError
 
     settings = ctx.require_settings()
     runtime = ctx.require_runtime()
@@ -937,6 +958,8 @@ def _check_gateway_reachable(ctx: ReadinessContext) -> Outcome:
     }[runtime.profile]
     try:
         auth = build_runtime_request_auth(url, remote)
+    except SecretStoreAccessError as exc:
+        return _failed(exc.failure, exc.remediation)
     except MissingSecretError as exc:
         return _failed(
             one_line(exc),

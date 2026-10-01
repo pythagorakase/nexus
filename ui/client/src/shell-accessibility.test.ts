@@ -2,11 +2,18 @@
  * Shell accessibility invariants that live in static assets (#777): the
  * viewport must let readers pinch-zoom, content names render in natural
  * case, and every looping or moving effect holds still under
- * prefers-reduced-motion. The assertions read the shipped files themselves.
+ * prefers-reduced-motion, app-wide. The assertions read the shipped files
+ * themselves.
  */
-import postcss, { type AtRule, type Container, type Root, type Rule } from "postcss";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import postcss, {
+  type AtRule,
+  type Container,
+  type Declaration,
+  type Root,
+  type Rule,
+} from "postcss";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -14,6 +21,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (...path: string[]) => readFileSync(resolve(here, ...path), "utf-8");
 
 const REDUCED_MOTION = "prefers-reduced-motion: reduce";
+
+/** The app-wide reduced-motion rule in index.css, selector for selector. */
+const GUARD = '[class*="animate-"]:not(.map-pin *)';
 
 function isReducedMotion(node: Container | undefined): boolean {
   return (
@@ -88,6 +98,20 @@ function consumers(
     if (hit) rule.selectors.forEach((s) => selectors.add(normalize(s)));
   });
   return selectors;
+}
+
+/** Every non-test .ts and .tsx file under `dir`, recursively. */
+function sourceFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...sourceFiles(path));
+    } else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
+      files.push(path);
+    }
+  }
+  return files;
 }
 
 describe("viewport (index.html)", () => {
@@ -193,5 +217,93 @@ describe("reduced motion (index.css theme effects)", () => {
 
     expect(animated.size).toBeGreaterThanOrEqual(8);
     for (const selector of animated) expect(stilled, selector).toContain(selector);
+  });
+});
+
+describe("reduced motion (app-wide animate-* guard)", () => {
+  const ANIMATE_TOKEN = /[^\s"'`{}()]*animate-[a-z0-9-]+/g;
+
+  it("stills every animate-* class from one rule, over Tailwind's variants", () => {
+    const root = postcss.parse(read("index.css"));
+    const rules: Rule[] = [];
+    root.walkRules((rule) => {
+      if (!within(rule, isReducedMotion)) return;
+      if (rule.selectors.map(normalize).includes(GUARD)) rules.push(rule);
+    });
+
+    expect(rules).toHaveLength(1);
+    const [rule] = rules;
+    expect(rule.selectors.map(normalize)).toEqual([GUARD]);
+    const declarations = rule.nodes
+      .filter((node): node is Declaration => node.type === "decl")
+      .map(({ prop, value, important }) => ({ prop, value, important }));
+    expect(declarations).toEqual([
+      { prop: "animation", value: "none", important: true },
+    ]);
+  });
+
+  it("reaches every animate-* use under src; only the map pin ring waits for 777-S2", () => {
+    // The map pin ring's pulse is the only cue that tells a hovered pin from
+    // the current one until its glyph shapes land; slice 777-S2 removes this
+    // constant and GUARD's :not(.map-pin *) exclusion together.
+    const HANDLED_BY_777_S2 = ["animate-pulse"];
+
+    const uses: { file: string; token: string }[] = [];
+    const pinFiles: string[] = [];
+    for (const path of sourceFiles(here)) {
+      const file = relative(here, path).split(sep).join("/");
+      const text = readFileSync(path, "utf-8");
+      for (const token of text.match(ANIMATE_TOKEN) ?? []) uses.push({ file, token });
+      if (text.includes('className="map-pin"')) pinFiles.push(file);
+    }
+    const pairs = new Set(uses.map(({ file, token }) => `${file} ${token}`));
+
+    expect(uses.length).toBeGreaterThanOrEqual(70);
+    for (const pair of [
+      "components/nexus/NexusLayout.tsx animate-fade-in",
+      "components/NewStoryWizard/WizardShell.tsx animate-fade-in",
+      "components/ui/dialog.tsx data-[state=open]:animate-in",
+      "components/ui/dialog.tsx data-[state=closed]:animate-out",
+      "components/ui/tooltip.tsx animate-in",
+      "components/ui/toast.tsx data-[swipe=end]:animate-out",
+      "pages/splash/shared.tsx animate-fade-out-slow",
+      "pages/splash/VeilSplash.tsx animate-fade-out-fast",
+    ]) {
+      expect(pairs, pair).toContain(pair);
+    }
+
+    for (const { file, token } of uses) {
+      const element = document.createElement("div");
+      element.setAttribute("class", token);
+      expect(element.matches(GUARD), `${file} ${token}`).toBe(true);
+    }
+
+    expect(pinFiles).toEqual(["components/nexus/MapPane.tsx"]);
+    const pinTokens = uses
+      .filter(({ file }) => file === "components/nexus/MapPane.tsx")
+      .map(({ token }) => token);
+    expect(pinTokens).toEqual(HANDLED_BY_777_S2);
+
+    const doc = new DOMParser().parseFromString(
+      '<svg><g class="map-pin"><circle class="animate-pulse"></circle></g>' +
+        '<circle class="animate-pulse"></circle></svg>',
+      "text/html",
+    );
+    const [inner, outer] = Array.from(doc.querySelectorAll("circle"));
+    expect(inner.matches(GUARD)).toBe(false);
+    expect(outer.matches(GUARD)).toBe(true);
+  });
+
+  it("animates nothing in index.css outside the two guards", () => {
+    const root = postcss.parse(read("index.css"));
+    const animated = consumers(root, ["animation", "animation-name"], (value) =>
+      items(value).some((item) => item !== "none"),
+    );
+    const stilled = guarded(root, "animation");
+
+    for (const selector of animated) {
+      const covered = selector.startsWith(".animate-") || stilled.has(selector);
+      expect(covered, selector).toBe(true);
+    }
   });
 });

@@ -91,7 +91,7 @@ from nexus.runtime.remote_auth import (
     InsecureRuntimeTransportError,
     build_runtime_request_auth,
 )
-from nexus.util.secret_manager import MissingSecretError
+from nexus.util.secret_manager import MissingSecretError, SecretStoreAccessError
 
 logger = logging.getLogger("nexus.cli")
 
@@ -1179,6 +1179,7 @@ _API_URL_ERRORS: tuple[type[BaseException], ...] = (
 _CREDENTIAL_ERRORS: tuple[type[BaseException], ...] = (
     InsecureRuntimeTransportError,
     MissingSecretError,
+    SecretStoreAccessError,
 )
 # A handler whose broad ``except`` turns failures into a result re-raises these
 # first (``except _TRANSPORT_ERRORS: raise``), so they reach main().
@@ -4071,6 +4072,7 @@ def run_up(args: argparse.Namespace) -> Dict[str, Any]:
         RuntimeError_,
         FileNotFoundError,
         MissingSecretError,
+        SecretStoreAccessError,
         ValueError,
         requests.RequestException,
     ) as exc:
@@ -4202,7 +4204,13 @@ def run_status(args: argparse.Namespace) -> Dict[str, Any]:
         if not args.json:
             _print_runtime_status(result)
         return result
-    except (RuntimeError_, FileNotFoundError, MissingSecretError, ValueError) as exc:
+    except (
+        RuntimeError_,
+        FileNotFoundError,
+        MissingSecretError,
+        SecretStoreAccessError,
+        ValueError,
+    ) as exc:
         return {"success": False, "error": str(exc)}
 
 

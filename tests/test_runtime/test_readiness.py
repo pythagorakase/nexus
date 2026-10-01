@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 import threading
 from typing import Any, Callable
@@ -48,7 +49,13 @@ from nexus.runtime.readiness import (
     slot_idf_targets,
     validate_registry,
 )
-from nexus.util.secret_manager import InMemorySecretBackend, get_secret, set_secret
+from nexus.util.secret_manager import (
+    InMemorySecretBackend,
+    SecretStoreAccessError,
+    get_secret,
+    keychain_read_error,
+    set_secret,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_CONFIG = REPO_ROOT / "nexus.toml"
@@ -470,6 +477,94 @@ def test_seat_secrets_read_the_platform_store_path(
     assert secrets.status == "pass"
     assert "5521" not in secrets.observed
     assert in_memory_secret_store.accounts() == frozenset(accounts)
+
+
+def _locked_store_error(account: str) -> SecretStoreAccessError:
+    """The error the ``unreadable_secret_store`` fixture raises for ``account``."""
+    return keychain_read_error(
+        account,
+        subprocess.CalledProcessError(36, ["security"], stderr="STDERR-SENTINEL-821"),
+    )
+
+
+def test_seat_secrets_name_an_unreadable_store(
+    unreadable_secret_store: InMemorySecretBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A locked store is unreadable, never missing, and names its own repair."""
+    accounts = _seat_accounts()
+    for account in accounts:
+        # An exported variable must not stand in for the store it cannot read.
+        monkeypatch.setenv(f"{account.upper()}_API_KEY", "env-held-value-7731")
+
+    secrets = _secrets_check()
+
+    assert secrets.status == "fail"
+    assert secrets.observed.startswith("unreadable: ")
+    assert "missing:" not in secrets.observed
+    assert "present:" not in secrets.observed
+    assert all(account in secrets.observed for account in accounts)
+    assert secrets.observed.endswith("[platform secret store]")
+    assert secrets.remediation == _locked_store_error(accounts[0]).remediation
+    assert "STDERR-SENTINEL-821" not in secrets.observed
+    assert "7731" not in secrets.observed
+
+
+def test_postgres_reachable_names_an_unreadable_password_store(
+    unreadable_secret_store: InMemorySecretBackend,
+    tmp_path: Path,
+) -> None:
+    """A password the store cannot read is not a wrong [api.database] setting."""
+
+    def password_from_store(document: Any) -> None:
+        document["api"]["database"]["password_secret"] = "qa821_database"
+
+    config = _write_config(tmp_path, password_from_store)
+    registry = [
+        spec for spec in REGISTRY if spec.id in {"config.valid", "postgres.reachable"}
+    ]
+    report = run_readiness(
+        "owner-host", ReadinessContext(config_path=config), registry=registry
+    )
+
+    check = _by_id(report)["postgres.reachable"]
+    error = _locked_store_error("qa821_database")
+    assert check.status == "fail"
+    assert check.observed == error.failure
+    assert check.remediation == error.remediation
+
+
+def test_gateway_reachable_names_an_unreadable_access_store(
+    unreadable_secret_store: InMemorySecretBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The Access token read fails before any request, naming the store's repair."""
+
+    def remote(document: Any) -> None:
+        document["runtime"]["profile"] = "remote"
+
+    config = _write_config(tmp_path, remote)
+    exit_code, out, _ = _run_cli(
+        monkeypatch,
+        capsys,
+        "doctor",
+        "--target",
+        "owner-client",
+        "--config",
+        str(config),
+        "--json",
+    )
+
+    assert exit_code == 1
+    checks = {check["id"]: check for check in json.loads(out)["checks"]}
+    assert checks["config.valid"]["status"] == "pass"
+    error = _locked_store_error("cloudflare_access_client_id")
+    assert checks["gateway.reachable"]["status"] == "fail"
+    assert checks["gateway.reachable"]["observed"] == error.failure
+    assert checks["gateway.reachable"]["remediation"] == error.remediation
+    assert checks["gateway.version"]["status"] == "skip"
 
 
 # ---------------------------------------------------------------------------
