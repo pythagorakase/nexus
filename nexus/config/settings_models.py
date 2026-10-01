@@ -898,8 +898,21 @@ class RuntimeCliSettings(BaseModel):
         description=(
             "Per-request HTTP timeout of the play and slot commands' short API "
             "requests (slot state reads, wizard setup and confirmation, undo, "
-            "clear, lock, unlock, model changes); generation, wizard chat, and "
-            "transition requests keep their own budgets"
+            "clear, lock, unlock, model changes); wizard chat, trait toggles, "
+            "phase introductions and the turn-scheduling POSTs take "
+            "turn_request_timeout_seconds, the transition takes the Retrograde "
+            "wizard's budget, and the generation wait apex's"
+        ),
+    )
+    turn_request_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Per-request HTTP timeout of the CLI's model-turn requests: wizard "
+            "chat, trait toggles, phase introductions, and the POSTs that "
+            "schedule continue, retry, regenerate and the seed's opening turn; "
+            "a finite number of seconds greater than 0"
         ),
     )
     poll_interval_seconds: float = Field(

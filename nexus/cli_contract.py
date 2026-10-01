@@ -43,15 +43,25 @@ refused, 4 API unreachable. Every ``--json`` failure prints
 :func:`error_envelope` on stderr, argparse's rejection of the command line
 included (``nexus.cli.CliArgumentParser``): ``ok`` false, a stable ``code``
 from :data:`ERROR_CODES`, the ``error`` message string earlier releases
-printed, and ``partial``, every non-empty field of the failed result. An
-HTTP handler's broad ``except`` never absorbs a refused connection, a timeout,
-an unusable API URL, or a missing or refused runtime credential: those
-propagate to ``nexus.cli.main()``, so every HTTP command reports them alike.
-Only a command that already saved work (a confirmed artifact, a saved seed, a
-scheduled turn) reports a later failed request itself, with a ``partial`` that
-keeps that work and its recovery command: as ``api_unreachable`` when the
-gateway refused or dropped the connection (``nexus.cli.wait_for_session``
-never retries a failed status read), otherwise as a domain failure. JSON-first
+printed, and ``partial``, every non-empty field of the failed result. A
+refused connection, a timeout, an unusable API URL, and a missing or refused
+runtime credential propagate from the HTTP handlers to ``nexus.cli.main()``,
+so every HTTP command reports them alike. An API answer the command cannot
+use propagates to ``main()`` from the play and slot handlers (``load``,
+``continue``, ``retry``, ``undo``, ``regenerate``, ``clear``, ``lock``,
+``unlock``, ``model --set``/``--clear``) and the ``inspect`` verbs, which
+report it alike: a non-2xx answer is ``api_error`` (``inspect`` reports a 404
+as ``not_found``), a 401, 403 or redirect that is not followed is
+``config_error`` (the gateway itself answers none of them, so an edge in front
+of it such as Cloudflare Access rejected the request), and a 2xx body that is
+not a JSON object is ``invalid_response``. ``model`` reports
+a slot database it cannot read as ``database_error``. Only a command that
+already saved work (a confirmed artifact, a saved seed, a scheduled turn)
+reports a later failed request itself, with a ``partial`` that keeps that
+work and its recovery command: as ``api_unreachable`` when the gateway
+refused or dropped the connection (``nexus.cli.wait_for_session`` never
+retries a failed status read), as ``api_error`` for a non-2xx answer, as
+``config_error`` for an access rejection, otherwise as a domain failure. JSON-first
 commands (:data:`ENVELOPE_COMMANDS`) print :func:`success_envelope` on stdout;
 other commands keep their established success payloads. One exception is
 kept for existing consumers: a policy gate (``trait-audit
@@ -196,6 +206,7 @@ ERROR_CODES: Mapping[str, ExitCode] = MappingProxyType(
         "not_found": ExitCode.DOMAIN_FAILURE,
         "api_error": ExitCode.DOMAIN_FAILURE,
         "invalid_response": ExitCode.DOMAIN_FAILURE,
+        "database_error": ExitCode.DOMAIN_FAILURE,
         "usage_error": ExitCode.USAGE,
         "transport_refused": ExitCode.TRANSPORT_REFUSED,
         "api_unreachable": ExitCode.UNREACHABLE,
