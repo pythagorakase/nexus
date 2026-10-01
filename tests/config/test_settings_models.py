@@ -782,7 +782,9 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
     )
 
 
-def test_test_identity_follows_the_provider_not_the_id(tmp_path, monkeypatch):
+def test_test_identity_follows_the_provider_not_the_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """TEST identity is the registry provider, so it survives a renamed entry."""
     config = renamed_test_model_config(tmp_path, "TEMPTEST")
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
@@ -807,7 +809,7 @@ def _compares_literal_test(node: ast.Compare) -> bool:
     return False
 
 
-def test_no_product_code_compares_the_literal_test_id():
+def test_no_product_code_compares_the_literal_test_id() -> None:
     """Product code keys TEST identity on the provider, never on the model id."""
     package = Path(__file__).resolve().parents[2] / "nexus"
     offenders = [

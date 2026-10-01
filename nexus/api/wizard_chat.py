@@ -725,7 +725,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
                     setting = SettingCard(**cache.get_setting_dict())
                     seed = StorySeed(**seed_data)
 
-                    # TEST provider: use pre-computed location data from the mock database
+                    # TEST provider: use pre-computed location data from the
+                    # mock database
                     if load_settings().is_test_model(selected_model):
                         logger.info(
                             "TEST mode: Using mock location data for slot %s",
@@ -1122,7 +1123,8 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                         setting = SettingCard(**cache.get_setting_dict())
                         seed = StorySeed(**seed_data)
 
-                        # TEST provider: use pre-computed location data from the mock database
+                        # TEST provider: use pre-computed location data from the
+                        # mock database
                         if load_settings().is_test_model(selected_model):
                             logger.info(
                                 "TEST mode (stream): Using mock location data for slot %s",
