@@ -1,3 +1,381 @@
+# STOP-REPORT: 810-S2 Amendment 3 (2026-10-01)
+
+## New Untouched Recording-Cursor Failure
+
+Resumed at accepted checkpoint `8dc4d37a`, preserving every commit. Read the
+common rules (including Static Checks), frozen order, all three amendments,
+previous reports, repository instructions, and live #810 comments. Proved
+`nexus.__file__` resolves to this worktree. All commands ran from the assigned
+worktree; all scratch files stayed under the assigned `scratchpad/810-S2/`.
+
+Merged fetched `origin/main` `16993687d7381955e0cc5f7ea0bbb59bf4b22764` in
+`6386630e`, without rebasing or rewriting history. Checkpoints `92d6fb70`,
+`b619d8d3`, and `8dc4d37a` and fetched main are ancestors of HEAD. Validated
+product/fixture head for this stop is `f18bca91f6ec6647c85a634ba786fa370d0f0af0`.
+
+The ordered PostgreSQL proofs all pass on the merged branch: **66 + 116 +
+182 = 364 passed**, with the secret-store guard active and **owner targets:
+none** on every piece. This run exported all 52 ownership/source/384d starting
+clone stamp records, closing the previously missing per-clone stamp evidence.
+The remaining MEMNON/runtime/util/scripts offline split passes after the
+amendment-authorized baseline update below: **290 passed, 25 skipped**.
+
+The API/Orrery offline gate has one failure in an untouched file:
+
+`tests/test_orrery/test_experiences.py::test_embedding_upsert_binds_each_correct_experience_id`
+
+Its `_EmbeddingCursor` (`tests/test_orrery/test_experiences.py:612-642`) has no
+DBAPI `description` and records writes without answering PostgreSQL catalog
+queries. The test patches both the pool connection and embedding manager
+(`:654-691`), then calls the real experience wrapper and ensure helper. The
+new catalog validation reaches `_catalog_rows` at
+`nexus/agents/memnon/utils/embedding_tables.py:140` and raises:
+
+```text
+E       AttributeError: '_EmbeddingCursor' object has no attribute 'description'
+```
+
+This is a recording-cursor test assumption, separate from product failures,
+clone preparation, #1091, and fingerprint/allowlist/exemption liveness. The
+frozen common rule says: "Any other failure in a file you did not change:
+report the exact test id and the failure tail, do not fix it, do not skip it;
+the coordinator triages." Amendment 3 retains that rule. STOP: no test or
+production validator workaround was made, and this test was not skipped.
+The gate reports **1 failed, 1828 passed, 749 skipped**; skips are offline
+results, never counted as PostgreSQL proof.
+
+## Completed Authorized Baseline Deltas
+
+### ANN SQL Fingerprint
+
+Commit `7c4dc699` updates only the `db_access.py` entry of
+`tests/test_memnon/fixtures/ann_repaired_sql.json` from
+`f24ac6cf9aa8e45d4cbb5f85194fa8ed68b875bfb460cb80b2b277d0eb370ac9` to
+`35ecf4de78ec08ff80f23f5d96037125e428d6a6597e18619aea5082317d5497`.
+The entire AST fingerprint test remains unchanged. Its offline rerun passes.
+
+Exactly four AST expressions disappear, all from the ordered deletion of
+`setup_database_indexes`; nothing is added. The raw delta follows:
+
+```json
+[
+  "Constant(value=\"SELECT 1 FROM pg_extension WHERE extname = 'vector'\")",
+  "JoinedStr(values=[Constant(value=\"\\n                        SELECT exists (\\n                            SELECT 1 FROM pg_indexes \\n                            WHERE indexname = '\"), FormattedValue(value=Name(id='dim_table', ctx=Load()), conversion=-1), Constant(value=\"_hnsw_idx'\\n                        )\\n                        \")])",
+  "Constant(value=\"\\n                        SELECT exists (\\n                            SELECT 1 FROM pg_indexes \\n                            WHERE indexname = '\")",
+  "Constant(value=\"_hnsw_idx'\\n                        )\\n                        \")"
+]
+```
+
+A fresh read-only comparison against merged `origin/main` checked all 35 SQL
+source segments matching the fingerprint keywords outside the deleted setup
+function. **Retrieval SQL is byte-identical**, preserving literal whitespace
+and interpolation. Output:
+
+```text
+Retrieval SQL source segments byte-identical to origin/main: 35; no additions.
+All three accepted checkpoint commits and origin/main are ancestors of HEAD.
+```
+
+### Exception-Disposition Exemptions Introduced by the Main Merge
+
+The first remaining-offline run failed only because the new main checker found
+nine stale swallowing-handler exemptions caused by this order's deletions and
+fail-loud conversions. Under Amendment 3's general rule, commit `f18bca91`
+removes exactly those nine identities: six in deleted `setup_database_indexes`,
+one in deleted `_setup_hybrid_search`, one for `check_vector_extension` now
+re-raising, and one for `_generate_chunk_embeddings` now re-raising.
+There are no additions or retained-reason changes; the checker is unchanged.
+The exact removed identities are:
+
+```text
+nexus/agents/memnon/utils/content_processor.py|ContentProcessor._generate_chunk_embeddings|31f7919238de69c3543c28a5f4d3cd41891ee39576b41f1c7a3995ef3f15bd7c|1
+nexus/agents/memnon/utils/db_access.py|check_vector_extension|f40e90a1a69e734e892bdb1e18105828c1ad1daab08ee68d12708d68ea1c690d|1
+nexus/agents/memnon/utils/db_access.py|setup_database_indexes|189003dbed1940b3d1b2a58593ac3723f8b855f86e2b765e74cf551e5438aabd|1
+nexus/agents/memnon/utils/db_access.py|setup_database_indexes|2bb427024de559e1ae86584eb5f578ae011aea3698e4dba7be021cd51681568e|1
+nexus/agents/memnon/utils/db_access.py|setup_database_indexes|5335445c524ecdc3e2087e1cbfb22bfbd2ade6020fd38bcf7cfa082bf0863247|1
+nexus/agents/memnon/utils/db_access.py|setup_database_indexes|6b53a987b88e0246e5a5eacc97fb056ca97ee8a11515646ad1739d8aff80b97e|1
+nexus/agents/memnon/utils/db_access.py|setup_database_indexes|8eeb5b357c45b106dbc295a5b7f93670b0ca7b9a76dd750a09c920efd37721ee|1
+nexus/agents/memnon/utils/db_access.py|setup_database_indexes|e332f0cb4568ce6249f95968cd12acac6068e9b6f1f82925832df010bdb6d61b|1
+nexus/agents/memnon/utils/db_schema.py|DatabaseManager._setup_hybrid_search|315aba118220cefb097d0462c142438cae259783338e5cccfe6dee34203d9c77|1
+```
+
+The direct check against origin/main and the commit hook pass:
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+Amendment 2's earlier removal of three stale owner-target exemption entries
+remains preserved: two `database_url("save_04")` entries from deleted setup
+probes, one `database.connect("save_05", dict_cursor=True)` from the converted
+source tests. The guard passes within the 182-test PostgreSQL split.
+
+## Exact Commands and Verbatim Tails
+
+Every test command ran through the assigned scratch `run_gate.py` foreground
+wrapper, with a 590-second command limit and 120-second silence limit. The
+exact child argv is printed below. `TMPDIR` also pointed to that scratch
+folder. No command timed out or remained running at STOP. Full logs and
+`runs.jsonl` remain there. These are new results after the main merge; prior
+dated results and accepted stops are retained verbatim below.
+
+### final-ownership (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --capture=tee-sys --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-final-ownership -p tests.dbname_audit -p clone_manifest_810s2 tests/test_embedding_table_ownership_pg.py tests/test_memnon_db_access.py tests/test_memnon/test_source_embeddings.py tests/test_retrograde_summary_retrieval.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 53 targets: postgres, qa640_810s2_contract_* x46, qa640_810s2_source_* x5, qa640_810s2_summary384_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+66 passed in 91.72s (0:01:31)
+```
+
+### final-contract-migrations (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-final-contract-migrations -p tests.dbname_audit -p clone_manifest_810s2 tests/test_database_contract.py tests/test_unowned_index_adoption_pg.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 23 targets: nexus_m10_fresh_test_82932, nexus_m10_template_test_82932, postgres, qa640_810_adopt_drift_*, qa640_810_adopt_noop_*, qa640_810_adopt_recreate_*, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_no_create_all_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_connection_contract, qa640_grieving_migration_*, qa640_raw_url_contract, qa640_vocab_migration_* x6
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:53483 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[1] at local:53486 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[0] at local:53498 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard; two_clusters[1] at local:53503 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard
+dbname audit: owner names admitted on registered clusters: none
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+116 passed in 35.71s
+```
+
+### final-schema-writers (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-final-schema-writers -p tests.dbname_audit -p clone_manifest_810s2 tests/test_schema_documentation_pg.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_orrery/test_retrograde_embedding_pg.py tests/test_memnon/test_ann_gate.py::test_ann_candidate_index_build_drop tests/test_memnon/test_ann_gate.py::test_ann_alias_candidates_and_database_errors tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 10 targets: postgres, qa640_766_schema_*, qa640_docs_refresh_*, qa640_regen_truncate_* x2, qa640_schema_docs_* x3, qa665_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+182 passed in 26.11s
+```
+
+### final-offline-remaining (Exit 1)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-final-offline-remaining tests/test_memnon tests/test_runtime tests/test_util tests/test_scripts tests/test_turn_observation.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_scripts/test_check_exception_dispositions.py::test_repository_tree_matches_committed_baseline
+1 failed, 289 passed, 25 skipped, 7 warnings in 53.76s
+```
+
+### final-offline-remaining-rerun (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-final-offline-remaining-rerun tests/test_memnon tests/test_runtime tests/test_util tests/test_scripts tests/test_turn_observation.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+290 passed, 25 skipped, 7 warnings in 59.41s
+```
+
+### final-offline-api-orrery (Exit 1)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-final-offline-api-orrery tests/test_api tests/test_orrery
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_experiences.py::test_embedding_upsert_binds_each_correct_experience_id
+1 failed, 1828 passed, 749 skipped, 7 warnings in 38.69s
+```
+
+New failure call-chain excerpt (terminal trailing spaces trimmed):
+
+```text
+tests/test_orrery/test_experiences.py:691:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+nexus/agents/orrery/experience_embedding.py:42: in embed_character_experiences
+    return embed_source_rows(dbname, CHARACTER_EXPERIENCE_SOURCE, experience_ids)
+nexus/agents/memnon/utils/source_embeddings.py:344: in embed_source_rows
+    upsert_source_vectors(cursor, spec, generated)
+nexus/agents/memnon/utils/source_embeddings.py:209: in upsert_source_vectors
+    table_name = spec.ensure_table(cursor, dimensions)
+nexus/agents/memnon/utils/embedding_tables.py:362: in ensure_character_experience_embedding_table
+    return _ensure_corpus_table(
+nexus/agents/memnon/utils/embedding_tables.py:165: in _ensure_corpus_table
+    relations = _catalog_rows(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <test_orrery.test_experiences._EmbeddingCursor object at 0x16c11a650>
+statement = "SELECT c.oid, c.relkind FROM pg_class c\n        JOIN pg_namespace n ON n.oid = c.relnamespace\n        WHERE n.nspname = 'public' AND c.relname = 'character_experience_embeddings_0002d'"
+
+    def _catalog_rows(connection: Any, statement: str) -> List[dict[str, Any]]:
+        """Read catalog rows through SQLAlchemy or tuple/dictionary DBAPI cursors."""
+        driver = getattr(connection, "exec_driver_sql", None)
+        if callable(driver):
+            return [dict(row) for row in driver(statement).mappings()]
+        connection.execute(statement)
+>       names = [column[0] for column in connection.description]
+E       AttributeError: '_EmbeddingCursor' object has no attribute 'description'
+
+nexus/agents/memnon/utils/embedding_tables.py:140: AttributeError
+```
+
+Removal proof:
+
+```sh
+rg -n 'setup_database_indexes|_setup_hybrid_search' nexus scripts ir_eval
+```
+
+No output; exit 1. `git diff --check` has no output; exit 0.
+
+## Fresh Disposable Clone Migration Manifest
+
+The read-only scratch plugin `clone_manifest_810s2.py` queries
+`SELECT version, name FROM schema_migrations ORDER BY version` before yielding
+each clone. This resumption records 73 helper-created clones: all 52
+ownership/source/384d clones, plus 21 adoption/schema/setup/ANN/transaction
+clones. Fixture-owned private clusters and non-helper databases retain their
+separate tests/audits; this manifest does not claim instrumentation of those
+creation mechanisms. Every recorded clone has this exact starting stamp set:
+
+```json
+[["001", "baseline"], ["002", "add_choice_columns"], ["003", "add_layer_zone_drafts"], ["004", "fix_global_variables_fk"], ["005", "add_incubator_choice_object"], ["006", "add_save_slots_model"], ["007", "normalize_new_story_creator"], ["009", "remove_assets_save_slots"], ["010", "add_traits_table"], ["011", "add_traits_confirmed"], ["012", "add_wizard_choice_object"], ["014", "add_2560d_4096d_embeddings"], ["015", "add_ir_eval_v2_tables"], ["016", "add_ir_eval_v1_query_tables"], ["017", "add_judgment_justification"], ["018", "narrative_chunks_column_comments"], ["019", "add_incubator_choice_text"], ["020", "drop_chunk_embeddings_0384d"], ["021", "dedup_embedded_state"], ["022", "compound_embedding_pk_lazy_tables"], ["023", "orrery_schema"], ["024", "orrery_commit_pipeline"], ["025", "orrery_package_library_vocab"], ["026", "relationship_valence_magnitude"], ["027", "orrery_package_library_round2_vocab"], ["028", "orrery_sunhelm_needs"], ["029", "orrery_need_state_init_trigger"], ["030", "orrery_place_affordance_vocab"], ["031", "orrery_slot2_semantic_tag_vocab"], ["032", "orrery_interpersonal_needs"], ["033", "orrery_travel_work"], ["034", "orrery_concealment_surveillance_vocab"], ["035", "orrery_osm_route_graph"], ["036", "skald_inline_tag_runtime"], ["037", "orrery_tag_category_registry"], ["038", "orrery_tag_baseline_reconciliation"], ["039", "new_story_character_orrery_tags"], ["040", "storyteller_authorial_directives"], ["041", "orrery_authority_model"], ["042", "orrery_entity_pair_tags"], ["043", "orrery_category_refactor_phase1"], ["044", "disambiguate_status_reputation_traits"], ["045", "trait_compiler_substrate"], ["046", "canonical_grieving_state"], ["047", "kind_qualified_contact_pair_tags"], ["048", "orrery_hunting_pair_tag"], ["049", "orrery_entity_tag_expiry_substrate"], ["050", "orrery_state_clearance_event_types"], ["051", "orrery_time_tag_clearance_kind"], ["052", "orrery_faction_tag_vocab"], ["053", "retire_faction_legacy_write_defaults"], ["054", "orrery_completed_tag_vocab"], ["055", "orrery_character_tag_vocab"], ["056", "orrery_routine_anchors"], ["057", "orrery_need_bodyform_applicability"], ["058", "retire_faction_legacy_columns"], ["059", "orrery_social_travel_event"], ["060", "retrograde_persistence_sources"], ["061", "trait_compiler_sponsors_pair_tag"], ["062", "retrograde_maturation_jobs"], ["063", "orrery_adjudication_history"], ["064", "tag_provenance_forward_fix"], ["065", "reconstructability"], ["066", "signal_event_vocab"], ["067", "rename_orrery_templates"], ["068", "mundane_band_event_vocab"], ["069", "ecology_event_vocab"], ["070", "need_state_chunk_stamp"], ["071", "retrograde_world_layer"], ["072", "retrograde_layer_backfill"], ["073", "rename_dream_to_atemporal"], ["074", "plan_relocation_projects"], ["075", "retrieval_coverage_log"], ["076", "claims_awareness"], ["077", "recruit_ally_projects"], ["078", "retrograde_summary_storage"], ["079", "need_state_chunk_provenance_comment"], ["080", "epistemics_knowers"], ["081", "faction_project_contexts"], ["082", "generation_model_provenance"], ["083", "claim_propagation_ledger"], ["084", "build_venture_projects"], ["085", "pursue_romance_projects"], ["086", "court_patron_projects"], ["087", "seek_redemption_projects"], ["088", "valence_float_canonical"], ["089", "relationship_drift_milestone"], ["090", "claim_accounts"], ["091", "backstory_secrets"], ["092", "claim_distortion_depth"], ["093", "claim_awareness_knower_index"], ["094", "scene_weather_override"], ["095", "mood_vocabulary"], ["096", "polymorphic_patron"], ["097", "trait_cold_start_relationship_constraints"], ["098", "narrative_generation_lease"], ["099", "storyteller_correspondence"], ["100", "orrery_need_clock_anchor"], ["101", "delete_project_start_summary_orphans"], ["102", "narration_job_fencing"], ["103", "bleed_uptake"], ["104", "character_experiences"], ["105", "interaction_threads"], ["106", "recall_trace"], ["107", "lore_pass_baselines"], ["108", "strip_retired_observations_from_drafts"], ["109", "extend_expiry_default_durations"], ["110", "experience_formation_sweep"], ["111", "experience_job_enqueue_gin_fence"], ["112", "character_experience_recall_eligibility"], ["113", "acquisition_formation_indexes"], ["114", "slot_scoped_idf"], ["115", "relationship_write_provenance"], ["116", "acceptance_chunk_identity"], ["117", "story_settings"], ["118", "world_clock_identity"], ["120", "deferred_work_owner"], ["121", "generation_session_truth"], ["122", "orrery_card_identity"], ["123", "character_alias_provenance"], ["124", "attempt_manifests"], ["125", "embedding_summary_jobs"], ["126", "seat_policies"], ["127", "schema_documentation"], ["128", "character_identity_rulings"], ["129", "wizard_confirmation"], ["130", "retire_psychology_endpoint_comments"], ["131", "regeneration_lineage"], ["132", "genesis_weird_level"], ["133", "idf_rebuild_command"], ["134", "drop_chunk_lifecycle_columns"], ["135", "schema_docs_backfill"], ["136", "column_comment_corrections"], ["137", "view_comments"], ["138", "adopt_unowned_fleet_indexes"], ["139", "character_relationship_bigint_ids"], ["140", "world_clock_primary_layer"]]
+```
+
+| Clone | Test |
+| --- | --- |
+| `qa640_810s2_contract_670688353cdf` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[sqlalchemy-chunk_id]` |
+| `qa640_810s2_contract_63ac7245c15e` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[sqlalchemy-summary_id]` |
+| `qa640_810s2_contract_14587fbf37e0` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[sqlalchemy-experience_id]` |
+| `qa640_810s2_contract_345abc521b4e` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[tuple-chunk_id]` |
+| `qa640_810s2_contract_4df8a7919ea9` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[tuple-summary_id]` |
+| `qa640_810s2_contract_a3e9480c9114` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[tuple-experience_id]` |
+| `qa640_810s2_contract_f4bbb14b7f3e` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[dict-chunk_id]` |
+| `qa640_810s2_contract_6bbf1bd85336` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[dict-summary_id]` |
+| `qa640_810s2_contract_664ce8c98e33` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[dict-experience_id]` |
+| `qa640_810s2_contract_0bf694a280b2` | `tests/test_embedding_table_ownership_pg.py::test_ensure_is_idempotent_and_never_builds_ann[chunk_id]` |
+| `qa640_810s2_contract_91e371926746` | `tests/test_embedding_table_ownership_pg.py::test_ensure_is_idempotent_and_never_builds_ann[summary_id]` |
+| `qa640_810s2_contract_d2d681600c24` | `tests/test_embedding_table_ownership_pg.py::test_ensure_is_idempotent_and_never_builds_ann[experience_id]` |
+| `qa640_810s2_contract_cd5b7a04f73d` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[dimension-chunk_id]` |
+| `qa640_810s2_contract_b31a0d6780bf` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[dimension-summary_id]` |
+| `qa640_810s2_contract_d8cd3fb63e52` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[dimension-experience_id]` |
+| `qa640_810s2_contract_028c71e85e25` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[source_type-chunk_id]` |
+| `qa640_810s2_contract_e3043ce669ea` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[source_type-summary_id]` |
+| `qa640_810s2_contract_e6746105f0de` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[source_type-experience_id]` |
+| `qa640_810s2_contract_ece312b87bc5` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[nullable_model-chunk_id]` |
+| `qa640_810s2_contract_250b91874452` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[nullable_model-summary_id]` |
+| `qa640_810s2_contract_f30e9d6d7abb` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[nullable_model-experience_id]` |
+| `qa640_810s2_contract_3b88232c3f0c` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[primary-chunk_id]` |
+| `qa640_810s2_contract_eef51453bff9` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[primary-summary_id]` |
+| `qa640_810s2_contract_01d79b42c6bc` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[primary-experience_id]` |
+| `qa640_810s2_contract_c5cfdb6708a7` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_target-chunk_id]` |
+| `qa640_810s2_contract_db5da08baeb7` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_target-summary_id]` |
+| `qa640_810s2_contract_6fda61ddaf06` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_target-experience_id]` |
+| `qa640_810s2_contract_54f6235bd5c4` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_delete-chunk_id]` |
+| `qa640_810s2_contract_1f4a87a388cc` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_delete-summary_id]` |
+| `qa640_810s2_contract_5217de41fd59` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_delete-experience_id]` |
+| `qa640_810s2_contract_c710f15e3531` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[timestamp-chunk_id]` |
+| `qa640_810s2_contract_94c8f35a555f` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[timestamp-summary_id]` |
+| `qa640_810s2_contract_6bf7e5a6a1fa` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[timestamp-experience_id]` |
+| `qa640_810s2_contract_b8f22d38c5da` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[view-chunk_id]` |
+| `qa640_810s2_contract_b6baa6e0d0e1` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[view-summary_id]` |
+| `qa640_810s2_contract_c7fbdbc69257` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[view-experience_id]` |
+| `qa640_810s2_contract_1f7d67b34365` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[index-chunk_id]` |
+| `qa640_810s2_contract_131804463e4d` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[index-summary_id]` |
+| `qa640_810s2_contract_3ca48b34c38c` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[index-experience_id]` |
+| `qa640_810s2_contract_beee3b54fbc5` | `tests/test_embedding_table_ownership_pg.py::test_ensure_and_upsert_roll_back_with_the_caller[chunk_id]` |
+| `qa640_810s2_contract_9c79d27ece9d` | `tests/test_embedding_table_ownership_pg.py::test_ensure_and_upsert_roll_back_with_the_caller[summary_id]` |
+| `qa640_810s2_contract_d65f46dcdb34` | `tests/test_embedding_table_ownership_pg.py::test_ensure_and_upsert_roll_back_with_the_caller[experience_id]` |
+| `qa640_810s2_contract_281a0f7076ab` | `tests/test_embedding_table_ownership_pg.py::test_constructor_leaves_missing_indexes_and_catalog_unchanged` |
+| `qa640_810s2_contract_c13a7608907d` | `tests/test_embedding_table_ownership_pg.py::test_constructor_refuses_missing_vector_extension` |
+| `qa640_810s2_contract_8954575b7a17` | `tests/test_embedding_table_ownership_pg.py::test_embedding_job_source_path_propagates_ensure_failure` |
+| `qa640_810s2_contract_cf1c9374e03e` | `tests/test_embedding_table_ownership_pg.py::test_content_processor_embedding_method_propagates_ensure_failure` |
+| `qa640_810s2_source_50e935a936cc` | `tests/test_memnon/test_source_embeddings.py::test_summaries_generate_every_vector_before_one_write_transaction` |
+| `qa640_810s2_source_9fc6cd281c15` | `tests/test_memnon/test_source_embeddings.py::test_experiences_load_and_stamp_only_valid_rendered_rows` |
+| `qa640_810s2_source_e5bb2a0c8ca1` | `tests/test_memnon/test_source_embeddings.py::test_stamp_shortfall_rolls_back_the_upserted_vectors` |
+| `qa640_810s2_source_358b07c293d1` | `tests/test_memnon/test_source_embeddings.py::test_wrappers_are_the_shared_orchestrator` |
+| `qa640_810s2_source_aaf806da6733` | `tests/test_memnon/test_source_embeddings.py::test_shared_helpers_serve_a_caller_supplied_embedder` |
+| `qa640_810s2_summary384_97429bd1de7e` | `tests/test_retrograde_summary_retrieval.py::test_retrograde_summary_embedding_table_helper_accepts_dbapi_cursor` |
+| `qa640_810_adopt_recreate_be363a53bb6b` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_recreates_the_indexes_and_column_it_owns` |
+| `qa640_810_adopt_noop_a21df017d9a2` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_changes_nothing_on_a_complete_database` |
+| `qa640_810_adopt_drift_50dfd2367b3a` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_refuses_a_same_named_index_with_another_definition` |
+| `qa640_810_no_create_all_841a30f3ada5` | `tests/test_unowned_index_adoption_pg.py::test_database_manager_construction_creates_no_table` |
+| `qa640_vocab_migration_27404eb10f4b` | `tests/test_orrery/test_migrate.py::test_character_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_d9be97713173` | `tests/test_orrery/test_migrate.py::test_completed_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_1a6a95192310` | `tests/test_orrery/test_migrate.py::test_entity_tag_expiry_substrate_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_0f959e5bedc6` | `tests/test_orrery/test_migrate.py::test_faction_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_f4a851d87f7f` | `tests/test_orrery/test_migrate.py::test_state_clearance_event_type_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_4bd9360a82fb` | `tests/test_orrery/test_migrate.py::test_kind_qualified_contact_migration_executes_against_slot_db` |
+| `qa640_grieving_migration_e402787de711` | `tests/test_orrery/test_migrate.py::test_canonical_grieving_migration_executes_against_slot_db` |
+| `qa640_810_template_26af05737d76` | `tests/test_new_story_setup.py::test_template_clone_replays_no_migration` |
+| `qa640_810_clone_5d66a5d811ee` | `tests/test_new_story_setup.py::test_template_clone_replays_no_migration` |
+| `qa640_810_fail_0306709450d4` | `tests/test_new_story_setup.py::test_failing_migration_is_unapplied_and_initialization_raises` |
+| `qa640_schema_docs_c7afb9dff257` | `tests/test_schema_documentation_pg.py::test_schema_documentation_coverage` |
+| `qa640_docs_refresh_ab29f04466c6` | `tests/test_schema_documentation_pg.py::test_story_setup_and_runner_preserve_comments` |
+| `qa640_regen_truncate_78611456c626` | `tests/test_regenerate_embeddings_truncate_pg.py::test_truncate_table_keeps_rows_when_the_model_artifact_is_missing` |
+| `qa640_regen_truncate_976635837dc3` | `tests/test_regenerate_embeddings_truncate_pg.py::test_chunk_keeps_its_row_when_the_model_artifact_is_missing` |
+| `qa665_072625389da8` | `tests/test_orrery/test_retrograde_embedding_pg.py::test_batch_embedding_writes_every_summary_model_pair` |
+| `qa640_766_schema_54ac055dc074` | `tests/test_memnon/test_ann_gate.py::test_ann_candidate_index_build_drop` |
+| `qa885_transaction_writer_d683d93e5de0` | `tests/test_pg_disposable_target.py::test_transaction_relationship_writer_writes_on_a_clone` |
+
+The new 66-case log preserves each malformed-object expected/observed error.
+On the caller's same still-open transaction the tests assert unchanged catalog,
+comments, constraints, indexes and marker data before rollback, then again
+after caller rollback (`tests/test_embedding_table_ownership_pg.py:298-365`).
+The creation/upsert rollback proof is at `:370-393`; constructor invariance is
+at `:396-416`; the real job-source failure and rollback proof is at `:428-468`.
+The three corpora and all three real adapters verify catalog shape and exact
+comments using independent SQL (`:150-222`). This run adds no catalog repair.
+
+## Remaining Gates and Coordinator Question
+
+At STOP, the standalone reachability command and final Black/flake8/mypy
+branch-versus-main comparison checks remain unrun. Earlier root splits,
+config, IR-eval and LORE results remain dated evidence; they are not claimed
+as fresh post-merge runs. No final all-offline green gate, whole-tree
+PostgreSQL gate, PR, push, merge-to-main, or landing is claimed.
+
+Coordinator: authorize converting the untouched
+`test_embedding_upsert_binds_each_correct_experience_id` regression to a real
+disposable-clone proof that preserves its per-experience vector binding and
+result assertions, then resume the remaining checks and publication?
+
+The accepted legacy-importer defect remains deferred under
+[issue #1091](https://github.com/pythagorakase/nexus/issues/1091).
+No fresh corpus result or new #964 disposition is claimed. No paid provider
+call, save/template write, owner-service action, main-checkout modification,
+or other-worktree modification occurred. Fixtures retained TEST story pins
+and the provider-only guard; configured embedding inference was local.
+
+Landing notes remain: no migration or fleet migration application. Migration
+022 documents lazy ownership; migration 138 owns fixed indexes. The
+coordinator restarts `nexus restart gateway` by name after pulling product
+changes. No UI bundle change or rebuild. The coordinator owns the final
+whole-tree PostgreSQL gate.
+
+Codex — GPT-6.
+
+---
+
 # STOP-REPORT: 810-S2 Amendment 2 (2026-10-01)
 
 ## New Frozen-Fingerprint Failure
