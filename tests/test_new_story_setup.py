@@ -34,12 +34,15 @@ from psycopg2 import sql
 import pytest
 import tomlkit
 
+from nexus.api import slot_utils
+from nexus.api.save_slots import is_slot_locked
 from scripts import migrate
 from scripts import new_story_setup
 from tests.pg_fixtures import (
     connect,
     disposable_database,
     disposable_slot_database,
+    route_slot_to_disposable,
     subprocess_env,
 )
 
@@ -465,3 +468,148 @@ def test_migrate_database_propagates_connection_errors() -> None:
                     )
         finally:
             admin.close()
+
+
+# Issue #823: setup refuses a locked target before any drop. The lock is
+# ``default_transaction_read_only=on`` on the database, which blocks writes
+# inside it but not ``dropdb``, which connects to another database.
+_MARKER_TABLE = "qa823_marker"
+_MARKER_ROW = "the story that must survive"
+
+
+def _set_read_only(dbname: str, value: str) -> None:
+    """Set the database-level read-only default to ``value`` (on or off)."""
+    admin = connect("postgres")
+    admin.autocommit = True
+    try:
+        with admin.cursor() as cur:
+            cur.execute(
+                sql.SQL(
+                    "ALTER DATABASE {} SET default_transaction_read_only = {}"
+                ).format(sql.Identifier(dbname), sql.SQL(value))
+            )
+    finally:
+        admin.close()
+
+
+def _database_oid(dbname: str) -> int:
+    with closing(connect("postgres")) as conn, conn.cursor() as cur:
+        cur.execute("SELECT oid FROM pg_database WHERE datname = %s", (dbname,))
+        row = cur.fetchone()
+    assert row is not None, f"{dbname} does not exist"
+    return int(row[0])
+
+
+def _plant_marker(dbname: str) -> int:
+    """Create the marker table with one row; return the database's oid."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("CREATE TABLE {} (note text)").format(sql.Identifier(_MARKER_TABLE))
+        )
+        cur.execute(
+            sql.SQL("INSERT INTO {} VALUES (%s)").format(sql.Identifier(_MARKER_TABLE)),
+            (_MARKER_ROW,),
+        )
+    return _database_oid(dbname)
+
+
+def _marker_rows(dbname: str) -> list[tuple[str, ...]]:
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("SELECT note FROM {}").format(sql.Identifier(_MARKER_TABLE))
+        )
+        return [tuple(row) for row in cur.fetchall()]
+
+
+def _marker_exists(dbname: str) -> bool:
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s)", (f"public.{_MARKER_TABLE}",))
+        return cur.fetchone()[0] is not None
+
+
+def test_initialize_refuses_locked_target(
+    monkeypatch: pytest.MonkeyPatch, template_source: str
+) -> None:
+    """A locked target survives ``initialize_slot_database(force=True)``."""
+    monkeypatch.setattr(new_story_setup, "USE_POOL", False)
+    with disposable_database("qa640_823_locked_init") as dbname:
+        oid = _plant_marker(dbname)
+        _set_read_only(dbname, "on")
+
+        kept: ValueError | None = None
+        try:
+            new_story_setup.initialize_slot_database(
+                dbname, source_db=template_source, force=True
+            )
+        except ValueError as error:
+            kept = error
+
+        assert _database_oid(dbname) == oid
+        assert _marker_rows(dbname) == [(_MARKER_ROW,)]
+        assert is_slot_locked(0, dbname=dbname) is True
+        assert kept is not None
+        assert str(kept) == new_story_setup._locked_target_message(dbname)
+
+
+def test_clone_refuses_locked_target(
+    monkeypatch: pytest.MonkeyPatch, template_source: str
+) -> None:
+    """A locked target survives ``clone_slot_with_data(force=True)``."""
+    monkeypatch.setattr(new_story_setup, "USE_POOL", False)
+    with disposable_database("qa640_823_locked_clone") as dbname:
+        oid = _plant_marker(dbname)
+        _set_read_only(dbname, "on")
+
+        kept: ValueError | None = None
+        try:
+            new_story_setup.clone_slot_with_data(
+                5, source_db=template_source, force=True, target_db=dbname
+            )
+        except ValueError as error:
+            kept = error
+
+        assert _database_oid(dbname) == oid
+        assert _marker_rows(dbname) == [(_MARKER_ROW,)]
+        assert is_slot_locked(0, dbname=dbname) is True
+        assert kept is not None
+        assert str(kept) == new_story_setup._locked_target_message(dbname)
+
+
+@pytest.mark.parametrize("path", ["init", "clone"])
+def test_unlocked_setting_off_proceeds(
+    monkeypatch: pytest.MonkeyPatch, template_source: str, path: str
+) -> None:
+    """``default_transaction_read_only = off`` (what unlock writes) is unlocked."""
+    monkeypatch.setattr(new_story_setup, "USE_POOL", False)
+    with disposable_database(f"qa640_823_unlocked_{path}") as dbname:
+        oid = _plant_marker(dbname)
+        _set_read_only(dbname, "off")
+        assert is_slot_locked(0, dbname=dbname) is False
+
+        if path == "init":
+            new_story_setup.initialize_slot_database(
+                dbname, source_db=template_source, force=True
+            )
+        else:
+            new_story_setup.clone_slot_with_data(
+                5, source_db=template_source, force=True, target_db=dbname
+            )
+
+        assert not _marker_exists(dbname)
+        assert _database_oid(dbname) != oid
+
+
+def test_locked_target_message_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A slot gets reset's text; any other name, routed or not, gets none."""
+    assert (
+        new_story_setup._locked_target_message("save_01")
+        == "Slot 1 is locked. Unlock it first with: nexus unlock --slot 1"
+    )
+    probe = "qa640_823_route_probe"
+    database_text = new_story_setup._locked_target_message(probe)
+    assert probe in database_text
+    assert "nexus unlock" not in database_text
+
+    route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=probe)
+    assert slot_utils.VALID_DBNAMES == {probe}
+    assert new_story_setup._locked_target_message(probe) == database_text
