@@ -912,6 +912,18 @@ def test_choice_readiness_is_the_complete_phase_row(
         "seconds_to_choice_ready",
     ]
 
+    # A staged draft later superseded: every phase stays, the session's own
+    # fields change. The choices were still ready at the complete row.
+    superseded = observe(
+        session={
+            **inspection["session"],
+            "terminal_outcome": "superseded",
+            "phase": "staging",
+        }
+    )
+    assert superseded["choice_ready_at"] == f"{ledger_clock.today}T00:00:20.500000Z"
+    assert superseded["seconds_to_choice_ready"] == 50.25
+
     # Failed at Gaia: the wall ends at the Gaia row, yet no choice is ready.
     # The session row's own phase stays "complete" here: it is never read.
     failed = observe(
