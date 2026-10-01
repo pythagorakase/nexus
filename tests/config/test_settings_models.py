@@ -1,5 +1,6 @@
 """Tests for configuration schema validation."""
 
+import ast
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from nexus.config.settings_models import (
     Settings,
     materialize_model_selections,
 )
+from tests.settings_helpers import renamed_test_model_config
 
 
 def _nexus_toml_dict() -> dict:
@@ -778,6 +780,46 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
         .global_.model.api_models["test"]
         .base_url.endswith(":5102/v1")
     )
+
+
+def test_test_identity_follows_the_provider_not_the_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TEST identity is the registry provider, so it survives a renamed entry."""
+    config = renamed_test_model_config(tmp_path, "TEMPTEST")
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+
+    settings = load_settings()
+
+    assert settings.is_test_model("TEMPTEST") is True
+    assert settings.is_test_model(settings.apex.model) is False
+    with pytest.raises(ValueError, match="'TEST' is not declared"):
+        settings.is_test_model("TEST")
+
+
+def _compares_literal_test(node: ast.Compare) -> bool:
+    for operand in [node.left, *node.comparators]:
+        values = (
+            operand.elts
+            if isinstance(operand, (ast.Tuple, ast.List, ast.Set))
+            else [operand]
+        )
+        if any(isinstance(v, ast.Constant) and v.value == "TEST" for v in values):
+            return True
+    return False
+
+
+def test_no_product_code_compares_the_literal_test_id() -> None:
+    """Product code keys TEST identity on the provider, never on the model id."""
+    package = Path(__file__).resolve().parents[2] / "nexus"
+    offenders = [
+        f"{path.relative_to(package.parent)}:{node.lineno}"
+        for path in sorted(package.rglob("*.py"))
+        for node in ast.walk(ast.parse(path.read_text(), filename=str(path)))
+        if isinstance(node, ast.Compare) and _compares_literal_test(node)
+    ]
+
+    assert offenders == []
 
 
 @pytest.mark.parametrize(
