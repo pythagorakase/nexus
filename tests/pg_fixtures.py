@@ -731,9 +731,8 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     ``MAX(chunk_metadata.world_time)``, then at ``base_timestamp``. The anchor
     is exact only when ``base_timestamp`` is set and, if chunks exist, the head
     ``world_time`` equals ``base_timestamp`` plus the summed primary-layer
-    deltas. Chunks
-    stamped while ``base_timestamp`` was NULL carry wall-clock ``world_time``
-    and fail here rather than seeding wall-clock need clocks.
+    deltas. Chunks stamped while ``base_timestamp`` was NULL carry wall-clock
+    ``world_time`` and fail here rather than seeding wall-clock need clocks.
     """
 
     cur.execute(
@@ -792,9 +791,9 @@ def seed_story_clock(
     ``base_timestamp`` (the bootstrap contract: ``base_timestamp`` is the
     clock at the end of the bootstrap chunk, which elapses no time).
     Otherwise the chunk's ``time_delta`` is the gap from the current head
-    clock, which must not be later than ``world_time``. The chunk is inserted through
-    ``seed_committed_chunk``; the stored ``world_time`` is asserted exact and
-    the chunk ID returned.
+    clock, which must not be later than ``world_time``. The chunk is inserted
+    through ``seed_committed_chunk``; the stored ``world_time`` is asserted
+    exact and the chunk ID returned.
     """
 
     require_disposable_target(dbname)
