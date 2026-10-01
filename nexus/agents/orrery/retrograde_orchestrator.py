@@ -22,7 +22,8 @@ new-story wizard fires at the ready -> narrative transition:
    player-visible; event prose, tags, and deferred seeds stay hidden with
    counts only.
 
-Stage states and outputs are written to the slot's genesis_runs and genesis_run_stages tables.
+Stage states and outputs are written to the slot's genesis_runs and
+genesis_run_stages tables.
 """
 
 from __future__ import annotations

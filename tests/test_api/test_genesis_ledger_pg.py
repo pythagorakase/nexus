@@ -73,7 +73,9 @@ def _rows(dbname: str, table: str) -> list[dict[str, Any]]:
 def test_stage_rows_and_outputs_persist(staged: tuple[str, Any]) -> None:
     """Successful generation outputs survive the mapper's validation refusal."""
     dbname, data = staged
-    data.zone = None
+    data = data.model_copy(
+        update={"zone": None, "ready_for_transition": False, "validated": False}
+    )
     with pytest.raises(ValueError, match="Transition data is incomplete"):
         perform_transition_with_retrograde(4, data)
     rows = {row["stage"]: row for row in _rows(dbname, "genesis_run_stages")}
@@ -101,9 +103,15 @@ def test_failure_is_recorded_at_each_stage(
     dbname, data = staged
     boundaries = {
         "derivation": "nexus.api.trait_input_derivation.ensure_trait_compile_inputs",
-        "packet": "nexus.agents.orrery.retrograde_packet.build_retrograde_dry_run_packet",
-        "seed_candidates": "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage",
-        "expansion": "nexus.agents.orrery.retrograde_expansion.generate_expansion_with_skald",
+        "packet": (
+            "nexus.agents.orrery.retrograde_packet.build_retrograde_dry_run_packet"
+        ),
+        "seed_candidates": (
+            "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage"
+        ),
+        "expansion": (
+            "nexus.agents.orrery.retrograde_expansion.generate_expansion_with_skald"
+        ),
     }
 
     def refuse(*args: Any, **kwargs: Any) -> None:
@@ -113,7 +121,9 @@ def test_failure_is_recorded_at_each_stage(
         monkeypatch.setattr(boundaries[stage], refuse)
         message = f"refused {stage}"
     else:
-        data.zone = None
+        data = data.model_copy(
+            update={"zone": None, "ready_for_transition": False, "validated": False}
+        )
         message = "Transition data is incomplete"
         if stage is None:
             upsert_slot(4, model="TEST", dbname=dbname)
@@ -171,7 +181,13 @@ def test_another_process_reads_the_running_stage(
             [
                 sys.executable,
                 "-c",
-                "from tests.pg_fixtures import route_slot_from_environment; route_slot_from_environment(); from nexus.agents.orrery.retrograde_orchestrator import get_retrograde_progress; import json; print(json.dumps(get_retrograde_progress(4)))",
+                (
+                    "from tests.pg_fixtures import route_slot_from_environment; "
+                    "route_slot_from_environment(); "
+                    "from nexus.agents.orrery.retrograde_orchestrator "
+                    "import get_retrograde_progress; "
+                    "import json; print(json.dumps(get_retrograde_progress(4)))"
+                ),
             ],
             env={
                 **os.environ,

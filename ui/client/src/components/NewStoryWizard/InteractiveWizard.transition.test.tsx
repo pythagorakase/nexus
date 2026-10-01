@@ -94,11 +94,11 @@ function stubGateway() {
 }
 
 function stage(name: string, detail: Record<string, unknown> = {}, run: string = THIS_RUN) {
-    return { slot: 5, run, stage: name, detail, updated_at: "2026-09-26T12:00:00+00:00", stages: [] };
+    return { slot: 5, run, run_status: name === "failed" ? "failed" : name === "done" ? "done" : "running", error: name === "failed" ? "Stage failed" : null, stage: name, detail, updated_at: "2026-09-26T12:00:00+00:00", stages: [] };
 }
 
-// No run has started for the slot in this gateway process.
-const NO_RUN = { slot: 5, run: null, stage: "idle", stages: [] };
+// No run has started for the slot.
+const NO_RUN = { slot: 5, run: null, run_status: null, error: null, stage: "idle", stages: [] };
 const TRANSITIONED = { status: "transitioned", retrograde: { enabled: true } };
 
 function renderReadyWizard(onComplete = vi.fn(), resumeData: WizardResumeData = readyWizard) {
@@ -127,6 +127,7 @@ function renderReadyWizard(onComplete = vi.fn(), resumeData: WizardResumeData = 
 }
 
 async function confirmIntroduction() {
+    await confirmIntroductionAvailable();
     fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
 }
 
@@ -156,7 +157,7 @@ describe("genesis stage waiter", () => {
         await waitFor(() => expect(gateway.transition).not.toBeNull());
         // The read before the post names the run owning the record and the
         // poll interval; nothing is read from the operator plane.
-        expect(gateway.requests.slice(0, 2)).toEqual([`GET ${STATUS_URL}`, "POST /api/story/new/transition"]);
+        expect(gateway.requests.slice(0, 3)).toEqual([`GET ${STATUS_URL}`, `GET ${STATUS_URL}`, "POST /api/story/new/transition"]);
         await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(1));
         expect(pipStates()).toEqual(Array(6).fill("pending"));
 
@@ -285,7 +286,7 @@ describe("genesis stage waiter", () => {
             renderReadyWizard();
             await confirmIntroduction();
             await waitFor(() => expect(gateway.transition).not.toBeNull());
-            expect(gateway.statusReads).toBe(1);
+            expect(gateway.statusReads).toBe(2);
 
             gateway.status = stage("failed", { stage: "persistence" });
             vi.spyOn(console, "error").mockImplementation(() => {});
@@ -296,14 +297,14 @@ describe("genesis stage waiter", () => {
             );
             expect(await screen.findByText("Retrograde persistence blocked: 2 unresolved refs")).toBeInTheDocument();
             expect(pipStates()).toEqual(track(3, "failed"));
-            expect(gateway.served).toEqual([before.stage, "failed"]);
+            expect(gateway.served).toEqual([before.stage, before.stage, "failed"]);
         },
     );
 
     it("marks the failed stage from the final read after the first stage read failed", async () => {
         const gateway = stubGateway();
         // The read before the post succeeds; the first interval read fails.
-        gateway.failedReads.add(2);
+        gateway.failedReads.add(3);
         vi.spyOn(console, "error").mockImplementation(() => {});
         renderReadyWizard();
         await confirmIntroduction();
@@ -318,7 +319,7 @@ describe("genesis stage waiter", () => {
         );
         expect(await screen.findByText("Transition failed: embedding provider timeout")).toBeInTheDocument();
         expect(pipStates()).toEqual(track(4, "failed"));
-        expect(gateway.served).toEqual(["idle", "502", "failed"]);
+        expect(gateway.served).toEqual(["idle", "idle", "502", "failed"]);
     });
 
     it("marks no stage failed when the transition is refused before its run starts", async () => {
@@ -438,7 +439,7 @@ describe("genesis stage waiter", () => {
         const { onComplete } = renderReadyWizard();
         vi.spyOn(console, "error").mockImplementation(() => {});
         // The first interval read, after the post, fails.
-        gateway.failedReads.add(2);
+        gateway.failedReads.add(3);
         await confirmIntroduction();
 
         expect(await screen.findByText("502: Gateway worker restarted")).toBeInTheDocument();
@@ -460,7 +461,7 @@ describe("genesis stage waiter", () => {
         expect(await screen.findByText("502: Gateway worker restarted")).toBeInTheDocument();
         expect(screen.getByText("Generation Failed")).toBeInTheDocument();
         await expectNoFurtherStatusReads(gateway);
-        expect(gateway.statusReads).toBe(1);
+        expect(gateway.statusReads).toBe(2);
         expect(gateway.transition).toBeNull();
     });
 
@@ -476,7 +477,156 @@ describe("genesis stage waiter", () => {
             ),
         ).toBeInTheDocument();
         expect(gateway.transition).toBeNull();
+        expect(gateway.statusReads).toBe(2);
+    });
+});
+
+describe("genesis reattach", () => {
+    it("disables Confirm during the mount read and aborts it on unmount", async () => {
+        let answer!: (response: Response) => void;
+        let signal!: AbortSignal;
+        const fetch = vi.fn((_url: string, init?: RequestInit) => {
+            signal = init!.signal!;
+            return new Promise<Response>(resolve => { answer = resolve; });
+        });
+        vi.stubGlobal("fetch", fetch);
+        const { unmount, onComplete } = renderReadyWizard();
+        expect(await screen.findByRole("button", { name: "Processing..." })).toBeDisabled();
+        expect(fetch).toHaveBeenCalledTimes(1);
+        unmount();
+        expect(signal.aborted).toBe(true);
+        await act(async () => answer(Response.json({
+            ...stage("packet"), status_poll_interval_seconds: 0.01,
+        })));
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops the reattached running poll on unmount", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("packet");
+        const { unmount } = renderReadyWizard();
+        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(1));
+        unmount();
+        await expectNoFurtherStatusReads(gateway);
+        expect(gateway.transitionBodies).toEqual([]);
+        expect(gateway.bootstrap).toBeNull();
+    });
+
+    it("reattaches the wait screen to a running run on mount", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("expansion");
+        const { onComplete } = renderReadyWizard();
+        await waitFor(() => expect(pipStates()).toEqual(track(2)));
+        expect(gateway.transitionBodies).toEqual([]);
+        gateway.status = stage("done", { embedded_summaries: 2 });
+        await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
+        expect(pipStates()).toEqual(track(5));
+        await act(async () => gateway.bootstrap!.resolve(Response.json({ session_id: "reattached-opening" })));
+        expect(onComplete).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(localStorage.getItem("pendingBootstrapSession")!)).toMatchObject({
+            slot: 5, sessionId: "reattached-opening",
+        });
+        await expectNoFurtherStatusReads(gateway);
+    });
+
+    it("shows a reattached run's failure with Retry", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("packet");
+        renderReadyWizard();
+        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        gateway.status = { ...stage("failed", { stage: "packet" }), error: "Packet refused" };
+        expect(await screen.findByText("Packet refused")).toBeInTheDocument();
+        expect(pipStates()).toEqual(track(0, "failed"));
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        await waitFor(() => expect(gateway.transitionBodies).toEqual([{ slot: 5 }]));
+    });
+
+    it("shows a stage read error during reattach with Retry and Cancel", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("expansion");
+        gateway.failedReads.add(2);
+        renderReadyWizard();
+        expect(await screen.findByText("502: Gateway worker restarted")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        await confirmIntroductionAvailable();
+        expect(screen.queryAllByTestId("wait-stage")).toHaveLength(0);
+        expect(gateway.transitionBodies).toEqual([]);
+        await expectNoFurtherStatusReads(gateway);
+    });
+
+    it("waits through derivation with no pip lit", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("idle");
+        renderReadyWizard();
+        await waitFor(() => expect(pipStates()).toEqual(Array(6).fill("pending")));
+        await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(2));
+        gateway.status = stage("packet");
+        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        expect(gateway.transitionBodies).toEqual([]);
+    });
+
+    it.each(["done", "failed"])("does not reattach to a %s run", async (name) => {
+        const gateway = stubGateway();
+        gateway.status = stage(name, name === "failed" ? { stage: "packet" } : {});
+        renderReadyWizard();
+        await confirmIntroductionAvailable();
+        expect(screen.queryAllByTestId("wait-stage")).toHaveLength(0);
+        expect(gateway.transitionBodies).toEqual([]);
+        expect(gateway.bootstrap).toBeNull();
         expect(gateway.statusReads).toBe(1);
+        await expectNoFurtherStatusReads(gateway);
+    });
+
+    it("keeps skipped pips dim when a reattached run finishes without Retrograde", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("idle");
+        renderReadyWizard();
+        await waitFor(() => expect(pipStates()).toEqual(Array(6).fill("pending")));
+        gateway.status = { ...stage("idle"), run_status: "done" };
+        await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
+        expect(pipStates()).toEqual([...Array(5).fill("skipped"), "active"]);
+    });
+
+    it("shows a reattached bootstrap failure and releases Confirm after Cancel", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("embedding");
+        renderReadyWizard();
+        await waitFor(() => expect(pipStates()).toEqual(track(4)));
+        gateway.status = stage("done");
+        await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
+        await act(async () => gateway.bootstrap!.resolve(Response.json({ detail: "Opening unavailable" }, { status: 503 })));
+        expect(await screen.findByText("Opening unavailable")).toBeInTheDocument();
+        expect(pipStates()).toEqual(track(5, "failed"));
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        await confirmIntroductionAvailable();
+    });
+
+    it("ends reattached polling on unmount and never completes an aborted bootstrap", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("embedding");
+        const { unmount, onComplete } = renderReadyWizard();
+        await waitFor(() => expect(pipStates()).toEqual(track(4)));
+        gateway.status = stage("done");
+        await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
+        unmount();
+        await act(async () => gateway.bootstrap!.resolve(Response.json({ session_id: "late-opening" })));
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(localStorage.getItem("pendingBootstrapSession")).toBeNull();
+        await expectNoFurtherStatusReads(gateway);
+    });
+
+    it("shows a mount-read error and releases the artifact review", async () => {
+        const gateway = stubGateway();
+        gateway.statusFailing = true;
+        renderReadyWizard();
+        expect(await screen.findByText("502: Gateway worker restarted")).toBeInTheDocument();
+        expect(screen.getByText("Transmission Error")).toBeInTheDocument();
+        await confirmIntroductionAvailable();
+        expect(screen.queryAllByTestId("wait-stage")).toHaveLength(0);
+        expect(gateway.transitionBodies).toEqual([]);
     });
 });
 
@@ -583,7 +733,7 @@ describe("genesis strangeness", () => {
         await waitFor(() => expect(pressed()).toEqual(["high"]));
         expect(confirm).toBeEnabled();
         // The click on the held Confirm started nothing.
-        expect(gateway.statusReads).toBe(0);
+        expect(gateway.statusReads).toBe(1);
         expect(gateway.transitionBodies).toEqual([]);
 
         fireEvent.click(confirm);
@@ -609,12 +759,12 @@ describe("genesis strangeness", () => {
         await act(async () => answer(Response.json({ status: "recorded", slot: 5, weird_level: "high" })));
         await waitFor(() => expect(gateway.transition).not.toBeNull());
         expect(gateway.transitionBodies).toEqual([{ slot: 5, weird_level: "high" }]);
-        expect(gateway.requests).toEqual([
+        expect(gateway.requests).toEqual([`GET ${STATUS_URL}`,
             "PUT /api/story/new/weird",
             SAVE_ANSWERED,
             `GET ${STATUS_URL}`,
             "POST /api/story/new/transition",
-            ...gateway.requests.slice(4),
+            ...gateway.requests.slice(5),
         ]);
     });
 
@@ -636,7 +786,7 @@ describe("genesis strangeness", () => {
 
         expect(await screen.findByText("The wizard changed while this response was being generated.")).toBeInTheDocument();
         await settle();
-        expect(gateway.requests).toEqual(["PUT /api/story/new/weird", SAVE_ANSWERED]);
+        expect(gateway.requests).toEqual([`GET ${STATUS_URL}`, "PUT /api/story/new/weird", SAVE_ANSWERED]);
         expect(gateway.transitionBodies).toEqual([]);
         expect(screen.queryAllByTestId("wait-stage")).toHaveLength(0);
         expect(pressed()).toEqual(["medium"]);
@@ -661,7 +811,7 @@ describe("genesis strangeness", () => {
 
 /** The ready wizard has restored its introduction and offers Confirm. */
 async function confirmIntroductionAvailable() {
-    expect(await screen.findByRole("button", { name: "Confirm" })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled());
 }
 
 // Logged among the gateway's requests when a held strangeness save is answered.
