@@ -1242,7 +1242,9 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             yield json.dumps(
                 {"type": "error", "status_code": 409, "detail": str(e)}
             ) + "\n"
-        except Exception as e:
+        except (
+            Exception
+        ) as e:  # nexus-exception-disposition: fail; reason=headers out; safety=500 row
             logger.exception("Error in streaming chat endpoint: %s", e)
             detail = (
                 f"{e} (cause: {e.__cause__})" if e.__cause__ is not None else str(e)
