@@ -461,7 +461,7 @@ def test_apply_entity_tag_manifest_rejects_deprecated_category_on_clone() -> Non
     allowed list reaches the tag lookup, whose registry join refuses it.
     """
 
-    with disposable_slot_database("qa811_entity_manifest") as dbname:
+    with disposable_slot_database("qa640_811_entity_manifest") as dbname:
         with closing(connect(dbname, cursor_factory=RealDictCursor)) as conn:
             with conn.cursor() as cur:
                 with pytest.raises(ValueError) as caught:

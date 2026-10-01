@@ -34,7 +34,7 @@ _DESCRIPTION_CATEGORIES = re.compile(r"Semantic tags for this protagonist \(([^)
 def template_clone() -> Iterator[str]:
     """One current-template clone for every vocabulary check in this module."""
 
-    with disposable_slot_database("qa811_prompt_vocab") as dbname:
+    with disposable_slot_database("qa640_811_prompt_vocab") as dbname:
         yield dbname
 
 

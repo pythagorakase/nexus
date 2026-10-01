@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator, List, Optional
 
+import asyncpg
 import pytest
 from psycopg2 import sql
 from psycopg2.extras import Json
@@ -46,6 +47,7 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.agents.orrery.tag_writer import (
     apply_exclusive_tag_bestowal,
+    apply_exclusive_tag_bestowal_async,
     apply_tag_bestowal,
     validate_tag_bestowal,
 )
@@ -57,7 +59,7 @@ from nexus.api.commit_handler_sync import (
 from nexus.api.db_pool import close_all_pools
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import connect, route_slot_to_disposable
+from tests.pg_fixtures import asyncpg_kwargs, connect, route_slot_to_disposable
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -1293,6 +1295,31 @@ def _active_entity_tag_id(
     return None if row is None else int(row[0])
 
 
+def _clear_active_rows_with_sql(
+    database: _Qa649Database, *, entity_id: int, tag: str
+) -> None:
+    """Clear any active ``tag`` row on ``entity_id`` without the writer under test.
+
+    Cleanup for the module clone: a failed case must not leave an active
+    deprecated-category row for the cases after it.
+    """
+
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE entity_tags et
+                SET cleared_at = now()
+                FROM tags registry
+                WHERE registry.id = et.tag_id
+                  AND et.entity_id = %s
+                  AND registry.tag = %s
+                  AND et.cleared_at IS NULL
+                """,
+                (entity_id, tag),
+            )
+
+
 @pytest.mark.parametrize(
     ("array_name", "entity_attribute", "entity_kind", "tag"),
     _DEPRECATED_CATEGORY_TAGS,
@@ -1351,32 +1378,37 @@ def test_writer_clears_active_deprecated_category_tag_with_ledger(
 
     entity = getattr(qa649_db, entity_attribute)
     _commit_activation(qa649_db, entity.entity_id, tag)
-    entity_tag_id = _active_entity_tag_id(qa649_db, entity_id=entity.entity_id, tag=tag)
-    assert entity_tag_id is not None
+    try:
+        entity_tag_id = _active_entity_tag_id(
+            qa649_db, entity_id=entity.entity_id, tag=tag
+        )
+        assert entity_tag_id is not None
 
-    with _connect(qa649_db.dbname) as conn:
-        with conn.cursor() as cur:
-            counters = apply_tag_bestowal(
-                cur,
-                entity_id=entity.entity_id,
-                entity_kind=entity_kind,
-                bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
-            )
-    assert counters == {"applied": 0, "cleared": 1}
-    assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
+        with _connect(qa649_db.dbname) as conn:
+            with conn.cursor() as cur:
+                counters = apply_tag_bestowal(
+                    cur,
+                    entity_id=entity.entity_id,
+                    entity_kind=entity_kind,
+                    bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
+                )
+        assert counters == {"applied": 0, "cleared": 1}
+        assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
 
-    with _connect(qa649_db.dbname) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT mechanism::text, justification
-                FROM tag_clearance_log
-                WHERE entity_tag_id = %s
-                """,
-                (entity_tag_id,),
-            )
-            ledger = cur.fetchall()
-    assert ledger == [("authored", {"reason": "bestowal.tags_to_clear"})]
+        with _connect(qa649_db.dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT mechanism::text, justification
+                    FROM tag_clearance_log
+                    WHERE entity_tag_id = %s
+                    """,
+                    (entity_tag_id,),
+                )
+                ledger = cur.fetchall()
+        assert ledger == [("authored", {"reason": "bestowal.tags_to_clear"})]
+    finally:
+        _clear_active_rows_with_sql(qa649_db, entity_id=entity.entity_id, tag=tag)
 
 
 @pytest.mark.parametrize(
@@ -1437,6 +1469,49 @@ def test_staged_draft_with_deprecated_category_application_fails(
                 cur.execute(
                     "DELETE FROM incubator WHERE session_id = %s", (session_id,)
                 )
+        _clear_active_rows_with_sql(qa649_db, entity_id=entity.entity_id, tag=tag)
+
+
+def test_registry_free_tag_validation_rejects_deprecated_category_application(
+    qa649_db: _Qa649Database,
+) -> None:
+    """Gaia's registry-free path (no vocabulary) rejects through the writer."""
+
+    entity = qa649_db.active_character
+    tag = "black_market_operator"
+    expected = _deprecated_application_message(qa649_db, "character", tag)
+    response = _response(
+        characters=_deprecated_category_update(entity, "tags_add", tag)
+    )
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            issues = collect_orrery_tag_issues(response, cur)
+    assert issues == [f"updates.characters[0]: applied_tags: {expected}"]
+
+
+@pytest.mark.asyncio
+async def test_async_exclusive_bestowal_rejects_deprecated_category_application(
+    qa649_db: _Qa649Database,
+) -> None:
+    """The asyncpg exclusive bestowal applies only live-library tags (#811-Q7)."""
+
+    entity = qa649_db.active_character
+    tag = "black_market_operator"
+    expected = _deprecated_application_message(qa649_db, "character", tag)
+    conn = await asyncpg.connect(**asyncpg_kwargs(qa649_db.dbname))
+    try:
+        with pytest.raises(ValueError) as caught:
+            await apply_exclusive_tag_bestowal_async(
+                conn,
+                entity_id=entity.entity_id,
+                entity_kind="character",
+                tag=tag,
+            )
+        assert str(caught.value) == expected
+        assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
+    finally:
+        await conn.close()
+        _clear_active_rows_with_sql(qa649_db, entity_id=entity.entity_id, tag=tag)
 
 
 def test_migration_109_seeds_only_time_cleared_defaults(
