@@ -317,3 +317,33 @@ Two scratch edits to `_expected_graph_class` (each restored from a copy afterwar
 
 - Dropping the migration kind (`or path in reachable["migration"]`): `pytest -k "graph_classes or ratchet"` gave `2 failed, 12 passed` (the two base-fixture cases where only the migration loader reaches `scripts/migrate.py`).
 - Moving the production branch below the test branch: `pytest -k graph_classes` gave `8 failed, 2 passed`.
+
+## Review Fixes at 1f298eb1
+
+The tails above ran before the review round. Commit `1f298eb1` changes only `tests/test_reachability.py`, `docs/reachability.md`, and a comment in `config/reachability.toml`. The checker and the classification entries do not change, so the counts, the red run and the green run above still hold. These tails ran on `1f298eb1`:
+
+`python -m pytest -q tests/test_reachability.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+52 passed, 5 warnings in 11.07s
+```
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 python -m pytest -q -p tests.dbname_audit tests/test_reachability.py tests/test_owner_target_guard.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+132 passed in 12.68s
+```
+
+`python -S scripts/check_reachability.py` exits 0 with three empty lists and the counts in the table above. Black leaves both Python files unchanged, flake8 is clean, and mypy reports the same four pre-existing errors in `scripts/check_reachability.py` and none in the test file.
+
+The graph fixture now gives `scripts/shared.py` a production and an operator root (`scripts/tool.py` imports it) and gives `scripts/tool_helper.py` an operator and a test root (`tests/test_example.py` imports it). The decision test now finds the first 811-S1 rule (1-8, in order) for each entry and asserts that the paths falling to rule 5 are exactly the `pending-ruling:811-Q5` set (38) and the paths falling to rule 8 are exactly the `pending-ruling:811-Q3` set (78). Three more scratch mutations, each restored from a copy afterwards:
+
+- Testing the test kind before the operator kind in `_expected_graph_class`: `pytest -k graph_classes_follow` gave `8 failed, 2 passed`.
+- Testing the operator kind before production: `pytest -k graph_classes_follow` gave `8 failed, 2 passed`.
+- Reclassing `ir_eval/qrels.json` from `pending-ruling:811-Q5` to `dead` in the TOML: `pytest -k "811_decisions or ratchet"` gave `1 failed, 4 passed` (the decision test fails; the ratchet alone still passes, because a non-Python path has no graph check).
