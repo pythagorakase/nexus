@@ -242,14 +242,20 @@ def _parse_mark(mark: str) -> Tuple[int, int, int]:
     return inode, size, crc
 
 
-def _open_segments(path: Path, backup_count: int) -> List[BinaryIO]:
+def _open_segments(
+    path: Path, backup_count: int, timeout_seconds: float, poll_seconds: float
+) -> List[BinaryIO]:
     """Open the current capture and its retained segments, newest first.
 
     The list stops at the first missing segment. A rotation between two opens
-    would hand back a skewed chain, so the opened identities are checked
-    against the paths afterwards and the snapshot is retaken until they agree.
+    would hand back a skewed chain, and a rotation in progress leaves a gap
+    (``.1`` absent while ``.2`` exists, or the current file absent while
+    ``.1`` exists), so the snapshot is retaken every ``poll_seconds`` until
+    the opened identities agree with the paths and no segment exists past the
+    first missing one. A gap that lasts ``timeout_seconds`` raises.
     """
     paths = [path] + [rotated_segment(path, i) for i in range(1, backup_count + 1)]
+    deadline = time.monotonic() + timeout_seconds
     while True:
         handles: List[BinaryIO] = []
         for segment in paths:
@@ -257,8 +263,9 @@ def _open_segments(path: Path, backup_count: int) -> List[BinaryIO]:
                 handles.append(open(segment, "rb"))
             except FileNotFoundError:
                 break
+        beyond = [segment for segment in paths[len(handles) :] if segment.exists()]
         try:
-            stable = len(handles) == len(paths) or not paths[len(handles)].exists()
+            stable = not beyond
             for segment, handle in zip(paths, handles):
                 stable = stable and (
                     os.stat(segment).st_ino == os.fstat(handle.fileno()).st_ino
@@ -269,6 +276,13 @@ def _open_segments(path: Path, backup_count: int) -> List[BinaryIO]:
             return handles
         for handle in handles:
             handle.close()
+        if beyond and time.monotonic() >= deadline:
+            raise RuntimeError_(
+                f"{paths[len(handles)]} is missing while {beyond[0]} exists, "
+                f"and the gap outlasted {timeout_seconds}s: the capture's "
+                "segment chain is broken."
+            )
+        time.sleep(poll_seconds)
 
 
 class _LogFollower:
@@ -1043,37 +1057,63 @@ class Supervisor:
         ``"<inode>:<size>:<crc>"`` names the current file, its size, and the
         ``zlib.crc32`` of its first ``min(size, 256)`` bytes (captures are
         append-only, so that prefix never changes); ``"0:0:0"`` when no
-        capture exists yet.
+        capture exists yet. A missing current file while ``.1`` exists is a
+        rotation in progress: the mark is retaken until the writer opens the
+        fresh file, and raises when that outlasts ``stop_grace_seconds``.
         """
         self._require_local_logs()
-        try:
-            with open(self.log_path(service), "rb") as handle:
-                stat = os.fstat(handle.fileno())
-                prefix = handle.read(min(stat.st_size, MARK_PREFIX_BYTES))
-        except FileNotFoundError:
-            return EMPTY_MARK
-        return f"{stat.st_ino}:{stat.st_size}:{zlib.crc32(prefix)}"
+        log_path = self.log_path(service)
+        health = self.runtime.health
+        deadline = time.monotonic() + health.stop_grace_seconds
+        while True:
+            try:
+                with open(log_path, "rb") as handle:
+                    stat = os.fstat(handle.fileno())
+                    prefix = handle.read(min(stat.st_size, MARK_PREFIX_BYTES))
+            except FileNotFoundError:
+                newest = rotated_segment(log_path, 1)
+                if not newest.exists():
+                    return EMPTY_MARK
+                if time.monotonic() >= deadline:
+                    raise RuntimeError_(
+                        f"{log_path} is missing while {newest} exists, and the "
+                        f"gap outlasted {health.stop_grace_seconds}s: no mark "
+                        "can name the capture's end."
+                    ) from None
+                time.sleep(health.poll_interval_seconds)
+                continue
+            return f"{stat.st_ino}:{stat.st_size}:{zlib.crc32(prefix)}"
 
     def logs_since(self, service: str, mark: str) -> List[str]:
         """Every line a service's capture received after ``mark``, in order.
 
         Reads the marked file from the marked offset, then each newer rotated
         segment and the current capture in full, across every rotation the
-        writer performed meanwhile. Raises when the marked text is no longer
-        retained, or the mark names a file it cannot be checked against.
+        writer performed meanwhile; a rotation in progress is waited out (see
+        ``_open_segments``). Raises when the marked text is no longer retained,
+        or the mark names a file it cannot be checked against.
         """
         self._require_local_logs()
         inode, offset, crc = _parse_mark(mark)
         log_path = self.log_path(service)
-        segments = _open_segments(log_path, self.runtime.logs.backup_count)
+        if mark == EMPTY_MARK:
+            # Once .backup_count exists it stays, so this check needs no
+            # snapshot of the chain.
+            oldest = rotated_segment(log_path, self.runtime.logs.backup_count)
+            if oldest.exists():
+                raise RuntimeError_(
+                    f"Log mark {mark} names no capture, and {oldest} exists: "
+                    "lines written after the mark may have left retention."
+                )
+        health = self.runtime.health
+        segments = _open_segments(
+            log_path,
+            self.runtime.logs.backup_count,
+            health.stop_grace_seconds,
+            health.poll_interval_seconds,
+        )
         try:
             if mark == EMPTY_MARK:
-                oldest = rotated_segment(log_path, self.runtime.logs.backup_count)
-                if oldest.exists():
-                    raise RuntimeError_(
-                        f"Log mark {mark} names no capture, and {oldest} exists: "
-                        "lines written after the mark may have left retention."
-                    )
                 start, start_offset = len(segments) - 1, 0
             else:
                 matches = [

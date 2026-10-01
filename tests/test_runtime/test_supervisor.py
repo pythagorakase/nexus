@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import threading
 import time
 from typing import Any, cast
 
@@ -535,6 +536,7 @@ def test_writer_keeps_an_overlong_line_whole(tmp_path: Path) -> None:
 def test_spawn_captured_releases_the_callers_stderr(tmp_path: Path) -> None:
     """A spawning process that exits leaves no writer holding its pipes."""
     capture = tmp_path / "logs" / "sleeper.log"
+    pid_file = tmp_path / "pids.txt"
     script = (
         "import sys\n"
         "from pathlib import Path\n"
@@ -546,14 +548,13 @@ def test_spawn_captured_releases_the_callers_stderr(tmp_path: Path) -> None:
         "    logs=RuntimeLogsSettings(),\n"
         "    popen_kwargs={'start_new_session': True},\n"
         ")\n"
-        "print(captured.pid, captured.writer_pid)\n"
+        "Path(sys.argv[2]).write_text(f'{captured.pid} {captured.writer_pid}')\n"
     )
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO_ROOT)
-    pids: list[int] = []
     try:
         completed = subprocess.run(
-            [sys.executable, "-c", script, str(capture)],
+            [sys.executable, "-c", script, str(capture), str(pid_file)],
             capture_output=True,
             timeout=10,
             cwd=REPO_ROOT,
@@ -561,15 +562,14 @@ def test_spawn_captured_releases_the_callers_stderr(tmp_path: Path) -> None:
             text=True,
         )
         assert completed.returncode == 0, completed.stderr
-        pids = [int(value) for value in completed.stdout.split()]
-        assert len(pids) == 2
+        assert len(pid_file.read_text().split()) == 2
         assert writer_error_path(capture).exists()
     finally:
-        for pid in pids:
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        # The pids are on disk before the script exits, so a run that times
+        # out on a held pipe still leaves no sleeper or writer behind.
+        if pid_file.exists():
+            for value in pid_file.read_text().split():
+                _kill_quietly(int(value))
 
 
 def test_follow_crosses_live_rotation(tmp_path: Path) -> None:
@@ -645,6 +645,66 @@ def test_logs_since_from_no_capture(tmp_path: Path) -> None:
         supervisor.logs_since("echo", mark)
 
 
+def test_logs_since_waits_out_a_rotation_in_progress(tmp_path: Path) -> None:
+    """A slice or mark taken mid-rotation waits for the chain to close."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=3, stop_grace_seconds=10
+    )
+    log_path = supervisor.log_path("echo")
+    _write_lines(log_path, ["current"])
+    _write_lines(rotated_segment(log_path, 2), ["oldest"])
+
+    def finish_rotation() -> None:
+        # The writer's rename of the current file, then its fresh open.
+        time.sleep(0.5)
+        log_path.replace(rotated_segment(log_path, 1))
+        time.sleep(0.5)
+        _write_lines(log_path, ["fresh"])
+
+    # .2 exists while .1 is absent: the shift of .1 -> .2 just ran.
+    rotation = threading.Thread(target=finish_rotation)
+    rotation.start()
+    try:
+        assert supervisor.logs_since("echo", "0:0:0") == ["oldest", "current", "fresh"]
+    finally:
+        rotation.join()
+
+    # The current file is absent while .1 exists: the rename just ran.
+    log_path.replace(rotated_segment(log_path, 1))
+
+    def open_fresh_file() -> None:
+        time.sleep(0.5)
+        _write_lines(log_path, ["newer"])
+
+    rotation = threading.Thread(target=open_fresh_file)
+    rotation.start()
+    try:
+        mark = supervisor.log_mark("echo")
+    finally:
+        rotation.join()
+    assert mark.split(":")[0] == str(log_path.stat().st_ino)
+    assert supervisor.logs_since("echo", mark) == []
+
+
+def test_logs_since_refuses_a_lasting_gap_in_the_chain(tmp_path: Path) -> None:
+    """A segment missing past the grace raises instead of dropping lines."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=3, stop_grace_seconds=1
+    )
+    log_path = supervisor.log_path("echo")
+    _write_lines(log_path, ["current"])
+    _write_lines(rotated_segment(log_path, 2), ["oldest"])
+
+    with pytest.raises(RuntimeError_, match="echo.log.1 is missing while"):
+        supervisor.logs_since("echo", "0:0:0")
+
+    log_path.replace(rotated_segment(log_path, 1))
+    with pytest.raises(RuntimeError_, match="echo.log is missing while"):
+        supervisor.log_mark("echo")
+    with pytest.raises(RuntimeError_, match="echo.log is missing while"):
+        supervisor.logs_since("echo", "0:0:0")
+
+
 def test_wait_for_writer_ignores_a_pid_that_is_not_the_writer(tmp_path: Path) -> None:
     """A live pid that is not this file's writer counts as gone, unsignalled."""
     sleeper = subprocess.Popen(["sleep", "30"])
@@ -656,6 +716,56 @@ def test_wait_for_writer_ignores_a_pid_that_is_not_the_writer(tmp_path: Path) ->
     finally:
         sleeper.kill()
         sleeper.wait()
+
+
+def test_wait_for_writer_returns_for_another_parents_exited_writer(
+    tmp_path: Path,
+) -> None:
+    """An exited writer that its live parent has not reaped counts as gone."""
+    capture = tmp_path / "logs" / "brief.log"
+    pid_file = tmp_path / "pids.txt"
+    # The parent spawns the capture, records the pids, and never reaps them.
+    script = (
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "from nexus.config.settings_models import RuntimeLogsSettings\n"
+        "from nexus.runtime.log_capture import spawn_captured\n"
+        "captured = spawn_captured(\n"
+        "    [sys.executable, '-c', 'import time; time.sleep(1)'],\n"
+        "    log_path=Path(sys.argv[1]),\n"
+        "    logs=RuntimeLogsSettings(),\n"
+        ")\n"
+        "Path(sys.argv[2]).write_text(f'{captured.pid} {captured.writer_pid}')\n"
+        "time.sleep(30)\n"
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    parent = subprocess.Popen(
+        [sys.executable, "-c", script, str(capture), str(pid_file)],
+        cwd=REPO_ROOT,
+        env=env,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not pid_file.exists() or len(pid_file.read_text().split()) < 2:
+            assert time.monotonic() < deadline, "the parent never recorded its pids"
+            time.sleep(0.05)
+        _child_pid, writer_pid = (int(value) for value in pid_file.read_text().split())
+
+        started = time.monotonic()
+        assert wait_for_writer(writer_pid, capture, 5, 0.1) is True
+        # The child sleeps 1 s; the writer exits at its EOF right after.
+        assert time.monotonic() - started < 2.5
+        state = subprocess.run(
+            ["ps", "-p", str(writer_pid), "-o", "stat="],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        assert state.startswith("Z"), f"the writer is not a zombie: {state!r}"
+    finally:
+        parent.kill()
+        parent.wait()
 
 
 def _spawn_holding_child(supervisor: Supervisor) -> tuple[int, int, int]:

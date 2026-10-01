@@ -286,7 +286,8 @@ def wait_for_writer(
 ) -> bool:
     """Wait until the writer ``pid`` of ``log_path`` is gone.
 
-    Returns True once the pid is gone, or at once when the pid is not this
+    Returns True once the pid is gone or has exited (a zombie that another
+    live process has not reaped yet), or at once when the pid is not this
     file's writer (a recycled pid is never waited on and never signalled).
     Returns False when the writer is still alive after ``timeout_seconds``:
     something still holds the captured process's output.
@@ -300,6 +301,11 @@ def wait_for_writer(
     while True:
         _reap(pid)
         if not pid_alive(pid):
+            return True
+        # Only the writer's parent can reap it. When that parent is another
+        # live process, the exited writer stays a zombie that answers
+        # kill(pid, 0); its command line no longer names this file.
+        if os.name == "posix" and not _is_writer_for(pid, log_path, timeout_seconds):
             return True
         if time.monotonic() >= deadline:
             return False

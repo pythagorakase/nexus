@@ -890,6 +890,18 @@ def _kill_group(pid: int) -> None:
         pass
 
 
+def _capture_holds(log_path: Path, text: str) -> bool:
+    """Whether the current capture holds ``text``; absent mid-rotation is "not yet".
+
+    The writer renames the capture to ``.1`` before it opens the fresh file, so
+    a read that lands between the two finds no file.
+    """
+    try:
+        return text in log_path.read_text()
+    except FileNotFoundError:
+        return False
+
+
 def test_activate_captures_through_the_writer_under_the_policy(
     tmp_path: Path, capture_config: Path
 ) -> None:
@@ -906,7 +918,7 @@ def test_activate_captures_through_the_writer_under_the_policy(
         )
         writer_pid = record["log_writer_pid"]
         deadline = time.monotonic() + 30
-        while TWO_HUNDRED_LINES[-1] not in log_path.read_text():
+        while not _capture_holds(log_path, TWO_HUNDRED_LINES[-1]):
             assert time.monotonic() < deadline, "the 200th line never reached disk"
             time.sleep(0.1)
 

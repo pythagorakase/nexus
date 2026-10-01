@@ -100,8 +100,9 @@ issue, dry-well, wall-clock, and token settings.
    Before starting the isolated gateway, record the gateway log's mark with
    `nexus logs gateway --mark` in a shell that sourced `runtime_env.sh`. Start
    the gateway, record its PID and UTC startup time, and verify its health and
-   effective model. Save the commands and outputs. These markers define the current-run log slice; persistent
-   gateway logs can contain earlier shifts and must not be mined as one run.
+   effective model. Save the commands and outputs. These markers define the
+   current-run log slice; persistent gateway logs can contain earlier shifts
+   and must not be mined as one run.
 
 If any preflight step fails, write the blocker into the mission report, perform
 the applicable teardown, and stop.
