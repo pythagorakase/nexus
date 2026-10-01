@@ -283,3 +283,118 @@ Black (`2 files left unchanged`), flake8 (exit 0), and mypy
 (`Success: no issues found in 2 source files`) pass on both changed Python
 files. Prose that reads "select ... into" inside a non-executed Python string
 now reaches the scanner by design, as the coordinator accepted.
+
+## After the Second Review
+
+Two verifiers then proved four more gaps in the `SELECT ... INTO` rule at
+`043d664e`, each checked in PostgreSQL 17.11 in a rolled-back transaction.
+Commit `76e4a8fe` closes them; this change itself opened no database.
+
+- **A parenthesized main statement after a WITH list.**
+  `WITH a AS (SELECT 1) (SELECT 1 INTO t);` and the same with
+  `UNION ALL SELECT 2` passed, because the group was read at the outer base
+  depth. `_query_tokens` now reads a main statement that opens with `(` as a
+  query of its own, with its own leading parentheses and WITH list.
+- **SEARCH and CYCLE clauses.** `_after_with_list` read the token after a
+  recursive CTE's group as the main statement, so `CYCLE n SET update USING
+  path`, `SEARCH DEPTH FIRST BY n SET ord, delete AS (...)`, and
+  `SEARCH BREADTH FIRST BY delete SET ord` silenced the rule.
+  `_after_search_cycle` skips `SEARCH {BREADTH | DEPTH} FIRST BY col [, ...]
+  SET name` and `CYCLE ... USING name` (USING is reserved) before the `,` /
+  `AS` / main-statement decision.
+- **EXPLAIN ANALYZE.** It executes its statement, but `EXPLAIN ANALYZE (SELECT
+  1 INTO t);` and `EXPLAIN (ANALYZE) WITH delete AS (...) SELECT id INTO t
+  FROM delete;` passed. `_explained` reads through `EXPLAIN ANALYZE [VERBOSE]`
+  (or `ANALYSE`) and through an option list that holds `ANALYZE` with no
+  false, off, or 0 value.
+- **Plans that create nothing.** Plain `EXPLAIN`, `EXPLAIN VERBOSE`, and
+  `EXPLAIN (ANALYZE false, ...)` only plan the statement and now pass.
+  `PREPARE p AS SELECT 1 INTO t;` stays reported, as a documented false
+  positive (module docstring, `_select_into` docstring, `docs/database.md`):
+  it creates nothing by itself, but a later `EXECUTE p` runs it, so exempting
+  it would let that pair through.
+
+`test_select_into_fails_like_ctas` gains the two parenthesized-main cases
+(lines 48 and 51 of its fixture). New test
+`test_select_into_is_found_past_search_cycle_and_explain_analyze` asserts the
+full findings list: the three SEARCH/CYCLE cases, four EXPLAIN ANALYZE cases
+(plain, parenthesized, CTE-led behind `(ANALYZE)`, and `ANALYZE VERBOSE` with a
+CTE and a parenthesized main statement), and `PREPARE`; and silence for
+`EXPLAIN`, `EXPLAIN VERBOSE`, `EXPLAIN (ANALYZE false, VERBOSE)`,
+`EXPLAIN (SELECT 1 INTO ...)`, and a real `DELETE` after `SEARCH` and `CYCLE`
+clauses whose names are `delete` and `update`.
+
+On `043d664e` (a scratch copy of `git show 043d664e:scripts/check_migration_comments.py`)
+both tests fail. Their findings there:
+
+```
+test_select_into_fails_like_ctas FAIL; findings:
+    130_snapshots.sql:2: SELECT INTO public.mood_snapshot declares no column list; its columns cannot be verified
+    130_snapshots.sql:6: SELECT INTO public.recent_moods declares no column list; its columns cannot be verified
+    130_snapshots.sql:9: SELECT INTO public.mood_ids declares no column list; its columns cannot be verified
+    130_snapshots.sql:43: SELECT INTO names '{}', which is not a literal identifier; name the object literally so its COMMENT can be verified
+    131_snapshots.py:3: SELECT INTO public.py_snapshot declares no column list; its columns cannot be verified
+    131_snapshots.py:9: SELECT INTO public.py_recent declares no column list; its columns cannot be verified
+test_select_into_is_found_past_search_cycle_and_explain_analyze FAIL; findings:
+    130_clauses.sql:11: SELECT INTO public.explained declares no column list; its columns cannot be verified
+    130_clauses.sql:16: SELECT INTO public.prepared declares no column list; its columns cannot be verified
+    130_clauses.sql:17: SELECT INTO public.planned declares no column list; its columns cannot be verified
+    130_clauses.sql:17: table public.planned has no COMMENT ON TABLE
+    130_clauses.sql:18: SELECT INTO public.planned_verbose declares no column list; its columns cannot be verified
+    130_clauses.sql:18: table public.planned_verbose has no COMMENT ON TABLE
+    130_clauses.sql:19: SELECT INTO public.planned_off declares no column list; its columns cannot be verified
+    130_clauses.sql:19: table public.planned_off has no COMMENT ON TABLE
+```
+
+Each fix is needed: with only that fix removed in a scratch copy
+(`-k select_into`):
+
+```
+== mutant with_paren (no re-read of a parenthesized main statement)
+FAILED test_lint_copy.py::test_select_into_fails_like_ctas - AssertionError: ...
+FAILED test_lint_copy.py::test_select_into_is_found_past_search_cycle_and_explain_analyze
+2 failed, 1 passed, 35 deselected in 0.06s
+== mutant search_cycle (no SEARCH/CYCLE skip)
+FAILED test_lint_copy.py::test_select_into_is_found_past_search_cycle_and_explain_analyze
+1 failed, 2 passed, 35 deselected in 0.05s
+== mutant explain (no EXPLAIN handling)
+FAILED test_lint_copy.py::test_select_into_is_found_past_search_cycle_and_explain_analyze
+1 failed, 2 passed, 35 deselected in 0.05s
+```
+
+The verifiers' eleven scratch cases (x01-x11), rerun against both scripts
+(count of `SELECT INTO` findings, old then new): x01 0→1, x02 0→1, x03 1→1,
+x04 0→1, x05 0→1, x06 0→1, x07 1→1, x08 0→1, x09 0→1, x10 1→0, x11 1→1
+(PREPARE, kept). Extra cases: `EXPLAIN (ANALYZE false, VERBOSE)` 1→0,
+`EXPLAIN ANALYZE VERBOSE WITH ... (SELECT 1 INTO t)` 0→1,
+`EXPLAIN (SELECT 1 INTO t)` 0→0, a real `DELETE` after SEARCH and CYCLE 0→0.
+
+On `76e4a8fe`, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT`
+unset:
+
+```
+$ black --check
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+exit=0
+$ flake8
+exit=0
+$ mypy
+Success: no issues found in 2 source files
+$ pytest lint
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 0.88s
+$ real tree
+OK: every object created after migration 129 has a comment.
+exit=0
+$ cmp hist_before.txt hist_after.txt
+exit=0
+     405
+     405
+$ reachability
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 10.61s
+```
+
+`hist_before.txt` was taken at `043d664e` before these edits and is
+byte-identical to the snapshot taken before the original change.
