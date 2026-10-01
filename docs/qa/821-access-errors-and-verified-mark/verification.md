@@ -166,6 +166,29 @@ $PY -m mypy nexus/util/secret_manager.py nexus/api/secrets_endpoints.py nexus/ru
                                                       -> Success: no issues found in 4 source files
 ```
 
+### After the Review Fixes (`d50e5714`)
+
+`d50e5714` removes `tests/test_secret_manager.py`'s import of `tests.conftest`
+(the fixture parameter is now annotated `InMemorySecretBackend`) and changes
+only Markdown otherwise. The changed test file and the guard tests, rerun at
+`d50e5714`:
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_secret_manager.py tests/test_secret_store_guard.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+108 passed in 3.53s
+```
+
+`$PY -m black --check tests/test_secret_manager.py` -> 1 file would be left
+unchanged; `$PY -m flake8 tests/test_secret_manager.py` -> exit 0.
+
 ### Not Run
 
 `tests/test_secret_store_integration.py::test_missing_security_executable_is_an_access_error`
