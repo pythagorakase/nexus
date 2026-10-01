@@ -291,3 +291,38 @@ $ $PY -m flake8 tests/test_doc_front_matter.py
 $ $PY -m mypy tests/test_doc_front_matter.py
 Success: no issues found in 1 source file
 ```
+
+## After the Second Review Fix
+
+Commit `74c9082c` removes `GIT_OPTIONAL_LOCKS=0` (and its comment) from
+`_history_git`, so every git call of the check runs with `os.environ` minus every
+`GIT_*` variable, as item 2 requires. No claim of `AGENTS.md` changed, so no
+stamp moved.
+
+Tails at `74c9082c`, `origin/main` at `e528cc08`, merge base still `41783c1d`:
+
+```
+$ $PY -m pytest -q tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+42 passed, 5 warnings in 7.07s
+
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_doc_front_matter.py tests/test_owner_target_guard.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+122 passed in 8.54s
+
+$ $PY -m pytest -q tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 10.03s
+
+$ $PY -m black tests/test_doc_front_matter.py
+All done! ✨ 🍰 ✨
+1 file left unchanged.
+$ $PY -m flake8 tests/test_doc_front_matter.py
+(no output)
+$ $PY -m mypy tests/test_doc_front_matter.py
+Success: no issues found in 1 source file
+```
