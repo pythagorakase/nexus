@@ -506,12 +506,12 @@ def perform_transition_with_retrograde(
         from nexus.agents.orrery.retrograde_orchestrator import (
             build_wizard_history_surface,
             embed_retrograde_history_summaries,
-            generate_retrograde_history,
-            persist_retrograde_history,
-            record_retrograde_progress,
-            record_genesis_stage_output,
             finish_genesis_persistence,
             finish_skipped_genesis_run,
+            generate_retrograde_history,
+            persist_retrograde_history,
+            record_genesis_stage_output,
+            record_retrograde_progress,
         )
         from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
         from nexus.api.save_slots import get_slot_model

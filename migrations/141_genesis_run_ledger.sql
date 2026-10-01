@@ -3,7 +3,7 @@
 -- Before this migration, progress is process-local: _PROGRESS_LOCK and
 -- _PROGRESS_BY_SLOT in nexus/agents/orrery/retrograde_orchestrator.py:61-62,
 -- record_retrograde_progress:97-124, get_retrograde_progress:127-146, and
--- reset_retrograde_progress:149-166 (base 9ac0caf6). Another worker or a
+-- reset_retrograde_progress:149-166 (pre-change base 5b977eab). Another worker or a
 -- restarted gateway answers idle with run null (wizard_chat.py:1426-1444).
 -- Packet, seeds, and expansion survive only in the returned bundle
 -- (retrograde_orchestrator.py:196-256); trait inputs only in transition_data

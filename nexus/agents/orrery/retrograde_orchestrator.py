@@ -343,7 +343,7 @@ def generate_retrograde_history(
 
     expansion_plan = dict(expansion_generation["retrograde_expansion_plan"])
     if on_stage_output is not None:
-        on_stage_output("expansion", expansion_plan)
+        on_stage_output("expansion", dict(expansion_plan))
 
     return RetrogradeGenerationBundle(
         slot=slot,
