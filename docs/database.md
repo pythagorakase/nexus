@@ -205,3 +205,14 @@ cur.execute(DDL)`, names joined only at run time such as `cur.execute(A + B)`, a
 file it reads, or a bytes literal). Legacy enums, functions, and views are
 enforced by the PostgreSQL ratchet above through their entries in
 `config/schema_docs_baseline.json`.
+
+## Genesis Run Ledger
+
+`genesis_runs` retains each wizard transition's status, stage, and failure, and
+`genesis_run_stages` retains its stage details and outputs. The ledger writers in
+`retrograde_orchestrator.py` commit progress and generation outputs on their own
+slot connections; `finish_genesis_persistence` and `finish_skipped_genesis_run`
+share the world transaction's cursor so their records commit or roll back with
+that world. The Retrograde status route reads the latest run from these tables,
+so every gateway worker reports the same durable record. Rows are kept after
+completion.

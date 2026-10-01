@@ -22,23 +22,22 @@ new-story wizard fires at the ready -> narrative transition:
    player-visible; event prose, tags, and deferred seeds stay hidden with
    counts only.
 
-Progress states for each stage are published to a process-local registry so
-the API can expose them while the transition request is in flight.
+Stage states and outputs are written to the slot's genesis_runs and genesis_run_stages tables.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import threading
 import time
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
+from nexus.api.db_pool import get_connection
+from nexus.api.slot_utils import slot_dbname
 from nexus.config.settings_models import (
     OrreryRetrogradeRetrievalSettings,
     OrreryRetrogradeWizardSettings,
@@ -58,8 +57,15 @@ RETROGRADE_WIZARD_STAGES: tuple[str, ...] = (
 
 ProgressCallback = Callable[[str, dict[str, Any]], None]
 
-_PROGRESS_LOCK = threading.Lock()
-_PROGRESS_BY_SLOT: dict[int, dict[str, Any]] = {}
+GENESIS_RUN_STAGES = (
+    "derivation",
+    "packet",
+    "seed_candidates",
+    "expansion",
+    "persistence",
+    "embedding",
+    "done",
+)
 
 
 class RetrogradePersistenceBlockedError(ValueError):
@@ -94,76 +100,160 @@ class RetrogradeGenerationBundle(BaseModel):
     timings: list[RetrogradeStageTiming]
 
 
+def _checked(cur: Any, run: str) -> None:
+    """Require a ledger update to match exactly one eligible row."""
+    if cur.rowcount != 1:
+        raise RuntimeError(f"Genesis run {run}: expected one eligible ledger row")
+
+
+def _close_open_stage(cur: Any, run: str) -> None:
+    cur.execute(
+        "UPDATE genesis_run_stages SET finished_at = clock_timestamp() "
+        "WHERE run_id = %s AND finished_at IS NULL",
+        (run,),
+    )
+
+
+def start_genesis_run(slot: int) -> str:
+    """Commit a fresh running genesis run and return its UUID hex identity."""
+    run = uuid.uuid4().hex
+    with get_connection(slot_dbname(slot)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO genesis_runs (run_id, status) VALUES (%s, 'running')", (run,)
+        )
+    return run
+
+
 def record_retrograde_progress(
     slot: int,
+    run: str,
     stage: str,
     detail: Optional[Mapping[str, Any]] = None,
 ) -> None:
-    """Publish the current Retrograde stage for one slot's transition run.
-
-    Raises:
-        ValueError: If ``stage`` is outside the published vocabulary.
-        RuntimeError: If no run has started for the slot; every stage belongs
-            to the run ``reset_retrograde_progress`` started.
-    """
-
-    if stage not in RETROGRADE_WIZARD_STAGES and stage != "failed":
+    """Commit a stage transition, refusing unknown stages or non-running runs."""
+    if stage not in GENESIS_RUN_STAGES:
         raise ValueError(f"Unknown Retrograde wizard stage {stage!r}")
-    with _PROGRESS_LOCK:
-        entry = _PROGRESS_BY_SLOT.get(slot)
-        if entry is None:
-            raise RuntimeError(
-                f"No Retrograde run has started for slot {slot}; "
-                "reset_retrograde_progress starts one before its first stage"
-            )
-        entry["stage"] = stage
-        entry["detail"] = dict(detail or {})
-        entry["updated_at"] = datetime.now(timezone.utc).isoformat()
-        entry["stages"].append(
-            {"stage": stage, "at": entry["updated_at"], "detail": entry["detail"]}
+    with get_connection(slot_dbname(slot)) as conn, conn.cursor() as cur:
+        terminal = (
+            ", status = 'done', finished_at = clock_timestamp()"
+            if stage == "done"
+            else ""
+        )
+        cur.execute(
+            "UPDATE genesis_runs SET stage = %s, updated_at = clock_timestamp()"
+            + terminal
+            + " WHERE run_id = %s AND status = 'running'",
+            (stage, run),
+        )
+        _checked(cur, run)
+        _close_open_stage(cur, run)
+        cur.execute(
+            "INSERT INTO genesis_run_stages (run_id, stage, detail, finished_at) "
+            "VALUES (%s, %s, %s::jsonb, "
+            + ("clock_timestamp()" if stage == "done" else "NULL")
+            + ")",
+            (run, stage, json.dumps(dict(detail or {}))),
         )
 
 
+def record_genesis_stage_output(slot: int, run: str, stage: str, output: Any) -> None:
+    """Commit an output and close its open stage on a running run."""
+    with get_connection(slot_dbname(slot)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE genesis_run_stages AS s SET output = %s::jsonb, "
+            "finished_at = clock_timestamp() FROM genesis_runs AS r "
+            "WHERE s.run_id = r.run_id AND s.run_id = %s AND s.stage = %s "
+            "AND s.finished_at IS NULL AND r.status = 'running'",
+            (None if output is None else json.dumps(output), run, stage),
+        )
+        _checked(cur, run)
+
+
+def record_genesis_failure(slot: int, run: str, error: str) -> None:
+    """Commit a failure at the run's current stage and close any open stage."""
+    with get_connection(slot_dbname(slot)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE genesis_runs SET status = 'failed', error = %s, "
+            "updated_at = clock_timestamp(), finished_at = clock_timestamp() "
+            "WHERE run_id = %s AND status = 'running'",
+            (error, run),
+        )
+        _checked(cur, run)
+        _close_open_stage(cur, run)
+
+
+def finish_genesis_persistence(cur: Any, *, run: str, output: Any) -> None:
+    """Close persistence on the world transaction's cursor without committing."""
+    cur.execute(
+        "UPDATE genesis_run_stages AS s SET output = %s::jsonb, "
+        "finished_at = clock_timestamp() FROM genesis_runs AS r "
+        "WHERE s.run_id = r.run_id AND s.run_id = %s AND s.stage = 'persistence' "
+        "AND s.finished_at IS NULL AND r.status = 'running'",
+        (None if output is None else json.dumps(output), run),
+    )
+    _checked(cur, run)
+
+
+def finish_skipped_genesis_run(cur: Any, *, run: str, skip_reason: str) -> None:
+    """Finish a skipped run on the world transaction's cursor, without committing."""
+    cur.execute(
+        "UPDATE genesis_runs SET status = 'done', skip_reason = %s, "
+        "updated_at = clock_timestamp(), finished_at = clock_timestamp() "
+        "WHERE run_id = %s AND status = 'running'",
+        (skip_reason, run),
+    )
+    _checked(cur, run)
+
+
 def get_retrograde_progress(slot: int) -> Optional[dict[str, Any]]:
-    """Return the slot's current Retrograde run record, if a run has started.
-
-    ``run`` identifies the transition run that owns the record, so a waiter
-    that noted the identity before posting its transition can tell this
-    run's stages, terminal ones included, from the previous run's.
-    """
-
-    with _PROGRESS_LOCK:
-        entry = _PROGRESS_BY_SLOT.get(slot)
-        if entry is None:
+    """Read the latest durable run and its display stages from any worker."""
+    with (
+        get_connection(slot_dbname(slot), dict_cursor=True) as conn,
+        conn.cursor() as cur,
+    ):
+        cur.execute("SELECT * FROM genesis_runs ORDER BY started_at DESC LIMIT 1")
+        row = cur.fetchone()
+        if row is None:
             return None
-        return {
-            "slot": entry["slot"],
-            "run": entry["run"],
-            "stage": entry["stage"],
-            "detail": dict(entry["detail"]),
-            "updated_at": entry["updated_at"],
-            "stages": [dict(item) for item in entry["stages"]],
+        cur.execute(
+            "SELECT stage, started_at, detail FROM genesis_run_stages "
+            "WHERE run_id = %s ORDER BY started_at",
+            (row["run_id"],),
+        )
+        stage_rows = cur.fetchall()
+    stages = [
+        {
+            "stage": item["stage"],
+            "at": item["started_at"].isoformat(),
+            "detail": item["detail"],
         }
-
-
-def reset_retrograde_progress(slot: int) -> str:
-    """Start a slot's record for a new transition run and return its identity.
-
-    The record starts at stage ``idle`` under a fresh run identity, replacing
-    the previous run's record and its terminal stage.
-    """
-
-    run = uuid.uuid4().hex
-    with _PROGRESS_LOCK:
-        _PROGRESS_BY_SLOT[slot] = {
-            "slot": slot,
-            "run": run,
-            "stage": "idle",
-            "detail": {},
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "stages": [],
-        }
-    return run
+        for item in stage_rows
+        if item["stage"] != "derivation"
+    ]
+    stage, detail = row["stage"], {}
+    if row["status"] == "done" and row["skip_reason"] is None:
+        stage = "done"
+        detail = next(item["detail"] for item in stage_rows if item["stage"] == "done")
+    elif row["skip_reason"] is not None or stage in (None, "derivation"):
+        stage = "idle"
+    elif row["status"] == "failed":
+        detail = {"stage": stage}
+        stages.append(
+            {"stage": "failed", "at": row["finished_at"].isoformat(), "detail": detail}
+        )
+        stage = "failed"
+    else:
+        detail = next(item["detail"] for item in stage_rows if item["stage"] == stage)
+    return {
+        "slot": slot,
+        "run": uuid.UUID(str(row["run_id"])).hex,
+        "run_status": row["status"],
+        "error": row["error"],
+        "updated_at": row["updated_at"].isoformat(),
+        "stage": stage,
+        "detail": detail,
+        "stages": stages,
+    }
 
 
 def generate_retrograde_history(
@@ -178,6 +268,7 @@ def generate_retrograde_history(
     weird_raw: Optional[float] = None,
     progress: Optional[ProgressCallback] = None,
     trait_compile_inputs: Optional[Mapping[str, Any]] = None,
+    on_stage_output: Optional[Callable[[str, dict[str, Any]], None]] = None,
 ) -> RetrogradeGenerationBundle:
     """Run the non-mutating Retrograde stages from a wizard cache snapshot.
 
@@ -211,6 +302,9 @@ def generate_retrograde_history(
         RetrogradeStageTiming(stage="packet", seconds=time.monotonic() - started)
     )
 
+    if on_stage_output is not None:
+        on_stage_output("packet", packet)
+
     _emit(progress, "seed_candidates", {"weird": packet["weird"]["level"]})
     started = time.monotonic()
     seed_generation = run_seed_stage(
@@ -224,6 +318,8 @@ def generate_retrograde_history(
         )
     )
     seed_response = seed_generation["seed_candidate_response"]
+    if on_stage_output is not None:
+        on_stage_output("seed_candidates", dict(seed_response))
 
     _emit(
         progress,
@@ -244,6 +340,10 @@ def generate_retrograde_history(
         RetrogradeStageTiming(stage="expansion", seconds=time.monotonic() - started)
     )
 
+    expansion_plan = dict(expansion_generation["retrograde_expansion_plan"])
+    if on_stage_output is not None:
+        on_stage_output("expansion", expansion_plan)
+
     return RetrogradeGenerationBundle(
         slot=slot,
         dbname=dbname,
@@ -251,7 +351,7 @@ def generate_retrograde_history(
         weird=dict(packet["weird"]),
         packet=packet,
         seed_candidate_response=dict(seed_response),
-        expansion_plan=dict(expansion_generation["retrograde_expansion_plan"]),
+        expansion_plan=expansion_plan,
         timings=timings,
     )
 
@@ -262,7 +362,6 @@ def persist_retrograde_history(
     bundle: RetrogradeGenerationBundle,
     settings: Settings,
     recorded_at_chunk_id: Optional[int] = None,
-    progress: Optional[ProgressCallback] = None,
 ) -> dict[str, Any]:
     """Execute the persistence plan on the caller's transaction cursor.
 
@@ -287,7 +386,6 @@ def persist_retrograde_history(
         raise AssertionError("Retrograde settings validation did not require Orrery")
     epistemics_settings = settings.orrery.epistemics
 
-    _emit(progress, "persistence", {})
     _raise_if_genesis_checkpoint_exists(cur)
     dry_manifest = build_retrograde_persistence_plan(
         cur,
