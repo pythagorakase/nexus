@@ -99,9 +99,11 @@ function declaration(selector: string, property: string): string {
   declarationCache.set(key, result);
   return result;
 }
+const measuredRoots = new Set<string>();
 function rootOf(value: string): string {
   const root = value.match(/var\((--[a-z-]+)\)/)?.[1];
   if (!root) throw new Error(`Missing production token ${value}`);
+  measuredRoots.add(root);
   return ["--danger", "--warning"].includes(root) ? rootOf(declaration(".settings-pane-v2", root)) : root;
 }
 const pairwise = (states: readonly string[]) => states.flatMap((a, i) => states.slice(i + 1).map(b => [a, b] as const));
@@ -136,7 +138,7 @@ const SIGNATURES: Record<Surface, Record<string, string>> = {
   key: { "optional-absent": "Circle", "required-missing": "AlertTriangle", present: "CircleDot", verified: "CircleCheck" },
 };
 type Palette = Record<string, Triple>;
-type Context = { surface: Surface; name: string; render: (state: string, p: Palette, before: boolean) => Triple };
+type Context = { surface: Surface; name: string; render: (state: string, p: Palette, before: boolean, theme: Theme) => Triple };
 // CSS interpolation/compositing is encoded sRGB (CSS `in srgb`), THEN the
 // simulation linearizes. Interior fill/stroke samples exclude edge AA/glow.
 function background(value: string, p: Palette, under?: Triple): Triple {
@@ -145,15 +147,16 @@ function background(value: string, p: Palette, under?: Triple): Triple {
     return under;
   }
   const mix = value.match(/^color-mix\(in srgb, var\((--[a-z0-9-]+)\) ([\d.]+)%, (.+)\)$/);
-  if (mix) return composite(p[mix[1]], background(mix[3], p, under), Number(mix[2]) / 100);
+  if (mix) { measuredRoots.add(mix[1]); return composite(p[mix[1]], background(mix[3], p, under), Number(mix[2]) / 100); }
   const root = value.match(/^var\((--[a-z0-9-]+)\)$/)?.[1];
-  if (root) return p[root];
+  if (root) { measuredRoots.add(root); if (!p[root]) throw new Error(`Unmodeled background token ${root}`); return p[root]; }
   return rgb(value);
 }
 // Trace real JSX ancestors, including SettingsCard's children slot. This is
 // source inspection only: it cannot mount the key card or read the secret store.
 const settingsSource = readFileSync(resolve(import.meta.dirname, "components/nexus/SettingsPane.tsx"), "utf8");
 const localSource = readFileSync(resolve(import.meta.dirname, "components/nexus/LocalModelRows.tsx"), "utf8");
+const productionTags = new Map<string, string>();
 function jsxAncestors(source: string, marker: string, tag = false): string[][] {
   const ast = ts.createSourceFile("surface.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let target: ts.Node | undefined;
@@ -165,7 +168,12 @@ function jsxAncestors(source: string, marker: string, tag = false): string[][] {
     const init = attr.initializer;
     // The first literal is the unconditional class prefix in the shipped JSX.
     const value = ts.isStringLiteral(init) ? init.text : init.getText(ast).match(/[`"]([^`"$]+)[`"$]/)?.[1];
-    return value?.trim().split(/\s+/) ?? [];
+    const names = value?.trim().split(/\s+/) ?? [];
+    const tagName = opening.tagName.getText(ast);
+    if (/^[a-z]/.test(tagName)) for (const name of names) {
+      productionTags.set(name, productionTags.has(name) && productionTags.get(name) !== tagName ? "ambiguous" : tagName);
+    }
+    return names;
   }
   function visit(node: ts.Node) {
     const opening = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : undefined;
@@ -201,70 +209,156 @@ function jsxAncestors(source: string, marker: string, tag = false): string[][] {
   }
   return result;
 }
-function paintedAncestor(ancestors: string[][]): { selector: string; value: string } {
-  // DOM matching handles compound/descendant selectors and CSS specificity.
-  let parent = document.createElement("div");
+// Model both shipped theme roots, the production class ancestry and the
+// measured interaction. Unsupported contexts fail closed before cascade lookup.
+const shellSource = readFileSync(resolve(import.meta.dirname, "components/nexus/NexusLayout.tsx"), "utf8");
+const topbarSource = readFileSync(resolve(import.meta.dirname, "components/nexus/TopBar.tsx"), "utf8");
+const keyAncestors = [...jsxAncestors(settingsSource, "key-row"), ...jsxAncestors(settingsSource, "KeysSection", true), ...jsxAncestors(shellSource, "SettingsPane", true)];
+const deleteAncestors = [...jsxAncestors(localSource, "lm-quant"), ...jsxAncestors(settingsSource, "LocalModelRows", true), ...jsxAncestors(settingsSource, "ModelSection", true), ...jsxAncestors(shellSource, "SettingsPane", true)];
+const mapOuter = jsxAncestors(shellSource, "MapPane", true);
+const sidebarAncestors = [...jsxAncestors(mapSource, "map-place-dot"), ...mapOuter];
+const canvasAncestors = [...jsxAncestors(mapSource, "mappane-svg"), ...mapOuter];
+const memoryAncestors = [...jsxAncestors(topbarSource, "mem-fill"), ...jsxAncestors(topbarSource, "MemoryMeter", true), ...jsxAncestors(shellSource, "TopBar", true)];
+const cssRules = [postcss.parse(shippedCss, { from: resolve(import.meta.dirname, "index.css") }), postcss.parse(layoutCss, { from: resolve(import.meta.dirname, "components/nexus/nexus-layout.css") })].flatMap(ast => {
+  const rules: postcss.Rule[] = []; ast.walkRules(rule => { rules.push(rule); }); return rules;
+});
+const modeledClasses = new Set([...keyAncestors, ...deleteAncestors, ...sidebarAncestors, ...canvasAncestors, ...memoryAncestors].flat().concat([
+  "dark", "theme-veil", "theme-gilded", "theme-vector", "key-row", "optional", "missing", "present", "verified", "key-status",
+  "lm-quant", "ready", "exceeds", "blocked", "staged", "dl", "active", "loading", "required", "lm-action", "lm-trash", "armed", "mem-fill", "over", "mem-over-glyph",
+  "map-pin", "map-state-glyph", "map-state-fill", "map-state-ring", "map-pin-leader", "map-place-dot", "on", "here", "animate-pulse",
+  ...Object.keys(MAPPINGS.key).map(state => `key-glyph-${state}`),
+]));
+let themeForm = "compound";
+function model(ancestors: string[][], theme: Theme, interaction = "rest", form = themeForm): HTMLElement[] {
+  const root = document.createElement("html");
+  root.className = `proof-root ${form === "compound" ? "dark " : ""}theme-${theme.toLowerCase()}`;
+  let parent: HTMLElement = root;
+  if (form === "descendant") {
+    parent = document.createElement("div"); parent.className = "dark"; root.appendChild(parent);
+  }
   const nodes: HTMLElement[] = [];
   for (const classes of [...ancestors].reverse()) {
-    const node = document.createElement("div");
-    node.className = classes.join(" "); parent.appendChild(node); parent = node; nodes.unshift(node);
+    const shape = classes.find(c => c.startsWith("proof-shape-"))?.slice("proof-shape-".length);
+    const tags: Record<string, string> = { "lm-trash": "button", "lm-action": "span", "lm-quant": "li", "key-status": "span", "key-row": "li", "map-pin": "g", "map-state-glyph": "g", "mem-fill": "div", "map-place-dot": "svg" };
+    const node = document.createElement(shape ?? classes.map(c => tags[c] ?? productionTags.get(c)).find(t => t && t !== "ambiguous") ?? "div"); node.className = classes.join(" ");
+    if (interaction === "hover") node.classList.add("proof-hover");
+    if (interaction === "focus") node.classList.add("proof-focus-within");
+    parent.appendChild(node); parent = node; nodes.unshift(node);
   }
-  for (const node of nodes) {
-    let paint: { selector: string; value: string; specificity: number; important: boolean } | undefined;
-    postcss.parse(layoutCss).walkRules(rule => {
-      // These ancestor scopes have no interaction/media-dependent backgrounds.
-      if (rule.parent?.type !== "root") return;
-      if (!rule.nodes.some(n => n.type === "decl" && ["background", "background-color"].includes(n.prop))) return;
-      for (const selector of rule.selectors) {
-        // Pseudo-elements paint separate boxes, never the ancestor itself.
-        if (selector.includes("::") || !node.matches(selector)) continue;
-        const specificity = (selector.match(/[.#:[\]]/g) ?? []).length;
-        rule.walkDecls(decl => {
-          if (!["background", "background-color"].includes(decl.prop)) return;
-          if (!paint || (decl.important && !paint.important) ||
-            (Boolean(decl.important) === paint.important && specificity >= paint.specificity))
-            paint = { selector, value: decl.value, specificity, important: Boolean(decl.important) };
-        });
-      }
-    });
-    if (paint && !["none", "transparent"].includes(paint.value)) return { selector: paint.selector, value: paint.value };
-  }
-  throw new Error("No production ancestor paints below opacity group");
+  modeledPaths.set(`${theme}/${form}/${interaction}/${ancestors.map(c => c.join(".")).join("/")}`, nodes);
+  return nodes;
 }
-const keyBackdrop = paintedAncestor(jsxAncestors(settingsSource, "key-row"));
-const deleteBackdrop = paintedAncestor([...jsxAncestors(localSource, "lm-quant"), ...jsxAncestors(settingsSource, "LocalModelRows", true)]);
+type Paint = { selector: string; value: string };
+const modeledPaths = new Map<string, HTMLElement[]>();
+const cascadeCache = new Map<string, Paint | undefined>();
+function cascade(nodes: HTMLElement[], index: number, property: string): Paint | undefined {
+  const node = nodes[index];
+  const key = `${node.localName}.${node.className}:${Array.from(function* () { for (let n = node.parentElement; n; n = n.parentElement) yield n.className; }()).join("/")}:${property}`;
+  if (cascadeCache.has(key)) return cascadeCache.get(key);
+  let paint: (Paint & { specificity: number[] }) | undefined;
+  for (const rule of cssRules) {
+    const declarations = rule.nodes.filter((n): n is postcss.Declaration => n.type === "decl" &&
+      (n.prop === property || (property === "background" && n.prop === "background-color")));
+    if (!declarations.length) continue;
+    for (const selector of rule.selectors) {
+      // A separate scrollbar box does not paint any measured element.
+      if (selector.includes("::-webkit-scrollbar")) continue;
+      // Conservative potential match: unknown context cannot hide a rule whose
+      // subject names this element (including classes inside functional pseudos).
+      const subject = selector.replace(/\([^)]*\)/g, m => m.replace(/\s+/g, "")).split(/[ >+~]+/).at(-1)!;
+      const subjectClasses = [...subject.matchAll(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g)].map(m => m[1]);
+      const generic = new Set(["on", "here", "ready", "exceeds", "optional", "missing", "present", "verified", "over", "armed"]);
+      const potential = subjectClasses.length ? subjectClasses.some(c => !generic.has(c) && node.classList.contains(c)) || (subjectClasses.every(c => node.classList.contains(c)) && (!subject.match(/^([a-z][\w-]*)/) || subject.match(/^([a-z][\w-]*)/)![1] === node.localName)) : /^(?:\*|:)/.test(subject) || subject.match(/^([a-z][\w-]*)/)?.[1] === node.localName;
+      if (!potential) continue;
+      const label = `${rule.source?.input.file ?? "shipped CSS"}: ${rule.selector} { ${declarations.map(d => d.toString()).join("; ")} }`;
+      function unsupported(reason: string): never { throw new Error(`Unmodeled ${reason}: ${label}`); }
+      if (/[#+~]/.test(selector)) unsupported("ancestor or sibling context");
+      const identity = subjectClasses.some(c => !generic.has(c) && node.classList.contains(c));
+      const classes = [...selector.matchAll(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g)].map(m => m[1]);
+      if (identity && classes.some(c => !modeledClasses.has(c))) unsupported("ancestor or compound class");
+      // Remove unsupported pseudo/attribute conditions only to establish
+      // possible relevance. An unrelated pane cannot match the real ancestry.
+      // The real selector is never resolved through this relaxed skeleton.
+      const skeleton = selector.replace(/:[a-z-]+\([^)]*\)/g, "").replace(/::?[a-z-]+/g, "").replace(/\[[^\]]*\]/g, "");
+      try { if (skeleton.trim() && !node.matches(skeleton)) continue; } catch { /* Unsupported grammar is rejected below. */ }
+      if (/[#+~[\]]/.test(selector) || /::|:(?!root\b|hover\b|focus-within\b|disabled\b)/.test(selector)) unsupported("selector context");
+      const evaluated = selector.replace(/:root\b/g, ".proof-root").replace(/:hover\b/g, ".proof-hover").replace(/:focus-within\b/g, ".proof-focus-within");
+      if (!node.matches(evaluated)) continue;
+      if (rule.parent?.type !== "root") unsupported(`at-rule context ${rule.parent?.type === "atrule" ? "@" + rule.parent.name + " " + rule.parent.params : rule.parent?.type}`);
+      if (declarations.some(d => d.important)) unsupported("!important conflict");
+      const residue = selector.replace(/[.#][a-zA-Z_-][a-zA-Z0-9_-]*/g, "").replace(/:(?:root|hover|focus-within|disabled)\b/g, "").replace(/\bhtml\b|[\s>*]/g, "");
+      if (residue) unsupported("element or selector syntax");
+      const specificity = [(selector.match(/#/g) ?? []).length, (selector.match(/\.|:(?!:)/g) ?? []).length, (selector.match(/\bhtml\b/g) ?? []).length];
+      const difference = paint ? specificity.findIndex((v, i) => v !== paint!.specificity[i]) : -1;
+      const wins = !paint || difference === -1 || specificity[difference] > paint.specificity[difference];
+      if (wins) for (const decl of declarations) paint = { selector, value: decl.value, specificity };
+    }
+  }
+  const result = paint && { selector: paint.selector, value: paint.value };
+  cascadeCache.set(key, result); return result;
+}
+function resolved(ancestors: string[][], property: string, theme: Theme, interaction = "rest", fallback?: string, form = themeForm): string {
+  const paint = cascade(model(ancestors, theme, interaction, form), 0, property);
+  if (paint) return paint.value;
+  if (fallback !== undefined) return fallback;
+  throw new Error(`Missing production ${property}: ${ancestors[0].join(".")}, ${theme}/${interaction}`);
+}
+function paintedAncestor(ancestors: string[][], theme: Theme, interaction = "rest", form = themeForm): Paint {
+  const nodes = model(ancestors, theme, interaction, form);
+  for (let i = 0; i < nodes.length; i++) {
+    const paint = cascade(nodes, i, "background");
+    if (paint && !["none", "transparent"].includes(paint.value)) return paint;
+  }
+  throw new Error(`No production ancestor paints below opacity group: ${theme}`);
+}
+const keyBackdrop = (theme: Theme, interaction = "rest") => paintedAncestor(keyAncestors, theme, interaction);
+const deleteBackdrop = (theme: Theme, interaction = "rest") => paintedAncestor(deleteAncestors, theme, interaction);
 const opacity = (selector: string) => Number(declaration(selector, "opacity"));
 const ringOpacity = Number(mapSource.match(/opacity: outline \? ([\d.]+)/)?.[1]);
 if (!Number.isFinite(ringOpacity)) throw new Error("Missing production ring opacity");
 function contexts(): Context[] {
   const result: Context[] = [];
-  const pigment = (surface: Surface, state: string, p: Palette, before: boolean) => p[before ? BASE_ROOTS[MAPPINGS[surface][state]] : MAPPINGS[surface][state]];
-  result.push({ surface: "memory", name: "fill", render: (s, p, b) => pigment("memory", s, p, b) });
+  const pigment = (surface: Surface, state: string, p: Palette, before: boolean, theme: Theme, interaction = "rest", part = "fill", requiredness = "required", sidebar = false) => {
+    let path: string[][], property = "color", fallback: string | undefined;
+    if (surface === "memory") { path = [["mem-fill", ...(state === "over" ? ["over"] : [])], ...memoryAncestors]; property = "background"; }
+    else if (surface === "delete") path = [["lm-trash", ...(state === "armed" ? ["armed"] : [])], ["lm-action"], ["lm-quant", "ready"], ...deleteAncestors];
+    else if (surface === "key") path = [["key-status", ...(state === "present" || state === "verified" ? [state] : [])], ["key-row", ...(state === "required-missing" ? ["missing"] : state === "optional-absent" || requiredness === "optional" ? ["optional"] : [])], ...keyAncestors];
+    else {
+      path = [[part === "ring" && state !== "rest" ? "map-state-ring" : "map-state-fill", `proof-shape-${state === "selected" ? "rect" : state === "hovered" ? "polygon" : "circle"}`], ["map-state-glyph"], ...(sidebar ? [["map-place-dot"], ...sidebarAncestors] : [["map-pin"], ["mappane-svg"], ...canvasAncestors])];
+      property = part === "ring" && state !== "rest" ? "stroke" : "fill"; fallback = `var(${MAPPINGS.map[state]})`;
+    }
+    const value = resolved(path, property, theme, interaction, fallback);
+    if (!/^var\(--state-[a-z-]+\)$/.test(value)) throw new Error(`Unmodeled state-surface color expression: ${theme} ${surface}/${state} ${value}`);
+    const root = rootOf(value);
+    if (root !== MAPPINGS[surface][state]) throw new Error(`State mapping override: ${theme} ${surface}/${state} ${value}`);
+    return p[before ? BASE_ROOTS[root] : root];
+  };
+  result.push({ surface: "memory", name: "fill", render: (s, p, b, theme) => pigment("memory", s, p, b, theme) });
   for (const row of ["ready", "ready-exceeds"])
     for (const interaction of ["rest", "hover", "focus"]) {
       // No hover/focus rule changes .lm-trash foreground/background. Resolve
       // the ready row first, then its group opacity against provider parent.
-      result.push({ surface: "delete", name: `${row}/${interaction}`, render: (s, p, b) => {
-        const rowBg = background(declaration(".lm-quant.ready", "background"), p);
-        const glyph = composite(pigment("delete", s, p, b), rowBg, 1);
-        return composite(glyph, background(deleteBackdrop.value, p), row === "ready-exceeds" ? opacity(".lm-quant.exceeds") : 1);
+      result.push({ surface: "delete", name: `${row}/${interaction}`, render: (s, p, b, theme) => {
+        const rowBg = background(resolved([["lm-quant", "ready", ...(row === "ready-exceeds" ? ["exceeds"] : [])], ...deleteAncestors], "background", theme, interaction), p);
+        const glyph = composite(pigment("delete", s, p, b, theme, interaction), rowBg, 1);
+        return composite(glyph, background(deleteBackdrop(theme, interaction).value, p), row === "ready-exceeds" ? opacity(".lm-quant.exceeds") : 1);
       } });
     }
   // Include required and optional presence/verification rows at rest and
   // hover/focus-within; required-missing cannot be an optional row.
   for (const requiredness of ["required", "optional"])
     for (const interaction of ["rest", "hover", "focus"]) {
-      result.push({ surface: "key", name: `${requiredness}/${interaction}`, render: (s, p, b) => {
+      result.push({ surface: "key", name: `${requiredness}/${interaction}`, render: (s, p, b, theme) => {
         const optional = s === "optional-absent" || (requiredness === "optional" && s !== "required-missing");
         const alpha = optional ? opacity(interaction === "rest" ? ".key-row.optional" : `.key-row.optional:${interaction === "hover" ? "hover" : "focus-within"}`) : 1;
-        return composite(pigment("key", s, p, b), background(keyBackdrop.value, p), alpha);
+        return composite(pigment("key", s, p, b, theme, interaction, "fill", requiredness), background(keyBackdrop(theme, interaction).value, p), alpha);
       } });
     }
   for (const terrain of ["sea", "land"])
     for (const part of ["fill", "ring"]) {
-      result.push({ surface: "map", name: `canvas-${terrain}/${part}`, render: (s, p, b) => {
-        const bg = background(declaration(".mappane-canvas", `--map-${terrain}`), p);
-        return composite(pigment("map", s, p, b), bg, part === "ring" && s !== "rest" ? ringOpacity : 1);
+      result.push({ surface: "map", name: `canvas-${terrain}/${part}`, render: (s, p, b, theme) => {
+        const bg = background(resolved(canvasAncestors, `--map-${terrain}`, theme), p);
+        return composite(pigment("map", s, p, b, theme, "rest", part), bg, part === "ring" && s !== "rest" ? ringOpacity : 1);
       } });
     }
   // The sidebar inherits .nexus-content's fixed radial wash over --bg.
@@ -275,11 +369,13 @@ function contexts(): Context[] {
   for (const washAlpha of [0, Number(wash[2])])
     for (const interaction of ["rest", "hover", "selected-current"])
       for (const part of ["fill", "ring"]) {
-        result.push({ surface: "map", name: `sidebar-wash-${washAlpha}/${interaction}/${part}`, render: (s, p, b) => {
-          const parent = composite(rgb(wash[1]), p[rootOf(content)], washAlpha);
+        result.push({ surface: "map", name: `sidebar-wash-${washAlpha}/${interaction}/${part}`, render: (s, p, b, theme) => {
+          const themedContent = resolved(mapOuter, "background", theme);
+          if (themedContent !== content) throw new Error(`Unmodeled sidebar gradient: ${theme} ${themedContent}`);
+          const parent = composite(rgb(wash[1]), p[rootOf(themedContent)], washAlpha);
           const on = s === "selected" || (interaction === "selected-current" && s === "current");
-          const bg = background(declaration(on ? ".map-place-row.on" : interaction === "hover" ? ".map-place-row:hover" : ".map-place-row", "background"), p, parent);
-          return composite(pigment("map", s, p, b), bg, !b && part === "ring" && s !== "rest" ? ringOpacity : 1);
+          const bg = background(resolved([["map-place-row", ...(on ? ["on"] : [])], ...sidebarAncestors.slice(1)], "background", theme, interaction), p, parent);
+          return composite(pigment("map", s, p, b, theme, interaction, part, "required", true), bg, !b && part === "ring" && s !== "rest" ? ringOpacity : 1);
         } });
       }
   return result;
@@ -309,7 +405,7 @@ function candidates(theme: Theme, root: string): { value: string; rgb: Triple; c
 }
 function measures(theme: Theme, p: Palette, before: boolean) {
   return CONTEXTS.flatMap(ctx => STATE_PAIRS[ctx.surface].map(states => {
-    const colors = states.map(s => ctx.render(s, p, before));
+    const colors = states.map(s => ctx.render(s, p, before, theme));
     return { theme, surface: ctx.surface, context: ctx.name, states, rgb: colors, delta: ciede2000(deutanLab(colors[0]), deutanLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
   }));
 }
@@ -333,7 +429,7 @@ function jointSearch(theme: Theme) {
       for (const ctx of ctxs) {
         const labs = [a, b].map(state => {
           const root = MAPPINGS[surface][state];
-          return domains[root].map(c => { p[root] = c.rgb; return deutanLab(ctx.render(state, p, false)); });
+          return domains[root].map(c => { p[root] = c.rgb; return deutanLab(ctx.render(state, p, false, theme)); });
         });
         let maximum = -Infinity, witness: Record<string, string> = {};
         let count = 0;
@@ -403,44 +499,72 @@ describe("777-S2 state shades", () => {
     }
   });
   it("opacity_backdrops_follow_the_production_painting_ancestors", () => {
-    expect(keyBackdrop).toEqual({ selector: ".set-card-frame", value: declaration(".set-card-frame", "background") });
-    expect(deleteBackdrop).toEqual({ selector: ".model-provider", value: declaration(".model-provider", "background") });
+    for (const theme of THEMES) expect(keyBackdrop(theme)).toEqual({ selector: ".set-card-frame", value: declaration(".set-card-frame", "background") });
+    for (const theme of THEMES) expect(deleteBackdrop(theme)).toEqual({ selector: ".model-provider", value: declaration(".model-provider", "background") });
     expect(jsxAncestors(settingsSource, "key-row")).toEqual([["key-list"], ["set-card-body"], ["set-card-frame"], ["set-card"]]);
     // Assert every opacity context against an independently assembled production
     // layer path. A context addition must extend this inventory, not pick a color.
-    const p = palette(shippedCss, "Vector");
-    const content = declaration(".nexus-content", "background");
-    const wash = content.match(/hsl\(([^/]+) \/ ([\d.]+)\)/)!;
-    for (const ctx of CONTEXTS) for (const state of Object.keys(MAPPINGS[ctx.surface])) {
-      const pigment = p[MAPPINGS[ctx.surface][state]];
-      let expected: Triple;
-      if (ctx.surface === "memory") expected = pigment;
-      else if (ctx.surface === "key") {
-        const [need, interaction] = ctx.name.split("/");
-        const optional = state === "optional-absent" || (need === "optional" && state !== "required-missing");
-        const alpha = optional ? opacity(interaction === "rest" ? ".key-row.optional" : `.key-row.optional:${interaction === "hover" ? "hover" : "focus-within"}`) : 1;
-        expected = composite(pigment, background(paintedAncestor(jsxAncestors(settingsSource, "key-row")).value, p), alpha);
-      } else if (ctx.surface === "delete") {
-        const row = composite(pigment, background(declaration(".lm-quant.ready", "background"), p), 1);
-        expected = composite(row, background(paintedAncestor([...jsxAncestors(localSource, "lm-quant"), ...jsxAncestors(settingsSource, "LocalModelRows", true)]).value, p), ctx.name.startsWith("ready-exceeds/") ? opacity(".lm-quant.exceeds") : 1);
-      } else {
-        const alpha = ctx.name.endsWith("/ring") && state !== "rest" ? ringOpacity : 1;
-        if (ctx.name.startsWith("canvas-")) {
-          // SVG terrain is painted beneath the glyph, not an HTML background.
-          expect(mapSource).toContain('fill="var(--map-sea)"');
-          expect(mapSource).toContain('fill="var(--map-land)"');
-          const terrain = ctx.name.split("/")[0].slice("canvas-".length);
-          expected = composite(pigment, background(declaration(".mappane-canvas", `--map-${terrain}`), p), alpha);
+    for (const theme of THEMES) {
+      const p = palette(shippedCss, theme);
+      const content = declaration(".nexus-content", "background");
+      const wash = content.match(/hsl\(([^/]+) \/ ([\d.]+)\)/)!;
+      for (const ctx of CONTEXTS) for (const state of Object.keys(MAPPINGS[ctx.surface])) {
+        const pigment = p[MAPPINGS[ctx.surface][state]];
+        let expected: Triple;
+        if (ctx.surface === "memory") expected = pigment;
+        else if (ctx.surface === "key") {
+          const [need, interaction] = ctx.name.split("/");
+          const optional = state === "optional-absent" || (need === "optional" && state !== "required-missing");
+          const alpha = optional ? opacity(interaction === "rest" ? ".key-row.optional" : `.key-row.optional:${interaction === "hover" ? "hover" : "focus-within"}`) : 1;
+          expected = composite(pigment, background(paintedAncestor(keyAncestors, theme).value, p), alpha);
+        } else if (ctx.surface === "delete") {
+          const row = composite(pigment, background(declaration(".lm-quant.ready", "background"), p), 1);
+          expected = composite(row, background(paintedAncestor(deleteAncestors, theme).value, p), ctx.name.startsWith("ready-exceeds/") ? opacity(".lm-quant.exceeds") : 1);
         } else {
-          expect(jsxAncestors(mapSource, "map-place-dot")[0]).toContain("map-place-row");
-          const [, washAlpha, interaction] = ctx.name.match(/^sidebar-wash-([\d.]+)\/(.*?)\//)!;
-          const parent = composite(rgb(wash[1].trim()), p[rootOf(content)], Number(washAlpha));
-          const on = state === "selected" || (interaction === "selected-current" && state === "current");
-          expected = composite(pigment, background(declaration(on ? ".map-place-row.on" : interaction === "hover" ? ".map-place-row:hover" : ".map-place-row", "background"), p, parent), alpha);
+          const alpha = ctx.name.endsWith("/ring") && state !== "rest" ? ringOpacity : 1;
+          if (ctx.name.startsWith("canvas-")) {
+            // SVG terrain is painted beneath the glyph, not an HTML background.
+            expect(mapSource).toContain('fill="var(--map-sea)"');
+            expect(mapSource).toContain('fill="var(--map-land)"');
+            const terrain = ctx.name.split("/")[0].slice("canvas-".length);
+            expected = composite(pigment, background(declaration(".mappane-canvas", `--map-${terrain}`), p), alpha);
+          } else {
+            expect(jsxAncestors(mapSource, "map-place-dot")[0]).toContain("map-place-row");
+            const [, washAlpha, interaction] = ctx.name.match(/^sidebar-wash-([\d.]+)\/(.*?)\//)!;
+            const parent = composite(rgb(wash[1].trim()), p[rootOf(content)], Number(washAlpha));
+            const on = state === "selected" || (interaction === "selected-current" && state === "current");
+            expected = composite(pigment, background(declaration(on ? ".map-place-row.on" : interaction === "hover" ? ".map-place-row:hover" : ".map-place-row", "background"), p, parent), alpha);
+          }
+        }
+        expect(ctx.render(state, p, false, theme), `${theme}/${ctx.surface}/${ctx.name}/${state}`).toEqual(expected);
+      }
+    }
+  });
+  it("theme_ancestry_and_every_relevant_rule_are_modeled", () => {
+    try {
+      for (const theme of THEMES) {
+        themeForm = "compound";
+        const compound = measures(theme, palette(shippedCss, theme), false);
+        themeForm = "descendant";
+        expect(measures(theme, palette(shippedCss, theme), false), `${theme}: compound and descendant theme contexts`).toEqual(compound);
+      }
+      for (const theme of THEMES) for (const form of ["compound", "descendant"]) {
+        model([["mem-over-glyph"], ...memoryAncestors], theme, "rest", form);
+        for (const state of Object.keys(MAPPINGS.key)) model([[`key-glyph-${state}`], ["key-status"], ["key-row"], ...keyAncestors], theme, "rest", form);
+        model([["map-pin-leader"], ["mappane-svg"], ...canvasAncestors], theme, "rest", form);
+      }
+      const properties = new Set<string>([...ROOTS, ...measuredRoots, "--map-sea", "--map-land"]);
+      for (const rule of cssRules) rule.walkDecls(decl => {
+        if (/^(?:color|fill|stroke|background(?:$|-)|opacity$)/.test(decl.prop)) properties.add(decl.prop);
+      });
+      for (const nodes of modeledPaths.values()) for (let i = 0; i < nodes.length; i++) {
+        for (const property of properties) {
+          const paint = cascade(nodes, i, property);
+          if (property.startsWith("--") && paint && !["--map-sea", "--map-land", "--map-coast"].includes(property))
+            throw new Error(`Unmodeled local custom-property cascade: ${paint.selector} { ${property}: ${paint.value} }`);
         }
       }
-      expect(ctx.render(state, p, false), `${ctx.surface}/${ctx.name}/${state}`).toEqual(expected);
-    }
+    } finally { themeForm = "compound"; }
   });
   it("reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures", () => {
     expect(MAPPINGS).toEqual({
