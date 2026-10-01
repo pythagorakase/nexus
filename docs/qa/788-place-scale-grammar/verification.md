@@ -189,9 +189,9 @@ $ $PY -m mypy <three files>
 Success: no issues found in 3 source files
 ```
 
-## Rerun After the Rebase Onto ffc2d6b8
+## Rerun After the Rebases Onto ffc2d6b8 and d05481d8
 
-`origin/main` gained ffc2d6b8 (#815 S1: CLI HTTP handlers; it touches `nexus.toml`, `nexus/cli.py`, `nexus/cli_contract.py` and `nexus/config/settings_models.py`) while the branch was being pushed, so the branch was rebased onto it and these were rerun at the rebased head. `nexus.toml:1243` and `:1274` still hold `turn_pipeline = "two_pass"` and `schema_enums = true`, and none of the measured builders changed. The script on `save_02` exited 0 with stdout byte-identical to the JSON above.
+`origin/main` gained ffc2d6b8 (#815 S1: CLI HTTP handlers; it touches `nexus.toml`, `nexus/cli.py`, `nexus/cli_contract.py` and `nexus/config/settings_models.py`) and then d05481d8 (#783 S0: a read-only probe, whose `config/reachability.toml` operator entry sat beside this branch's; both entries are kept) while the branch was being pushed. The branch was rebased onto d05481d8 and everything below was rerun at the rebased head (f74d08b0 for the code, before the evidence commits). `nexus.toml:1243` and `:1274` still hold `turn_pipeline = "two_pass"` and `schema_enums = true`, and none of the measured builders changed. The script on `save_02` exited 0 with stdout byte-identical to the JSON above.
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_measure_place_scale_grammar_pg.py tests/test_orrery/test_gaia_registry_schema_pg.py tests/test_owner_target_guard.py tests/test_pg_disposable_target.py
@@ -200,12 +200,13 @@ dbname audit: 6 targets: postgres, qa638_*, qa640_788_scale_* x2, qa640_811_gaia
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-146 passed, 1 skipped in 9.78s
+146 passed, 1 skipped in 10.03s
 $ $PY -m pytest -q tests/test_reachability.py tests/test_measure_place_scale_grammar.py
-58 passed, 5 warnings in 10.51s
+58 passed, 5 warnings in 10.78s
 $ $PY -m pytest -q -p no:cacheprovider tests/test_api tests/test_orrery
-1829 passed, 746 skipped, 7 warnings in 34.53s
+1829 passed, 746 skipped, 7 warnings in 35.16s
 $ $PY -m pytest -q -p no:cacheprovider tests --ignore=tests/test_api --ignore=tests/test_orrery
-2719 passed, 445 skipped, 8 warnings in 428.03s (0:07:08)
+2720 passed, 450 skipped, 8 warnings in 439.30s (0:07:19)
 ```
 
+`git merge-tree --write-tree HEAD origin/main` against 5d99c5b2 (#782 S0, which landed after the last rebase and adds only its own script, test, document and reachability entry) reports a clean merge.
