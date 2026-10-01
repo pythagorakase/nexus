@@ -725,3 +725,81 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 ```
 
 `hist_before.txt` was rendered at `77933da5` before these edits.
+
+## After the Sixth Review
+
+Two verifiers found one more P2 at `88255096`: `_is_into_clause` decided
+whether a `.` before `INTO` ends a numeric literal with `str.isdigit()` on the
+run before the dot. PostgreSQL 16 and later accept `_` digit separators in
+decimal literals, so in `SELECT 1_000. INTO t;` the run is `1_000`,
+`isdigit()` is false, the dot was read as a qualifier, the `INTO` was skipped
+as an attribute name, and the statement passed. The verifiers showed on the
+local PostgreSQL 17.11 that `SELECT 1_000. INTO TEMP ...` runs its `INTO`
+clause and returns 1000; `0x1F.`, `0o17.`, `0b101.` and `1e5.` are syntax
+errors there, so only the separated form was affected. This change opened no
+database.
+
+Commit `f0f190cd`: the run must fully match PostgreSQL's decinteger,
+`_DECINTEGER = re.compile(r"[0-9](?:_?[0-9])*")` (ASCII digits, single `_`
+between digits). `test_into_after_a_dot_or_as_is_a_name` adds
+`SELECT 1_000. INTO separated;` (with its `COMMENT ON TABLE`) and expects its
+`SELECT INTO public.separated declares no column list` finding at line 6.
+
+The test fails on `88255096` (a scratch `git archive` of that commit with the
+new test file copied in, `-k into_after_a_dot`):
+
+```
+E       AssertionError: assert ['130_into_na... be verified'] == ['130_into_na... be verified']
+E         
+E         Right contains one more item: '130_into_names.sql:6: SELECT INTO public.separated declares no column list; its columns cannot be verified'
+E         Use -v to get more diff
+FAILED tests/test_migration_comment_lint.py::test_into_after_a_dot_or_as_is_a_name
+1 failed, 40 deselected, 5 warnings in 0.30s
+```
+
+The verifiers' probe, a scratch `999_x.sql` holding `SELECT 1_000. INTO t;`,
+through `--migrations-dir`:
+
+| Statement | `88255096` | `f0f190cd` |
+| --- | --- | --- |
+| `SELECT 1_000. INTO t;` | `OK`, exit 0 | `SELECT INTO public.t declares no column list` and `table public.t has no COMMENT ON TABLE`, exit 1 |
+| `SELECT 1_000_000. INTO b;` | not run | reported |
+| `SELECT 1_000.5 INTO d;` | not run | reported |
+| `SELECT x1_000.into FROM (VALUES (1)) AS x1_000("into");` | not run | passes (a qualifier) |
+| `SELECT _1.into FROM (VALUES (1)) AS _1("into");` | not run | passes (a qualifier) |
+
+Fuzz (`r5/fuzz.py`, the fifth round's script with `1_000.`, `1_000` and
+`x1_0.` added to its tokens):
+
+```
+$ fuzz.py scripts/check_migration_comments.py 40000 5
+statements=40000 forms={'sql': 10000, 'do body': 10000, 'execute': 10000, 'python': 10000} seconds=4.3
+exceptions=0 {}
+```
+
+With `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT` unset:
+
+```
+$ cmp hist_before.txt hist_after.txt
+exit=0
+     405
+     405
+$ black --check
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+$ flake8
+exit=0
+$ mypy
+Success: no issues found in 2 source files
+$ pytest lint
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+41 passed, 5 warnings in 1.11s
+$ real tree
+OK: every object created after migration 129 has a comment.
+exit 0
+$ reachability
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 10.51s
+```
+
+`hist_before.txt` was rendered at `88255096` before these edits.
