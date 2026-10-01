@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from typing import Any
 
+from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 import pytest
 
 from nexus.api.entity_tag_manifest_apply import apply_entity_tag_manifest
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 class EntityApplyCursor:
@@ -72,10 +75,19 @@ class EntityApplyCursor:
             ]
         elif normalized == "SELECT max(world_time) AS world_time FROM chunk_metadata":
             self._rows = [{"world_time": self.world_time}]
-        elif "FROM tags" in normalized and "WHERE tag = %s" in normalized:
-            tag, category = params
+        elif "FROM tags t" in normalized and "WHERE t.tag = %s" in normalized:
+            entity_kind, tag, category = params
             row = self.tags.get((str(category), str(tag)))
-            self._rows = [row] if row else []
+            # Registered rows are not deprecated; an unregistered category
+            # joins NULL, as the LEFT JOIN does.
+            registered = str(category) in self.registered_categories.get(
+                str(entity_kind), ()
+            )
+            self._rows = (
+                [{**row, "category_deprecated": False if registered else None}]
+                if row
+                else []
+            )
         elif "FROM entities" in normalized:
             entity_id = int(params[0])
             kind = self.entities.get(entity_id)
@@ -439,6 +451,49 @@ def test_apply_entity_tag_manifest_execute_records_world_time() -> None:
 
     assert result["counters"]["entity_tags_inserted"] == 1
     assert cursor.entity_tags[0]["applied_at_world_time"] == 123
+
+
+@pytest.mark.requires_postgres
+def test_apply_entity_tag_manifest_rejects_deprecated_category_on_clone() -> None:
+    """A manifest cannot apply a live tag in a category the registry deprecates.
+
+    ``profession_lite`` is registered (deprecated) for characters, so the
+    allowed list reaches the tag lookup, whose registry join refuses it.
+    """
+
+    with disposable_slot_database("qa640_811_entity_manifest") as dbname:
+        with closing(connect(dbname, cursor_factory=RealDictCursor)) as conn:
+            with conn.cursor() as cur:
+                with pytest.raises(ValueError) as caught:
+                    apply_entity_tag_manifest(
+                        cur,
+                        _manifest(
+                            [
+                                _operation(
+                                    operation_id="ready-black-market",
+                                    status="ready",
+                                    review_required=False,
+                                    operation_type="insert_entity_tag",
+                                    target={
+                                        "entity_kind": "character",
+                                        "entity_id": 1001,
+                                        "category": "profession_lite",
+                                        "tag": "black_market_operator",
+                                    },
+                                )
+                            ]
+                        ),
+                        manifest_schema_version="test-manifest.v1",
+                        entity_kind="character",
+                        allowed_categories=("profession_lite",),
+                        exclusive_categories=(),
+                        dry_run=True,
+                    )
+            conn.rollback()
+    assert str(caught.value) == (
+        "Tag profession_lite:black_market_operator in manifest is in a category "
+        "tag_category_registry deprecates for character"
+    )
 
 
 def _manifest(operations: list[dict[str, Any]]) -> dict[str, Any]:

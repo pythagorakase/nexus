@@ -808,8 +808,9 @@ class WildcardTrait(BaseModel):
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description=(
-            "Semantic tags for this protagonist (bodyform, capacity, "
-            "disposition, role, state, etc.). Apply registered tags by name; "
+            "Semantic tags for this protagonist (bodyform.lineage, "
+            "bodyform.condition, capacity, disposition, role.function, state, "
+            "etc.). Apply registered tags by name; "
             "omit tags when the closed registry has no exact fit. See the "
             "Orrery Awareness section of your system prompt for category guidance."
         ),

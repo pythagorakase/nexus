@@ -256,6 +256,44 @@ clock disagreement; after migration 118 the expected count is zero. A missing
 seed is reported as JSON null. Database and formatting errors surface loudly.
 This family never migrates or repairs a slot.
 
+## Boundary Catch-Up
+
+The read-only `boundary_catchup` family (issue 780) lists every scheduled
+world-clock boundary that a child turn would cross after a primary-layer
+parent chunk. It measures one window `(previous, target]` per configured skip
+(`[boundary_catchup] skip_minutes` in `qa_shift.toml`: a zero-time turn, a
+one-hour skip, a three-day skip) and one more for an explicit target:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/boundary_catchup.py --dbname ref_codex_bakeoff_2026_07
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/boundary_catchup.py --slot 4
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/boundary_catchup.py --slot 3 \
+    --parent-chunk 100 --target-world-time 2189-10-27T18:07:00-04:00
+```
+
+`--dbname` accepts `save_NN`, `ref_*`, and `qa640_*`. Without
+`--parent-chunk`, the newest primary-layer chunk with a world clock anchors
+the windows. `--target-world-time` needs an ISO 8601 offset; a naive time
+raises. The session's transactions are read-only and repeatable read, and the
+family refuses a writable transaction before it reads. It prints one JSON
+document: per window, the counts per producer, the subjects already pending
+at or before the previous clock, the total, and every crossing in order of
+instant, then precedence.
+
+| Producer | Class | Precedence | Owner | Subject | Instant |
+|---|---|---|---|---|---|
+| `tag_expiry` | deterministic | 10 | | `entity_tag` | `expires_at_world_time` of an uncleared tag |
+| `claim_propagation` | deterministic | 20 | | `claim_hop` | each planned hop's `acquired_at_world_time` |
+| `travel_eta` | adjudicable | 30 | #785 | `travel` | `eta_world_time` of an `in_transit` row |
+| `project_due` | adjudicable | 40 | | `project` | `next_eligible_at_world_time` |
+| `project_neglected` | adjudicable | 41 | | `project` | due time plus `advance_interval_hours` |
+| `project_abandon` | adjudicable | 42 | | `project` | due time at the stall threshold, else plus `abandon_after_stalled_world_hours` |
+
+The family materializes nothing, simulates no rescheduling or rearm (a
+project's later crossings assume nobody touches it), and coalesces nothing.
+Travel crossings are reported as #785's: today's arrival package is gated on
+progress, not on the ETA.
+
 ## Travel Reachability
 
 The read-only travel reachability probe (issue 785) reports, for every active
@@ -300,4 +338,37 @@ reports numbers only:
 ```sh
 PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49
 PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49 --markdown
+```
+
+## Cooldown Calibration
+
+The [classification and calibration document](../../docs/orrery_cooldown_classification.md)
+records the complete gate inventory, measured reports, formulas, and limitations.
+
+The report adopts no policy: individual gate classifications are analytical
+proposals under the settled rule, “Refractories to hours, staggering stays on
+ticks.” It prints stored resolution counts and reference-cadence equivalents.
+Every script-issued SQL statement is a SELECT; the connection enforces and
+verifies read-only, repeatable-read isolation and database identity, preserving
+ambient PGOPTIONS before appending the protective options. Slot 2 is refused.
+
+```sh
+PYTHONPATH=$PWD $PY scripts/qa_shift/cooldown_calibration.py --dbname ref_codex_bakeoff_2026_07 --format markdown
+```
+
+The reference stays at migration 114 and retains inherited all-layer clock
+contamination. The slots are already repaired by migration 140; the following
+TEST-pinned save_04 clone has primary-only stored clocks. The shared fixture
+snapshots the source read-only, migrates only the disposable clone, and drops it
+on exit. Use `--format json` for the same fields in machine-readable form.
+
+```sh
+PYTHONPATH=$PWD $PY - <<'PY'
+import sys
+from tests.pg_fixtures import disposable_slot_database
+from scripts.qa_shift.cooldown_calibration import main
+with disposable_slot_database("qa640_778s4a_evidence", source_db="save_04", include_data=True) as dbname:
+    sys.argv = ["cooldown_calibration", "--dbname", dbname, "--format", "markdown"]
+    main()
+PY
 ```

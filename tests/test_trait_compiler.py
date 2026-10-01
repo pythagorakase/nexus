@@ -322,8 +322,9 @@ class TraitCompilerCursor:
 
         if "FROM TAG_CATEGORY_REGISTRY" in normalized:
             (entity_kind,) = params
+            # Registry rows are not deprecated by default.
             self._next_rows = [
-                (category,)
+                (category, False, None)
                 for category in self.category_registry.get(entity_kind, set())
             ]
             self.rowcount = len(self._next_rows)

@@ -332,6 +332,46 @@ ceiling delta, overflow, trimmable memory tokens, feasibility, and freed
 tokens. The JSON payload places `run`, `day`, `config`, and `rows` under the
 `window_replay` key. See `docs/settings_scopes.md` for the field semantics.
 
+### `inspect-turn` — Inspect One Generation Turn
+
+Reads one generation session's durable records from a slot database, addressed
+by its session or by the chunk it produced. The plain read prints those
+records as tables and never touches the ledgers.
+
+```bash
+# Address the turn by its generation session or by its accepted chunk
+poetry run nexus inspect-turn --slot N --session UUID
+poetry run nexus inspect-turn --slot N --chunk N
+
+# Machine-readable JSON, or a concise read of the observation
+poetry run nexus inspect-turn --slot N --session UUID --json
+poetry run nexus inspect-turn --slot N --session UUID --summary
+```
+
+With `--json` the payload carries `observation` beside `turn_inspection`, and
+`--summary` prints a few lines of it. The observation is derived on read from
+the attempt manifests, the prompt-window ledger, the provider usage ledger and
+the job rows; it is never stored. It is schema version 2 and counts tokens
+only: nothing is priced.
+
+Choice readiness is the server's `complete` phase row, which
+`finish_generation` writes in the transaction that stages the draft.
+`choice_ready_at` is its time and `seconds_to_choice_ready` the seconds from
+the first observed phase. Both are null when phases were observed and none is
+`complete`, as for a failed or unfinished session, and `"unknown"` when no
+phase was observed. An attempt's `usage.provider_completed_at` is the time of
+its latest usage event, when the provider's response arrived; it is not
+readiness.
+
+Each attempt's `window` carries `estimated_input_tokens`, the local estimate of
+the whole request, and `reported_input_tokens`, the provider's input for that
+attempt. For the `anthropic_messages` transport the reported figure adds cache
+reads and writes, so it is the per-attempt figure comparable across transports;
+the `usage` section keeps each provider's raw `input_tokens`.
+
+Throughout the observation, `"unknown"` means no source recorded the value, and
+null means the thing has not happened.
+
 ### `load` — View Current State
 
 Shows the current state of a slot: wizard phase, narrative text, or empty status.

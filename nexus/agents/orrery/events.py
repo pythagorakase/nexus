@@ -82,6 +82,7 @@ from nexus.agents.orrery.tag_writer import (
     apply_status_pair_tag_bestowal,
     apply_status_pair_tag_bestowal_async,
 )
+from nexus.config.settings_models import OrreryTravelSettings
 
 
 logger = logging.getLogger("nexus.orrery.events")
@@ -221,24 +222,6 @@ def coerce_signal_detection(raw: Any) -> SignalDetection:
     raise ValueError(f"Unsupported orrery ecology settings: {type(raw)!r}")
 
 
-TRAVEL_MODE_DETOUR_FACTOR = {
-    "walking": 1.35,
-    "vehicle": 1.25,
-    "rail": 1.15,
-    "water": 1.40,
-    "air": 1.05,
-    "covert": 1.80,
-    "mixed": 1.40,
-}
-TRAVEL_MODE_SPEED_KMH = {
-    "walking": 5.0,
-    "vehicle": 45.0,
-    "rail": 75.0,
-    "water": 25.0,
-    "air": 450.0,
-    "covert": 3.5,
-    "mixed": 25.0,
-}
 ROUTE_GRAPH_DEFAULT_KEY = "default"
 
 
@@ -4996,7 +4979,7 @@ def _destination_place_classes(payload: Mapping[str, Any]) -> tuple[str, ...]:
 
 def _travel_mode(payload: Mapping[str, Any], fallback: str = "mixed") -> str:
     mode = str(payload.get("mode") or payload.get("travel_mode") or fallback)
-    if mode not in TRAVEL_MODE_DETOUR_FACTOR:
+    if mode not in _travel_settings().detour_factor.model_dump():
         raise ValueError(f"Unsupported Orrery travel mode: {mode!r}")
     return mode
 
@@ -5049,6 +5032,19 @@ def _route_graph_max_edges_per_query() -> int:
     if settings.orrery is None:
         return DEFAULT_ROUTE_GRAPH_MAX_EDGES_PER_QUERY
     return int(settings.orrery.route_graph.max_edges_per_query)
+
+
+def _travel_settings() -> OrreryTravelSettings:
+    """Return the configured per-mode travel speeds and detour factors."""
+
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    if settings.orrery is None:
+        raise RuntimeError(
+            "Orrery travel needs the [orrery.travel] table in nexus.toml"
+        )
+    return settings.orrery.travel
 
 
 def _apply_travel_start_sync(
@@ -7374,7 +7370,7 @@ def _osm_graph_route_sync(
         origin_node_id=int(_row_get(origin_node, "node_id", 0)),
         destination_node_id=int(_row_get(destination_node, "node_id", 0)),
         requested_mode=mode,
-        speed_kmh=TRAVEL_MODE_SPEED_KMH[mode],
+        speed_kmh=getattr(_travel_settings().speed_kmh, mode),
     )
     if route is None:
         return None
@@ -7421,7 +7417,7 @@ async def _osm_graph_route_async(
         origin_node_id=int(_row_get(origin_node, "node_id", 0)),
         destination_node_id=int(_row_get(destination_node, "node_id", 0)),
         requested_mode=mode,
-        speed_kmh=TRAVEL_MODE_SPEED_KMH[mode],
+        speed_kmh=getattr(_travel_settings().speed_kmh, mode),
     )
     if route is None:
         return None
@@ -7843,8 +7839,9 @@ def _route_estimate_from_distance(
     mode: str,
     risk: str,
 ) -> dict[str, Any]:
-    detour_factor = TRAVEL_MODE_DETOUR_FACTOR[mode]
-    speed_kmh = TRAVEL_MODE_SPEED_KMH[mode]
+    travel = _travel_settings()
+    detour_factor = getattr(travel.detour_factor, mode)
+    speed_kmh = getattr(travel.speed_kmh, mode)
     if geodesic_distance_m is None:
         distance_m = None
         duration_minutes = None

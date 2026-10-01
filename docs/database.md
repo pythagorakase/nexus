@@ -50,6 +50,8 @@ any migration or restore error and never log success, but the partial target
 database remains: initialization can leave committed migrations, seed rows, and
 the `global_variables` row without IDF initialization, and a failed clone can
 keep the source's `new_story = false`, which lists the slot as active.
+Both paths refuse a locked slot before any drop, with the message
+`reset_setup` uses (`Slot N is locked. Unlock it first with: nexus unlock --slot N`).
 `start_setup` reuses an existing database without checking its migrations, so
 recreate the target with `--force` after fixing the cause; durable quarantine
 and staged replacement belong to #823. The runner itself propagates connection

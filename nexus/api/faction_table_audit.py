@@ -1596,12 +1596,15 @@ def _load_current_world_time(cur: Any) -> Any:
 def _lookup_apply_tag(cur: Any, *, tag: str, category: str) -> Mapping[str, Any]:
     cur.execute(
         """
-        SELECT id, tag, category
-        FROM tags
-        WHERE tag = %s
-          AND category = %s
-          AND NOT deprecated
-          AND synonym_for IS NULL
+        SELECT t.id, t.tag, t.category, r.deprecated AS category_deprecated
+        FROM tags t
+        LEFT JOIN tag_category_registry r
+          ON r.category = t.category
+         AND r.entity_kind = 'faction'::entity_kind
+        WHERE t.tag = %s
+          AND t.category = %s
+          AND NOT t.deprecated
+          AND t.synonym_for IS NULL
         """,
         (tag, category),
     )
@@ -1609,6 +1612,11 @@ def _lookup_apply_tag(cur: Any, *, tag: str, category: str) -> Mapping[str, Any]
     if row is None:
         raise ValueError(
             f"Unknown or deprecated faction tag {category}:{tag} in manifest"
+        )
+    if _row_value(row, "category_deprecated") is True:
+        raise ValueError(
+            f"Tag {category}:{tag} in manifest is in a category "
+            "tag_category_registry deprecates for faction"
         )
     return row
 
