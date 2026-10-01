@@ -255,3 +255,14 @@ Reads use a repeatable-read, read-only transaction. Exit 1 means at least one
 clock disagreement; after migration 118 the expected count is zero. A missing
 seed is reported as JSON null. Database and formatting errors surface loudly.
 This family never migrates or repairs a slot.
+
+## Travel Reachability
+
+The read-only travel reachability probe (issue 785) reports, for every active
+character, which predicates block each branch that starts travel and the
+relocation rows that hand off to it, against a production-parity hydrated
+state in one read-only, repeatable-read session per database:
+
+```sh
+PGOPTIONS='-c default_transaction_read_only=on' PYTHONPATH=$PWD "$PY" scripts/qa_shift/travel_reachability.py --dbname save_02 --dbname save_03 --dbname save_04
+```
