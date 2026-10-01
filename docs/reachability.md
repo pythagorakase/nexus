@@ -109,14 +109,23 @@ which one is correct:
 - **`dead`:** no root reaches it and no tracked document names it.
 
 The graph check accepts `documented` or `dead` for a path that no root reaches. Non-Python
-files take a graph class by review and have no graph check. A `dead` class is a finding
-for review, not a deletion decision; removing a path still needs its own decision.
+files have no graph check; they take a held class or, by review, a graph class. A `dead`
+class is a finding for review, not a deletion decision; removing a path still needs its
+own decision.
 
 A held class, listed in `held_classes`, records a pending owner question
-(`pending-ruling:<question id>`, for example `pending-ruling:811-Q5`) or a separately
-recorded decision (`openrouter-shim`). A held class is exempt from the graph check, and
-no held class may reuse a graph class name. When the question is ruled, the path moves to
-the class the ruling implies.
+(`pending-ruling:<question id>`) or a separately recorded decision. There are five held
+classes:
+
+- **`pending-ruling:811-Q1`:** slot-2 manifest and apply tooling.
+- **`pending-ruling:811-Q3`:** unique historical material.
+- **`pending-ruling:811-Q4`:** provider shims that runtime imports.
+- **`pending-ruling:811-Q5`:** ir_eval V1 tooling.
+- **`openrouter-shim`:** `scripts/api_openrouter.py`, kept in `scripts/` under its own
+  class (811-Q12).
+
+A held class is exempt from the graph check, and no held class may reuse a graph class
+name. When the question is ruled, the path moves to the class the ruling implies.
 
 Every change that adds, renames, or deletes a path under `scripts/` or `ir_eval/` updates
 its entry in the same change. The checker prints the three finding lists

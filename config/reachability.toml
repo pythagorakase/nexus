@@ -141,7 +141,8 @@ source = "ir_eval/*.py"
 paths = ["ir_eval", "ir_eval/scripts", "scripts"]
 reason = "Legacy IR tools explicitly prepend ir_eval and its scripts directory to sys.path; repo scripts supplies api_openai. These edges do not promote tools to supported roots."
 
-# Every tracked path under scripts/ and ir_eval/, with its class (#811).
+# Every path under scripts/ and ir_eval/ in git's view of the tree (tracked,
+# plus untracked files the ignore rules keep), with its class (#811).
 # Graph classes must match check_reachability's import graph; held classes
 # record a pending owner question or a separate recorded decision.
 [classification]

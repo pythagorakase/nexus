@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import subprocess
 import sys
@@ -749,7 +750,12 @@ def test_classification_requires_one_entry_per_scoped_path(static_repo) -> None:
 
 
 def _graph_repo(root: Path, config: dict[str, Any]) -> None:
-    """Give each graph class one fixture path under scripts/."""
+    """Give each graph class one fixture path under scripts/.
+
+    ``scripts/shared.py`` is production- and operator-reachable, and
+    ``scripts/tool_helper.py`` is operator- and test-reachable, so the
+    parametrized cases pin both precedences.
+    """
     _write(
         root,
         "pkg/cli.py",
@@ -758,13 +764,16 @@ def _graph_repo(root: Path, config: dict[str, Any]) -> None:
     )
     _write(root, "scripts/shared.py", "value = 1\n")
     _write(
-        root, "scripts/tool.py", "import scripts.tool_helper\ndef main():\n    pass\n"
+        root,
+        "scripts/tool.py",
+        "import scripts.shared\nimport scripts.tool_helper\n" "def main():\n    pass\n",
     )
     _write(root, "scripts/tool_helper.py", "value = 1\n")
     _write(
         root,
         "tests/test_example.py",
-        "def test_example():\n    import pkg.helper\n    import scripts.tested\n",
+        "def test_example():\n    import pkg.helper\n    import scripts.tested\n"
+        "    import scripts.tool_helper\n",
     )
     _write(root, "scripts/tested.py", "value = 1\n")
     _write(root, "scripts/orphan.py", "value = 1\n")
@@ -876,6 +885,96 @@ def test_repository_reachability_ratchet() -> None:
     }
 
 
+# The 811-S1 rules 1-8, in order; the first match wins. Each is (class, fnmatch
+# patterns, non-Python files only). Rules 5 and 8 cover whole families, so the
+# decision test checks every path that falls to them, not one member each.
+RULES_811_S1: tuple[tuple[str, tuple[str, ...], bool], ...] = (
+    (
+        "pending-ruling:811-Q4",
+        ("scripts/api_openai.py", "scripts/api_anthropic.py"),
+        False,
+    ),
+    ("openrouter-shim", ("scripts/api_openrouter.py",), False),
+    (
+        "pending-ruling:811-Q1",
+        (
+            "scripts/apply_slot2_semantic_tags.py",
+            "scripts/seed_slot2_routine_anchors.py",
+            "scripts/backfill_routine_anchors.py",
+        ),
+        False,
+    ),
+    (
+        "test-only",
+        (
+            "scripts/install_pgvector.sh",
+            "ir_eval/README.md",
+            "ir_eval/golden_queries_backup.json",
+        ),
+        False,
+    ),
+    (
+        "pending-ruling:811-Q5",
+        (
+            "ir_eval/ir_eval.py",
+            "ir_eval/ir_eval_debug.py",
+            "ir_eval/ir_eval_sqlite.py",
+            "ir_eval/db.py",
+            "ir_eval/pg_db.py",
+            "ir_eval/import_golden_queries.py",
+            "ir_eval/migrate_sqlite_to_postgres.py",
+            "ir_eval/test_*.py",
+            "ir_eval/scripts/*",
+            "ir_eval/golden_queries.json",
+            "ir_eval/golden_queries.json.bak",
+            "ir_eval/qrels.json",
+            "ir_eval/pg_schema.sql",
+            "ir_eval/*.md",
+            "scripts/run_golden_queries.py",
+            "scripts/README_golden_queries.md",
+        ),
+        False,
+    ),
+    ("operator", ("scripts/qa_shift/*", "scripts/scratchpad_audit/*"), True),
+    (
+        "dead",
+        (
+            "scripts/edi",
+            "scripts/token_count",
+            "scripts/register_production_conditions.sh",
+        ),
+        False,
+    ),
+    (
+        "pending-ruling:811-Q3",
+        (
+            "scripts/*.json",
+            "scripts/*.md",
+            "scripts/*.txt",
+            "scripts/*.sql",
+            "scripts/*.bak",
+            "scripts/*.new",
+            "ir_eval/ir_eval.db",
+            "ir_eval/ir_eval.db.bak",
+            "ir_eval/results/*",
+            "ir_eval/query_classifier_*",
+        ),
+        True,
+    ),
+)
+PATTERN_HELD_CLASSES = ("pending-ruling:811-Q5", "pending-ruling:811-Q3")
+
+
+def _first_811_rule_class(path: str) -> str | None:
+    """Return the class of the first 811-S1 rule that matches ``path``."""
+    for rule_class, patterns, non_python_only in RULES_811_S1:
+        if non_python_only and path.endswith(".py"):
+            continue
+        if any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns):
+            return rule_class
+    return None
+
+
 def test_repository_classification_applies_811_decisions() -> None:
     """Paths decided on #811 keep the class those decisions gave them."""
     classification = _repository_config()["classification"]
@@ -894,6 +993,13 @@ def test_repository_classification_applies_811_decisions() -> None:
     }
     assert "ir_eval/ir_eval.py" in by_class["pending-ruling:811-Q5"]
     assert "ir_eval/ir_eval.db" in by_class["pending-ruling:811-Q3"]
+    pattern_classes: dict[str, set[str]] = {}
+    for path in {entry["path"] for entry in classification["paths"]}:
+        rule_class = _first_811_rule_class(path)
+        if rule_class in PATTERN_HELD_CLASSES:
+            pattern_classes.setdefault(rule_class, set()).add(path)
+    for held in PATTERN_HELD_CLASSES:
+        assert by_class[held] == pattern_classes[held]
     graph_classes = {"runtime", "operator", "test-only", "documented", "dead"}
     assert set(by_class) - graph_classes <= set(classification["held_classes"])
 
