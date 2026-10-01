@@ -81,7 +81,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
@@ -257,6 +257,9 @@ class ReplayResult:
     # of reporting phantom drift.
     uncertain_rows: set[tuple[str, str]] = field(default_factory=set)
 
+    world_time: datetime | None = None
+    clock_drifts: list[Drift] = field(default_factory=list)
+
     def add_note(self, section: str, note: str, *, approximate: bool) -> None:
         self.notes.setdefault(section, []).append(note)
         if approximate:
@@ -271,6 +274,124 @@ class Drift:
     kind: str  # 'missing_row' | 'extra_row' | 'value'
     expected: Any
     actual: Any
+
+
+def chunk_clock_report_sync(
+    cur: Any, through_chunk_id: int | None = None
+) -> dict[str, Any]:
+    """Independently audit inclusive primary clocks without trusting stored stamps."""
+    cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
+    singleton = cur.fetchone()
+    if singleton is None:
+        raise RuntimeError("Missing global_variables singleton")
+    base = singleton[0]
+    cur.execute(
+        """
+        SELECT chunk_id, world_layer, time_delta, world_time,
+               %s::timestamptz + COALESCE(
+                   SUM(COALESCE(time_delta, interval '0'))
+                       FILTER (WHERE world_layer = 'primary') OVER (
+                           ORDER BY chunk_id ROWS BETWEEN UNBOUNDED PRECEDING
+                           AND CURRENT ROW
+                       ), interval '0'
+               ) AS expected_world_time
+        FROM chunk_metadata
+        WHERE %s::bigint IS NULL OR chunk_id <= %s
+        ORDER BY chunk_id
+        """,
+        (base, through_chunk_id, through_chunk_id),
+    )
+    columns = (
+        "chunk_id",
+        "world_layer",
+        "time_delta",
+        "world_time",
+        "expected_world_time",
+    )
+    rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+    categories: dict[str, list[Drift]] = {
+        "disagreements": [],
+        "primary_regressions": [],
+        "missing_base": [],
+        "nonprimary_contributions": [],
+        "bootstrap_nonzero": [],
+    }
+    previous = base
+    previous_primary = base
+    for row in rows:
+        chunk_id, actual = row["chunk_id"], row["world_time"]
+        expected = row["expected_world_time"]
+        if actual != expected:
+            categories["disagreements"].append(
+                Drift(
+                    "chunk_metadata",
+                    str(chunk_id),
+                    "world_time",
+                    "value",
+                    expected,
+                    actual,
+                )
+            )
+        if row["world_layer"] == "primary":
+            if actual is not None:
+                if previous_primary is not None and actual < previous_primary:
+                    categories["primary_regressions"].append(
+                        Drift(
+                            "chunk_metadata",
+                            str(chunk_id),
+                            "world_time",
+                            "value",
+                            previous_primary,
+                            actual,
+                        )
+                    )
+                previous_primary = actual
+        elif actual != previous:
+            categories["nonprimary_contributions"].append(
+                Drift(
+                    "chunk_metadata",
+                    str(chunk_id),
+                    "world_time",
+                    "value",
+                    previous,
+                    actual,
+                )
+            )
+        previous = actual
+    if rows and base is None:
+        categories["missing_base"].append(
+            Drift(
+                "global_variables",
+                "true",
+                "base_timestamp",
+                "value",
+                "non-NULL when chunks exist",
+                None,
+            )
+        )
+    if rows and (rows[0]["time_delta"] or timedelta(0)) != timedelta(0):
+        categories["bootstrap_nonzero"].append(
+            Drift(
+                "chunk_metadata",
+                str(rows[0]["chunk_id"]),
+                "time_delta",
+                "value",
+                timedelta(0),
+                rows[0]["time_delta"],
+            )
+        )
+    return {
+        "rows": rows,
+        "findings": [finding for group in categories.values() for finding in group],
+        "chunks": len(rows),
+        **{name: len(group) for name, group in categories.items()},
+    }
+
+
+def verify_chunk_clocks_sync(cur: Any) -> list[Drift]:
+    """Return every full-table chunk-clock finding, outside checkpoint windows too."""
+    findings: list[Drift] = chunk_clock_report_sync(cur)["findings"]
+    return findings
 
 
 def _seed_checkpoint_character_names(
@@ -3209,9 +3330,26 @@ def reconstruct_state_at_sync(
     reconstruction leaves it None and keeps the chunk-window boundary.
     """
 
-    return _Replayer(cur, chunk_id, target_checkpoint_id=target_checkpoint_id).replay(
+    result = _Replayer(cur, chunk_id, target_checkpoint_id=target_checkpoint_id).replay(
         base_checkpoint_id
     )
+    report = chunk_clock_report_sync(cur, through_chunk_id=chunk_id)
+    result.clock_drifts = report["findings"]
+    target = next((row for row in report["rows"] if row["chunk_id"] == chunk_id), None)
+    if target is None:
+        result.clock_drifts.append(
+            Drift(
+                "chunk_metadata",
+                str(chunk_id),
+                "world_time",
+                "missing_row",
+                "metadata row",
+                None,
+            )
+        )
+    else:
+        result.world_time = target["expected_world_time"]
+    return result
 
 
 def _values_equal(expected: Any, actual: Any) -> bool:

@@ -1,4 +1,4 @@
-"""Reconstruct world state at an arbitrary chunk, or audit ledger sufficiency.
+"""Reconstruct world state at an arbitrary chunk, or audit ledgers and chunk clocks.
 
 The read half of the reconstruction contract (issue #426): world state at
 chunk N = latest checkpoint at or before N + the Orrery and Skald ledgers
@@ -11,7 +11,8 @@ Usage:
 
 ``--verify`` replays every consecutive checkpoint pair and diffs the result
 against the stored target checkpoint; exits nonzero on drift. Zero drift
-proves the ledgers were sufficient across every checkpointed window.
+proves the ledgers were sufficient across every checkpointed window. The independent
+chunk-clock audit checks every metadata row, even with fewer than two checkpoints.
 """
 
 from __future__ import annotations
@@ -36,17 +37,26 @@ sys.path.insert(0, str(REPO_ROOT))
 from nexus.agents.orrery.replay import (  # noqa: E402
     reconstruct_state_at_sync,
     verify_checkpoints_sync,
+    verify_chunk_clocks_sync,
 )
 from nexus.api.slot_utils import slot_dbname  # noqa: E402
 
 
 def _connect(slot: int) -> Any:
     conn = psycopg2.connect(**connection_kwargs(slot_dbname(slot)))
-    conn.set_session(readonly=True)
-    return conn
+    try:
+        conn.set_session(isolation_level="REPEATABLE READ", readonly=True)
+        with conn.cursor() as cur:
+            cur.execute("SELECT current_setting('transaction_read_only')")
+            if cur.fetchone()[0] != "on":
+                raise RuntimeError("replay_state requires a read-only transaction")
+        return conn
+    except BaseException:
+        conn.close()
+        raise
 
 
-def _print_reconstruction(slot: int, chunk_id: int, output: str | None) -> None:
+def _print_reconstruction(slot: int, chunk_id: int, output: str | None) -> int:
     conn = _connect(slot)
     try:
         with conn.cursor() as cur:
@@ -64,6 +74,10 @@ def _print_reconstruction(slot: int, chunk_id: int, output: str | None) -> None:
         print(f"  {section:<32} {len(rows):>5} rows  [{tier}]")
         for note in result.notes.get(section, []):
             print(f"    - {note}")
+    print(f"  world_time: {result.world_time}")
+    print(f"  clock_drifts: {len(result.clock_drifts)} finding(s)")
+    for drift in result.clock_drifts:
+        print(f"  {json.dumps(asdict(drift), default=str)}")
     if output:
         document = {
             "target_chunk_id": result.target_chunk_id,
@@ -72,10 +86,13 @@ def _print_reconstruction(slot: int, chunk_id: int, output: str | None) -> None:
             "approximate_sections": sorted(result.approximate_sections),
             "notes": result.notes,
             "state": result.state,
+            "world_time": result.world_time,
+            "clock_drifts": [asdict(drift) for drift in result.clock_drifts],
         }
         with open(output, "w") as handle:
             json.dump(document, handle, indent=2, default=str)
         print(f"wrote {output}")
+    return int(bool(result.clock_drifts))
 
 
 def _print_verification(slot: int) -> int:
@@ -84,9 +101,18 @@ def _print_verification(slot: int) -> int:
         with conn.cursor() as cur:
             verdicts = verify_checkpoints_sync(cur)
             correspondence_findings = _verify_correspondence_provenance(cur)
+            clock_findings = verify_chunk_clocks_sync(cur)
+            cur.execute("SELECT count(*) FROM chunk_metadata")
+            clock_chunks = cur.fetchone()[0]
     finally:
         conn.close()
 
+    print(
+        f"slot {slot}: chunk clocks: {clock_chunks} checked row(s), "
+        f"{len(clock_findings)} finding(s)"
+    )
+    for drift in clock_findings:
+        print(f"  {json.dumps(asdict(drift), default=str)}")
     if not verdicts:
         print(
             f"slot {slot}: fewer than two checkpoints at distinct chunks — "
@@ -101,7 +127,7 @@ def _print_verification(slot: int) -> int:
             "(authorial channel excluded from world-state replay; "
             "chunk-versioned undo invariants hold)"
         )
-        return 0
+        return int(bool(clock_findings))
     total_drift = 0
     for verdict in verdicts:
         status = "DRIFT" if verdict.drifts else "ok"
@@ -136,7 +162,7 @@ def _print_verification(slot: int) -> int:
             "state without a replayable ledger record"
         )
         return 1
-    return 0
+    return int(bool(clock_findings))
 
 
 def _verify_correspondence_provenance(cur: Any) -> list[str]:
@@ -213,14 +239,14 @@ def main() -> None:
     group.add_argument(
         "--verify",
         action="store_true",
-        help="replay every checkpoint pair and diff against stored documents",
+        help="audit chunk clocks, correspondence, and every checkpoint pair",
     )
     parser.add_argument("--output", help="write the full state document (JSON)")
     args = parser.parse_args()
 
     if args.verify:
         sys.exit(_print_verification(args.slot))
-    _print_reconstruction(args.slot, args.chunk, args.output)
+    sys.exit(_print_reconstruction(args.slot, args.chunk, args.output))
 
 
 if __name__ == "__main__":

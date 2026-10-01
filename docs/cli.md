@@ -309,6 +309,13 @@ counts, the OpenAI-only UTC-day total, and configured readout-only allowances.
 The JSON payload places `day`, `events`, `providers`, `seats`,
 `openai_day_total`, and `allowance` under the `usage` key.
 
+Prompt-window rows also carry `removed_block_tokens`: cached assembly removal
+estimates by recent narrative, historical context, and recalled scenes, including
+removed lane headings. Text prints the total and map below kept blocks; an absent
+or empty legacy map prints `removed unknown`, while a complete zero map records
+zero. These per-attempt snapshots are separate from actual input and API usage;
+retries repeat the same snapshot and must not be summed as fresh removals.
+
 ### `window-replay` — Replay Prompt Windows
 
 Recomputes each recorded attempt's seat ceiling for one run under candidate
@@ -330,7 +337,12 @@ Human output lists, per seat and attempt, the recorded input and ceiling, the
 candidate ceiling, whether the model cap bounded the recorded spend, the
 ceiling delta, overflow, trimmable memory tokens, feasibility, and freed
 tokens. The JSON payload places `run`, `day`, `config`, and `rows` under the
-`window_replay` key. See `docs/settings_scopes.md` for the field semantics.
+`window_replay` key. `REMOVED` follows `FREED`, with the recorded per-block map
+beneath each attempt. JSON adds `removed_block_tokens` and `removed_tokens_total`
+(`null` for absent/empty legacy maps; text says `unknown`). Cached assembly
+removals include headings and remain fixed under candidate changes. They are
+per-attempt snapshots, distinct from candidate headroom (`freed_tokens`) and
+actual provider input. See `docs/settings_scopes.md` for the field semantics.
 
 ### `inspect-turn` — Inspect One Generation Turn
 

@@ -37,7 +37,10 @@ in ``legacy_session_keyed`` (``recorded_before`` names the convention change;
 ``events``, ``seats``, ``ledger_days`` and each token field), which is null when
 the turn has none. No job is guessed for it, so a summary job from before the
 change reads ``"unknown"`` usage and counts in ``jobs_without_usage`` while its
-spend appears in the legacy block.
+spend appears in the legacy block. Background workers record under their job id from
+``LEGACY_SESSION_KEYED_CUTOFF`` (2026-09-26T23:41:17Z, when PR #995 merged), so such an
+event recorded at or after that instant is a worker defect, and the join raises
+instead of filing it as legacy.
 
 Token counts are renderer, local-estimate or provider counts, and each section
 names its ``provenance``; nothing is priced (Decision 9, #858). A window's
@@ -49,6 +52,10 @@ both in the attempt manifest. A value no source recorded reads ``"unknown"``;
 this includes list-typed fields (``repair_codes``, ``rejection_codes``,
 ``outcomes``, ``seats``, and a ``block_tokens`` or ``influence_tokens``
 mapping), so a JSON consumer must not assume they are always arrays or objects.
+Window ``removed_block_tokens`` and ``removed_tokens_total`` are cached assembly
+removal estimates, including headings, copied from the authoritative source.
+Absent or empty maps read ``"unknown"``; complete zero maps record zero removal.
+Each attempt repeats its seat's snapshot, not additional provider usage.
 ``null`` means the source records that the thing has not happened (no terminal
 outcome yet, no later phase) or was not sent (no reasoning effort on the
 request).
@@ -76,7 +83,8 @@ attempt and job names its provider and transport.
 The join refuses, instead of guessing, rows from another session or an unread
 day, conflicting models or providers on one attempt, a timestamp without a UTC
 offset, phases recorded out of order, and an event under a listed job's id and
-slot whose seat no provider-backed queue records.
+slot whose seat no provider-backed queue records. Background-seat events under the
+session run id at or after the convention cutoff are also refused.
 
 Choice readiness is the server's ``complete`` phase row, which
 ``finish_generation`` writes in the transaction that stages the draft:
@@ -104,6 +112,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, Union
 
+from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
 from nexus.telemetry.attempt_manifest import PROVIDER_JOB_SEATS, validation_metadata
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.usage import UsageEvent, read_prompt_windows, summarize_usage
@@ -130,6 +139,8 @@ LEGACY_SESSION_KEYED = (
     "Recorded under the generation session before background workers recorded "
     "under their job id (#802); not attributable to one job."
 )
+# PR #995's merge commit f6140704 marks the immutable job-id convention boundary.
+LEGACY_SESSION_KEYED_CUTOFF = datetime(2026, 9, 26, 23, 41, 17, tzinfo=timezone.utc)
 
 Count = Union[int, str]
 AttemptKey = tuple[str, int]
@@ -314,8 +325,15 @@ def derive_turn_observation(
                 f"read: {list(ledger_days)}"
             )
         if event.seat in BACKGROUND_SEAT_QUEUES:
-            # Background work keyed by the session, as workers recorded it
-            # before they recorded under their job id; no job is guessed.
+            if _utc(event.ts) >= LEGACY_SESSION_KEYED_CUTOFF:
+                raise ValueError(
+                    f"Background seat {event.seat} recorded usage under session run "
+                    f"{event.run_id} at {event.ts}, on or after "
+                    f"{_iso(LEGACY_SESSION_KEYED_CUTOFF)}, when background workers "
+                    "began recording under their job id (#802)"
+                )
+            # Only pre-cutoff background work keyed by the session is legacy;
+            # no job is guessed for these historical events.
             legacy.append(event)
             continue
         usage.setdefault((event.seat, event.attempt), []).append(event)
@@ -412,11 +430,14 @@ def _window(
                     "block_tokens_total",
                     "block_tokens",
                     "influence_tokens",
+                    "removed_block_tokens",
+                    "removed_tokens_total",
                 ),
                 UNKNOWN,
             ),
         }
     block_tokens = dict(values["block_tokens"])
+    removed = dict(values.get("removed_block_tokens") or {})
     # Records written before influence roles were declared (#744) carry none.
     influence_tokens = values.get("influence_tokens") or UNKNOWN
     return {
@@ -432,6 +453,8 @@ def _window(
         "block_tokens_total": sum(block_tokens.values()),
         "block_tokens": block_tokens,
         "influence_tokens": influence_tokens,
+        "removed_block_tokens": removed or UNKNOWN,
+        "removed_tokens_total": sum(removed.values()) if removed else UNKNOWN,
     }
 
 
@@ -866,6 +889,16 @@ def _attempt_lines(attempt: Mapping[str, Any]) -> list[str]:
                     f"{role} {_tokens(tokens)}" for role, tokens in influence.items()
                 )
             )
+    removed = window["removed_block_tokens"]
+    if isinstance(removed, dict):
+        lines.append(
+            f"  removed {_tokens(window['removed_tokens_total'])} · "
+            + " · ".join(
+                f"{kind} {_tokens(removed.get(kind, 0))}" for kind in TRIMMABLE_BLOCKS
+            )
+        )
+    else:
+        lines.append(f"  removed {UNKNOWN}")
     usage = attempt["usage"]
     lines.append(_usage_line(usage, completed=usage["provider_completed_at"]))
     if validation["provenance"] == UNKNOWN:

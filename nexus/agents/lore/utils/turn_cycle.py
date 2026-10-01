@@ -246,6 +246,11 @@ class TurnCycleManager:
 
         return self.settings.lore.retrieval.max_deep_queries
 
+    def _deep_query_k(self) -> int:
+        """Resolve the configured MEMNON result count for each deep query."""
+
+        return self.settings.lore.retrieval.deep_query_k
+
     def _presence_boost_enabled(self) -> bool:
         """Return the required MEMNON presence-boost feature flag."""
 
@@ -679,6 +684,7 @@ class TurnCycleManager:
         all_results: List[Dict[str, Any]] = []
         query_type_counts: Dict[str, int] = {}
         max_deep_queries = self._max_deep_queries()
+        deep_query_k = self._deep_query_k()
         orrery = self._enabled_orrery()
         collect_query_embeddings = orrery is not None and orrery.knowledge.enabled
 
@@ -689,7 +695,7 @@ class TurnCycleManager:
             # to adjust vector/text weights for optimal results
             search_kwargs: Dict[str, Any] = {
                 "query": query_obj["text"],
-                "k": 15,  # Get more results since we'll deduplicate
+                "k": deep_query_k,
                 "use_hybrid": True,
             }
             query_embeddings: Dict[str, List[float]] | None = None
@@ -1156,6 +1162,9 @@ class TurnCycleManager:
         window = turn_context.token_counts["apex_window"]
         self._select_scene_payload(payload)
         requests = logon.measure_turn_requests(payload, window)
+        seat_tokens_before = {
+            request.budget.seat: request.tokens for request in requests
+        }
         writer = requests[0]
         tokens_before = writer.tokens
         prompt_overhead_tokens = writer.budget.policy_headroom
@@ -1247,10 +1256,20 @@ class TurnCycleManager:
                 retrieved_passages_dropped,
             )
 
+        for request in requests:
+            recovered = seat_tokens_before[request.budget.seat] - request.tokens
+            if sum(request.removed_block_tokens.values()) != recovered:
+                raise ValueError(
+                    f"Removal accounting mismatch for {request.budget.seat}"
+                )
+        if sum(writer.removed_block_tokens.values()) != tokens_before - tokens_after:
+            raise ValueError("Writer removal accounting differs from window recovery")
+
         payload["window_trimming"] = {
             "tokens_before": tokens_before,
             "tokens_after": tokens_after,
             "tokens_recovered": tokens_before - tokens_after,
+            "removed_block_tokens": writer.removed_block_tokens,
             "dropped_chunk_ids": [memory_identity(chunk) for chunk in dropped_chunks],
             "dropped_blocks": {
                 recent: sum(
@@ -1266,6 +1285,10 @@ class TurnCycleManager:
             "seats": {
                 request.budget.seat: {
                     "input_tokens": request.tokens,
+                    "tokens_before": seat_tokens_before[request.budget.seat],
+                    "tokens_recovered": seat_tokens_before[request.budget.seat]
+                    - request.tokens,
+                    "removed_block_tokens": request.removed_block_tokens,
                     "input_ceiling": request.budget.input_ceiling,
                     "trim_target": request.target,
                     "reserved_writer_output": request.reserved_output,

@@ -1260,6 +1260,13 @@ class LORERetrievalSettings(BaseModel):
         ge=1,
         description="Maximum MEMNON queries to execute during LORE deep-query pass",
     )
+    deep_query_k: int = Field(
+        default=15,
+        ge=1,
+        description=(
+            "Results MEMNON returns for each LORE deep query before deduplication"
+        ),
+    )
 
 
 class PresenceAuditSettings(BaseModel):
@@ -1338,6 +1345,8 @@ class OrreryCompositionSettings(BaseModel):
     hostile_source_enabled: bool = False
     roster_source_enabled: bool = False
     acquaintance_source_enabled: bool = False
+    # Same-place introductions one character may join per tick.
+    acquaintance_introductions_per_entity_per_tick: int = Field(default=1, ge=1)
     roster_reach: int = Field(default=2, ge=1, le=4)
 
 
@@ -4191,6 +4200,22 @@ class UIRecapSettings(BaseModel):
     )
 
 
+class UIReaderSettings(BaseModel):
+    """Required chunk-count bounds for the playable reader feed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_page_size: int = Field(..., strict=True, ge=1)
+    max_page_size: int = Field(..., strict=True, ge=1)
+
+    @model_validator(mode="after")
+    def validate_page_bounds(self) -> "UIReaderSettings":
+        """Require the default page to fit inside the maximum."""
+        if self.default_page_size > self.max_page_size:
+            raise ValueError("default_page_size must be <= max_page_size")
+        return self
+
+
 class UISettings(BaseModel):
     """Settings consumed by the React client.
 
@@ -4219,6 +4244,9 @@ class UISettings(BaseModel):
     recap: UIRecapSettings = Field(
         ...,
         description="Hiatus and roster bounds for the reader's return recap",
+    )
+    reader: UIReaderSettings = Field(
+        ..., description="Chunk-count bounds for the playable reader feed"
     )
 
 
@@ -4607,6 +4635,26 @@ def _validate_model_id(
             "Select an explicit model ID from the registry."
         )
     return value
+
+
+class BoundaryCatchupSettings(BaseModel):
+    """Read-only boundary catch-up QA windows, loaded from qa_shift.toml."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skip_minutes: List[int] = Field(min_length=1)
+
+    @field_validator("skip_minutes")
+    @classmethod
+    def validate_skip_minutes(cls, value: List[int]) -> List[int]:
+        """Reject negative, duplicate, or unsorted skip lengths."""
+        if any(minutes < 0 for minutes in value):
+            raise ValueError(f"skip_minutes must not be negative: {value}")
+        if len(set(value)) != len(value):
+            raise ValueError(f"skip_minutes must not repeat a value: {value}")
+        if value != sorted(value):
+            raise ValueError(f"skip_minutes must be sorted ascending: {value}")
+        return value
 
 
 class ProseMetricsSettings(BaseModel):

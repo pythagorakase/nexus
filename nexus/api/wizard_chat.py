@@ -732,90 +732,81 @@ async def new_story_chat_endpoint(request: ChatRequest):
                             "TEST mode: Using mock location data for slot %s",
                             request.slot,
                         )
-                        try:
-                            from nexus.api.mock_openai import query_wizard_cache
+                        from nexus.api.mock_openai import query_wizard_cache
 
-                            mock_cache = query_wizard_cache()
-                            layer_data = {
-                                "name": mock_cache.get("layer_name"),
-                                "type": mock_cache.get("layer_type"),
-                                "description": mock_cache.get("layer_description"),
-                            }
-                            zone_data = {
-                                "name": mock_cache.get("zone_name"),
-                                "summary": mock_cache.get("zone_summary"),
-                            }
-                            location_data = mock_cache.get("initial_location") or {}
+                        mock_cache = query_wizard_cache()
+                        layer_data = {
+                            "name": mock_cache.get("layer_name"),
+                            "type": mock_cache.get("layer_type"),
+                            "description": mock_cache.get("layer_description"),
+                        }
+                        zone_data = {
+                            "name": mock_cache.get("zone_name"),
+                            "summary": mock_cache.get("zone_summary"),
+                        }
+                        location_data = mock_cache.get("initial_location") or {}
 
-                            persisted_design = _record_set_design(
-                                request.slot,
-                                cache,
-                                layer=layer_data,
-                                zone=zone_data,
-                                location=location_data,
-                            )
-                            context.last_tool_result.update(
-                                persisted_design.confirmation_metadata()
-                            )
-                            context.last_tool_result["phase_complete"] = True
-                            context.last_tool_result["set_design"] = {
-                                "layer": layer_data,
-                                "zone": zone_data,
-                                "location": location_data,
-                            }
-                            logger.info(
-                                "TEST mode set design complete: %s -> %s -> %s",
-                                layer_data.get("name"),
-                                zone_data.get("name"),
-                                location_data.get("name"),
-                            )
-                        except Exception as e:
-                            logger.error("TEST mode set design failed: %s", e)
-                            context.last_tool_result["set_design_error"] = str(e)
+                        persisted_design = _record_set_design(
+                            request.slot,
+                            cache,
+                            layer=layer_data,
+                            zone=zone_data,
+                            location=location_data,
+                        )
+                        context.last_tool_result.update(
+                            persisted_design.confirmation_metadata()
+                        )
+                        context.last_tool_result["phase_complete"] = True
+                        context.last_tool_result["set_design"] = {
+                            "layer": layer_data,
+                            "zone": zone_data,
+                            "location": location_data,
+                        }
+                        logger.info(
+                            "TEST mode set design complete: %s -> %s -> %s",
+                            layer_data.get("name"),
+                            zone_data.get("name"),
+                            location_data.get("name"),
+                        )
                     else:
                         # Production: Call set designer to generate location data
                         logger.info("Running set designer for slot %s", request.slot)
-                        try:
-                            # selected_model, not request.model: the request
-                            # may omit the model (it is persisted on the slot),
-                            # and the effective model is locked after the first
-                            # user message regardless of provider.
-                            layer, zone, place = await generate_set_design(
-                                location_sketch=location_sketch,
-                                setting=setting,
-                                seed=seed,
-                                model=selected_model,
-                            )
+                        # selected_model, not request.model: the request
+                        # may omit the model (it is persisted on the slot),
+                        # and the effective model is locked after the first
+                        # user message regardless of provider.
+                        layer, zone, place = await generate_set_design(
+                            location_sketch=location_sketch,
+                            setting=setting,
+                            seed=seed,
+                            model=selected_model,
+                        )
 
-                            # Record the generated location data
-                            persisted_design = _record_set_design(
-                                request.slot,
-                                cache,
-                                layer=layer.model_dump(),
-                                zone=zone.model_dump(),
-                                location=place.model_dump(),
-                            )
-                            context.last_tool_result.update(
-                                persisted_design.confirmation_metadata()
-                            )
+                        # Record the generated location data
+                        persisted_design = _record_set_design(
+                            request.slot,
+                            cache,
+                            layer=layer.model_dump(),
+                            zone=zone.model_dump(),
+                            location=place.model_dump(),
+                        )
+                        context.last_tool_result.update(
+                            persisted_design.confirmation_metadata()
+                        )
 
-                            # Update the result to indicate full completion
-                            context.last_tool_result["phase_complete"] = True
-                            context.last_tool_result["set_design"] = {
-                                "layer": layer.model_dump(),
-                                "zone": zone.model_dump(),
-                                "location": place.model_dump(),
-                            }
-                            logger.info(
-                                "Set designer complete: %s -> %s -> %s",
-                                layer.name,
-                                zone.name,
-                                place.name,
-                            )
-                        except Exception as e:
-                            logger.error("Set designer failed: %s", e)
-                            context.last_tool_result["set_design_error"] = str(e)
-                            # Still return partial result so user can see the seed
+                        # Update the result to indicate full completion
+                        context.last_tool_result["phase_complete"] = True
+                        context.last_tool_result["set_design"] = {
+                            "layer": layer.model_dump(),
+                            "zone": zone.model_dump(),
+                            "location": place.model_dump(),
+                        }
+                        logger.info(
+                            "Set designer complete: %s -> %s -> %s",
+                            layer.name,
+                            zone.name,
+                            place.name,
+                        )
 
             return _artifact_response(
                 context.last_tool_result, request.slot, request.thread_id
@@ -1127,89 +1118,81 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                         # mock database
                         if load_settings().is_test_model(selected_model):
                             logger.info(
-                                "TEST mode (stream): Using mock location data for slot %s",
+                                "TEST mode (stream): Using mock location data "
+                                "for slot %s",
                                 request.slot,
                             )
-                            try:
-                                from nexus.api.mock_openai import query_wizard_cache
+                            from nexus.api.mock_openai import query_wizard_cache
 
-                                mock_cache = query_wizard_cache()
-                                layer_data = {
-                                    "name": mock_cache.get("layer_name"),
-                                    "type": mock_cache.get("layer_type"),
-                                    "description": mock_cache.get("layer_description"),
-                                }
-                                zone_data = {
-                                    "name": mock_cache.get("zone_name"),
-                                    "summary": mock_cache.get("zone_summary"),
-                                }
-                                location_data = mock_cache.get("initial_location") or {}
+                            mock_cache = query_wizard_cache()
+                            layer_data = {
+                                "name": mock_cache.get("layer_name"),
+                                "type": mock_cache.get("layer_type"),
+                                "description": mock_cache.get("layer_description"),
+                            }
+                            zone_data = {
+                                "name": mock_cache.get("zone_name"),
+                                "summary": mock_cache.get("zone_summary"),
+                            }
+                            location_data = mock_cache.get("initial_location") or {}
 
-                                persisted_design = _record_set_design(
-                                    request.slot,
-                                    cache,
-                                    layer=layer_data,
-                                    zone=zone_data,
-                                    location=location_data,
-                                )
-                                payload.update(persisted_design.confirmation_metadata())
-                                payload["phase_complete"] = True
-                                payload["set_design"] = {
-                                    "layer": layer_data,
-                                    "zone": zone_data,
-                                    "location": location_data,
-                                }
-                                logger.info(
-                                    "TEST mode (stream) set design complete: %s -> %s -> %s",
-                                    layer_data.get("name"),
-                                    zone_data.get("name"),
-                                    location_data.get("name"),
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    "TEST mode (stream) set design failed: %s", e
-                                )
-                                payload["set_design_error"] = str(e)
+                            persisted_design = _record_set_design(
+                                request.slot,
+                                cache,
+                                layer=layer_data,
+                                zone=zone_data,
+                                location=location_data,
+                            )
+                            payload.update(persisted_design.confirmation_metadata())
+                            payload["phase_complete"] = True
+                            payload["set_design"] = {
+                                "layer": layer_data,
+                                "zone": zone_data,
+                                "location": location_data,
+                            }
+                            logger.info(
+                                "TEST mode (stream) set design complete: "
+                                "%s -> %s -> %s",
+                                layer_data.get("name"),
+                                zone_data.get("name"),
+                                location_data.get("name"),
+                            )
                         else:
                             # Production: Call set designer
                             logger.info(
                                 "Running set designer (stream) for slot %s",
                                 request.slot,
                             )
-                            try:
-                                # selected_model, not request.model (see the
-                                # non-streaming endpoint for rationale).
-                                layer, zone, place = await generate_set_design(
-                                    location_sketch=location_sketch,
-                                    setting=setting,
-                                    seed=seed,
-                                    model=selected_model,
-                                )
+                            # selected_model, not request.model (see the
+                            # non-streaming endpoint for rationale).
+                            layer, zone, place = await generate_set_design(
+                                location_sketch=location_sketch,
+                                setting=setting,
+                                seed=seed,
+                                model=selected_model,
+                            )
 
-                                persisted_design = _record_set_design(
-                                    request.slot,
-                                    cache,
-                                    layer=layer.model_dump(),
-                                    zone=zone.model_dump(),
-                                    location=place.model_dump(),
-                                )
-                                payload.update(persisted_design.confirmation_metadata())
+                            persisted_design = _record_set_design(
+                                request.slot,
+                                cache,
+                                layer=layer.model_dump(),
+                                zone=zone.model_dump(),
+                                location=place.model_dump(),
+                            )
+                            payload.update(persisted_design.confirmation_metadata())
 
-                                payload["phase_complete"] = True
-                                payload["set_design"] = {
-                                    "layer": layer.model_dump(),
-                                    "zone": zone.model_dump(),
-                                    "location": place.model_dump(),
-                                }
-                                logger.info(
-                                    "Set designer (stream) complete: %s -> %s -> %s",
-                                    layer.name,
-                                    zone.name,
-                                    place.name,
-                                )
-                            except Exception as e:
-                                logger.error("Set designer (stream) failed: %s", e)
-                                payload["set_design_error"] = str(e)
+                            payload["phase_complete"] = True
+                            payload["set_design"] = {
+                                "layer": layer.model_dump(),
+                                "zone": zone.model_dump(),
+                                "location": place.model_dump(),
+                            }
+                            logger.info(
+                                "Set designer (stream) complete: %s -> %s -> %s",
+                                layer.name,
+                                zone.name,
+                                place.name,
+                            )
 
                 yield json.dumps(
                     {
@@ -1259,6 +1242,17 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             yield json.dumps(
                 {"type": "error", "status_code": 409, "detail": str(e)}
             ) + "\n"
+        except (
+            Exception
+        ) as e:  # nexus-exception-disposition: fail; reason=headers out; safety=500 row
+            logger.exception("Error in streaming chat endpoint: %s", e)
+            detail = (
+                f"{e} (cause: {e.__cause__})" if e.__cause__ is not None else str(e)
+            )
+            yield json.dumps(
+                {"type": "error", "status_code": 500, "detail": detail}
+            ) + "\n"
+            return
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
@@ -1431,14 +1425,21 @@ async def retrograde_status_endpoint(slot: int) -> Dict[str, Any]:
     Stages: packet -> seed_candidates -> expansion -> persistence ->
     embedding -> done (or failed). ``run`` identifies the transition run that
     owns the record; it is null, with stage "idle", when no run has started
-    for the slot in this server process. Every answer also carries the
-    configured ``status_poll_interval_seconds``, so a player-plane waiter
-    paces its reads without the operator settings route.
+    for the slot. The record lives in genesis_runs and genesis_run_stages.
+    Every answer also carries the configured ``status_poll_interval_seconds``,
+    so a player-plane waiter paces its reads without the operator settings route.
     """
     from nexus.agents.orrery.retrograde_orchestrator import get_retrograde_progress
 
     poll_interval = get_retrograde_status_poll_interval_seconds()
-    progress = get_retrograde_progress(slot)
+    progress = await asyncio.to_thread(get_retrograde_progress, slot)
     if progress is None:
-        progress = {"slot": slot, "run": None, "stage": "idle", "stages": []}
+        progress = {
+            "slot": slot,
+            "run": None,
+            "run_status": None,
+            "error": None,
+            "stage": "idle",
+            "stages": [],
+        }
     return {**progress, "status_poll_interval_seconds": poll_interval}

@@ -110,6 +110,29 @@ def main() -> None:
         evidence["clone_frontier"] = read_rows(dbname, frontier_sql)
         assert evidence["clone_frontier"] == evidence["source_before"] == [(46, 49)]
         payload = json.loads(SOURCE.read_text())["payload"]
+        names = dict(read_rows(dbname, "SELECT id, name FROM characters"))
+        hydrated = 0
+        for relationship in payload["entity_data"]["relationships"]:
+            missing = [
+                side
+                for side in ("character1", "character2")
+                if f"{side}_name" not in relationship
+            ]
+            if missing:
+                pair = (relationship["character1_id"], relationship["character2_id"])
+                for side in missing:
+                    character_id = relationship[f"{side}_id"]
+                    if character_id not in names:
+                        raise RuntimeError(
+                            f"Missing character id {character_id} "
+                            f"for relationship {pair}"
+                        )
+                    relationship[f"{side}_name"] = names[character_id]
+                hydrated += 1
+        evidence["archive_relationships_hydrated"] = hydrated
+        evidence["archive_relationships_hydration_reason"] = (
+            "The archive predates the renderer's relationship-name requirement."
+        )
         # Prompt capture serializes PostgreSQL Decimal values as JSON strings.
         for relationship in payload["entity_data"]["relationships"]:
             relationship["valence_current"] = Decimal(relationship["valence_current"])
@@ -185,9 +208,20 @@ def main() -> None:
                     if kind == "historical context" and i not in request.removed
                 )
 
+            trimming = context.context_payload["window_trimming"]
+            assert (
+                sum(trimming["removed_block_tokens"].values())
+                == trimming["tokens_recovered"]
+            )
+            for seat in trimming["seats"].values():
+                assert (
+                    sum(seat["removed_block_tokens"].values())
+                    == seat["tokens_recovered"]
+                )
             evidence["runs"].append(
                 {
                     "cap": cap,
+                    "removed_block_tokens": trimming["removed_block_tokens"],
                     "provider_model": utility.provider.model,
                     "printed_ids": printed,
                     "historical_tokens_before_trim": historical_tokens(before[0]),

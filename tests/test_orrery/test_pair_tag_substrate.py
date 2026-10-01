@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Generator, Iterator
 from contextlib import closing
+from datetime import datetime, timezone
 
 import psycopg2
 import pytest
@@ -27,12 +28,19 @@ from nexus.agents.orrery.tag_writer import (
     apply_pair_tag_bestowal,
     clear_pair_tag,
 )
-from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_story_clock,
+    sqlalchemy_url,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
 
 # Pair-tag names the suite bestows; migration 042 seeds them in the template.
+STORY_WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
+
 REQUIRED_TAGS = ("mentors", "protects")
 
 
@@ -47,9 +55,10 @@ class _TestEntities:
 
 @pytest.fixture(scope="module")
 def pair_tag_slot() -> Iterator[str]:
-    """Own one template clone for the module; it is dropped afterward."""
+    """Own a clocked clone; anchorless hydration supplies that clock explicitly."""
 
     with disposable_slot_database("qa640_pair_tag_substrate") as dbname:
+        seed_story_clock(dbname, world_time=STORY_WORLD_TIME)
         yield dbname
 
 
@@ -147,6 +156,7 @@ def test_hydrate_world_state_loads_active_pair_tags(
     state = hydrate_world_state(
         sqlalchemy_session,
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=1,
     )
 
@@ -174,6 +184,7 @@ def test_pair_tag_conditions_are_direction_and_tag_sensitive(
     state = hydrate_world_state(
         sqlalchemy_session,
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=1,
     )
 
@@ -216,6 +227,7 @@ def test_cleared_pair_tags_do_not_hydrate(
     state = hydrate_world_state(
         sqlalchemy_session,
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=1,
     )
 
@@ -288,6 +300,7 @@ def test_deprecated_pair_tags_do_not_hydrate(
         state = hydrate_world_state(
             sqlalchemy_session,
             anchor_chunk_id=None,
+            world_time_override=STORY_WORLD_TIME,
             window_chunks=1,
         )
 

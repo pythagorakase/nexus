@@ -256,6 +256,44 @@ clock disagreement; after migration 118 the expected count is zero. A missing
 seed is reported as JSON null. Database and formatting errors surface loudly.
 This family never migrates or repairs a slot.
 
+## Boundary Catch-Up
+
+The read-only `boundary_catchup` family (issue 780) lists every scheduled
+world-clock boundary that a child turn would cross after a primary-layer
+parent chunk. It measures one window `(previous, target]` per configured skip
+(`[boundary_catchup] skip_minutes` in `qa_shift.toml`: a zero-time turn, a
+one-hour skip, a three-day skip) and one more for an explicit target:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/boundary_catchup.py --dbname ref_codex_bakeoff_2026_07
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/boundary_catchup.py --slot 4
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/boundary_catchup.py --slot 3 \
+    --parent-chunk 100 --target-world-time 2189-10-27T18:07:00-04:00
+```
+
+`--dbname` accepts `save_NN`, `ref_*`, and `qa640_*`. Without
+`--parent-chunk`, the newest primary-layer chunk with a world clock anchors
+the windows. `--target-world-time` needs an ISO 8601 offset; a naive time
+raises. The session's transactions are read-only and repeatable read, and the
+family refuses a writable transaction before it reads. It prints one JSON
+document: per window, the counts per producer, the subjects already pending
+at or before the previous clock, the total, and every crossing in order of
+instant, then precedence.
+
+| Producer | Class | Precedence | Owner | Subject | Instant |
+|---|---|---|---|---|---|
+| `tag_expiry` | deterministic | 10 | | `entity_tag` | `expires_at_world_time` of an uncleared tag |
+| `claim_propagation` | deterministic | 20 | | `claim_hop` | each planned hop's `acquired_at_world_time` |
+| `travel_eta` | adjudicable | 30 | #785 | `travel` | `eta_world_time` of an `in_transit` row |
+| `project_due` | adjudicable | 40 | | `project` | `next_eligible_at_world_time` |
+| `project_neglected` | adjudicable | 41 | | `project` | due time plus `advance_interval_hours` |
+| `project_abandon` | adjudicable | 42 | | `project` | due time at the stall threshold, else plus `abandon_after_stalled_world_hours` |
+
+The family materializes nothing, simulates no rescheduling or rearm (a
+project's later crossings assume nobody touches it), and coalesces nothing.
+Travel crossings are reported as #785's: today's arrival package is gated on
+progress, not on the ETA.
+
 ## Travel Reachability
 
 The read-only travel reachability probe (issue 785) reports, for every active
@@ -302,6 +340,40 @@ PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname s
 PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49 --markdown
 ```
 
+## Clock Contract
+
+Run the independent primary-clock audit in an enforced read-only,
+repeatable-read transaction:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/clock_contract.py --slot 4
+```
+
+Repeat `--slot` to select several slots; a fleet run defaults to all five.
+Slot 2's time data is contaminated evidence, never calibration evidence.
+An empty slot's zero counters prove only empty-state behavior.
+
+The `clock_contract` JSON family reports six integer fields per slot:
+
+- `chunks`: number of metadata rows checked.
+- `disagreements`: stored clocks distinct from base plus inclusive primary deltas,
+  including NULL differences.
+- `primary_regressions`: non-NULL primary clocks earlier than the preceding
+  non-NULL primary clock (or the base for the first primary row).
+- `missing_base`: one when metadata exists and the singleton base is NULL.
+- `nonprimary_contributions`: non-primary clocks (including NULL layers) distinct
+  from the immediately preceding metadata clock (or base for the first row).
+- `bootstrap_nonzero`: one when the lowest metadata row's delta is nonzero;
+  NULL counts as zero.
+
+Exit 1 means at least one of the five violation counters is nonzero; otherwise
+exit 0. Missing schema, missing singleton, and database errors raise loudly.
+After transaction setup every statement is SELECT-only; the family asserts
+`transaction_read_only=on` and never repairs data, migrates, configures a pool,
+starts a gateway, or calls a provider. The existing `world_clock` family and
+its JSON and exit contract remain separate.
+
+
 ## Cooldown Calibration
 
 The [classification and calibration document](../../docs/orrery_cooldown_classification.md)
@@ -334,3 +406,28 @@ with disposable_slot_database("qa640_778s4a_evidence", source_db="save_04", incl
     main()
 PY
 ```
+
+## Existing-Ledger Envelope Measurement
+
+Run the read-only #759 measurement with explicit inputs (inclusive UTC days):
+
+```bash
+PYTHONPATH=$PWD python scripts/qa_shift/envelope_measure.py \
+  --usage-dir /path/to/usage --from-day 2026-07-30 --through-day 2026-10-01 \
+  --slot-db 4=save_04
+```
+
+Repeat `--slot-db N=dbname` to inspect additional slots; omit it for ledger-only
+coverage. No implicit database is opened. The script prints one JSON document
+and writes no files. It validates captured byte prefixes, folds window revisions,
+and measures only attempts represented in those selected prefixes. Database-only
+attempts remain separate inventory. Enumeration and each inspection use separate
+read-only, repeatable-read transactions, so intervening changes are possible.
+
+`estimate_vs_reported` consumes the production observation's projected manifest
+counts. `rendered_window_vs_reported` separately compares rendered inputs with
+one matching nonaggregate response (including Anthropic cache reads and writes).
+Both expose separate signed/absolute and relative populations and exclusions.
+No dispatch times exist in these ledgers: concurrent demand remains unknown.
+See [the measured evidence](../../docs/qa/759-envelope/measurement.md) for input
+digests, coverage, limitations and proof.

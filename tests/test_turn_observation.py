@@ -25,6 +25,8 @@ from nexus.telemetry.attempt_manifest import (
 )
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.turn_observation import (
+    BACKGROUND_SEAT_QUEUES,
+    LEGACY_SESSION_KEYED_CUTOFF,
     SCHEMA_VERSION,
     UNKNOWN,
     derive_turn_observation,
@@ -594,6 +596,8 @@ def test_observation_joins_each_attempt_with_its_provider_usage(
     assert (writer["outcome"], writer["provider_outcome"]) == ("accepted", "accepted")
     assert writer["window"] == {
         "provenance": "attempt_manifest",
+        "removed_block_tokens": UNKNOWN,
+        "removed_tokens_total": UNKNOWN,
         "input_tokens": 20777,
         "estimated_input_tokens": 20412,
         "reported_input_tokens": 20777,
@@ -1322,6 +1326,7 @@ def test_session_keyed_background_usage_joins_as_legacy(
     ledger_clock: _LedgerClock,
 ) -> None:
     """Summary spend recorded under the session before #802 stays visible."""
+    ledger_clock.now = LEGACY_SESSION_KEYED_CUTOFF - timedelta(hours=12)
     session = str(uuid4())
     writer = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
     record_prompt_window(writer)
@@ -1444,10 +1449,80 @@ def test_session_keyed_background_usage_joins_as_legacy(
     )
 
 
+@pytest.mark.parametrize("seat", sorted(BACKGROUND_SEAT_QUEUES))
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "2026-09-26T23:41:17Z",
+        "2026-09-26T23:41:17.000001Z",
+        "2026-09-26T19:41:17-04:00",
+    ],
+)
+def test_session_keyed_background_usage_at_or_after_cutoff_raises(
+    ledger_clock: _LedgerClock, seat: str, timestamp: str
+) -> None:
+    """Every background seat respects the exact, offset-aware convention boundary."""
+    ledger_clock.now = LEGACY_SESSION_KEYED_CUTOFF
+    session = str(uuid4())
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [
+            {"phase": "writer", "recorded_at": "2026-09-26 23:39:17+00"},
+            {"phase": "complete", "recorded_at": "2026-09-26 23:40:17+00"},
+        ],
+        "manifests": [],
+        "jobs": [],
+    }
+    record_usage_event(
+        _event(
+            session,
+            "2026-09-26T23:41:16.999999Z",
+            seat,
+            1,
+            "background-model",
+            outcome="accepted",
+            input_tokens=100,
+            output_tokens=10,
+            total_tokens=110,
+        )
+    )
+    read_at = LEGACY_SESSION_KEYED_CUTOFF + timedelta(minutes=1)
+    observation = observe_turn(inspection, slot=4, read_at=read_at)
+    assert observation["attempts"] == []
+    legacy = observation["usage_totals"]["background"]["legacy_session_keyed"]
+    assert legacy["events"] == 1
+    assert legacy["seats"] == [seat]
+    assert legacy["input_tokens"] == 100
+    assert legacy["output_tokens"] == 10
+    assert observation["jobs"]["entries"] == []
+
+    record_usage_event(
+        _event(
+            session,
+            timestamp,
+            seat,
+            1,
+            "background-model",
+            outcome="accepted",
+            input_tokens=100,
+            output_tokens=10,
+            total_tokens=110,
+        )
+    )
+    with pytest.raises(ValueError) as error:
+        observe_turn(inspection, slot=4, read_at=read_at)
+    assert str(error.value) == (
+        f"Background seat {seat} recorded usage under session run {session} at "
+        f"{timestamp}, on or after 2026-09-26T23:41:17Z, when background workers "
+        "began recording under their job id (#802)"
+    )
+
+
 def test_join_refuses_rows_it_cannot_attribute(ledger_clock: _LedgerClock) -> None:
     """Foreign runs, unread days, naive clocks, drift and stray seats raise."""
     from nexus.telemetry.turn_observation import job_ledger_days, read_job_ledgers
 
+    ledger_clock.now = LEGACY_SESSION_KEYED_CUTOFF + timedelta(days=1)
     inspection, session, other = _two_pass_turn(ledger_clock)
     days = ledger_days(inspection)
     events, windows = read_turn_ledgers(session, days)
@@ -1490,9 +1565,10 @@ def test_join_refuses_rows_it_cannot_attribute(ledger_clock: _LedgerClock) -> No
     rerouted = [*events, accepted.model_copy(update={"provider": "other-provider"})]
     with pytest.raises(ValueError, match="conflicting provider values"):
         derive(rerouted, job_events)
-    # Background work under the session's run id joins as legacy, unguessed.
+    # Post-cutoff background work under the session's run id is a worker defect.
     legacy = accepted.model_copy(update={"seat": "summaries", "attempt": 1})
-    derive([*events, legacy], job_events)
+    with pytest.raises(ValueError, match="recorded usage under session run"):
+        derive([*events, legacy], job_events)
     # A call under a listed job's id and slot must name a seat of some queue.
     stray = job_events[0].model_copy(update={"seat": "skald_writer"})
     with pytest.raises(ValueError, match="seat skald_writer under job run"):
@@ -1541,7 +1617,8 @@ def test_summary_renders_one_concise_read_of_the_turn(
         "  roles voice_source 18,611 · player_language 26 · "
         "canonical_evidence 2,194 · authorial_plan -54"
     )
-    assert lines[writer + 3] == (
+    assert lines[writer + 3] == "  removed unknown"
+    assert lines[writer + 4] == (
         "  usage in 20,777 · cached 12,288 · cache write unknown · out 2,100 · "
         "reasoning 800 · effort high · max out 8,000 · completed "
         f"{ledger_clock.yesterday}T23:59:59.500000Z [provider_usage_ledger ×1]"
@@ -1555,8 +1632,8 @@ def test_summary_renders_one_concise_read_of_the_turn(
         "(active-extend-expiry, scene-reset-crossings) [attempt_manifest]"
     ) in lines
     timed_out = lines.index("gaia #1 gaia-model · outcome accepted · provider error")
-    assert lines[timed_out + 2] == "  usage unknown"
-    assert lines[writer + 5 :] == [
+    assert lines[timed_out + 3] == "  usage unknown"
+    assert lines[writer + 6 :] == [
         "Critical path in 26,877 · cached 38,288 · cache write unknown · out "
         "3,950 · reasoning unknown · events 3 · attempts without usage 1",
         "correspondence_compaction #2 compaction-model · succeeded",
@@ -1669,3 +1746,63 @@ def test_inspect_turn_accepts_the_summary_flag() -> None:
 
     assert parser.parse_args(base).summary is False
     assert parser.parse_args([*base, "--summary"]).summary is True
+
+
+@pytest.mark.parametrize(
+    "source", ["manifest", "ledger", "conflicting", "legacy", "zero", "none"]
+)
+def test_removed_tokens_follow_manifest_precedence_and_preserve_unknown(
+    ledger_clock: _LedgerClock,
+    source: str,
+) -> None:
+    """The authoritative window distinguishes missing accounting from recorded zero."""
+    from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
+
+    session = str(uuid4())
+    record = _window(session, "skald_writer", 1, "TEST", WRITER_BLOCKS)
+    removed: dict[str, int] = dict(zip(TRIMMABLE_BLOCKS, (7, 11, 13)))
+    if source == "zero":
+        removed = {str(kind): 0 for kind in TRIMMABLE_BLOCKS}
+    record.removed_block_tokens = removed if source != "legacy" else {}
+    if source != "none":
+        record_prompt_window(record)
+    manifests = []
+    if source in {"manifest", "conflicting", "legacy", "zero"}:
+        manifest = _manifest(record, provider_outcome="accepted")
+        if source in {"manifest", "zero"}:
+            manifest["window_record"]["removed_block_tokens"] = removed
+        manifests.append(manifest)
+    if source == "none":
+        record_usage_event(
+            _event(
+                session,
+                ledger_clock.now.isoformat(),
+                "skald_writer",
+                1,
+                "TEST",
+                input_tokens=100,
+                outcome="accepted",
+            )
+        )
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [{"phase": "complete", "recorded_at": ledger_clock.now.isoformat()}],
+        "manifests": manifests,
+        "jobs": [],
+    }
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
+    window = observation["attempts"][0]["window"]
+    known = source in {"manifest", "ledger", "zero"}
+    assert window["removed_block_tokens"] == (removed if known else UNKNOWN)
+    assert window["removed_tokens_total"] == (
+        sum(removed.values()) if known else UNKNOWN
+    )
+    if source != "none":
+        assert window["block_tokens_total"] == window["input_tokens"]
+    assert json.loads(json.dumps(observation))["attempts"][0]["window"] == window
+    summary = format_turn_summary(observation)
+    assert (
+        f"removed {sum(removed.values())}" if known else "removed unknown"
+    ) in summary
+    if known:
+        assert all(f"{kind} {tokens}" in summary for kind, tokens in removed.items())

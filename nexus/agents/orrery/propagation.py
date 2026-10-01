@@ -171,6 +171,52 @@ def drain_claim_propagation_sync(
     )
 
 
+def plan_due_propagations_sync(
+    cur: Any,
+    *,
+    horizon_world_time: datetime,
+    settings: Any,
+    distortion_settings: Any = None,
+) -> tuple[PlannedPropagation, ...]:
+    """Plan every not-yet-minted hop due at or before a world-clock horizon.
+
+    This runs the read steps of :func:`drain_claim_propagation_sync` (the
+    migration check, the candidate incidents, the communication graph, the
+    awareness frontier and the heap-ordered fixpoint) with the caller's
+    ``horizon_world_time`` in place of an accepted chunk's clock. It takes no
+    chunk, writes nothing, and returns ``()`` when contagion is disabled or no
+    incident qualifies. Each planned hop carries its exact
+    ``acquired_at_world_time``; hops already minted in ``claim_awareness`` are
+    part of the frontier and are never planned again.
+    """
+
+    if horizon_world_time.tzinfo is None:
+        raise ValueError(
+            "plan_due_propagations_sync needs a timezone-aware horizon_world_time"
+        )
+    config = _enabled_config(settings)
+    if config is None:
+        return ()
+    _require_migration_083_sync(cur)
+    incidents = _candidate_incidents_sync(cur, config)
+    if not incidents:
+        return ()
+    graph = assemble_communication_graph(
+        cur,
+        settings=config,
+        world_time=horizon_world_time,
+    )
+    frontier = _awareness_frontier_sync(cur, incidents)
+    return _plan_propagations(
+        incidents=incidents,
+        frontier=frontier,
+        graph=graph,
+        world_time=horizon_world_time,
+        settings=config,
+        distortion_enabled=_distortion_enabled(distortion_settings),
+    )
+
+
 async def drain_claim_propagation_async(
     conn: Any,
     *,

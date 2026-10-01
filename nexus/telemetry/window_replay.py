@@ -11,7 +11,7 @@ Decision 9 (#858).
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, NonNegativeInt
 
 from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
 from nexus.config.seat_window import resolve_seat_window
@@ -52,6 +52,8 @@ class ReplayRow(BaseModel):
     trimmable_tokens: int
     feasible: bool
     freed_tokens: int
+    removed_block_tokens: dict[str, NonNegativeInt] = Field(default_factory=dict)
+    removed_tokens_total: int | None = None
 
 
 def recorded_window(record: PromptWindowRecord) -> int:
@@ -139,6 +141,12 @@ def replay_record(
         trimmable_tokens=trimmable,
         feasible=overflow <= trimmable,
         freed_tokens=max(0, ceiling - record.input_tokens),
+        removed_block_tokens=dict(record.removed_block_tokens),
+        removed_tokens_total=(
+            sum(record.removed_block_tokens.values())
+            if record.removed_block_tokens
+            else None
+        ),
     )
 
 
