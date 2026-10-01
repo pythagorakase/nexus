@@ -304,6 +304,9 @@ PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname s
 
 ## Cooldown Calibration
 
+The [classification and calibration document](../../docs/orrery_cooldown_classification.md)
+records the complete gate inventory, measured reports, formulas, and limitations.
+
 The report adopts no policy: individual gate classifications are analytical
 proposals under the settled rule, “Refractories to hours, staggering stays on
 ticks.” It prints stored resolution counts and reference-cadence equivalents.
