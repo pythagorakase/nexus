@@ -1,7 +1,9 @@
 # 840-S2a Verification: Place-Coordinate Costs for 840-Q4
 
-Date: 2026-10-01 (America/Chicago). Branch `claude/840-coordinate-cost-measure`,
-base `origin/main` at `9ac0caf6`; measured with the script at `055f4079`.
+Date: 2026-10-01 (America/Chicago). Branch `claude/840-coordinate-cost-measure`.
+The script was first measured on base `9ac0caf6`, then the branch was rebased
+onto `origin/main` at `d05481d8`; every tail below and the report JSON are
+from runs after the rebase (the JSON is byte-identical to the pre-rebase run).
 Refs #840.
 
 This slice changes no product behavior. It measures two ways to meet the
@@ -158,7 +160,7 @@ dbname audit: 8 targets: postgres, qa640_840_cost_*, qa735_gis_stubs_* x5, qa885
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-147 passed in 15.81s
+147 passed in 12.28s
 ```
 
 ### Offline Suites
@@ -170,7 +172,7 @@ dbname audit: owner targets: none
 ```
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2678 passed, 444 skipped, 8 warnings in 389.69s (0:06:29)
+2719 passed, 449 skipped, 8 warnings in 440.40s (0:07:20)
 ```
 
 ```
@@ -180,7 +182,7 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 ```
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1829 passed, 746 skipped, 7 warnings in 37.09s
+1829 passed, 746 skipped, 7 warnings in 34.29s
 ```
 
 The first offline run failed `tests/test_reachability.py` (two tests) and
@@ -188,7 +190,7 @@ The first offline run failed `tests/test_reachability.py` (two tests) and
 because the new script was unclassified; the commit registers it as an
 operator in `config/reachability.toml` and reclassifies
 `scripts/entity_reference_parity.py` from test-only to operator (the new
-operator imports it). The tails above are the reruns after that change.
+operator imports it). The tails above are the reruns after that change and after the rebase.
 `tests/test_reachability.py` runs inside the first offline suite.
 
 ### Lint and Types
@@ -209,7 +211,7 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/measure_place_coo
 ```
 
 Exit status 0. Stderr carried only the five `Reading save_NN read-only` log
-lines. A second run produced identical JSON. Full stdout:
+lines. Runs before and after the rebase produced identical JSON. Full stdout:
 
 ```json
 {
