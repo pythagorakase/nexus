@@ -1,0 +1,724 @@
+[
+  {
+    "theme": "Veil",
+    "sizes": [
+      15,
+      15,
+      1,
+      15
+    ],
+    "total": 3375,
+    "feasible": 180,
+    "best": 15.618186802122327,
+    "bestWitness": [
+      [
+        15,
+        75,
+        60
+      ],
+      [
+        330.2439024390244,
+        60,
+        30
+      ],
+      "#b83d7a",
+      [
+        330.2439024390244,
+        60,
+        70
+      ]
+    ],
+    "bestWitnessRgb": [
+      [
+        0.9,
+        0.44999999999999996,
+        0.29999999999999993
+      ],
+      [
+        0.48,
+        0.12,
+        0.2985365853658537
+      ],
+      [
+        0.7215686274509804,
+        0.23921568627450981,
+        0.47843137254901963
+      ],
+      [
+        0.88,
+        0.5199999999999999,
+        0.6985365853658536
+      ]
+    ],
+    "bestWitnessPairs": [
+      {
+        "states": [
+          "rest",
+          "current"
+        ],
+        "delta": 40.238029984278675
+      },
+      {
+        "states": [
+          "rest",
+          "selected"
+        ],
+        "delta": 28.68503954807603
+      },
+      {
+        "states": [
+          "rest",
+          "hovered"
+        ],
+        "delta": 28.154921869576675
+      },
+      {
+        "states": [
+          "current",
+          "selected"
+        ],
+        "delta": 15.618186802122327
+      },
+      {
+        "states": [
+          "current",
+          "hovered"
+        ],
+        "delta": 37.60960617716947
+      },
+      {
+        "states": [
+          "selected",
+          "hovered"
+        ],
+        "delta": 17.854502924461286
+      }
+    ],
+    "maxima": [
+      {
+        "pair": [
+          "--bronze",
+          "--brass-bright"
+        ],
+        "states": [
+          "rest",
+          "current"
+        ],
+        "maximum": 46.9393789806122,
+        "count": 225,
+        "witness": [
+          [
+            15,
+            95,
+            70
+          ],
+          [
+            330.2439024390244,
+            60,
+            30
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--bronze",
+          "--brass"
+        ],
+        "states": [
+          "rest",
+          "selected"
+        ],
+        "maximum": 31.77890102995034,
+        "count": 15,
+        "witness": [
+          [
+            15,
+            95,
+            70
+          ],
+          "#b83d7a"
+        ]
+      },
+      {
+        "pair": [
+          "--bronze",
+          "--map-hovered"
+        ],
+        "states": [
+          "rest",
+          "hovered"
+        ],
+        "maximum": 46.9393789806122,
+        "count": 225,
+        "witness": [
+          [
+            15,
+            95,
+            70
+          ],
+          [
+            330.2439024390244,
+            60,
+            30
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--brass-bright",
+          "--brass"
+        ],
+        "states": [
+          "current",
+          "selected"
+        ],
+        "maximum": 17.854502924461286,
+        "count": 15,
+        "witness": [
+          [
+            330.2439024390244,
+            60,
+            70
+          ],
+          "#b83d7a"
+        ]
+      },
+      {
+        "pair": [
+          "--brass-bright",
+          "--map-hovered"
+        ],
+        "states": [
+          "current",
+          "hovered"
+        ],
+        "maximum": 37.60960617716947,
+        "count": 225,
+        "witness": [
+          [
+            330.2439024390244,
+            60,
+            30
+          ],
+          [
+            330.2439024390244,
+            60,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--brass",
+          "--map-hovered"
+        ],
+        "states": [
+          "selected",
+          "hovered"
+        ],
+        "maximum": 17.854502924461286,
+        "count": 15,
+        "witness": [
+          "#b83d7a",
+          [
+            330.2439024390244,
+            60,
+            70
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "theme": "Gilded",
+    "sizes": [
+      18,
+      15,
+      18,
+      15
+    ],
+    "total": 72900,
+    "feasible": 2,
+    "best": 15.734719451085242,
+    "bestWitness": [
+      [
+        30,
+        50,
+        70
+      ],
+      [
+        45,
+        55,
+        30
+      ],
+      [
+        43,
+        94,
+        50
+      ],
+      [
+        45,
+        65,
+        40
+      ]
+    ],
+    "bestWitnessRgb": [
+      [
+        0.85,
+        0.7,
+        0.5499999999999999
+      ],
+      [
+        0.46499999999999997,
+        0.3825,
+        0.13499999999999998
+      ],
+      [
+        0.97,
+        0.7036666666666668,
+        0.030000000000000027
+      ],
+      [
+        0.66,
+        0.53,
+        0.14
+      ]
+    ],
+    "bestWitnessPairs": [
+      {
+        "states": [
+          "rest",
+          "current"
+        ],
+        "delta": 29.753934163514682
+      },
+      {
+        "states": [
+          "rest",
+          "selected"
+        ],
+        "delta": 15.734719451085242
+      },
+      {
+        "states": [
+          "rest",
+          "hovered"
+        ],
+        "delta": 16.88905360207312
+      },
+      {
+        "states": [
+          "current",
+          "selected"
+        ],
+        "delta": 33.49411532720503
+      },
+      {
+        "states": [
+          "current",
+          "hovered"
+        ],
+        "delta": 16.827166444023003
+      },
+      {
+        "states": [
+          "selected",
+          "hovered"
+        ],
+        "delta": 17.132180574621383
+      }
+    ],
+    "maxima": [
+      {
+        "pair": [
+          "--bronze",
+          "--brass-bright"
+        ],
+        "states": [
+          "rest",
+          "current"
+        ],
+        "maximum": 41.679314201124186,
+        "count": 270,
+        "witness": [
+          [
+            30,
+            50,
+            30
+          ],
+          [
+            45,
+            75,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--bronze",
+          "--brass"
+        ],
+        "states": [
+          "rest",
+          "selected"
+        ],
+        "maximum": 43.366319139940046,
+        "count": 324,
+        "witness": [
+          [
+            30,
+            50,
+            30
+          ],
+          [
+            43,
+            94,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--bronze",
+          "--map-hovered"
+        ],
+        "states": [
+          "rest",
+          "hovered"
+        ],
+        "maximum": 41.679314201124186,
+        "count": 270,
+        "witness": [
+          [
+            30,
+            50,
+            30
+          ],
+          [
+            45,
+            75,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--brass-bright",
+          "--brass"
+        ],
+        "states": [
+          "current",
+          "selected"
+        ],
+        "maximum": 36.62488523858307,
+        "count": 270,
+        "witness": [
+          [
+            45,
+            55,
+            30
+          ],
+          [
+            43,
+            94,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--brass-bright",
+          "--map-hovered"
+        ],
+        "states": [
+          "current",
+          "hovered"
+        ],
+        "maximum": 35.0132015742976,
+        "count": 225,
+        "witness": [
+          [
+            45,
+            55,
+            30
+          ],
+          [
+            45,
+            75,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--brass",
+          "--map-hovered"
+        ],
+        "states": [
+          "selected",
+          "hovered"
+        ],
+        "maximum": 36.62488523858307,
+        "count": 270,
+        "witness": [
+          [
+            43,
+            94,
+            70
+          ],
+          [
+            45,
+            55,
+            30
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "theme": "Vector",
+    "sizes": [
+      12,
+      15,
+      5,
+      15
+    ],
+    "total": 13500,
+    "feasible": 0,
+    "best": 12.49178898372119,
+    "bestWitness": [
+      [
+        200,
+        100,
+        60
+      ],
+      [
+        190,
+        80,
+        30
+      ],
+      [
+        185,
+        100,
+        60
+      ],
+      [
+        190,
+        80,
+        40
+      ]
+    ],
+    "bestWitnessRgb": [
+      [
+        0.19999999999999996,
+        0.7333333333333328,
+        1
+      ],
+      [
+        0.06,
+        0.4600000000000003,
+        0.54
+      ],
+      [
+        0.19999999999999996,
+        0.9333333333333329,
+        1
+      ],
+      [
+        0.07999999999999996,
+        0.6133333333333337,
+        0.7200000000000001
+      ]
+    ],
+    "bestWitnessPairs": [
+      {
+        "states": [
+          "rest",
+          "current"
+        ],
+        "delta": 25.852305167006655
+      },
+      {
+        "states": [
+          "rest",
+          "selected"
+        ],
+        "delta": 13.097148319792739
+      },
+      {
+        "states": [
+          "rest",
+          "hovered"
+        ],
+        "delta": 12.49178898372119
+      },
+      {
+        "states": [
+          "current",
+          "selected"
+        ],
+        "delta": 33.758254191230165
+      },
+      {
+        "states": [
+          "current",
+          "hovered"
+        ],
+        "delta": 13.994396296541595
+      },
+      {
+        "states": [
+          "selected",
+          "hovered"
+        ],
+        "delta": 20.37619893837457
+      }
+    ],
+    "maxima": [
+      {
+        "pair": [
+          "--bronze",
+          "--brass-bright"
+        ],
+        "states": [
+          "rest",
+          "current"
+        ],
+        "maximum": 39.36886922076322,
+        "count": 180,
+        "witness": [
+          [
+            200,
+            90,
+            30
+          ],
+          [
+            190,
+            100,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--bronze",
+          "--brass"
+        ],
+        "states": [
+          "rest",
+          "selected"
+        ],
+        "maximum": 41.68905520762976,
+        "count": 60,
+        "witness": [
+          [
+            200,
+            90,
+            30
+          ],
+          [
+            185,
+            100,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--bronze",
+          "--map-hovered"
+        ],
+        "states": [
+          "rest",
+          "hovered"
+        ],
+        "maximum": 39.36886922076322,
+        "count": 180,
+        "witness": [
+          [
+            200,
+            90,
+            30
+          ],
+          [
+            190,
+            100,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--brass-bright",
+          "--brass"
+        ],
+        "states": [
+          "current",
+          "selected"
+        ],
+        "maximum": 35.28699590725341,
+        "count": 75,
+        "witness": [
+          [
+            190,
+            80,
+            30
+          ],
+          [
+            185,
+            100,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--brass-bright",
+          "--map-hovered"
+        ],
+        "states": [
+          "current",
+          "hovered"
+        ],
+        "maximum": 33.23977102083307,
+        "count": 225,
+        "witness": [
+          [
+            190,
+            80,
+            30
+          ],
+          [
+            190,
+            100,
+            70
+          ]
+        ]
+      },
+      {
+        "pair": [
+          "--brass",
+          "--map-hovered"
+        ],
+        "states": [
+          "selected",
+          "hovered"
+        ],
+        "maximum": 35.28699590725341,
+        "count": 75,
+        "witness": [
+          [
+            185,
+            100,
+            70
+          ],
+          [
+            190,
+            80,
+            30
+          ]
+        ]
+      }
+    ]
+  }
+]

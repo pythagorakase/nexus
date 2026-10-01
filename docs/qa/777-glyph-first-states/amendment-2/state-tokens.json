@@ -1,0 +1,188 @@
+{
+  "Veil": {
+    "--state-map-rest": {
+      "source": "--bronze",
+      "baseline": "hsl(15 75% 60%)",
+      "shipped": "hsl(15 75% 60%)"
+    },
+    "--state-map-current": {
+      "source": "--brass-bright",
+      "baseline": "hsl(320 60% 60%)",
+      "shipped": "hsl(330.2439024390244 70% 50%)"
+    },
+    "--state-map-selected": {
+      "source": "--brass",
+      "baseline": "#b83d7a",
+      "shipped": "hsl(330.2439024390244 50.20408163265306% 70%)"
+    },
+    "--state-map-hovered": {
+      "source": "--brass-bright",
+      "baseline": "hsl(320 60% 60%)",
+      "shipped": "hsl(330.2439024390244 60% 30%)"
+    },
+    "--state-key-absent": {
+      "source": "--fg-dim",
+      "baseline": "hsl(42 20% 50%)",
+      "shipped": "hsl(42 20% 50%)"
+    },
+    "--state-key-missing": {
+      "source": "--bronze",
+      "baseline": "hsl(15 75% 60%)",
+      "shipped": "hsl(15 75% 60%)"
+    },
+    "--state-key-present": {
+      "source": "--fg-muted",
+      "baseline": "hsl(42 30% 65%)",
+      "shipped": "hsl(42 50% 70%)"
+    },
+    "--state-key-verified": {
+      "source": "--brass",
+      "baseline": "#b83d7a",
+      "shipped": "hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)"
+    },
+    "--state-mem-normal": {
+      "source": "--brass",
+      "baseline": "#b83d7a",
+      "shipped": "hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)"
+    },
+    "--state-mem-over": {
+      "source": "--bronze",
+      "baseline": "hsl(15 75% 60%)",
+      "shipped": "hsl(15 75% 60%)"
+    },
+    "--state-delete-unarmed": {
+      "source": "--fg-muted",
+      "baseline": "hsl(42 30% 65%)",
+      "shipped": "hsl(42 30% 65%)"
+    },
+    "--state-delete-armed": {
+      "source": "--destructive",
+      "baseline": "hsl(0 65% 50%)",
+      "shipped": "hsl(0 80% 50%)"
+    }
+  },
+  "Gilded": {
+    "--state-map-rest": {
+      "source": "--bronze",
+      "baseline": "hsl(30 50% 45%)",
+      "shipped": "hsl(30 50% 70%)"
+    },
+    "--state-map-current": {
+      "source": "--brass-bright",
+      "baseline": "hsl(45 55% 60%)",
+      "shipped": "hsl(45 75% 40%)"
+    },
+    "--state-map-selected": {
+      "source": "--brass",
+      "baseline": "hsl(43 74% 47%)",
+      "shipped": "hsl(43 84% 60%)"
+    },
+    "--state-map-hovered": {
+      "source": "--brass-bright",
+      "baseline": "hsl(45 55% 60%)",
+      "shipped": "hsl(45 55% 30%)"
+    },
+    "--state-key-absent": {
+      "source": "--fg-dim",
+      "baseline": "hsl(43 30% 40%)",
+      "shipped": "hsl(43 30% 30%)"
+    },
+    "--state-key-missing": {
+      "source": "--bronze",
+      "baseline": "hsl(30 50% 45%)",
+      "shipped": "hsl(30 50% 45%)"
+    },
+    "--state-key-present": {
+      "source": "--fg-muted",
+      "baseline": "hsl(43 40% 52%)",
+      "shipped": "hsl(43 40% 70%)"
+    },
+    "--state-key-verified": {
+      "source": "--brass",
+      "baseline": "hsl(43 74% 47%)",
+      "shipped": "hsl(43 74% 47%)"
+    },
+    "--state-mem-normal": {
+      "source": "--brass",
+      "baseline": "hsl(43 74% 47%)",
+      "shipped": "hsl(43 74% 47%)"
+    },
+    "--state-mem-over": {
+      "source": "--bronze",
+      "baseline": "hsl(30 50% 45%)",
+      "shipped": "hsl(30 50% 45%)"
+    },
+    "--state-delete-unarmed": {
+      "source": "--fg-muted",
+      "baseline": "hsl(43 40% 52%)",
+      "shipped": "hsl(43 40% 70%)"
+    },
+    "--state-delete-armed": {
+      "source": "--destructive",
+      "baseline": "hsl(0 70% 45%)",
+      "shipped": "hsl(0 90% 50%)"
+    }
+  },
+  "Vector": {
+    "--state-map-rest": {
+      "source": "--bronze",
+      "baseline": "hsl(200 90% 55%)",
+      "shipped": "hsl(200 100% 40%)"
+    },
+    "--state-map-current": {
+      "source": "--brass-bright",
+      "baseline": "hsl(190 80% 60%)",
+      "shipped": "hsl(190 100% 40%)"
+    },
+    "--state-map-selected": {
+      "source": "--brass",
+      "baseline": "hsl(185 100% 50%)",
+      "shipped": "hsl(185 100% 50%)"
+    },
+    "--state-map-hovered": {
+      "source": "--brass-bright",
+      "baseline": "hsl(190 80% 60%)",
+      "shipped": "hsl(190 80% 30%)"
+    },
+    "--state-key-absent": {
+      "source": "--fg-dim",
+      "baseline": "hsl(185 30% 40%)",
+      "shipped": "hsl(185 30% 30%)"
+    },
+    "--state-key-missing": {
+      "source": "--bronze",
+      "baseline": "hsl(200 90% 55%)",
+      "shipped": "hsl(200 90% 55%)"
+    },
+    "--state-key-present": {
+      "source": "--fg-muted",
+      "baseline": "hsl(185 40% 55%)",
+      "shipped": "hsl(185 40% 55%)"
+    },
+    "--state-key-verified": {
+      "source": "--brass",
+      "baseline": "hsl(185 100% 50%)",
+      "shipped": "hsl(185 100% 70%)"
+    },
+    "--state-mem-normal": {
+      "source": "--brass",
+      "baseline": "hsl(185 100% 50%)",
+      "shipped": "hsl(185 100% 50%)"
+    },
+    "--state-mem-over": {
+      "source": "--bronze",
+      "baseline": "hsl(200 90% 55%)",
+      "shipped": "hsl(200 90% 55%)"
+    },
+    "--state-delete-unarmed": {
+      "source": "--fg-muted",
+      "baseline": "hsl(185 40% 55%)",
+      "shipped": "hsl(185 40% 55%)"
+    },
+    "--state-delete-armed": {
+      "source": "--destructive",
+      "baseline": "hsl(350 80% 55%)",
+      "shipped": "hsl(350 80% 55%)"
+    }
+  }
+}

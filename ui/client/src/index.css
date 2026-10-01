@@ -414,12 +414,12 @@ html {
   --sidebar-background: 220 40% 5%;
   --sidebar-foreground: 42 45% 77%;
   --sidebar-border: 270 30% 20%;
-  --sidebar-primary: 320 55% 48%;
+  --sidebar-primary: 330.2439024390244 50.20408163265306% 48.03921568627451%;
   /* #b83d7a magenta rose */
   --sidebar-primary-foreground: 42 45% 92%;
   --sidebar-accent: 15 75% 60%;
   --sidebar-accent-foreground: 220 40% 6%;
-  --sidebar-ring: 320 55% 48%;
+  --sidebar-ring: 330.2439024390244 50.20408163265306% 48.03921568627451%;
 
   /* Popover */
   --popover: 220 35% 8%;
@@ -427,7 +427,7 @@ html {
   --popover-border: 270 30% 32%;
 
   /* Primary - Magenta Rose #b83d7a */
-  --primary: 320 55% 48%;
+  --primary: 330.2439024390244 50.20408163265306% 48.03921568627451%;
   --primary-foreground: 42 45% 92%;
 
   /* Secondary - Copper */
@@ -448,10 +448,10 @@ html {
 
   /* Form elements */
   --input: 270 30% 18%;
-  --ring: 320 55% 48%;
+  --ring: 330.2439024390244 50.20408163265306% 48.03921568627451%;
 
   /* Charts - magenta leads */
-  --chart-1: 320 55% 48%;
+  --chart-1: 330.2439024390244 50.20408163265306% 48.03921568627451%;
   --chart-2: 15 75% 60%;
   --chart-3: 27 45% 46%;
   --chart-4: 270 40% 45%;
@@ -479,7 +479,7 @@ html {
   --fg: hsl(42 45% 77%);
   --fg-muted: hsl(42 30% 65%);
   --fg-dim: hsl(42 20% 50%);
-  --brass: hsl(320 55% 48%);
+  --brass: #b83d7a;
   /* magenta rose — PRIMARY (legacy name from the Gilded era) */
   --brass-bright: hsl(320 60% 60%);
   --brass-hot: hsl(15 80% 65%);
@@ -487,7 +487,7 @@ html {
   /* coral — ACCENT */
   --bronze-dark: hsl(27 45% 46%);
   /* copper — SECONDARY */
-  --magenta: hsl(320 55% 48%);
+  --magenta: #b83d7a;
   --magenta-light: hsl(320 60% 60%);
   --coral: hsl(15 75% 60%);
   --copper: hsl(27 45% 46%);
@@ -520,6 +520,20 @@ html {
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
+  --state-map-rest: hsl(15 75% 60%);
+  --state-map-current: hsl(330.2439024390244 70% 50%);
+  --state-map-selected: hsl(330.2439024390244 50.20408163265306% 70%);
+  --state-map-hovered: hsl(330.2439024390244 60% 30%);
+  --state-key-absent: hsl(42 20% 50%);
+  --state-key-missing: hsl(15 75% 60%);
+  --state-key-present: hsl(42 50% 70%);
+  --state-key-verified: hsl(330.2439024390244 50.20408163265306% 48.03921568627451%);
+  --state-mem-normal: hsl(330.2439024390244 50.20408163265306% 48.03921568627451%);
+  --state-mem-over: hsl(15 75% 60%);
+  --state-delete-unarmed: hsl(42 30% 65%);
+  --state-delete-armed: hsl(0 80% 50%);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -663,6 +677,22 @@ html {
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  /* Freeze the inherited Veil pigment at its starting value. */
+  --magenta: hsl(320 55% 48%);
+
+  /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
+  --state-map-rest: hsl(30 50% 70%);
+  --state-map-current: hsl(45 75% 40%);
+  --state-map-selected: hsl(43 84% 60%);
+  --state-map-hovered: hsl(45 55% 30%);
+  --state-key-absent: hsl(43 30% 30%);
+  --state-key-missing: hsl(30 50% 45%);
+  --state-key-present: hsl(43 40% 70%);
+  --state-key-verified: hsl(43 74% 47%);
+  --state-mem-normal: hsl(43 74% 47%);
+  --state-mem-over: hsl(30 50% 45%);
+  --state-delete-unarmed: hsl(43 40% 70%);
+  --state-delete-armed: hsl(0 90% 50%);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -791,6 +821,22 @@ html {
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  /* Freeze the inherited Veil pigment at its starting value. */
+  --magenta: hsl(320 55% 48%);
+
+  /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
+  --state-map-rest: hsl(200 100% 40%);
+  --state-map-current: hsl(190 100% 40%);
+  --state-map-selected: hsl(185 100% 50%);
+  --state-map-hovered: hsl(190 80% 30%);
+  --state-key-absent: hsl(185 30% 30%);
+  --state-key-missing: hsl(200 90% 55%);
+  --state-key-present: hsl(185 40% 55%);
+  --state-key-verified: hsl(185 100% 70%);
+  --state-mem-normal: hsl(185 100% 50%);
+  --state-mem-over: hsl(200 90% 55%);
+  --state-delete-unarmed: hsl(185 40% 55%);
+  --state-delete-armed: hsl(350 80% 55%);
 }
 
 /* Veil theme font variants: small-caps for mono, uppercase for display.
@@ -1484,8 +1530,7 @@ html {
    and zoom classes only feed them), the accordion, and the fade classes
    above. It reaches portals, the wizard and the splash, which render
    outside .nexus-shell. It needs !important because Tailwind appends its
-   data-[state] variant rules after this file. The map pin ring (.map-pin)
-   keeps its pulse until its glyph shapes land (#777, slice S2).
+   data-[state] variant rules after this file.
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   .terminal-flicker,
@@ -1499,7 +1544,7 @@ html {
     animation: none;
   }
 
-  [class*="animate-"]:not(.map-pin *) {
+  [class*="animate-"] {
     animation: none !important;
   }
 }

@@ -1,0 +1,313 @@
+{
+  "css": "index-DgHx-njr.css",
+  "palettes": [
+    {
+      "theme": "veil",
+      "brass": "#b83d7a",
+      "hovered": "hsl(330.2439024390244 60% 70%)"
+    },
+    {
+      "theme": "gilded",
+      "brass": "hsl(43 74% 40%)",
+      "hovered": "hsl(45 75% 60%)"
+    },
+    {
+      "theme": "vector",
+      "brass": "hsl(185 100% 50%)",
+      "hovered": "hsl(190 80% 30%)"
+    }
+  ],
+  "reducedMotion": true,
+  "motion": [
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    },
+    {
+      "state": "selected",
+      "animation": "none"
+    },
+    {
+      "state": "hovered",
+      "animation": "none"
+    }
+  ],
+  "dimensions": [
+    {
+      "state": "lucide lucide-triangle-alert mem-over-glyph",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-trash2",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-triangle-alert",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-circle key-glyph-optional-absent",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-triangle-alert key-glyph-required-missing",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-dot key-glyph-present",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-check key-glyph-verified",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "rest",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "current",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "selected",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "hovered",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "lucide lucide-triangle-alert mem-over-glyph",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-trash2",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-triangle-alert",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-circle key-glyph-optional-absent",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-triangle-alert key-glyph-required-missing",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-dot key-glyph-present",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-check key-glyph-verified",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "rest",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "current",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "selected",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "hovered",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "lucide lucide-triangle-alert mem-over-glyph",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-trash2",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-triangle-alert",
+      "width": 11,
+      "height": 11
+    },
+    {
+      "state": "lucide lucide-circle key-glyph-optional-absent",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-triangle-alert key-glyph-required-missing",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-dot key-glyph-present",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "lucide lucide-circle-check key-glyph-verified",
+      "width": 12,
+      "height": 12
+    },
+    {
+      "state": "rest",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "current",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "selected",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "hovered",
+      "width": 18,
+      "height": 18
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    },
+    {
+      "state": "map-place-dot",
+      "width": 7,
+      "height": 7
+    }
+  ],
+  "errors": [],
+  "apiRequests": [],
+  "source_commit": "8ace1995205291d9a31837d6ef1a0dbd894a973b",
+  "sources": {
+    "ui/client/src/index.css": "a916ed35eef181ae03d89bdc123cb5ade6eaa647eab7cc1e160e9c7ad392f6ff",
+    "ui/client/src/components/nexus/TopBar.tsx": "35540ae9a28dcd329d497bc070e6208af873c0ec21052e410cb1c8d5edbbe6e0",
+    "ui/client/src/components/nexus/LocalModelRows.tsx": "74aef32a62a5d71ee2eaa99cb5afcbc393742240c289e6cdbf7819ddcb6c3435",
+    "ui/client/src/components/nexus/MapPane.tsx": "fa9c5b1431f3936f7e75e48019a8f7e4d33b645e2993114562e68ac2ca2c30dc",
+    "ui/client/src/components/nexus/SettingsPane.tsx": "1b578003fc945ab0b57a1f0c7f37359170986570dd6a01c4ed968b7d08a0e32b",
+    "ui/client/src/components/nexus/nexus-layout.css": "1c7cbae7a2712ef0cc413a81600c105bb94ca5694fc04328d67c2b79a7f79afb"
+  },
+  "fixture_files": {
+    "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/fixture.tsx": "c99cc7dcb03159df66780518531e5171cbb40021a8f46a8e5368542ebff784cf",
+    "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/capture.cjs": "03fbb024d5bea01ea7dad2514850b0d0bad55236d2c206538a2810fbbc8ae32b"
+  }
+}

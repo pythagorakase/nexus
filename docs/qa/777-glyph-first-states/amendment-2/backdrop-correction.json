@@ -1,0 +1,316 @@
+{
+  "baseline_head": "d155e53adfc2cc9755a65426adf78474dc43eecf",
+  "backdrop": {
+    "key": {
+      "path": [
+        "key-row",
+        "key-list",
+        "set-card-body",
+        "set-card-frame",
+        "set-card"
+      ],
+      "selector": ".set-card-frame",
+      "value": "var(--bg-elev-2)"
+    },
+    "delete": {
+      "selector": ".model-provider",
+      "value": "var(--bg)"
+    }
+  },
+  "themes": [
+    {
+      "theme": "Veil",
+      "maximum": 9.913464335675082,
+      "assignment_changed": false,
+      "changed_measurements": [
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "required-missing"
+          ],
+          "old_delta": 35.826832286531086,
+          "new_delta": 35.200235802148725
+        },
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "present"
+          ],
+          "old_delta": 45.50260432163349,
+          "new_delta": 44.391760386328535
+        },
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "verified"
+          ],
+          "old_delta": 17.471028667646113,
+          "new_delta": 16.620542527406
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "required-missing"
+          ],
+          "old_delta": 35.826832286531086,
+          "new_delta": 35.200235802148725
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "present"
+          ],
+          "old_delta": 10.87802426264397,
+          "new_delta": 10.982788739552134
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "verified"
+          ],
+          "old_delta": 13.741295960893453,
+          "new_delta": 13.945677679528746
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "required-missing",
+            "present"
+          ],
+          "old_delta": 23.29328104810856,
+          "new_delta": 22.621664432198582
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "required-missing",
+            "verified"
+          ],
+          "old_delta": 46.28426679252508,
+          "new_delta": 46.1805857090005
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "present",
+            "verified"
+          ],
+          "old_delta": 22.19949279768684,
+          "new_delta": 22.532359693790667
+        }
+      ],
+      "shortfalls": 30
+    },
+    {
+      "theme": "Gilded",
+      "maximum": 11.515866170801722,
+      "assignment_changed": false,
+      "changed_measurements": [
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "required-missing"
+          ],
+          "old_delta": 32.49244138885215,
+          "new_delta": 31.478439290789392
+        },
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "present"
+          ],
+          "old_delta": 58.56181365418784,
+          "new_delta": 56.821216360613214
+        },
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "verified"
+          ],
+          "old_delta": 50.79335425394908,
+          "new_delta": 49.846448287962716
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "required-missing"
+          ],
+          "old_delta": 32.49244138885215,
+          "new_delta": 31.478439290789392
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "present"
+          ],
+          "old_delta": 18.12584341746114,
+          "new_delta": 18.343538747812936
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "verified"
+          ],
+          "old_delta": 18.465987459750902,
+          "new_delta": 18.62936373084396
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "required-missing",
+            "present"
+          ],
+          "old_delta": 16.98801900564459,
+          "new_delta": 16.00519085195528
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "required-missing",
+            "verified"
+          ],
+          "old_delta": 16.41371532037838,
+          "new_delta": 15.059450129901082
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "present",
+            "verified"
+          ],
+          "old_delta": 12.046424121385503,
+          "new_delta": 12.158313227019862
+        }
+      ],
+      "shortfalls": 45
+    },
+    {
+      "theme": "Vector",
+      "maximum": 10.191082279599211,
+      "assignment_changed": false,
+      "changed_measurements": [
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "required-missing"
+          ],
+          "old_delta": 45.47510490045781,
+          "new_delta": 44.657849866661884
+        },
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "present"
+          ],
+          "old_delta": 43.34071736879887,
+          "new_delta": 42.49505596399999
+        },
+        {
+          "surface": "key",
+          "context": "required/rest",
+          "states": [
+            "optional-absent",
+            "verified"
+          ],
+          "old_delta": 65.7530991551755,
+          "new_delta": 63.786449519441916
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "required-missing"
+          ],
+          "old_delta": 45.47510490045781,
+          "new_delta": 44.657849866661884
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "present"
+          ],
+          "old_delta": 12.672203866904772,
+          "new_delta": 12.76143545154035
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "optional-absent",
+            "verified"
+          ],
+          "old_delta": 22.924342811299475,
+          "new_delta": 23.121744578262003
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "required-missing",
+            "present"
+          ],
+          "old_delta": 33.47067227577112,
+          "new_delta": 32.26058554500088
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "required-missing",
+            "verified"
+          ],
+          "old_delta": 21.974192194719148,
+          "new_delta": 20.992536859519888
+        },
+        {
+          "surface": "key",
+          "context": "optional/rest",
+          "states": [
+            "present",
+            "verified"
+          ],
+          "old_delta": 10.452122097547305,
+          "new_delta": 10.571462802144106
+        }
+      ],
+      "shortfalls": 58
+    }
+  ]
+}

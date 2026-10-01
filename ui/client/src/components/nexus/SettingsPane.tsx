@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Circle,
+  CircleCheck,
   CircleDot,
   RefreshCw,
   Save,
@@ -27,6 +28,24 @@ import type {
   SettingsPayload,
   ThemeId,
 } from "@/types/settings";
+
+/** Static status geometry; verified wins even while a refresh changes presence. */
+export function KeyStatusGlyph({
+  required,
+  present,
+  verified,
+}: {
+  required: boolean;
+  present: boolean;
+  verified: boolean;
+}) {
+  if (verified) return <CircleCheck size={12} className="key-glyph-verified" />;
+  if (present) return <CircleDot size={12} className="key-glyph-present" />;
+  if (required) {
+    return <AlertTriangle size={12} className="key-glyph-required-missing" />;
+  }
+  return <Circle size={12} className="key-glyph-optional-absent" />;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Section index (rail names double as the one label per card)
@@ -547,11 +566,11 @@ function KeysSection({ slot }: { slot: number | null }) {
                 {row.provider}
               </span>
               <span className={`key-status ${status}`} data-testid={`key-status-${row.provider}`}>
-                {row.present || isVerified ? (
-                  <CircleDot size={12} />
-                ) : (
-                  <Circle size={12} />
-                )}
+                <KeyStatusGlyph
+                  required={row.required}
+                  present={row.present}
+                  verified={isVerified}
+                />
               </span>
               <input
                 className="key-input"
