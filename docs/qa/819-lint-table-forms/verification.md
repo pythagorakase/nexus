@@ -589,3 +589,139 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 
 `hist_before.txt` was rendered from a scratch copy of `af03db94` against the
 worktree's `migrations/`, with paths relative to the worktree root.
+
+## After the Fifth Review
+
+The fix order for this round names this section "After the Fourth Review";
+that heading already holds the P3 wording round, so this one is the fifth.
+The third independent pass found three P2 in the `SELECT INTO` rule at
+`77933da5`, each a legal PostgreSQL 17 form that created a table and passed.
+Commit `f7701d0d` applies the coordinator's three decisions. This change opened
+no database; the earlier `EXPLAIN` and `PREPARE` decisions are unchanged.
+
+- **Nested set operations (P2).** `_query_tokens` rebased through a
+  parenthesized main statement at most once more, so
+  `WITH a AS (SELECT 1) (WITH b AS (SELECT 2) (SELECT 1 INTO escaped) UNION ALL SELECT 2) UNION ALL SELECT 3;`
+  passed. It is now a `while` loop over an explicit counter: while the tokens
+  open with `WITH`, skip that list (with its `SEARCH`/`CYCLE` clauses); a main
+  statement that opens with `(` is read again past its leading parentheses;
+  any other main statement ends the loop. After 64 `WITH` lists
+  (`_WITH_NESTING_LIMIT`) it returns `None`, and `_select_into` reports
+  `cannot parse SQL: a statement nests more than 64 WITH lists` at the
+  statement's first non-blank character. No function calls itself.
+- **`into` as an identifier (P2).** `_is_into_clause`: a base-depth `INTO` is
+  the clause unless the token before it is `AS` (an output alias) or the
+  character before it, past whitespace, is `.` (a qualified attribute). A `.`
+  that ends an all-digit run is a numeric literal (`SELECT 1. INTO t`), not a
+  qualifier, so that `INTO` stays the clause. The rule takes the first
+  base-depth `INTO` after the verb that passes.
+- **A target named `temp` (P2).** `_select_into_target` replaces the
+  `_SELECT_INTO_TARGET` regex. `GLOBAL`/`LOCAL`, then
+  `TEMP`/`TEMPORARY`/`UNLOGGED`, are modifiers only when `_names_target`
+  finds a name next: a quoted identifier, a placeholder (`%s`, `%(n)s`, or the
+  `{}` an interpolated value renders as), a word not in `_RESERVED_WORDS`, or
+  `TABLE` followed by one of those. Otherwise the word is the target's name.
+  `TABLE` is reserved, so `INTO TABLE temp` names `temp`. `_RESERVED_WORDS` is
+  PostgreSQL 17's reserved key-word list; it equals the 78 `RESERVED_KEYWORD`
+  entries of the installed
+  `/Applications/Postgres.app/Contents/Versions/latest/include/postgresql/server/parser/kwlist.h`
+  (`diff` exit 0).
+
+Tests: `test_select_into_reading_is_bounded` now expects the 1,100-deep
+`WITH a AS (SELECT 1) (` wrapper to report `cannot parse SQL` (it passed
+before, which the decision forbids), and adds the nested set operation
+(reports `escaped`), a 64-deep `(WITH x AS (SELECT 1) ` nest (reports
+`at_limit`), and a 70-deep one (reports `cannot parse SQL`). New
+`test_into_after_a_dot_or_as_is_a_name` holds the order's three statements
+plus a spaced `src . into AS into INTO spaced` and `SELECT 1. INTO numbered`.
+New `test_select_into_target_named_temp` holds `INTO temp`, `INTO temporary`,
+`INTO TABLE temp`, `INTO unlogged;` and `(SELECT 1 INTO temp);` (each
+reported), and `INTO TEMP t`, `INTO LOCAL TEMP t`, `(SELECT 1 INTO TEMP t)`,
+`INTO TEMP TABLE t WHERE true`, `INTO GLOBAL TEMPORARY "t"`, and a Python
+f-string `INTO TEMP {name}` (each silent). Every test asserts the full
+findings list.
+
+The three tests fail on `77933da5` (a scratch copy of
+`git show 77933da5:scripts/check_migration_comments.py` beside the new test
+file, `-k "bounded or into_after_a_dot or target_named_temp"`):
+
+```
+E       AssertionError: assert ['130_bounded... be verified'] == ['130_bounded...4 WITH lists']
+test_lint_copy.py:1171: AssertionError
+E       AssertionError: assert ['130_into_na... be verified'] == ['130_into_na... be verified']
+test_lint_copy.py:1203: AssertionError
+E       AssertionError: assert ['130_temp_na... be verified'] == ['130_temp_na... be verified']
+test_lint_copy.py:1248: AssertionError
+FAILED test_lint_copy.py::test_select_into_reading_is_bounded - AssertionErro...
+FAILED test_lint_copy.py::test_into_after_a_dot_or_as_is_a_name - AssertionEr...
+FAILED test_lint_copy.py::test_select_into_target_named_temp - AssertionError...
+3 failed, 38 deselected in 0.08s
+```
+
+Each of the order's statements alone, through `check_migrations` (no
+`COMMENT ON` in the file, so a reported table also has its missing-comment
+finding):
+
+| Statement | `77933da5` | `f7701d0d` |
+| --- | --- | --- |
+| `WITH a AS (SELECT 1) (WITH b AS (SELECT 2) (SELECT 1 INTO escaped) UNION ALL SELECT 2) UNION ALL SELECT 3;` | passes | `SELECT INTO public.escaped`, no comment |
+| 70-deep `(WITH x AS (SELECT 1) ... SELECT 1 INTO t ...)` | passes | `cannot parse SQL: a statement nests more than 64 WITH lists` |
+| `SELECT src.into temp INTO escaped FROM (VALUES (1)) AS src("into");` | passes | `SELECT INTO public.escaped`, no comment |
+| `SELECT src.into FROM (VALUES (1)) AS src("into");` | `SELECT INTO public.from`, no comment | passes |
+| `SELECT 1 AS into;` | `SELECT INTO names '<nothing>'` | passes |
+| `SELECT 1 INTO temp FROM (VALUES (1)) AS v(n);` | passes | `SELECT INTO public.temp`, no comment |
+| `SELECT 1 INTO temporary FROM (VALUES (1)) AS v(n);` | passes | `SELECT INTO public.temporary`, no comment |
+| `SELECT 1 INTO TABLE temp FROM (VALUES (1)) AS v(n);` | `SELECT INTO public.temp`, no comment | the same |
+| `SELECT 1 INTO TEMP t;` | passes | passes |
+| `SELECT 1 INTO LOCAL TEMP t;` | passes | passes |
+| `(SELECT 1 INTO TEMP t);` | passes | passes |
+
+Fuzz (`fuzz.py` in the scratch subdirectory): random statements of 1 to 40
+tokens drawn from the earlier rounds' words (verbs, `WITH`, `RECURSIVE`,
+`MATERIALIZED`, set operations, `INTO` and its modifiers, `EXPLAIN` and its
+options, `PREPARE`, `EXECUTE`, `SEARCH`/`CYCLE` words, `DO`, `CREATE`,
+`FOREIGN`, `IMPORT`, `COMMENT ON`, brackets, commas, `;`, literals, dollar
+quotes, comments, placeholders) plus `.`, `AS`, `temp`, `temporary`,
+`"into"`, `FROM`, `VALUES`, `1.`, and `src.into`; each a quarter as a `.sql`
+statement, a DO body, an `EXECUTE` command, and a Python `execute` literal,
+scanned with `_scan_sql` and resolved:
+
+```
+$ fuzz.py scripts/check_migration_comments.py 40000 4
+statements=40000 forms={'sql': 10000, 'do body': 10000, 'execute': 10000, 'python': 10000} seconds=4.7
+exceptions=0 {}
+$ fuzz.py scripts/check_migration_comments.py 200000 819
+statements=200000 forms={'sql': 50000, 'do body': 50000, 'execute': 50000, 'python': 50000} seconds=22.0
+exceptions=0 {}
+```
+
+In 20,000 of the `.sql` statements, 187 reached a `SELECT INTO` finding, so
+the fuzz exercises the new rules.
+
+With `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT` unset:
+
+```
+$ cmp hist_before.txt hist_after.txt
+exit=0
+     405
+     405
+$ black --check
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+exit=0
+$ flake8
+exit=0
+$ mypy
+Success: no issues found in 2 source files
+$ pytest lint
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+41 passed, 5 warnings in 1.06s
+$ real tree
+OK: every object created after migration 129 has a comment.
+exit=0
+$ reachability
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 11.06s
+```
+
+`hist_before.txt` was rendered at `77933da5` before these edits.
