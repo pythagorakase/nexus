@@ -443,13 +443,19 @@ function requiredByTitle(row: SecretStatus): string | undefined {
 }
 
 function KeysSection({ slot }: { slot: number | null }) {
-  const { data: providers, error } = useSecretsQuery(slot);
+  const { data: providers, error, dataUpdatedAt } = useSecretsQuery(slot);
   const setSecret = useSetSecret(slot);
   const verifySecret = useVerifySecret();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [verified, setVerified] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<Error | null>(null);
+
+  // A Verified mark lasts until the next status refresh (a GET or a PUT's
+  // answer), whatever the refreshed rows say: two keys can share a suffix.
+  useEffect(() => {
+    setVerified((current) => (current.size === 0 ? current : new Set()));
+  }, [dataUpdatedAt]);
 
   if (actionError) throw actionError;
 
