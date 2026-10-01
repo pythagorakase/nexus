@@ -40,15 +40,6 @@ class EmotionalValence(str, Enum):
     HATEFUL = "-5|hateful"
 
 
-class EntityType(str, Enum):
-    """Types of entities that can be referenced in chunks"""
-
-    CHARACTER = "character"
-    FACTION = "faction"
-    PLACE = "place"
-    ITEM = "item"  # Note: items table is currently empty
-
-
 class FactionMemberRole(str, Enum):
     """Roles that characters can have within factions"""
 
