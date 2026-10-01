@@ -1781,3 +1781,93 @@ Landing notes stay restart by name (`nexus restart gateway`, then
 `nexus restart mock_openai`), each service's writer shown in `nexus status`,
 no migration/fleet application, no client change and no UI rebuild. The
 coordinator owns merging and the whole-tree PostgreSQL gate.
+
+
+### Integration and Final Proof
+
+The round-five fix commit is `ee89f379543c4154a2ff0eafdd0b51836731bc64`.
+Its pre-commit hooks reported:
+
+```text
+Regenerate Orrery package catalog........................................Passed
+Validate NEXUS config and model-ID drift.................................Passed
+Require COMMENT ON for new migration objects.........(no files to check)Skipped
+```
+
+During validation `origin/main` advanced. Merge commit
+`ca2c0bbe8b1413212e2683664aee167bebe2889a` integrates main at
+`2e70e9cb2c566f6f48e70ea84874670a719055f9`, including `36ec0b26` (#1063)
+and `2e70e9cb` (#1086). The shared origin ref advanced between inspection and
+merge; the merge's actual second parent is recorded here. No conflict, history
+rewrite, manual edits to incoming main files, or other-worktree modification.
+The final fetch reports `28 0` for `HEAD...origin/main`: no main commits missing.
+
+The scoped PostgreSQL proof ran again after integration. Incoming main changed
+API/Orrery tests and root tests, so both offline directories and every affected
+root test (plus reachability) ran again. The initially failing API test also
+passes in the final complete API directory run; its earlier failure stays
+recorded above for coordinator triage.
+
+The runner enables PostgreSQL only for labels beginning `postgres-proof`;
+all other environment, temporary-state and timeout rules above remain.
+
+**postgres-proof-integrated (exit 0)**
+
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_runtime tests/test_runtime_home.py tests/test_api/test_local_inference.py tests/test_api/test_local_models_endpoints.py tests/test_owner_target_guard.py --basetemp=$SP/postgres-integrated-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+366 passed, 7 warnings in 153.61s (0:02:33)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+**offline-integrated-root (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_commit_handler_sync.py tests/test_entity_tag_manifest_apply.py tests/test_faction_table_audit.py tests/test_orrery_tag_validation.py tests/test_orrery_tag_validation_pg.py tests/test_prompt_tag_vocabulary_pg.py tests/test_trait_compiler.py tests/test_qa_shift.py tests/test_reachability.py --basetemp=$SP/integrated-root-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+234 passed, 65 skipped in 16.25s
+```
+
+**offline-api-integrated (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_api --basetemp=$SP/api-integrated-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+654 passed, 239 skipped, 7 warnings in 35.36s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+**offline-orrery-integrated (exit 0)**
+
+`$PY -m pytest -q -p tests.dbname_audit tests/test_orrery --basetemp=$SP/orrery-integrated-tmp`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1188 passed, 509 skipped, 2 warnings in 10.10s
+```
+
+The two static-check baseline files still byte-match `origin/main` after the
+merge; the two round-five Python files still byte-match the validated fix
+commit. Static-check results therefore remain applicable without repetition.
+Only evidence changes after these tests.
+
+No scratch-path log writer or gateway process remains (real `/bin/ps` inspection).
