@@ -83,11 +83,14 @@ cmp exit 0
      405 hist_after.txt
 ```
 
-PL/pgSQL `SELECT ... INTO` in the DO bodies of migrations 077, 100, and 109
-stays silent because the DO-body scanner runs with `plpgsql=True`. The
-`SELECT ... INTO` in the function bodies of migrations 114 and 133 is masked as
-a literal. `test_every_historical_migration_parses` now asserts that no
-historical finding names `SELECT INTO`, `IMPORT FOREIGN SCHEMA`, or `foreign table`.
+PL/pgSQL `SELECT ... INTO` in the DO bodies of migrations 022, 077, 100, 109,
+110, 134, and 138 stays silent because the DO-body scanner runs with
+`plpgsql=True` (forcing the flag off makes `SELECT INTO` findings appear in
+exactly those seven files). The `SELECT ... INTO` in the function bodies of
+migrations 114 and 133 is masked as a literal.
+`test_every_historical_migration_parses` now asserts that no historical finding
+names `SELECT INTO`, `IMPORT FOREIGN SCHEMA`, or `foreign table` (the last
+compared case-insensitively, so a `CREATE FOREIGN TABLE` label is caught too).
 
 ## The New Tests Fail Without the Change
 
@@ -156,6 +159,37 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 Black (`2 files would be left unchanged`), flake8 (exit 0), and mypy
 (`Success: no issues found in 2 source files`) on
 `scripts/check_migration_comments.py` and `tests/test_migration_comment_lint.py`.
+
+## Review Fixes
+
+Commit `9182a195` applies the review findings: the docstring and
+`docs/database.md` list `IMPORT FOREIGN SCHEMA` and `SELECT ... INTO` as
+separate failing forms and say that an `EXECUTE` command in a DO body is still
+checked; `test_select_into_fails_like_ctas` asserts the unresolvable finding for
+`EXECUTE 'SELECT 1 AS id INTO ' || v_name || ' FROM scene_moods'` at its line
+(changing the `SELECT INTO` label in `_select_into` makes it fail); and the
+historical guard's comment and match were corrected as described above. On
+`9182a195`, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT` unset:
+
+```
+$ python -m pytest -q tests/test_migration_comment_lint.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+36 passed, 5 warnings in 0.72s
+$ python scripts/check_migration_comments.py; echo "exit $?"
+OK: every object created after migration 129 has a comment.
+exit 0
+$ cmp hist_fix_before.txt hist_fix_after.txt; echo "cmp exit $?"
+cmp exit 0
+     405 hist_fix_before.txt
+     405 hist_fix_after.txt
+```
+
+`hist_fix_before.txt` was saved at `90076e4a` before the fixes and is also
+byte-identical to the original `hist_before.txt`. Black
+(`2 files would be left unchanged`), flake8 (exit 0), and mypy
+(`Success: no issues found in 2 source files`) pass on both changed Python
+files. The wider gate tails above predate these fixes; the fixes change only a
+docstring, prose, and one test file, so only the lint's own tests were rerun.
 
 ## Not Covered
 
