@@ -1,13 +1,10 @@
 """
-Test cache loader for wizard mock server.
+Wizard test cache loader.
 
-Loads from temp/test_cache_wizard.json (pre-parsed by user).
-Provides instant cached responses for wizard phases to eliminate
-API latency during UI debugging.
-
-Usage: Select "TEST" model in the UI model picker. The backend
-routes TEST model requests to the mock OpenAI server, which calls
-these functions to return cached wizard data.
+Loads and parses ``tests/fixtures/test_cache_wizard.json``, whose object
+fields are stored as JSON-encoded strings. Tests stage wizard transition data
+from ``load_cache``. The mock provider (``nexus.api.mock_openai``) does not
+import this module; it has its own cached phase responses.
 """
 
 import json
