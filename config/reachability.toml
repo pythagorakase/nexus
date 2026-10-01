@@ -52,6 +52,9 @@ reason = "Read-only attention-class grammar and card-block probe for issue 784 (
 target = "scripts/qa_shift/travel_reachability.py:main"
 reason = "Read-only travel reachability probe for issue 785; session-enforced default_transaction_read_only."
 [[operators]]
+target = "scripts/qa_shift/routine_delta_grammar_probe.py:main"
+reason = "Read-only routine-delta grammar weight probe for issue 783 (slice 783-S0); no provider calls."
+[[operators]]
 target = "scripts/qa_shift/long_absence_probe.py:main"
 reason = "Clone-only long-absence probe launcher from issue 909; writes only to a qa640_* clone."
 [[operators]]
@@ -352,6 +355,7 @@ paths = [
     { path = "scripts/qa_shift/qa_shift.toml", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
     { path = "scripts/qa_shift/rearm_grammar_weight.py", class = "operator", reason = "operator root scripts/qa_shift/rearm_grammar_weight.py:main" },
     { path = "scripts/qa_shift/reference_corpora.toml", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
+    { path = "scripts/qa_shift/routine_delta_grammar_probe.py", class = "operator", reason = "operator root scripts/qa_shift/routine_delta_grammar_probe.py:main" },
     { path = "scripts/qa_shift/travel_reachability.py", class = "operator", reason = "operator root scripts/qa_shift/travel_reachability.py:main" },
     { path = "scripts/qa_shift/world_clock.py", class = "operator", reason = "operator root scripts/qa_shift/world_clock.py:main" },
     { path = "scripts/query_narratives.py", class = "dead", reason = "No root reaches it; no tracked document names it." },

@@ -284,3 +284,20 @@ PYTHONPATH=$PWD "$PY" scripts/qa_shift/rearm_grammar_weight.py --registry-dbname
 
 `--format json` prints the same header and rows as JSON. Token counts are the
 configured models' local estimates, not billed counts.
+
+## Routine-Delta Grammar Weight
+
+The read-only routine-delta grammar probe (issue 783, slice 783-S0) renders
+the structured-output grammars the configured seats send today (the Gaia
+registry strict format, the Gaia lenient format and prompt guide, and the
+Retrograde strict format for the wizard and maturation seats) as they stand and
+with the two candidate routine-delta placements, and reports bytes and local
+tokenizer counts. The Gaia grammar depends on the anchor chunk's present
+entities, so every number names its anchor. The probe sets
+`default_transaction_read_only=on` itself, builds no provider client, and
+reports numbers only:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49 --markdown
+```
