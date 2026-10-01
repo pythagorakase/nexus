@@ -334,3 +334,37 @@ After transaction setup every statement is SELECT-only; the family asserts
 `transaction_read_only=on` and never repairs data, migrates, configures a pool,
 starts a gateway, or calls a provider. The existing `world_clock` family and
 its JSON and exit contract remain separate.
+
+
+## Cooldown Calibration
+
+The [classification and calibration document](../../docs/orrery_cooldown_classification.md)
+records the complete gate inventory, measured reports, formulas, and limitations.
+
+The report adopts no policy: individual gate classifications are analytical
+proposals under the settled rule, “Refractories to hours, staggering stays on
+ticks.” It prints stored resolution counts and reference-cadence equivalents.
+Every script-issued SQL statement is a SELECT; the connection enforces and
+verifies read-only, repeatable-read isolation and database identity, preserving
+ambient PGOPTIONS before appending the protective options. Slot 2 is refused.
+
+```sh
+PYTHONPATH=$PWD $PY scripts/qa_shift/cooldown_calibration.py --dbname ref_codex_bakeoff_2026_07 --format markdown
+```
+
+The reference stays at migration 114 and retains inherited all-layer clock
+contamination. The slots are already repaired by migration 140; the following
+TEST-pinned save_04 clone has primary-only stored clocks. The shared fixture
+snapshots the source read-only, migrates only the disposable clone, and drops it
+on exit. Use `--format json` for the same fields in machine-readable form.
+
+```sh
+PYTHONPATH=$PWD $PY - <<'PY'
+import sys
+from tests.pg_fixtures import disposable_slot_database
+from scripts.qa_shift.cooldown_calibration import main
+with disposable_slot_database("qa640_778s4a_evidence", source_db="save_04", include_data=True) as dbname:
+    sys.argv = ["cooldown_calibration", "--dbname", dbname, "--format", "markdown"]
+    main()
+PY
+```
