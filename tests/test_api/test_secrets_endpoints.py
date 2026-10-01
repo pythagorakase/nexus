@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import subprocess
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
@@ -19,7 +20,13 @@ from fastapi.testclient import TestClient
 
 from nexus.api import secrets_endpoints
 from nexus.api.secrets_endpoints import SecretProvider, get_secret_providers, router
-from nexus.util.secret_manager import InMemorySecretBackend, set_secret
+from nexus.util.secret_manager import (
+    InMemorySecretBackend,
+    SecretStoreAccessError,
+    get_secret,
+    keychain_read_error,
+    set_secret,
+)
 
 TEST_ACCOUNT = "test-secret-455"
 TEST_ENV_VAR = f"{TEST_ACCOUNT.upper()}_API_KEY"
@@ -235,6 +242,115 @@ def test_verify_without_a_stored_key_reports_missing_secret(
         "verified": False,
         "detail": "MissingSecretError",
     }
+
+
+STDERR_SENTINEL = "STDERR-SENTINEL-821"
+
+
+def _locked_store_error(account: str) -> SecretStoreAccessError:
+    """The error the unreadable store raises for ``account``."""
+    return keychain_read_error(
+        account,
+        subprocess.CalledProcessError(36, ["security"], stderr=STDERR_SENTINEL),
+    )
+
+
+def test_status_reads_the_store_behind_the_process_cache(
+    client: TestClient,
+    synthetic_provider: SecretProvider,
+    in_memory_secret_store: InMemorySecretBackend,
+) -> None:
+    """A key rotated outside the app shows at once, though the cache is warm."""
+    first = secrets.token_urlsafe(24)
+    rotated = secrets.token_urlsafe(24)
+    set_secret(TEST_ACCOUNT, first)
+    assert get_secret(TEST_ACCOUNT) == first
+    in_memory_secret_store.write(TEST_ACCOUNT, rotated)
+
+    response = client.get("/api/secrets/status")
+
+    assert response.status_code == 200
+    assert response.json()[0]["last4"] == rotated[-4:]
+    assert response.json()[0]["present"] is True
+    # The status read neither refreshed nor cleared the generation cache.
+    assert get_secret(TEST_ACCOUNT) == first
+
+
+def test_verify_sends_an_out_of_band_rotation_to_the_provider(
+    client: TestClient,
+    in_memory_secret_store: InMemorySecretBackend,
+    models_endpoint: tuple[str, list[tuple[str, str | None]], list[int]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify tests the key the store holds now, not the one cached earlier."""
+    base_url, received, _ = models_endpoint
+    monkeypatch.delenv(TEST_ENV_VAR, raising=False)
+    provider = SecretProvider(
+        provider=TEST_ACCOUNT, account=TEST_ACCOUNT, base_url=base_url
+    )
+    monkeypatch.setattr(secrets_endpoints, "get_secret_providers", lambda: [provider])
+    first = secrets.token_urlsafe(24)
+    rotated = secrets.token_urlsafe(24)
+    set_secret(TEST_ACCOUNT, first)
+    assert get_secret(TEST_ACCOUNT) == first
+    in_memory_secret_store.write(TEST_ACCOUNT, rotated)
+
+    response = client.post(f"/api/secrets/{TEST_ACCOUNT}/verify")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "provider": TEST_ACCOUNT,
+        "verified": True,
+        "detail": "Models endpoint reachable.",
+    }
+    assert received == [("/v1/models", f"Bearer {rotated}")]
+
+
+def test_unreadable_store_fails_status_and_put_with_its_remediation(
+    client: TestClient,
+    unreadable_secret_store: InMemorySecretBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A locked store fails the whole card; it never reads as an absent key."""
+    monkeypatch.delenv(TEST_ENV_VAR, raising=False)
+    provider = SecretProvider(provider=TEST_ACCOUNT, account=TEST_ACCOUNT)
+    monkeypatch.setattr(secrets_endpoints, "get_secret_providers", lambda: [provider])
+    expected = str(_locked_store_error(TEST_ACCOUNT))
+    key = secrets.token_urlsafe(24)
+
+    status = client.get("/api/secrets/status")
+    written = client.put(f"/api/secrets/{TEST_ACCOUNT}", json={"key": key})
+
+    for response in (status, written):
+        assert response.status_code == 503
+        assert response.json() == {"detail": expected}
+        assert "security unlock-keychain" in response.json()["detail"]
+        assert b"present" not in response.content
+        assert STDERR_SENTINEL.encode() not in response.content
+        assert key.encode() not in response.content
+    # The write landed before the read-back failed.
+    assert unreadable_secret_store.accounts() == {TEST_ACCOUNT}
+
+
+def test_verify_of_an_unreadable_store_names_its_remediation(
+    client: TestClient,
+    unreadable_secret_store: InMemorySecretBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verification reports the access error itself, not its class name."""
+    monkeypatch.delenv(TEST_ENV_VAR, raising=False)
+    provider = SecretProvider(provider=TEST_ACCOUNT, account=TEST_ACCOUNT)
+    monkeypatch.setattr(secrets_endpoints, "get_secret_providers", lambda: [provider])
+
+    response = client.post(f"/api/secrets/{TEST_ACCOUNT}/verify")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "provider": TEST_ACCOUNT,
+        "verified": False,
+        "detail": str(_locked_store_error(TEST_ACCOUNT)),
+    }
+    assert STDERR_SENTINEL.encode() not in response.content
 
 
 def test_verify_unknown_provider_is_not_found(

@@ -16,17 +16,22 @@ from pathlib import Path
 import pytest
 
 from nexus.util.secret_manager import (
+    _SECURITY_CALL_TIMEOUT_SEC,
     InMemorySecretBackend,
     KeyringLibraryBackend,
     MacOSKeychainBackend,
     MissingSecretError,
+    SecretStoreAccessError,
     active_backend,
     get_secret,
+    get_secret_uncached,
+    keychain_read_error,
     platform_backend,
     set_secret,
     use_secret_backend,
 )
 from tests import secret_store_guard
+from tests.conftest import UnreadableSecretBackend
 
 TEST_ACCOUNT = "test-secret-455"
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -73,6 +78,127 @@ def test_get_secret_serves_cache_until_set_secret_invalidates(
     set_secret(TEST_ACCOUNT, rotated)
     assert get_secret(TEST_ACCOUNT) == rotated
     assert in_memory_secret_store.read(TEST_ACCOUNT) == rotated
+
+
+STDERR_SENTINEL = "STDERR-SENTINEL-821"
+
+
+@pytest.mark.parametrize(
+    ("error", "reason", "failure", "remediation"),
+    [
+        pytest.param(
+            subprocess.CalledProcessError(
+                36,
+                ["security", "find-generic-password", "-a", TEST_ACCOUNT, "-w"],
+                output=STDERR_SENTINEL,
+                stderr=STDERR_SENTINEL,
+            ),
+            "locked",
+            f"The login keychain refused to read account '{TEST_ACCOUNT}' "
+            "(security exit 36).",
+            "Unlock the login keychain (Keychain Access, or security "
+            "unlock-keychain) and retry.",
+            id="locked",
+        ),
+        pytest.param(
+            subprocess.TimeoutExpired(
+                ["security", "find-generic-password", "-a", TEST_ACCOUNT, "-w"],
+                _SECURITY_CALL_TIMEOUT_SEC,
+                output=STDERR_SENTINEL,
+                stderr=STDERR_SENTINEL,
+            ),
+            "timeout",
+            f"The login keychain did not answer a read of account "
+            f"'{TEST_ACCOUNT}' within {_SECURITY_CALL_TIMEOUT_SEC}s.",
+            "Unlock the login keychain (Keychain Access, or security "
+            "unlock-keychain), then retry.",
+            id="timeout",
+        ),
+        pytest.param(
+            FileNotFoundError(2, STDERR_SENTINEL, "security"),
+            "no_security_cli",
+            f"The security executable is not on this process's PATH, so account "
+            f"'{TEST_ACCOUNT}' could not be read.",
+            "Put /usr/bin (where macOS ships security) back on this process's "
+            "PATH and retry.",
+            id="no-security-cli",
+        ),
+    ],
+)
+def test_keychain_read_error_names_each_failure(
+    error: (
+        FileNotFoundError | subprocess.CalledProcessError | subprocess.TimeoutExpired
+    ),
+    reason: str,
+    failure: str,
+    remediation: str,
+) -> None:
+    """Each real ``security`` failure becomes an access error, never absence."""
+    exc = keychain_read_error(TEST_ACCOUNT, error)
+
+    assert isinstance(exc, SecretStoreAccessError)
+    assert not isinstance(exc, MissingSecretError)
+    assert not issubclass(SecretStoreAccessError, MissingSecretError)
+    assert (exc.account, exc.reason) == (TEST_ACCOUNT, reason)
+    assert exc.failure == failure
+    assert exc.remediation == remediation
+    assert str(exc) == f"{exc.failure} {exc.remediation}"
+    assert STDERR_SENTINEL not in str(exc)
+
+
+def test_access_error_never_falls_back_to_the_environment(
+    unreadable_secret_store: UnreadableSecretBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A store that cannot be read is not an absent item: no env fallback."""
+    monkeypatch.setenv(TEST_ENV_VAR, "env-fallback-value")
+
+    with pytest.raises(SecretStoreAccessError) as raised:
+        get_secret(TEST_ACCOUNT)
+    assert raised.value.reason == "locked"
+    with pytest.raises(SecretStoreAccessError):
+        get_secret_uncached(TEST_ACCOUNT)
+    assert STDERR_SENTINEL not in str(raised.value)
+
+
+@pytest.mark.parametrize("case", ["store", "env-fallback", "env-only"])
+def test_get_secret_uncached_sees_an_out_of_band_write(
+    in_memory_secret_store: InMemorySecretBackend,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+) -> None:
+    """The uncached reader follows each lookup path past a warm cache."""
+    first = secrets.token_urlsafe(24)
+    second = secrets.token_urlsafe(24)
+    monkeypatch.delenv(TEST_ENV_VAR, raising=False)
+
+    if case == "store":
+        set_secret(TEST_ACCOUNT, first)
+        assert get_secret(TEST_ACCOUNT) == first
+        in_memory_secret_store.write(TEST_ACCOUNT, second)
+    elif case == "env-fallback":
+        monkeypatch.setenv(TEST_ENV_VAR, first)
+        assert get_secret(TEST_ACCOUNT) == first
+        monkeypatch.setenv(TEST_ENV_VAR, second)
+    else:
+        # set_secret refuses this mode, so the store is filled directly; a
+        # read of it would answer this value instead of the variable's.
+        monkeypatch.setenv("NEXUS_KEYRING_DISABLE", "1")
+        in_memory_secret_store.write(TEST_ACCOUNT, "store-held-value")
+        monkeypatch.setenv(TEST_ENV_VAR, first)
+        assert get_secret(TEST_ACCOUNT) == first
+        monkeypatch.setenv(TEST_ENV_VAR, second)
+
+    assert get_secret_uncached(TEST_ACCOUNT) == second
+    assert get_secret(TEST_ACCOUNT) == first
+
+    if case == "env-only":
+        monkeypatch.delenv(TEST_ENV_VAR)
+        with pytest.raises(
+            MissingSecretError,
+            match=f"NEXUS_KEYRING_DISABLE=1 but {TEST_ENV_VAR} is not set",
+        ):
+            get_secret_uncached(TEST_ACCOUNT)
 
 
 def test_store_value_wins_over_environment_fallback(

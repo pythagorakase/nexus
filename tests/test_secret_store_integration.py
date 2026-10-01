@@ -16,6 +16,7 @@ only to the point of its skip on Linux.
 
 from __future__ import annotations
 
+import os
 import platform
 import secrets
 import subprocess
@@ -27,6 +28,7 @@ import pytest
 from nexus.util.secret_manager import (
     SERVICE_NAME,
     MacOSKeychainBackend,
+    SecretStoreAccessError,
     get_secret,
     set_secret,
     use_secret_backend,
@@ -118,3 +120,30 @@ def test_disposable_keychain_round_trip_through_public_api(
         disposable_keychain.delete(account)
         assert disposable_keychain.read(account) is None
         disposable_keychain.delete(account)
+
+
+def test_missing_security_executable_is_an_access_error(
+    disposable_keychain: MacOSKeychainBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without ``security`` on PATH a read is an access error, not absence."""
+    monkeypatch.delenv("NEXUS_KEYRING_DISABLE", raising=False)
+    account = f"it-{secrets.token_hex(4)}"
+    monkeypatch.setenv(f"{account.upper()}_API_KEY", "env-fallback-value")
+    empty_path = tmp_path / "empty-path"
+    empty_path.mkdir()
+    search_path = os.environ["PATH"]
+
+    with use_secret_backend(disposable_keychain):
+        monkeypatch.setenv("PATH", str(empty_path))
+        try:
+            with pytest.raises(SecretStoreAccessError) as raised:
+                get_secret(account)
+        finally:
+            # The fixture's teardown runs security again from the real PATH.
+            monkeypatch.setenv("PATH", search_path)
+
+    assert raised.value.reason == "no_security_cli"
+    assert raised.value.account == account
+    assert "/usr/bin" in raised.value.remediation
