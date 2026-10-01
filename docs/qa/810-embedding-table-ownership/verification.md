@@ -2526,3 +2526,316 @@ lands, the coordinator still restarts `nexus restart gateway` by name; no UI
 bundle change is present.
 
 Codex — GPT-6.
+
+
+## After the Independent Review
+
+Fixed the accepted P2 in PR #1096 from frozen head
+`5552b77c99ae927bb9a9f09b346dc299fc33da02`. The primary-key catalog query now
+reads `conname`, `condeferrable`, and `condeferred`; after checking the ordered
+columns it requires `(False, False)` for the deferral flags. A mismatch raises
+`RuntimeError` naming the table and actual constraint before any comment or
+repair write (`nexus/agents/memnon/utils/embedding_tables.py:228`).
+
+The new PostgreSQL regression recreates the primary key under a distinct name,
+parametrizes all three corpora and both `INITIALLY IMMEDIATE` and `INITIALLY
+DEFERRED`, clears the table comment, and compares `obj_description` and the
+complete catalog before/after the error on the same open transaction, before
+rollback (`tests/test_embedding_table_ownership_pg.py:300`). Existing valid-table,
+adapter, idempotency, and production-upsert cases remain green.
+
+The scratch plant copies the production module and deletes only the new
+`_require_contract` call for deferral. A pytest plugin loads that copy into the
+module for the red run; no tracked file is modified by the plant. The new
+IMMEDIATE chunk test fails with `DID NOT RAISE`: validation passes, reproducing
+the defect before the downstream `ON CONFLICT` arbiter error. The unplanted full
+ordered PostgreSQL proof plus the Amendment 4 experience case passes **371
+passed, zero skipped**, including all six new cases. All database proof tails
+show the secret-store guard and `owner targets: none`.
+
+The offline suite was split into core, CLI, and API/Orrery commands. The core
+run's three failures came from this run's initial `--basetemp` inside the
+checkout: the migration lint expected an absolute external path, runtime-home
+planning correctly refused a home inside the checkout, and the Git-failure
+probe unexpectedly inherited the enclosing repository. The three exact failing
+cases all passed when rerun with an external order-owned scratch directory.
+No unrelated source or tests were changed. The original failure tail is retained
+below; there is no unresolved offline failure. CLI: 351 passed/1 skipped;
+API/Orrery: 1830 passed/753 skipped; standalone reachability: 54 passed.
+
+Black, flake8, and `mypy --explicit-package-bases` pass on both touched files.
+For the no-new-diagnostics gate, `git show origin/main:<path>` extracted the
+pre-existing module to scratch and the same static commands were run there.
+The regression-test file does not exist on origin/main and has zero diagnostics.
+Pre-existing diagnostics: main's embedding module has only flake8 E501 at line
+154 (107 > 88 characters); branch flake8 has none; both mypy runs are clean.
+No baseline delta is needed for this review fix.
+
+Fetched origin/main remains `56b7854a1f6b62ccddb0417e0dda8446620ddcbd`, already
+an ancestor of HEAD (merge-base exit 0). No rebase or history rewrite was needed.
+No paid call, owner-database write, migration, gateway start, or new PR. The
+existing order's landing/deferred-work notes remain unchanged. This fix is
+Codex (GPT-6 Astra) work; the existing PR footer remains intact.
+
+### Exact Commands and Verbatim Tails
+
+Every command ran from the assigned worktree. `run_gate.py` executed each child
+with a 590-second total limit and a 120-second silence limit and awaited it.
+Below are its exact child commands, including the initial harness mistake.
+
+#### red (Exit 1)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership/scratchpad/810-S2-fix1096 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership/scratchpad/810-S2-fix1096/pytest-red -p tests.dbname_audit -p clone_manifest_810s2 -p deferrable_plant 'tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[IMMEDIATE-chunk_id]'
+```
+
+```text
+E           Failed: DID NOT RAISE <class 'RuntimeError'>
+tests/test_embedding_table_ownership_pg.py:320: Failed
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_810s2_contract_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[IMMEDIATE-chunk_id]
+1 failed in 3.23s
+```
+
+#### pg-proof (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership/scratchpad/810-S2-fix1096 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership/scratchpad/810-S2-fix1096/pytest-pg-proof -p tests.dbname_audit -p clone_manifest_810s2 tests/test_embedding_table_ownership_pg.py tests/test_memnon_db_access.py tests/test_memnon/test_source_embeddings.py tests/test_retrograde_summary_retrieval.py tests/test_database_contract.py tests/test_unowned_index_adoption_pg.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py tests/test_schema_documentation_pg.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_orrery/test_retrograde_embedding_pg.py tests/test_memnon/test_ann_gate.py::test_ann_candidate_index_build_drop tests/test_memnon/test_ann_gate.py::test_ann_alias_candidates_and_database_errors tests/test_pg_disposable_target.py tests/test_owner_target_guard.py tests/test_orrery/test_experiences.py::test_embedding_upsert_binds_each_correct_experience_id
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 91 targets: nexus_m10_fresh_test_77490, nexus_m10_template_test_77490, postgres, qa640_766_schema_*, qa640_810_adopt_drift_*, qa640_810_adopt_noop_*, qa640_810_adopt_recreate_*, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_no_create_all_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_810s2_contract_* x52, qa640_810s2_experience_ids_*, qa640_810s2_source_* x5, qa640_810s2_summary384_*, qa640_connection_contract, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_raw_url_contract, qa640_regen_truncate_* x2, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa665_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:61001 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[1] at local:61003 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[0] at local:61011 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard; two_clusters[1] at local:61015 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard
+dbname audit: owner names admitted on registered clusters: none
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+371 passed in 150.09s (0:02:30)
+```
+
+#### offline-core (Exit 1)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership/scratchpad/810-S2-fix1096/pytest-offline-core tests --ignore=tests/test_api --ignore=tests/test_orrery '--ignore-glob=tests/test_cli*'
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_migration_comment_lint.py::test_command_line_reports_findings
+FAILED tests/test_runtime_home.py::test_home_plan_cli_is_read_only_and_deterministic
+FAILED tests/test_scripts/test_check_exception_dispositions.py::test_failed_git_command_is_not_an_empty_inventory
+3 failed, 2480 passed, 537 skipped, 8 warnings in 213.11s (0:03:33)
+```
+
+#### offline-harness-rerun (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/fix1096/pytest-offline-harness-rerun tests/test_migration_comment_lint.py::test_command_line_reports_findings tests/test_runtime_home.py::test_home_plan_cli_is_read_only_and_deterministic tests/test_scripts/test_check_exception_dispositions.py::test_failed_git_command_is_not_an_empty_inventory
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3 passed, 7 warnings in 1.09s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+#### offline-cli (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/fix1096/pytest-offline-cli tests/test_cli.py tests/test_cli_choice_http.py tests/test_cli_contract.py tests/test_cli_generation_http.py tests/test_cli_inspect_pg.py tests/test_cli_model_selection.py tests/test_cli_session_wait.py tests/test_cli_wizard_confirmation.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+351 passed, 1 skipped, 5 warnings in 244.03s (0:04:04)
+```
+
+#### offline-api-orrery (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/fix1096/pytest-offline-api-orrery tests/test_api tests/test_orrery
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1830 passed, 753 skipped, 7 warnings in 34.08s
+```
+
+#### flake8-main (Exit 1)
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 scratchpad/810-S2-fix1096/static-main/nexus/agents/memnon/utils/embedding_tables.py
+```
+
+```text
+scratchpad/810-S2-fix1096/static-main/nexus/agents/memnon/utils/embedding_tables.py:154:89: E501 line too long (107 > 88 characters)
+```
+
+#### black (Exit 0)
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/agents/memnon/utils/embedding_tables.py tests/test_embedding_table_ownership_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+```
+
+#### flake8-branch (Exit 0)
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m flake8 nexus/agents/memnon/utils/embedding_tables.py tests/test_embedding_table_ownership_pg.py
+```
+
+```text
+
+```
+
+#### mypy-branch (Exit 0)
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases nexus/agents/memnon/utils/embedding_tables.py tests/test_embedding_table_ownership_pg.py
+```
+
+```text
+Success: no issues found in 2 source files
+```
+
+#### mypy-main (Exit 0)
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases scratchpad/810-S2-fix1096/static-main/nexus/agents/memnon/utils/embedding_tables.py
+```
+
+```text
+Success: no issues found in 1 source file
+```
+
+#### reachability (Exit 0)
+
+```sh
+env -u NEXUS_RUN_LIVE_LLM -u NEXUS_RUN_POSTGRES PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/fix1096/pytest-reachability tests/test_reachability.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+54 passed, 5 warnings in 10.37s
+```
+
+### Clone Stamps and Cleanup
+
+Recorded 81 clone manifests; 81 unique clones; remaining databases: []
+
+The manifest instrumentation only reads migration stamps after fixture setup.
+The ordered existing fixtures retain their own qa665/qa885 prefixes under the common working rules; every new regression clone uses qa640_810s2_contract.
+Artifacts, plant, full logs, runner, and manifest are retained at `/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/fix1096/artifacts`.
+Manifest SHA-256: `b495ae94e68b5039058f61510436d6680d6e1389957f4f91caa3d73a383f2308`.
+All 81 clones shared these starting migration versions (names are preserved in the manifest):
+
+```text
+001, 002, 003, 004, 005, 006, 007, 009, 010, 011, 012, 014, 015, 016, 017, 018, 019, 020, 021, 022, 023, 024, 025, 026, 027, 028, 029, 030, 031, 032, 033, 034, 035, 036, 037, 038, 039, 040, 041, 042, 043, 044, 045, 046, 047, 048, 049, 050, 051, 052, 053, 054, 055, 056, 057, 058, 059, 060, 061, 062, 063, 064, 065, 066, 067, 068, 069, 070, 071, 072, 073, 074, 075, 076, 077, 078, 079, 080, 081, 082, 083, 084, 085, 086, 087, 088, 089, 090, 091, 092, 093, 094, 095, 096, 097, 098, 099, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140
+```
+
+Read-only cleanup query on `postgres`: `SELECT datname FROM pg_database WHERE datname = ANY(%s)`, with the exact 81 manifest names; result `[]`.
+
+| Clone | Test |
+| --- | --- |
+| `qa640_810s2_contract_063531561819` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[IMMEDIATE-chunk_id]` |
+| `qa640_810s2_contract_8246a3a2e664` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[sqlalchemy-chunk_id]` |
+| `qa640_810s2_contract_a00f86c1d57a` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[sqlalchemy-summary_id]` |
+| `qa640_810s2_contract_fc15ca7e7955` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[sqlalchemy-experience_id]` |
+| `qa640_810s2_contract_61b84af7b14d` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[tuple-chunk_id]` |
+| `qa640_810s2_contract_c19e10903f14` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[tuple-summary_id]` |
+| `qa640_810s2_contract_0de857b12bb0` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[tuple-experience_id]` |
+| `qa640_810s2_contract_bf86356a7917` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[dict-chunk_id]` |
+| `qa640_810s2_contract_d38627474c99` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[dict-summary_id]` |
+| `qa640_810s2_contract_517e28d7ca5b` | `tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[dict-experience_id]` |
+| `qa640_810s2_contract_25ddd293ec99` | `tests/test_embedding_table_ownership_pg.py::test_ensure_is_idempotent_and_never_builds_ann[chunk_id]` |
+| `qa640_810s2_contract_b4f149e25b42` | `tests/test_embedding_table_ownership_pg.py::test_ensure_is_idempotent_and_never_builds_ann[summary_id]` |
+| `qa640_810s2_contract_b114f48ea856` | `tests/test_embedding_table_ownership_pg.py::test_ensure_is_idempotent_and_never_builds_ann[experience_id]` |
+| `qa640_810s2_contract_5494b7ff6d6a` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[IMMEDIATE-chunk_id]` |
+| `qa640_810s2_contract_ad88adeb5074` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[IMMEDIATE-summary_id]` |
+| `qa640_810s2_contract_84e760489807` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[IMMEDIATE-experience_id]` |
+| `qa640_810s2_contract_0b67d69e2dcf` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[DEFERRED-chunk_id]` |
+| `qa640_810s2_contract_f3ff76b1a25a` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[DEFERRED-summary_id]` |
+| `qa640_810s2_contract_518e89eee094` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_deferrable_primary_key_before_comment_writes[DEFERRED-experience_id]` |
+| `qa640_810s2_contract_9eaa68d7393a` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[dimension-chunk_id]` |
+| `qa640_810s2_contract_d0c892d30989` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[dimension-summary_id]` |
+| `qa640_810s2_contract_9dee96c1adf6` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[dimension-experience_id]` |
+| `qa640_810s2_contract_d46d7a66c6d8` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[source_type-chunk_id]` |
+| `qa640_810s2_contract_b1d3fd61b673` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[source_type-summary_id]` |
+| `qa640_810s2_contract_d695a3c423bf` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[source_type-experience_id]` |
+| `qa640_810s2_contract_81fb7be9abb5` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[nullable_model-chunk_id]` |
+| `qa640_810s2_contract_72c894068f5a` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[nullable_model-summary_id]` |
+| `qa640_810s2_contract_765537eaad12` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[nullable_model-experience_id]` |
+| `qa640_810s2_contract_771d2dc0ec19` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[primary-chunk_id]` |
+| `qa640_810s2_contract_7f0a8144ca7e` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[primary-summary_id]` |
+| `qa640_810s2_contract_578b7497c2d6` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[primary-experience_id]` |
+| `qa640_810s2_contract_c3052187ae7f` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_target-chunk_id]` |
+| `qa640_810s2_contract_6d0e33e75589` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_target-summary_id]` |
+| `qa640_810s2_contract_58a608b0612d` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_target-experience_id]` |
+| `qa640_810s2_contract_e2f5480be86f` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_delete-chunk_id]` |
+| `qa640_810s2_contract_6d3706372b50` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_delete-summary_id]` |
+| `qa640_810s2_contract_8861ff77cb1e` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_delete-experience_id]` |
+| `qa640_810s2_contract_397096ff0453` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[timestamp-chunk_id]` |
+| `qa640_810s2_contract_91ac15dca47d` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[timestamp-summary_id]` |
+| `qa640_810s2_contract_066efb608b7d` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[timestamp-experience_id]` |
+| `qa640_810s2_contract_33ee5d318947` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[view-chunk_id]` |
+| `qa640_810s2_contract_c72803e6dc87` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[view-summary_id]` |
+| `qa640_810s2_contract_15459b1a2fb7` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[view-experience_id]` |
+| `qa640_810s2_contract_0167e36b53c3` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[index-chunk_id]` |
+| `qa640_810s2_contract_19fe69e1e5b8` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[index-summary_id]` |
+| `qa640_810s2_contract_a477f6323192` | `tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[index-experience_id]` |
+| `qa640_810s2_contract_bd483eb883a3` | `tests/test_embedding_table_ownership_pg.py::test_ensure_and_upsert_roll_back_with_the_caller[chunk_id]` |
+| `qa640_810s2_contract_be65bdec402c` | `tests/test_embedding_table_ownership_pg.py::test_ensure_and_upsert_roll_back_with_the_caller[summary_id]` |
+| `qa640_810s2_contract_9e9e9c13f95b` | `tests/test_embedding_table_ownership_pg.py::test_ensure_and_upsert_roll_back_with_the_caller[experience_id]` |
+| `qa640_810s2_contract_402ca940abb3` | `tests/test_embedding_table_ownership_pg.py::test_constructor_leaves_missing_indexes_and_catalog_unchanged` |
+| `qa640_810s2_contract_9f62c5b7eebe` | `tests/test_embedding_table_ownership_pg.py::test_constructor_refuses_missing_vector_extension` |
+| `qa640_810s2_contract_80aa36e3638d` | `tests/test_embedding_table_ownership_pg.py::test_embedding_job_source_path_propagates_ensure_failure` |
+| `qa640_810s2_contract_4a34adb5d8bd` | `tests/test_embedding_table_ownership_pg.py::test_content_processor_embedding_method_propagates_ensure_failure` |
+| `qa640_810s2_source_c3c9bbf37ad6` | `tests/test_memnon/test_source_embeddings.py::test_summaries_generate_every_vector_before_one_write_transaction` |
+| `qa640_810s2_source_5802a1437d43` | `tests/test_memnon/test_source_embeddings.py::test_experiences_load_and_stamp_only_valid_rendered_rows` |
+| `qa640_810s2_source_7ea7758c1d5f` | `tests/test_memnon/test_source_embeddings.py::test_stamp_shortfall_rolls_back_the_upserted_vectors` |
+| `qa640_810s2_source_709b2e3d57ee` | `tests/test_memnon/test_source_embeddings.py::test_wrappers_are_the_shared_orchestrator` |
+| `qa640_810s2_source_daf8a415d829` | `tests/test_memnon/test_source_embeddings.py::test_shared_helpers_serve_a_caller_supplied_embedder` |
+| `qa640_810s2_summary384_9e17c36447de` | `tests/test_retrograde_summary_retrieval.py::test_retrograde_summary_embedding_table_helper_accepts_dbapi_cursor` |
+| `qa640_810_adopt_recreate_13c8c433e1ef` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_recreates_the_indexes_and_column_it_owns` |
+| `qa640_810_adopt_noop_c06e08aa82ea` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_changes_nothing_on_a_complete_database` |
+| `qa640_810_adopt_drift_7234609f09c9` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_refuses_a_same_named_index_with_another_definition` |
+| `qa640_810_no_create_all_b575cc263442` | `tests/test_unowned_index_adoption_pg.py::test_database_manager_construction_creates_no_table` |
+| `qa640_vocab_migration_0f2f686c96c9` | `tests/test_orrery/test_migrate.py::test_character_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_db8fd6037d30` | `tests/test_orrery/test_migrate.py::test_completed_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_27d81ddc0046` | `tests/test_orrery/test_migrate.py::test_entity_tag_expiry_substrate_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_76e07fe1817b` | `tests/test_orrery/test_migrate.py::test_faction_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_635885fe1635` | `tests/test_orrery/test_migrate.py::test_state_clearance_event_type_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_188e422077db` | `tests/test_orrery/test_migrate.py::test_kind_qualified_contact_migration_executes_against_slot_db` |
+| `qa640_grieving_migration_7d2a1046a476` | `tests/test_orrery/test_migrate.py::test_canonical_grieving_migration_executes_against_slot_db` |
+| `qa640_810_template_8a4a7ef334e6` | `tests/test_new_story_setup.py::test_template_clone_replays_no_migration` |
+| `qa640_810_clone_19f434ca3713` | `tests/test_new_story_setup.py::test_template_clone_replays_no_migration` |
+| `qa640_810_fail_99f1a7141cbf` | `tests/test_new_story_setup.py::test_failing_migration_is_unapplied_and_initialization_raises` |
+| `qa640_schema_docs_870af925ef6c` | `tests/test_schema_documentation_pg.py::test_schema_documentation_coverage` |
+| `qa640_docs_refresh_199b556e60be` | `tests/test_schema_documentation_pg.py::test_story_setup_and_runner_preserve_comments` |
+| `qa640_regen_truncate_6d45e5ef4f18` | `tests/test_regenerate_embeddings_truncate_pg.py::test_truncate_table_keeps_rows_when_the_model_artifact_is_missing` |
+| `qa640_regen_truncate_80f72d878ca1` | `tests/test_regenerate_embeddings_truncate_pg.py::test_chunk_keeps_its_row_when_the_model_artifact_is_missing` |
+| `qa665_e6eaf18f9ec2` | `tests/test_orrery/test_retrograde_embedding_pg.py::test_batch_embedding_writes_every_summary_model_pair` |
+| `qa640_766_schema_e834a57633f4` | `tests/test_memnon/test_ann_gate.py::test_ann_candidate_index_build_drop` |
+| `qa885_transaction_writer_4547fbb5adb0` | `tests/test_pg_disposable_target.py::test_transaction_relationship_writer_writes_on_a_clone` |
+| `qa640_810s2_experience_ids_d0ed7347ab3c` | `tests/test_orrery/test_experiences.py::test_embedding_upsert_binds_each_correct_experience_id` |
+
+
+The first commit attempt was refused by `validate-config` because the temporary
+pytest fixtures were still inside the checkout: its recursive model-ID scan
+found 1899 intentional fixture literals under `scratchpad/810-S2-fix1096`.
+Moved that entire untracked scratch directory to the external artifact path
+above before retrying the unchanged fix; no hook was disabled and no registry
+or model-ID baseline was changed. The other hooks passed on that attempt.
+
+Agent: Codex (GPT-6 Astra)

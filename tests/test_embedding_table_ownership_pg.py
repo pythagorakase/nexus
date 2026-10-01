@@ -295,6 +295,38 @@ def test_ensure_is_idempotent_and_never_builds_ann(
             )
 
 
+@pytest.mark.parametrize("spec", SOURCES, ids=lambda s: s.embedding_fk_column)
+@pytest.mark.parametrize("initially", ["IMMEDIATE", "DEFERRED"])
+def test_ensure_refuses_deferrable_primary_key_before_comment_writes(
+    ownership_db: str, spec: EmbeddingSource, initially: str
+) -> None:
+    """Reject an unusable ON CONFLICT arbiter before documenting the table."""
+    name = spec.table_name_for_dimensions(3)
+    constraint = f"{name}_deferrable_pk"
+    with closing(connect(ownership_db)) as conn, conn, conn.cursor() as cur:
+        spec.ensure_table(cur, 3)
+        cur.execute(f"ALTER TABLE {name} DROP CONSTRAINT {name}_pkey")
+        cur.execute(
+            f"ALTER TABLE {name} ADD CONSTRAINT {constraint} "
+            f"PRIMARY KEY ({spec.embedding_fk_column}, model) "
+            f"DEFERRABLE INITIALLY {initially}"
+        )
+        cur.execute(f"COMMENT ON TABLE {name} IS NULL")
+        cur.execute("SELECT obj_description(%s::regclass, 'pg_class')", (name,))
+        comment_before = cur.fetchone()
+        assert comment_before == (None,)
+        before = catalog_snapshot(cur)
+
+        with pytest.raises(
+            RuntimeError, match=name + r".*" + constraint + r".*expected.*observed"
+        ) as error:
+            spec.ensure_table(cur, 3)
+        print(str(error.value))
+        cur.execute("SELECT obj_description(%s::regclass, 'pg_class')", (name,))
+        assert cur.fetchone() == comment_before
+        assert catalog_snapshot(cur) == before
+
+
 MALFORMED = [
     "dimension",
     "source_type",

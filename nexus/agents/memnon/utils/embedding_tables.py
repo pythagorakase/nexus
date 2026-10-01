@@ -204,7 +204,8 @@ def _ensure_corpus_table(
             )
         constraints = _catalog_rows(
             connection,
-            f"""SELECT c.contype, c.convalidated, c.confdeltype,
+            f"""SELECT c.conname, c.contype, c.convalidated, c.confdeltype,
+            c.condeferrable, c.condeferred,
             ARRAY(SELECT a.attname FROM unnest(c.conkey) WITH ORDINALITY k(num, ord)
               JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num
               ORDER BY k.ord) AS columns,
@@ -223,6 +224,11 @@ def _ensure_corpus_table(
             f"{table_name} primary key",
             [[source_id, "model"]],
             [row["columns"] for row in primary],
+        )
+        _require_contract(
+            f"{table_name} constraint {primary[0]['conname']} primary key deferral",
+            (False, False),
+            (primary[0]["condeferrable"], primary[0]["condeferred"]),
         )
         primary_index = primary[0]["index_name"]
         foreign = [
