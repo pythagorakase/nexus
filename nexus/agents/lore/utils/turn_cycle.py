@@ -332,16 +332,12 @@ class TurnCycleManager:
 
         memory_update: Dict[str, Any] = {}
         if getattr(self.lore, "memory_manager", None):
-            try:
-                pass2_update = self.lore.memory_manager.handle_user_input(
-                    turn_context.user_input,
-                    turn_context.token_counts,
-                    turn_id=turn_context.turn_id,
-                )
-                memory_update = pass2_update.to_dict()
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error("Pass 2 memory handling failed: %s", exc)
-                memory_update = {"error": str(exc)}
+            pass2_update = self.lore.memory_manager.handle_user_input(
+                turn_context.user_input,
+                turn_context.token_counts,
+                turn_id=turn_context.turn_id,
+            )
+            memory_update = pass2_update.to_dict()
 
         if memory_update:
             turn_context.memory_state["pass2"] = memory_update
@@ -689,42 +685,35 @@ class TurnCycleManager:
         for query_obj in queries[:max_deep_queries]:
             if getattr(self.lore, "memory_manager", None):
                 self.lore.memory_manager.record_pass1_query(query_obj["text"])
-            try:
-                # MEMNON's SearchManager uses the query type internally
-                # to adjust vector/text weights for optimal results
-                search_kwargs: Dict[str, Any] = {
-                    "query": query_obj["text"],
-                    "k": 15,  # Get more results since we'll deduplicate
-                    "use_hybrid": True,
-                }
-                query_embeddings: Dict[str, List[float]] | None = None
-                if collect_query_embeddings:
-                    query_embeddings = {}
-                    search_kwargs["query_embeddings"] = query_embeddings
-                if (
-                    self._presence_boost_enabled()
-                    and turn_context.present_character_ids
-                ):
-                    search_kwargs["present_character_ids"] = (
-                        turn_context.present_character_ids
-                    )
-                results = self.lore.memnon.query_memory(**search_kwargs)
-                if query_embeddings:
-                    turn_context.recall_query_embeddings = query_embeddings
+            # MEMNON's SearchManager uses the query type internally
+            # to adjust vector/text weights for optimal results
+            search_kwargs: Dict[str, Any] = {
+                "query": query_obj["text"],
+                "k": 15,  # Get more results since we'll deduplicate
+                "use_hybrid": True,
+            }
+            query_embeddings: Dict[str, List[float]] | None = None
+            if collect_query_embeddings:
+                query_embeddings = {}
+                search_kwargs["query_embeddings"] = query_embeddings
+            if self._presence_boost_enabled() and turn_context.present_character_ids:
+                search_kwargs["present_character_ids"] = (
+                    turn_context.present_character_ids
+                )
+            results = self.lore.memnon.query_memory(**search_kwargs)
+            if query_embeddings:
+                turn_context.recall_query_embeddings = query_embeddings
 
-                # Track query types for logging
-                query_type = query_obj["type"]
-                query_type_counts[query_type] = query_type_counts.get(query_type, 0) + 1
+            # Track query types for logging
+            query_type = query_obj["type"]
+            query_type_counts[query_type] = query_type_counts.get(query_type, 0) + 1
 
-                # Tag results with query metadata
-                for result in results.get("results", []):
-                    result["query_type"] = query_type
-                    result["query_source"] = query_obj["source"]
+            # Tag results with query metadata
+            for result in results.get("results", []):
+                result["query_type"] = query_type
+                result["query_source"] = query_obj["source"]
 
-                all_results.extend(results.get("results", []))
-
-            except Exception as e:
-                logger.error(f"Query failed for '{query_obj['text'][:50]}...': {e}")
+            all_results.extend(results.get("results", []))
 
         # Sort by score and take top results
         unique_results = _deduplicate_retrieval_results(all_results)
