@@ -115,9 +115,10 @@ async def test_retrieve_context_skips_a_directive_that_sanitizes_to_nothing() ->
     """A punctuation-only directive must not send an empty query to MEMNON."""
 
     lore = LORE.__new__(LORE)
-    lore.memnon = FakeMemnon()
-    lore.settings = {}
+    memnon = FakeMemnon()
+    setattr(lore, "memnon", memnon)
+    setattr(lore, "settings", {})
 
     await lore.retrieve_context(["???"], chunk_id=None)
 
-    assert lore.memnon.queries == []
+    assert memnon.queries == []
