@@ -65,7 +65,7 @@ no longer exists.
 | Code | Meaning | JSON `code` values |
 | --- | --- | --- |
 | 0 | Success | — |
-| 1 | Domain failure: the command ran and failed | `domain_failure`, `not_found`, `api_error`, `invalid_response`, `config_error` |
+| 1 | Domain failure: the command ran and failed | `domain_failure`, `not_found`, `api_error`, `invalid_response`, `config_error`, `database_error` |
 | 2 | Usage: unusable arguments, argparse's own rejections included | `usage_error` |
 | 3 | Transport refused under a remote runtime | `transport_refused` |
 | 4 | The NEXUS API could not be reached or did not answer in time | `api_unreachable` |
@@ -76,18 +76,43 @@ checked for every command but `doctor` before it runs. A `NEXUS_API_URL` that
 is not `http://` or `https://`, and a runtime credential that is missing or
 refused, are a `config_error` when the first request is sent. Every HTTP
 command reports these, and an API that refuses or drops the connection or
-does not answer in time (exit 4), the same way. Only a command that already saved work
-(a confirmed artifact, a saved seed, a scheduled turn) reports a later failed
-request itself, with a `partial` that keeps that work and its recovery
-command: as `api_unreachable` (exit 4) when the gateway refused or dropped the
-connection, otherwise as a domain failure. A traceback means a programming
-fault.
+does not answer in time (exit 4), the same way.
+
+Every HTTP command classifies the API's answers the same way too:
+
+- A non-2xx answer is `api_error`, with the answer's HTTP status in
+  `partial.status_code`. The legacy play and slot commands keep their message
+  (`API error: <body>`, or their own wording where they had one).
+- A 401, a 403, or a redirect that is not followed is `config_error`. The
+  gateway itself answers none of them, so an edge in front of it, such as
+  Cloudflare Access, rejected the request; the error names the URL, the
+  status, a redirect's `Location`, and `[runtime.remote.cloudflare_access]`.
+  Requests follow redirects unless they carry a runtime credential, so a
+  redirect is reported only when one was sent.
+- The `inspect` verbs report a 404 as `not_found`, before either rule above.
+- A handler's read of a 2xx body that is not a JSON object is
+  `invalid_response`; an unusable body during a generation wait, or of the
+  opening turn's schedule answer, stays a domain failure with
+  `generation_error.status` or `bootstrap_error` naming it.
+- `model --slot N` reads the slot database itself; a database it cannot open
+  or query is `database_error`, and a story pin naming a model no longer in
+  the registry is a domain failure whose error names the `--clear` remedy.
+
+Only a command that already saved work (a confirmed artifact, a saved seed, a
+scheduled turn) reports a later failed request itself, with a `partial` that
+keeps that work and its recovery command: as `api_unreachable` (exit 4) when
+the gateway refused or dropped the connection, as `api_error` for a non-2xx
+answer, as `config_error` for an access rejection, otherwise as a domain
+failure. A traceback means a programming fault.
 
 `[runtime.cli].request_timeout_seconds` bounds each short request of `load`,
 `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, and
-`model --set`/`--clear`; generation, wizard chat, and transition requests keep
-their own budgets. Waiting on a generation session is described in Waiting on
-a Generation below.
+`model --set`/`--clear`. `[runtime.cli].turn_request_timeout_seconds` bounds
+each model-turn request: wizard chat, trait toggles, phase introductions, and
+the POSTs that schedule `continue`, `retry`, `regenerate`, and the seed's
+opening turn. The wizard's transition to narrative takes
+`[orrery.retrograde.wizard].transition_timeout_seconds`. Waiting on a
+generation session is described in Waiting on a Generation below.
 
 ### Transports
 
@@ -162,10 +187,13 @@ helper, `nexus.cli.wait_for_session`:
   not bound that load.
 - A session the API reports as failed is a domain failure (exit 1) whose
   `error` is the API's own message.
+- A non-2xx answer to a status read or the state load is `api_error`, or
+  `config_error` for a 401, a 403 or an unfollowed redirect (exit 1), with
+  `generation_error.status` `http_error`.
 - A session still running when the budget ends, a read that times out
-  (before its headers arrive or while its body stalls after them), an HTTP
-  error answer or any other failed request, or an unusable payload is a
-  domain failure (exit 1).
+  (before its headers arrive or while its body stalls after them), any other
+  failed request (too many redirects, for example), or an unusable payload is
+  a domain failure (exit 1).
 - A gateway that refuses or drops the connection mid-wait, a body cut off
   mid-answer included, is `api_unreachable` (exit 4). A failed read is never
   retried.
