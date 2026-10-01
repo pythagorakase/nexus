@@ -1,4 +1,4 @@
-"""Rollback-only live coverage for ruled Orrery composition sources."""
+"""Rollback-only composition coverage with an explicit story clock."""
 
 from __future__ import annotations
 
@@ -327,6 +327,7 @@ def test_live_roster_source_respects_reach_roster_liveness_and_opt_in(
     state = hydrate_world_state(
         session,
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=30,
     )
     at_one = compose_actor_faction_bindings(
@@ -389,6 +390,7 @@ def test_live_widened_sources_keep_resolver_and_audit_in_parity(
     templates = (HOSTILE_TEMPLATE, ROSTER_TEMPLATE)
     kwargs = {
         "anchor_chunk_id": None,
+        "world_time_override": STORY_WORLD_TIME,
         "window_chunks": 30,
         "composition_settings": COMPOSITION,
     }
@@ -454,6 +456,7 @@ def test_live_acquaintance_writes_mutual_contact_and_feeds_next_tick(
     session.flush()
     kwargs = {
         "anchor_chunk_id": None,
+        "world_time_override": STORY_WORLD_TIME,
         "window_chunks": 30,
         "composition_settings": COMPOSITION,
     }
@@ -598,6 +601,7 @@ def test_live_acquaintance_rebuffs_prior_ties_and_separation(
         session,
         (MAKE_ACQUAINTANCE,),
         anchor_chunk_id=None,
+        world_time_override=STORY_WORLD_TIME,
         window_chunks=30,
         composition_settings=COMPOSITION,
     )

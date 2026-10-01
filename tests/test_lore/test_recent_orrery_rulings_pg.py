@@ -1,4 +1,4 @@
-"""Disposable-PostgreSQL prompt regressions for recent Orrery rulings."""
+"""Recent Orrery ruling regressions with an explicit disposable story clock."""
 
 from __future__ import annotations
 
@@ -33,6 +33,8 @@ from nexus.memory import ContextMemoryManager
 from tests.pg_fixtures import connect
 
 pytestmark = pytest.mark.requires_postgres
+
+STORY_WORLD_TIME = datetime(2042, 8, 18, 8, 54, tzinfo=timezone.utc)
 
 
 def _connect(dbname: str) -> Any:
@@ -110,7 +112,7 @@ def _resolve_then_commit(
     drafts: tuple[OrreryResolutionDraft, ...],
     adjudications: list[dict[str, Any]],
 ) -> Any:
-    """Exercise the live-cycle resolve then real adjudication/commit path."""
+    """Resolve at the fixture's supplied clock, then adjudicate and commit."""
 
     settings = seeded["settings"]
     with seeded["Session"]() as session:
@@ -118,6 +120,7 @@ def _resolve_then_commit(
             session,
             BUILTIN_TEMPLATES,
             anchor_chunk_id=tick_chunk_id,
+            world_time_override=STORY_WORLD_TIME,
             window_chunks=int(settings["orrery"]["binding"]["window_chunks"]),
             sunhelm_settings=settings["orrery"].get("sunhelm"),
         )
@@ -146,7 +149,7 @@ def _resolve_then_commit(
 
 @pytest.fixture()
 def recent_rulings_db() -> Iterator[dict[str, Any]]:
-    """Create real outcomes through resolve/adjudicate/commit, then drop the DB."""
+    """Create sparse-chunk outcomes at an explicit clock, then drop the DB."""
 
     dbname = f"nexus_test_i685_{uuid.uuid4().hex[:12]}"
     admin = _connect("postgres")
@@ -178,7 +181,7 @@ def recent_rulings_db() -> Iterator[dict[str, Any]]:
                     ON CONFLICT (id) DO UPDATE
                     SET base_timestamp = EXCLUDED.base_timestamp
                     """,
-                    (datetime(2042, 8, 18, 8, 54, tzinfo=timezone.utc),),
+                    (STORY_WORLD_TIME,),
                 )
                 cur.execute(
                     "INSERT INTO entities (kind, is_active) "
