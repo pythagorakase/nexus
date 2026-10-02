@@ -3,7 +3,7 @@ status: canonical
 sources:
   - tests/test_doc_front_matter.py
   - README.md
-verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
+verified_commit: "41783c1dfcb16ff94e31e26bf2723b597b97803b"
 ---
 
 # Document Status and the Decision Ledger
@@ -23,7 +23,7 @@ A classified document begins with a YAML block, before its title:
 status: canonical
 sources:
   - nexus/api/narrative.py
-  - nexus/jobs/
+  - nexus/jobs/scheduler.py
 verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
 ---
 ```
@@ -31,8 +31,8 @@ verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
 | Key | Required | Contract |
 |---|---|---|
 | `status` | always | `canonical`, `historical`, or `superseded`. |
-| `verified_commit` | always | The commit whose tree the document was last checked against: 7 to 40 lowercase hex characters, quoted so YAML keeps it a string. A commit cannot name itself, so this is usually the base of the change that edits the document. |
-| `sources` | when `canonical` | Repository-relative paths (files, or directories with a trailing slash) that the document describes. Every path must exist. Optional for the other statuses. |
+| `verified_commit` | always | The commit whose tree the document was last checked against: 7 to 40 lowercase hex characters, quoted so YAML keeps it a string. A commit cannot name itself, so this is usually the base of the change that edits the document. When it changes, it must name the merge base with `origin/main` or one of its ancestors, and descend from the value it replaces, so it survives a squash merge. |
+| `sources` | when `canonical` | Repository-relative paths of the files that the document describes. Directories are not accepted. Every path must exist. Optional for the other statuses. |
 | `superseded_by` | when `superseded` | The repository-relative path of the replacing document, which must list this document under `supersedes`. The replacement may itself be superseded later; links are never rewritten, and following them must reach a document that is not superseded. Not allowed with any other status. |
 | `supersedes` | no | Documents this one replaces. Each must be `superseded` with `superseded_by` naming this document. |
 
@@ -40,9 +40,9 @@ No other keys are accepted.
 
 ### Status Values
 
-- **canonical** — describes the current system. A change that alters the
-  behavior of a listed source updates the document and its `verified_commit`
-  in the same pull request.
+- **canonical** — describes the current system. Any change to a listed
+  source re-verifies the document and moves its `verified_commit` in the same
+  pull request.
 - **historical** — a record of retired or completed work: blueprints for
   modules that were never built, dated plans and checkpoints, and notes on
   configurations since replaced. Kept for provenance, never edited to track the
@@ -63,8 +63,12 @@ exists, that supersession links agree in both directions and every chain ends
 at a document that is not superseded, and that every Markdown path `README.md`
 references, including `./`-relative links, exists inside the repository, is not
 superseded, and is labeled historical on its line when its status is
-historical. It does not yet fail when a listed source changes after
-`verified_commit`.
+historical. It also fails when the branch's diff against its merge base with
+`origin/main`, uncommitted and untracked files included, touches a source that
+a document canonical at that merge base or now declares at either point, unless
+the document's `verified_commit` changed. It fails rather than skips when that
+history is missing: no git checkout at the repository root, a shallow clone, no
+`origin/main`, or no merge base.
 
 ## Decision and Parked-Work Records
 

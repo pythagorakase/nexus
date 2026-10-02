@@ -2,19 +2,40 @@
 status: canonical
 sources:
   - CLAUDE.md
-  - nexus/agents/
-  - nexus/memory/
+  - nexus/agents/lore/lore.py
+  - nexus/agents/lore/utils/turn_cycle.py
+  - nexus/agents/lore/logon_utility.py
+  - nexus/agents/lore/seat_blocks.py
+  - nexus/agents/logon/apex_enums.py
+  - nexus/agents/logon/apex_schema.py
+  - nexus/agents/logon/gaia_registry_schema.py
+  - nexus/agents/logon/orrery_tag_validation.py
+  - nexus/agents/logon/place_reference_validation.py
+  - nexus/agents/logon/skald_wire.py
+  - nexus/agents/memnon/memnon.py
+  - nexus/agents/orrery/worker.py
+  - docs/blueprint_gaia.md
+  - docs/blueprint_nemesis.md
+  - docs/blueprint_psyche.md
+  - nexus/memory/manager.py
+  - nexus/memory/context_state.py
+  - nexus/memory/divergence.py
+  - nexus/memory/entity_detector.py
   - nexus/api/narrative.py
-  - nexus/jobs/
+  - nexus/jobs/scheduler.py
   - nexus/prompts/registry.py
-  - prompts/
-  - nexus/api/slot_utils.py
-  - nexus/util/secret_manager.py
-  - tests/
-  - pytest.ini
-  - docs/agent_workflow.md
   - docs/turn_flow_sequence.md
-verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
+  - tests/conftest.py
+  - tests/pg_fixtures.py
+  - tests/test_lore/conftest.py
+  - tests/test_lore/test_memory_manager.py
+  - pytest.ini
+  - nexus.toml
+  - docs/agent_workflow.md
+  - nexus/util/secret_manager.py
+  - scripts/sync_secrets.py
+  - nexus/api/slot_utils.py
+verified_commit: "41783c1dfcb16ff94e31e26bf2723b597b97803b"
 ---
 
 # Repository Guidelines
