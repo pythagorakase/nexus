@@ -1,3 +1,5 @@
+> Historical: the coordinator's second clarification resolves the histogram rule below with a visibility-hidden control capture. The subsequent interaction blocker is recorded in [interaction-stop-report.md](interaction-stop-report.md).
+
 # Resumed Round-Four Stop Report: Histogram Rule Removes the Foreground
 
 Date: 2026-10-05. Source head: `afbb27568aeb4a19c13103720b9c7134b48393d1`.

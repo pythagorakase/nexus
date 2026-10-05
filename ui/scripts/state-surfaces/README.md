@@ -1,37 +1,44 @@
-# Browser-Resolved State Surfaces
+# Painted Control-Capture Oracle (Round-Four Work in Progress)
 
-Run from the worktree root:
+The control-capture replacement is blocked by a production interaction mismatch.
+See [the interaction stop-report](../../../docs/qa/777-glyph-first-states/after-review-r4/interaction-stop-report.md).
+The checked acceptance receipt remains stale. No tables, swatches, group maxima
+or exceptions have been regenerated or approved from this partial work.
+
+The draft bundles the real NexusLayout and production settings sections. Vite
+emits the production CSS in its normal order; the reversed fixture stylesheet
+has been removed. Browser captures use file://, aborted HTTP(S), device scale 4,
+1200×900 default, dark scheme and reduced motion. Media preludes are inventoried
+with additional emulation variants; compound-condition coverage remains to be
+validated. Hover uses the actual mouse; focus-visible uses keyboard Tab.
+Finite browser animations/transitions are awaited. Infinite animations are
+paused at declared phases. Candidates are rendered, never composited by hand.
+
+Each bounding-box sample has a painted PNG and a visibility:hidden control.
+The mask contains changed device pixels; its RGB mode, mask size and top eight
+colors are recorded. The trial mode floor is 8%: a 40% trial rejected a real
+verified key whose own shadow enlarged the mask (interior mode 423/2304).
+The 8% floor has not yet been validated across the complete inventory.
+Empty or weak masks throw named measurement failures.
+
+Freshness hashes path-delimited file bytes from the esbuild metafile, recursive
+CSS imports, tooling, Chromium/Playwright configuration and Tailwind's complete
+client source scan. Vitest computes the fingerprint in a clean Node process,
+then refuses stale or incomplete receipts before using samples. The per-group
+search and nine-plant protocol are draft implementations awaiting a complete
+unplanted control receipt. Plants have not been run; their command splitting,
+acceptance-failure classification and complete media coverage remain unfinished.
+
+Run full regeneration only after the coordinator settles the inventory:
 
 ```sh
-npm --prefix ui ci
-# Only needed when the pinned browser is absent:
-npx --prefix ui playwright install chromium
-npm --prefix ui run resolve-state-surfaces
+STATE_SURFACES_SCRATCH=<order-scratch>/capture npm --prefix ui run resolve-state-surfaces
+npm --prefix ui test -- state-shades StateGlyphs shell-accessibility
 ```
 
-Set `STATE_SURFACES_SCRATCH` to an order-specific scratch directory when required
-by a work order. Otherwise the script creates a temporary directory. It starts
-no server: esbuild bundles the real production renderers and seeded React Query
-data, Vite runs the production PostCSS/Tailwind pipeline, and Playwright loads a
-`file://` page with HTTP(S) requests aborted. The conditions are 1200×900, dark
-color scheme, and reduced motion. Place selection opens the production dialog;
-the capture clicks its existing Close button and waits for dismissal.
-
-The receipt contains 29 contexts per theme in shipped and historical-pigment
-phases, the exact computed color strings, each compositing ancestor's opacity,
-background and opacity stacking-context flag, the SVG terrain colors and radial
-wash endpoints, and browser-serialized candidate pigments. Historical pigments
-are rendered on the current geometry; historical sidebar rings are opaque.
-Interior paints exclude edge antialiasing and glow, as the fixed proof requires.
-
-The SHA-256 guards stylesheet sources, the four state component sources, fixture,
-regenerator, toolchain configurations and lockfile, browser revision and emulation
-conditions. Vitest checks that receipt and reads the JSON without launching or
-installing a browser. The joint search substitutes only the candidate pigment
-at the surface node; all opacity groups and backdrops remain browser-reported.
-
-After regeneration, run `npm --prefix ui test -- state-shades`. A changed receipt
-also requires refreshing the checked evidence tables; regeneration alone cannot
-silently bless a changed palette or a changed backdrop.
+Filtered probes require an explicit STATE_SURFACES_OUTPUT scratch path and
+cannot overwrite ui/client/src/state-surfaces.resolved.json. A partial success
+is marked acceptanceComplete=false; a failure writes incomplete-probe.json in
+scratch and names its context. No partial probe satisfies the acceptance gates.
 
 Codex, GPT-6.

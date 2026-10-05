@@ -105,7 +105,7 @@ function rootOf(value: string): string {
   return root;
 }
 const pairwise = (states: readonly string[]) => states.flatMap((a, i) => states.slice(i + 1).map(b => [a, b] as const));
-// Exactly 14 base pairs, expanded below into production opacity contexts.
+// Exactly 14 base pairs, expanded below into browser-painted contexts.
 const STATE_PAIRS = {
   memory: pairwise(["normal", "over"]),
   delete: pairwise(["unarmed", "armed"]),
@@ -136,71 +136,51 @@ const SIGNATURES: Record<Surface, Record<string, string>> = {
   key: { "optional-absent": "Circle", "required-missing": "AlertTriangle", present: "CircleDot", verified: "CircleCheck" },
 };
 type Palette = Record<string, Triple>;
-type Layer = {
-  tag: string; classes: string; opacity: string; backgroundColor: string;
-  backgroundImage: string; stackingContext: boolean;
-  underlay?: { color: string; opacity: string; source: string };
+type Sample = {
+  painted: [number, number, number]; maskSize: number; modeFraction: number;
+  histogram: { rgb: number[]; count: number }[]; width: number; height: number;
+  action: string; animationsRunning: number;
+  pseudos: { hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean };
+  target: { hover: boolean; focusVisible: boolean };
 };
-type Sample = { property: string; color: string; chain: Layer[] };
+type ContextSamples = Record<string, Record<string, Sample>>;
 type Receipt = {
-  inputs: ReturnType<typeof inputs>;
-  themes: Record<Theme, Record<"shipped" | "before", Record<string, Record<string, Sample>>>>;
-  candidateColors: Record<Theme, Record<string, string>>;
+  inputs: Awaited<ReturnType<typeof inputs>>;
+  media: { preludes: string[]; unsupported: string[]; variants: { id: string }[] };
+  proof: { acceptanceComplete: boolean; minimumModeFraction: number; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
+  conditions: Record<string, Record<Theme, {
+    shipped: ContextSamples; before: ContextSamples;
+    candidates: Record<string, Record<string, Record<string, Sample>>>;
+  }>>;
 };
 const receipt = JSON.parse(readFileSync(resolve(import.meta.dirname, "state-surfaces.resolved.json"), "utf8")) as Receipt;
-const currentInputs = inputs(resolve(import.meta.dirname, "../.."));
-if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))
+const currentInputs = JSON.parse(execFileSync(process.execPath,
+  [resolve(import.meta.dirname, "../../scripts/state-surfaces/inputs.mjs"), resolve(import.meta.dirname, "../..")], { encoding: "utf8" }));
+if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))
   throw new Error("Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).");
-// The browser has already resolved selectors, inheritance, media, specificity,
-// !important, custom properties and color-mix. Only numeric source-over remains.
-function browserColor(value: string): { rgb: Triple; alpha: number } {
-  const srgb = value.match(/^color\(srgb ([\d.e+-]+) ([\d.e+-]+) ([\d.e+-]+)(?: \/ ([\d.e+-]+))?\)$/);
-  const legacy = value.match(/^rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)$/);
-  const match = srgb ?? legacy;
-  if (!match) throw new Error(`Unsupported browser color serialization: ${value}`);
-  return { rgb: match.slice(1, 4).map(v => Number(v) / (srgb ? 1 : 255)) as unknown as Triple, alpha: Number(match[4] ?? 1) };
-}
-function over(front: { rgb: Triple; alpha: number }, back: { rgb: Triple; alpha: number }) {
-  const alpha = front.alpha + back.alpha * (1 - front.alpha);
-  return { alpha, rgb: (alpha === 0 ? [0, 0, 0] : front.rgb.map((v, i) =>
-    (v * front.alpha + back.rgb[i] * back.alpha * (1 - front.alpha)) / alpha)) as Triple };
-}
-function painted(sample: Sample, candidate?: Triple): Triple {
-  let pixel = candidate ? { rgb: candidate, alpha: 1 } : browserColor(sample.color);
-  for (const [i, layer] of sample.chain.entries()) {
-    // A background-color surface IS the leaf background. Substitution replaces
-    // that one token value, never its browser-reported opacity or any backdrop.
-    let back = i === 0 && sample.property === "background-color"
-      ? { rgb: [0, 0, 0] as Triple, alpha: 0 } : browserColor(layer.backgroundColor);
-    if (layer.underlay) {
-      const underlay = browserColor(layer.underlay.color);
-      back = over({ ...underlay, alpha: underlay.alpha * Number(layer.underlay.opacity) }, back);
-    }
-    pixel = over(pixel, back);
-    pixel.alpha *= Number(layer.opacity);
-  }
-  if (Math.abs(pixel.alpha - 1) > 1e-12) throw new Error("Browser chain has no opaque final backdrop");
-  return pixel.rgb;
-}
-type Context = { surface: Surface; name: string; render: (state: string, p: Palette | undefined, before: boolean, theme: Theme) => Triple };
-// Explicit inventory; adding or dropping a context cannot silently change the proof.
-const CONTEXTS: Context[] = [
-  ["memory", "fill"],
-  ...["ready", "ready-exceeds"].flatMap(row => ["rest", "hover", "focus"].map(action => ["delete", `${row}/${action}`])),
-  ...["required", "optional"].flatMap(need => ["rest", "hover", "focus"].map(action => ["key", `${need}/${action}`])),
-  ...["sea", "land"].flatMap(terrain => ["fill", "ring"].map(part => ["map", `canvas-${terrain}/${part}`])),
-  ...[0, .07].flatMap(wash => ["rest", "hover", "selected-current"].flatMap(action => ["fill", "ring"].map(part => ["map", `sidebar-wash-${wash}/${action}/${part}`]))),
-].map(([surface, name]) => ({ surface: surface as Surface, name, render: (state, p, before, theme) => {
-  const sample = receipt.themes[theme][before ? "before" : "shipped"][`${surface}/${name}`][state];
-  if (!p) return painted(sample);
-  // Joint-search substitution rule: vary only the surface's own state-token
-  // pigment. Every opacity, background and ancestor comes from Chromium. The
-  // domain is unchanged; Chromium also reports candidate RGB serialization.
-  const root = MAPPINGS[surface as Surface][state];
-  const candidate = candidates(theme, root).find(c => c.rgb.every((v, i) => Math.abs(v - p[root][i]) < 1e-12));
-  if (!candidate) throw new Error(`Candidate outside domain: ${theme}/${root}`);
-  return painted(sample, browserColor(receipt.candidateColors[theme][candidate.value]).rgb);
-} }));
+if (receipt.proof.acceptanceComplete !== true)
+  throw new Error("Incomplete painted state surfaces: filtered/probe captures are not acceptance receipts.");
+const painted = (sample: Sample): Triple => sample.painted.map(v => v / 255) as unknown as Triple;
+// No DOM/cascade/compositing model: only browser-painted candidate captures.
+const contextNames = [
+  "memory/fill",
+  ...["ready", "ready-exceeds"].flatMap(row => ["rest", "row-hover", "button-hover", "focus-visible"].map(action => `delete/${row}/${action}`)),
+  ...["required", "optional"].flatMap(need => ["rest", "hover", "focus-visible"].map(action => `key/${need}/${action}`)),
+  ...["sea", "land"].flatMap(terrain => ["fill", "ring"].map(part => `map/canvas-${terrain}/${part}`)),
+  ...["rest", "hover", "selected-current"].flatMap(action => ["fill", "ring"].map(part => `map/sidebar/${action}/${part}`)),
+];
+const CONTEXTS = receipt.media.variants.flatMap(({ id: condition }) => contextNames.map(context => {
+  const [surface, ...name] = context.split("/");
+  return { surface: surface as Surface, name: name.join("/"), condition,
+    render(state: string, p: Palette | undefined, before: boolean, theme: Theme): Triple {
+      const data = receipt.conditions[condition][theme];
+      if (!p) return painted(data[before ? "before" : "shipped"][context][state]);
+      const root = MAPPINGS[surface as Surface][state];
+      const candidate = candidates(theme, root).find(c => c.rgb.every((v, i) => Math.abs(v - p[root][i]) < 1e-12));
+      if (!candidate) throw new Error(`Candidate outside domain: ${theme}/${root}`);
+      return painted(data.candidates[root][candidate.value][context]);
+    } };
+}));
 function palette(css: string, theme: Theme): Palette {
   return Object.fromEntries(Object.entries(tokens(css, theme))
     .filter(([, value]) => value === "#b83d7a" || /^(?:hsl\()?([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/.test(value))
@@ -232,14 +212,14 @@ function candidates(theme: Theme, root: string): { value: string; rgb: Triple; c
 function measures(theme: Theme, p: Palette | undefined, before: boolean) {
   return CONTEXTS.flatMap(ctx => STATE_PAIRS[ctx.surface].map(states => {
     const colors = states.map(s => ctx.render(s, p, before, theme));
-    return { theme, surface: ctx.surface, context: ctx.name, states, rgb: colors, delta: ciede2000(deutanLab(colors[0]), deutanLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
+    return { theme, surface: ctx.surface, context: ctx.name, condition: ctx.condition, states, rgb: colors, delta: ciede2000(deutanLab(colors[0]), deutanLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
   }));
 }
 /** Exact exhaustive factorization: fixed global backgrounds mean that the
  * four surfaces share no mutable pigment. Each pair/context matrix visits all
  * candidate pairs; each surface then visits its complete Cartesian product.
- * The global optimum is the minimum of the four surface maxima. Choosing the
- * fewest changes above that threshold in each factor gives the global tie-break.
+ * Amendment 4 accepts each group independently at 15 when reachable, otherwise
+ * its own maximum; ties within that group go to the fewest changed tokens.
  * BigInt counts retain the exact size of the twelve-token Cartesian domain.
  */
 function jointSearch(theme: Theme) {
@@ -266,7 +246,7 @@ function jointSearch(theme: Theme) {
             scores[i][j] = Math.min(scores[i][j], delta);
             if (delta > maximum) { maximum = delta; witness = { [ra]: domains[ra][i].value, [rb]: domains[rb][j].value }; }
           }
-        maxima[`${surface}/${ctx.name}/${a}/${b}`] = { maximum, count, witness };
+        maxima[`${ctx.condition}/${surface}/${ctx.name}/${a}/${b}`] = { maximum, count, witness };
       }
       return { ra, rb, scores };
     });
@@ -290,7 +270,7 @@ function jointSearch(theme: Theme) {
     return { roots, entries, best: entries.reduce((n, e) => Math.max(n, e.minimum), -Infinity), coverage: { surface, roots, visited, unique: unique.size, expected } };
   });
   const best = Math.min(...factors.map(f => f.best));
-  const chosen = factors.map(f => f.entries.filter(e => e.minimum >= best).sort((a, b) => a.changed - b.changed)[0]);
+  const chosen = factors.map(f => f.entries.filter(e => e.minimum >= Math.min(15, f.best)).sort((a, b) => a.changed - b.changed)[0]);
   const assignment = Object.assign({}, ...chosen.map(e => Object.fromEntries(Object.entries(e.ix).map(([r, i]) => [r, domains[r][i].value])))) as Record<string, string>;
   const shipped = { ...palette(shippedCss, theme), ...Object.fromEntries(ROOTS.map(r => [r, rgb(assignment[r])])) };
   return {
@@ -298,7 +278,7 @@ function jointSearch(theme: Theme) {
     count: ROOTS.reduce((n, r) => n * BigInt(domains[r].length), 1n).toString(),
     feasible: factors.reduce((n, f) => n * BigInt(f.entries.filter(e => e.minimum >= 15).length), 1n).toString(),
     best, changes: chosen.reduce((n, e) => n + e.changed, 0), assignment,
-    coverage: factors.map(f => f.coverage), factorMaxima: factors.map(f => ({ surface: f.coverage.surface, best: f.best })),
+    coverage: factors.map(f => f.coverage), factorMaxima: factors.map(f => ({ surface: f.coverage.surface, best: f.best, threshold: Math.min(15, f.best), feasible: f.entries.filter(e => e.minimum >= 15).length, shippedMinimum: chosen[factors.indexOf(f)].minimum, changes: chosen[factors.indexOf(f)].changed })),
     maxima, measurements: measures(theme, shipped, false),
   };
 }
@@ -313,48 +293,53 @@ describe("777-S2 state shades", () => {
     for (const [l1, a1, b1, l2, a2, b2, expected] of SHARMA)
       expect(Math.abs(ciede2000([l1, a1, b1], [l2, a2, b2]) - expected)).toBeLessThan(.00005);
   });
-  it("every_state_pair_is_measured_in_every_theme", () => {
+  it("every_state_pair_is_measured_under_every_declared_media_condition", () => {
     expect(Object.values(STATE_PAIRS).flat()).toHaveLength(14);
-    expect(CONTEXTS.filter(c => c.surface === "delete").map(c => c.name)).toEqual(["ready/rest", "ready/hover", "ready/focus", "ready-exceeds/rest", "ready-exceeds/hover", "ready-exceeds/focus"]);
-    expect(CONTEXTS.filter(c => c.surface === "key")).toHaveLength(6);
-    expect(CONTEXTS.filter(c => c.surface === "map")).toHaveLength(16);
-    for (const theme of THEMES) {
-      const values = measures(theme, undefined, false);
-      expect(values).toHaveLength(139);
-      for (const ctx of CONTEXTS) expect(values.filter(v => v.context === ctx.name && v.surface === ctx.surface)).toHaveLength(STATE_PAIRS[ctx.surface].length);
-    }
-  });
-  it("browser_measurements_cover_production_compositing_chains", () => {
-    for (const theme of THEMES) for (const phase of ["before", "shipped"] as const) {
-      const contexts = receipt.themes[theme][phase];
-      expect(Object.keys(contexts)).toEqual(CONTEXTS.map(c => `${c.surface}/${c.name}`));
-      for (const ctx of CONTEXTS) {
-        const samples = contexts[`${ctx.surface}/${ctx.name}`];
-        expect(Object.keys(samples)).toEqual(Object.keys(MAPPINGS[ctx.surface]));
-        for (const [state, sample] of Object.entries(samples)) {
-          if (phase === "before") {
-            // Historical declarations are immutable and use legacy HSL RGB
-            // serialization. Check the pigment independently of the fixture's
-            // theme overlay; opacity/backdrops still come only from the receipt.
-            const value = tokens(baseCss, theme)[BASE_ROOTS[MAPPINGS[ctx.surface][state]]];
-            const actual = browserColor(sample.color).rgb;
-            // Chromium serializes legacy RGB to 8-bit channels. A half-channel
-            // bound avoids imposing JavaScript's floating-point tie rounding.
-            rgb(value).forEach((v, i) => expect(Math.abs(actual[i] - v) * 255,
-              `${theme} before/${ctx.surface}/${state}`).toBeLessThanOrEqual(.5 + 1e-9));
-          }
-          expect(sample.chain.length).toBeGreaterThan(0);
-          for (const layer of sample.chain)
-            expect(layer.stackingContext).toBe(Number(layer.opacity) < 1);
-          expect(() => painted(sample)).not.toThrow();
+    expect(receipt.media.unsupported, "Unemulatable media/container prelude").toEqual([]);
+    expect(Object.keys(receipt.conditions)).toEqual(receipt.media.variants.map(v => v.id));
+    expect(receipt.media.preludes.length).toBeGreaterThan(0);
+    expect(receipt.inputs.conditions.deviceScaleFactor).toBe(4);
+    expect(receipt.proof.pageErrors).toEqual([]);
+    expect(receipt.proof.networkRequests).toEqual([]);
+    for (const theme of THEMES) for (const { id } of receipt.media.variants) {
+      for (const phase of ["before", "shipped"] as const) {
+        const contexts = receipt.conditions[id][theme][phase];
+        expect(Object.keys(contexts)).toEqual(contextNames);
+        for (const context of contextNames) {
+          const surface = context.split("/")[0] as Surface;
+          expect(Object.keys(contexts[context])).toEqual(Object.keys(MAPPINGS[surface]));
         }
       }
-      const optional = contexts["key/optional/rest"].present.chain;
-      expect(optional.some(n => n.classes.split(" ").includes("optional") && n.stackingContext)).toBe(true);
-      expect(optional.at(-1)?.classes.split(" ")).toContain("set-card-frame");
-      const exceeds = contexts["delete/ready-exceeds/rest"].unarmed.chain;
-      expect(exceeds.some(n => n.classes.split(" ").includes("exceeds") && n.stackingContext)).toBe(true);
-      expect(exceeds.at(-1)?.classes.split(" ")).toContain("model-provider");
+      expect(measures(theme, undefined, false).filter(m => m.condition === id)).toHaveLength(105);
+    }
+  });
+  it("painted_control_masks_are_strong_and_interactions_are_real_and_settled", () => {
+    const check = (sample: Sample, context: string) => {
+      expect(sample.maskSize, `${context}: empty mask`).toBeGreaterThan(0);
+      expect(sample.modeFraction, `${context}: weak mask`).toBeGreaterThanOrEqual(receipt.proof.minimumModeFraction);
+      expect(sample.histogram[0].rgb).toEqual(sample.painted);
+      expect(sample.histogram[0].count / sample.maskSize).toBe(sample.modeFraction);
+      expect(sample.animationsRunning).toBe(0);
+      if (context.endsWith("focus-visible")) {
+        expect(sample.target.focusVisible, `${context}: Tab focus-visible`).toBe(true);
+        expect(sample.pseudos.focusWithin).toBe(true);
+        expect(sample.action).toContain("Tab");
+      }
+      if (context.endsWith("hover")) expect(sample.pseudos.ancestorHover, `${context}: row hover`).toBe(true);
+      if (context.endsWith("button-hover")) expect(sample.target.hover).toBe(true);
+    };
+    for (const { id } of receipt.media.variants) for (const theme of THEMES) {
+      const data = receipt.conditions[id][theme];
+      for (const phase of ["before", "shipped"] as const)
+        for (const [context, samples] of Object.entries(data[phase])) Object.values(samples).forEach(s => check(s, context));
+      for (const root of ROOTS) {
+        expect(Object.keys(data.candidates[root])).toEqual(candidates(theme, root).map(c => c.value));
+        const group = Object.entries(MAPPINGS).find(([, states]) => Object.values(states).includes(root))![0];
+        for (const samples of Object.values(data.candidates[root])) {
+          expect(Object.keys(samples)).toEqual(contextNames.filter(c => c.startsWith(`${group}/`)));
+          for (const [context, sample] of Object.entries(samples)) check(sample, context);
+        }
+      }
     }
   });
   it("browser_measurements_match_recorded_tables", () => {
@@ -381,39 +366,46 @@ describe("777-S2 state shades", () => {
       const actual = palette(shippedCss, result.theme);
       for (const root of ROOTS) expect(candidates(result.theme, root).some(c => c.rgb.every((v, i) => Math.abs(v - actual[root][i]) < 1e-12)), `${result.theme} ${root} outside domain`).toBe(true);
       const shipped = measures(result.theme, undefined, false);
-      expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(result.best, 10);
+      for (const factor of result.factorMaxima) {
+        const minimum = Math.min(...shipped.filter(m => m.surface === factor.surface).map(m => m.delta));
+        if (factor.feasible) expect(minimum, `${result.theme}/${factor.surface}: reachable group`).toBeGreaterThanOrEqual(15);
+        else expect(minimum, `${result.theme}/${factor.surface}: group maximum`).toBeCloseTo(factor.best, 10);
+        expect(minimum).toBeCloseTo(factor.shippedMinimum, 10);
+      }
+      // Every candidate assignment is independently painted, including its shipped witness.
+      expect(result.measurements).toEqual(shipped);
       const shortfalls = shipped.filter(m => m.delta < 15);
-      expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${m.surface}/${m.context}/${m.states.join("/")}`));
-      expect(shortfalls.length > 0).toBe(result.feasible === "0");
+      expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${m.condition}/${m.surface}/${m.context}/${m.states.join("/")}`));
+      for (const factor of result.factorMaxima) expect(shortfalls.some(m => m.surface === factor.surface)).toBe(factor.feasible === 0);
       for (const m of shortfalls) expect(m.signatures[0]).not.toEqual(m.signatures[1]);
       expect(result.count).toBe(result.sizes.reduce((n, s) => n * BigInt(s), 1n).toString());
       expect(ROOTS.filter(root => actual[root].some((v, i) => Math.abs(v - rgb(baselineValue(result.theme, root))[i]) >= 1e-12))).toHaveLength(result.changes);
     }
   }, 120000);
-  it("global_tokens_are_unchanged_from_baseline", () => {
-    function otherGlobals(css: string): string[] {
+  it("global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values", () => {
+    const normalize = (v: string) => v.replace(/\s+/g, "");
+    function otherGlobals(css: string, skipThemes: boolean): string[] {
       const result: string[] = [];
       postcss.parse(css).walkDecls(decl => {
-        if (!decl.prop.startsWith("--")) return;
+        if (!decl.prop.startsWith("--") || ROOTS.includes(decl.prop)) return;
         const rule = decl.parent;
-        if (rule?.type === "rule" && rule.parent?.type === "root" &&
+        if (skipThemes && rule?.type === "rule" && rule.parent?.type === "root" &&
           (rule.selector === ".dark" || rule.selector.includes(".dark.theme-gilded") || rule.selector.includes(".dark.theme-vector"))) return;
-        result.push(`${rule?.toString().split("{")[0].trim()}:${decl.prop}:${decl.value}`);
+        result.push(`${normalize(rule?.toString().split("{")[0] ?? "")}:${decl.prop}:${normalize(decl.value)}`);
       });
       return result;
     }
-    expect(otherGlobals(shippedCss)).toEqual(otherGlobals(baseCss));
+    expect(otherGlobals(shippedCss, true)).toEqual(otherGlobals(baseCss, true));
+    const baseLayout = execFileSync("git", ["show", `${START}:ui/client/src/components/nexus/nexus-layout.css`], { encoding: "utf8" });
+    expect(otherGlobals(layoutCss, false)).toEqual(otherGlobals(baseLayout, false));
     for (const theme of THEMES) {
       const before = tokens(baseCss, theme), after = tokens(shippedCss, theme);
       expect(Object.keys(after).filter(r => r.startsWith("--state-")).sort()).toEqual([...ROOTS].sort());
       expect(Object.keys(after).filter(r => !r.startsWith("--state-")).sort()).toEqual(Object.keys(before).sort());
       for (const [root, value] of Object.entries(before)) {
-        // Identical expressions include backgrounds, alpha colors, shadows,
-        // fonts and computed aliases. Changed color syntax must resolve equally.
         if (theme === "Veil" && VEIL_ANCHOR_TOKENS.includes(root))
-          rgb(after[root]).forEach((v, i) => expect(v, `${theme} anchor exemption ${root}`).toBeCloseTo(ANCHOR[i], 12));
-        else if (value !== after[root])
-          rgb(after[root]).forEach((v, i) => expect(v, `${theme} frozen ${root}`).toBeCloseTo(rgb(value)[i], 12));
+          rgb(after[root]).forEach((v, i) => expect(v).toBeCloseTo(ANCHOR[i], 12));
+        else expect(normalize(after[root]), `${theme} frozen ${root}`).toBe(normalize(value));
       }
     }
   });
@@ -439,7 +431,7 @@ describe("777-S2 state shades", () => {
     const refs = (value: string) => [...value.matchAll(/var\(\s*(--[a-z0-9-]+)/g)].map(m => m[1]);
     for (const f of css) f.ast.walkRules(rule => {
       if (rule.selectors.some(mentionsSurface)) rule.walkDecls(decl => {
-        if (colorProperty(decl.prop)) refs(decl.value).forEach(r => consumed.add(r));
+        if (colorProperty(decl.prop) && !(rule.selector === ".topbar .mem-fill" && decl.prop === "box-shadow")) refs(decl.value).forEach(r => consumed.add(r));
       });
     });
     let size = -1;
@@ -463,6 +455,9 @@ describe("777-S2 state shades", () => {
     for (const f of css) f.ast.walkRules(rule => {
       const members = rule.selectors.map(mentionsSurface);
       rule.walkDecls(decl => {
+        if (rule.selector === ".topbar .mem-fill" && decl.prop === "box-shadow") {
+          expect(decl.value).toBe("var(--glow-soft)"); return;
+        }
         const stateRefs = refs(decl.value).filter(r => r.startsWith("--state-"));
         // Theme declarations define pigments; they do not consume them.
         if (stateRefs.length) expect(members.every(Boolean), `${f.path}: ${rule.selector} outside state surfaces`).toBe(true);
@@ -493,6 +488,11 @@ describe("777-S2 state shades", () => {
     expect(mapSource).toContain("color={PIN_COLOR[state]}");
     expect(mapSource).toContain("color={pinColor}");
     expect(mapSource).toContain("const pinColor = PIN_COLOR[state]");
+    expect(mapSource).toContain("fill={LABEL_COLOR[state]}");
+    const labelMap = mapSource.match(/const LABEL_COLOR[^=]*=\s*\{([^}]+)\}/)![1];
+    expect(labelMap).not.toContain("--state-");
+    for (const [state, value] of Object.entries({ current: "--brass-bright", selected: "--brass", hovered: "--brass-bright", rest: "--bronze" }))
+      expect(labelMap).toContain(`${state}: "var(${value})"`);
     expect(mapSource).toContain('stroke={PIN_COLOR[pinState(place)]}');
     expect(shippedCss + layoutCss + mapSource).not.toContain("--map-hovered");
   });
