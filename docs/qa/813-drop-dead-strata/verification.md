@@ -6287,3 +6287,577 @@ pass ten, fleet application and whole-tree PostgreSQL gate remain with the
 coordinator.
 
 Authored by Codex, running GPT-6.
+
+
+## After the Ninth Independent Review and the Second Panel: Clarified Implementation
+
+Round nine is implemented, resuming the accepted `982a4c7e` and `c285984a` stop reports without rewriting either commit. The implementation commit is `f5ae4993ecb5ea0d1c16b86615556c8ea3f4a481`. Its four commit hooks passed. All executable SQL and Python in the following documentation commit are identical to that proof head; the SQL contract comment now says **migration user**, rather than creator, to name the actual R6 identity precisely.
+
+The complete ordered four-file PostgreSQL proof is **677 passed / zero failed / zero skipped**: 199 direct + 129 post-143 + 153 round-eight/nine + 196 fleet/support. All six fleet sources apply under `NEXUS_RUN_CORPUS=1`. All offline tests are covered by three disjoint splits: **4795 passed / zero failed / 1867 skipped**; these skips are offline exclusions, not PostgreSQL proof. Black, flake8, mypy, and both mandatory lints pass for the R9 changes. The test module is new relative to `origin/main`, so it has no main-side file for diagnostic comparison; it has zero flake8/mypy diagnostics. The unchanged product-code files' previously recorded diagnostics remain historical, not fixed or newly claimed clean here.
+
+### Shipped Contract and Six Rules
+
+> PostgreSQL decides catalog dependencies: every drop is RESTRICT, and SQL-standard bodies (prosqlbody) carry real dependencies. String-bodied routines are decided lexically under every declared SET clause (search_path, role, session_authorization, standard_conforming_strings and the rest) on top of session startup settings: a token naming a drop target refuses, every decoded string literal resolving to a drop target refuses, and a form the lexer cannot classify refuses. After the drops, PostgreSQL's own validators check every surviving application routine's body under that environment, with identity settings reserved for scanner lookups and validators run as the migration user. A routine whose environment, body or definition uses a form this guard does not model is refused, and section 1 of this order names those forms. Outside this contract, a name arriving as data at runtime (a nonliteral text argument to a catalog-input function or reg* parameter), dynamic SQL assembled from nonconstants (SQL text that is not a constant), or a path/role changed through an unrecognized form cannot be seen statically and is not claimed. Constant SQL text executed through a means this guard does not fold is not outside the contract: supported constant forms fold; unresolved forms refuse. Late-bound PL/pgSQL expression references and polymorphic SQL bodies remain: fmgr_sql_validator only syntax-checks polymorphic SQL; plpgsql_validator checks syntax and declared types.
+
+1. **R1:** Refuse every non-extension `format`, `concat`, `concat_ws` function or `||` operator outside `pg_catalog`, naming the objects. Remove the candidate/path-order model; fold only builtin `format`/`concat`/`||` unqualified or qualified by `pg_catalog`.
+2. **R2:** Allow only `search_path`, `role`, `session_authorization`, `standard_conforming_strings`, `backslash_quote`, `DateStyle`, `IntervalStyle`, `TimeZone`, `extra_float_digits`, `default_text_search_config`, `client_min_messages`, and `application_name`. Refuse any other proconfig name before applying settings. Reassert the guard's `check_function_bodies=on` and five-second lock policy.
+3. **R3:** Refuse statement-initial bare `SET`/`RESET` and any `set_config` identifier, including quoted or qualified forms. Keep `UPDATE ... SET` column uses; refuse direct `pg_settings` mutations including `UPDATE ONLY`.
+4. **R4:** Refuse every enabled event trigger by name before helper DDL.
+5. **R5:** Pin the migration's own `search_path=pg_catalog`, `standard_conforming_strings=on`, `backslash_quote=safe_encoding`, and `lock_timeout=5s`. Routine startup resolution still uses `reset_val`.
+6. **R6:** Apply `role` and `session_authorization` inside scanner lookups; skip them in validators, whose access checks run as the migration user.
+
+### Exact Fixes and Accepted Clarifications
+
+- F1 mirrors scan.l identifier/dollar high bytes, ASCII whitespace and single-letter prefix boundaries. Dollar-tag regex groups are noncapturing so PostgreSQL substring returns the complete delimiter. F2 independently treats every relation/type literal-lookup error as data. F3/F4 use token kinds for depth, separators and keyword positions, including quoted `)` and literal `;` regressions.
+- F5 refuses target names in unmodeled column-definition lists. F6 covers argument defaults, SQL-standard deparse under `on`, and aggregate initial values. F7 folds constant EXECUTE, DO and all five ordered SQL-text consumers, including quoted consumer names; unresolved arguments refuse. F8 uses every pg_class address of the verified closure, including TOAST. F9 terminates EXECUTE folds at LOOP; F10 removes the one-word typed-literal gap; F11 classifies RETURNING by the enclosing group.
+- **F12 applies only the literal rule.** Deparsed non-routine identifiers are decided by pg_depend/RESTRICT. Both `character_relationship_pairs` and `entity_relationships_v` apply in the complete fleet proof. No new rule refused any fleet routine or object; no exemption was added.
+- F13 resolves every decoded literal before consuming fold operands. F14 has one environment-applying helper: all statements and settings are prepared under pg_catalog; its sub-block applies the startup/allowlisted settings and executes exactly one prebuilt statement, then aborts through the native sentinel. Result comparisons run after unwind. Validators call this helper with a prebuilt qualified validator statement and filtered identity entries. There is no runtime EXECUTE in a top-level migration block, and no candidate sub-block remains.
+- The old `item_type` format control's acceptance was superseded by the literal rule in round eight. The default-path applying control now uses `pg_catalog.format('SELECT %L','character_relationships')`; its `item_type` counterpart refuses specifically through the literal rule. R1 removes the candidate check regardless.
+- Existing assertions are updated only for ordered rule changes: arbitrary proconfig now refuses; healthy DateStyle/equal-sign and native-unwind controls use allowed application_name/client_min_messages. A shadow set_config wrapper refuses by R3. Unknown multi-letter prefixes tokenize as an identifier plus string under F1 and still refuse atomically through the native validator. R6's raw $user consequence is recorded below, not exempted.
+- T3 is closed by the accepted stop-report's corrected history: the full module/proof was first recorded at ebcfbe15 (round seven), then at 9ed33d54 (round eight, 615 cases). The coordinator's whole-tree PostgreSQL gate was 6535 passed / zero failed / 65 skipped on 2026-10-05. This run claims the ordered proof and offline suite, not a new whole-tree PG gate.
+
+### Final Red/Green Ledger: Every Regression
+
+The final swap-plugin cohort uses exactly 9ed33d54's migration, including discovery substitution; no old-control rewriting is enabled. It has 64 expected failures and 10 controls that already pass. T1's four candidate cases require the new R1 diagnostic, and two additional cases prove healthy concat and a target split across concat operands; all six fail against ebcfbe15 for the appropriate acceptance/diagnostic assertion. T2's mutant is made from f5ae4993 by removing only the resolver sentinel raise/handler. It is red against the shipped environment_unwinds test: both identities leak. The five-second pin cannot go red in this mutant; the final renderer-settings call also returns scs to on, so this red proves identity unwind, not an independent scs mutation. Earlier draft-mutant logs remain labeled historical and are not credited here.
+
+A separate final cohort records 23 expected red failures for retained assertions changed by R1/R2/F1: all overload candidates, validation-off settings, exit_on_error settings, validator timeout settings, and unknown-prefix refusal stages.
+
+Every red ID below is verified against the final green logs. Some cases demonstrate a new required refusal or a corrected diagnostic rather than destructive runtime damage; no generic claim that every old acceptance newly broke a routine is made.
+
+| Regression test ID (test file prefix omitted) | Red baseline | Shipped proof |
+| --- | --- | --- |
+| `test_migration_143_round6_search_path[shadow-broken-False]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_round6_search_path[shadow-broken-True]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_round6_search_path[shadow-healthy-False]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_round6_search_path[shadow-healthy-True]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_round8_role_resolution[True-role-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_role_resolution[True-role-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_role_resolution[True-session_authorization-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_role_resolution[True-session_authorization-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-cursor-to-xml]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-ts-stat]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-query-to-xml-and-xmlschema]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-query-to-xmlschema]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R2-custom-setting]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R2-log-min-messages]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F13-default-target-literal]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R1-default-format-control]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R1-unreachable-format]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R1-unreachable-concat-ws]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R2-statement-timeout]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R2-transaction-timeout]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R3-set-local]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R3-reset]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R3-quoted-set-config]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R3-update-only-settings]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R4-event-trigger]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R6-revoked-role]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[R6-revoked-session-authorization]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F1-dollar-high-byte]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F1-identifier-dollar]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F1-prefix-boundary]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F1-nbsp-dollar]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F2-three-part-data]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F3-string-close-paren]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F3-string-semicolon]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F3-quoted-close-paren]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F5-record-column-definition]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F5-json-table-column-definition]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F4-F5-quoted-json-column]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F6-parameter-default]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F6-aggregate-initcond]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F6-atomic-scs-target]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F6-atomic-scs-data]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-quoted-query-to-xml]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-query-to-xml]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-sql-do]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-plpgsql-do]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F7-nonconstant-query]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F9-for-execute-loop]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F10-case-column]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F10-like-column]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F11-cte-returning]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-view]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-materialized-view]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-check]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-default]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-domain]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-trigger-when]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-index-expression]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-index-predicate]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-policy]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F12-generated]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[F13-format-operand]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_startup_pin[off]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_toast_literal` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[public,pg_catalog-concat-False]` | FAILED (ebcfbe15) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[public,pg_catalog-concat-True]` | FAILED (ebcfbe15) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[pg_catalog,public-concat-False]` | FAILED (ebcfbe15) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[pg_catalog,public-concat-True]` | FAILED (ebcfbe15) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[T1-concat-healthy]` | FAILED (ebcfbe15) | PASSED (final-pg-rounds) |
+| `test_migration_143_round9_definitions[T1-concat-target-split]` | FAILED (ebcfbe15) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_environment_unwinds` | FAILED (f5ae4993 sentinel mutant) | PASSED (final-pg-rounds) |
+| `test_migration_143_refuses_hidden_body_reference[sql-literal-unknown]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-unknown]` | FAILED (9ed33d54) | PASSED (final-pg-post143) |
+| `test_migration_143_round5_routine_cannot_disable_validation[broken-body-False]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_round5_routine_cannot_disable_validation[broken-body-True]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_round5_routine_cannot_disable_validation[healthy-body-False]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_round5_routine_cannot_disable_validation[healthy-body-True]` | FAILED (9ed33d54) | PASSED (final-pg-direct) |
+| `test_migration_143_round8_contract[exit-on-error-healthy-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_contract[exit-on-error-healthy-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_contract[exit-on-error-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_contract[exit-on-error-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[public,pg_catalog-format-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[public,pg_catalog-format-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[public,pg_catalog-concat-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[public,pg_catalog-concat-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[public,pg_catalog-operator-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[public,pg_catalog-operator-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[pg_catalog,public-format-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[pg_catalog,public-format-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[pg_catalog,public-concat-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[pg_catalog,public-concat-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[pg_catalog,public-operator-False]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_fold_candidates[pg_catalog,public-operator-True]` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+| `test_migration_143_round8_validator_lock_timeout` | FAILED (9ed33d54) | PASSED (final-pg-rounds) |
+
+Ten pre-existing controls also pass under 9ed33d54; their acceptance is not misrepresented as a red regression. The entire final green module/proof includes them.
+
+### Commands and Verbatim Guarded Tails
+
+Every command runs from `/Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata`. The shared Python import was verified to resolve this worktree. `run.py` sets PYTHONPATH to this worktree plus this scratch directory, TMPDIR to scratch, and NEXUS_DBNAME_AUDIT=1; unsets gateway/API/slot/live-provider overrides; enforces 540-second wall and 120-second silence bounds; records argv, output and exit status. All runs completed in the foreground before other work. Repository-owned proof fixtures retain their canonical disposable prefixes as `_common_codex.md` requires; implementer-created clones use qa640_813_case_*. Saves are read by pg_dump only in the corpus-enabled fleet case. No owner/template/ref writes occurred.
+
+**final-red-r9**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/9ed33d54.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-red-r9 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k 'round9 or round8_role_resolution or (round6_search_path and shadow)' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-broken-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-broken-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-healthy-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-healthy-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-role-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-role-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-session_authorization-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-session_authorization-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-cursor-to-xml]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-ts-stat]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-query-to-xml-and-xmlschema]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-query-to-xmlschema]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R2-custom-setting]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R2-log-min-messages]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F13-default-target-literal]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R1-default-format-control]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R1-unreachable-format]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R1-unreachable-concat-ws]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R2-statement-timeout]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R2-transaction-timeout]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R3-set-local]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R3-reset]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R3-quoted-set-config]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R3-update-only-settings]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R4-event-trigger]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R6-revoked-role]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[R6-revoked-session-authorization]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F1-dollar-high-byte]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F1-identifier-dollar]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F1-prefix-boundary]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F1-nbsp-dollar]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F2-three-part-data]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F3-string-close-paren]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F3-string-semicolon]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F3-quoted-close-paren]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F5-record-column-definition]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F5-json-table-column-definition]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F4-F5-quoted-json-column]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F6-parameter-default]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F6-aggregate-initcond]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F6-atomic-scs-target]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F6-atomic-scs-data]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-quoted-query-to-xml]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-query-to-xml]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-sql-do]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-plpgsql-do]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F7-nonconstant-query]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F9-for-execute-loop]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F10-case-column]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F10-like-column]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F11-cte-returning]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-view]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-materialized-view]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-check]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-default]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-domain]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-trigger-when]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-index-expression]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-index-predicate]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-policy]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F12-generated]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F13-format-operand]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_startup_pin[off]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_toast_literal
+========== 64 failed, 10 passed, 413 deselected in 123.83s (0:02:03) ===========
+EXIT STATUS: 1
+```
+
+**final-red-T1**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/ebcfbe15.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-red-T1 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k '(round8_fold_candidates and concat) or T1-concat' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-concat-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-concat-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-concat-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-concat-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[T1-concat-healthy]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[T1-concat-target-split]
+====================== 6 failed, 481 deselected in 10.08s ======================
+EXIT STATUS: 1
+```
+
+**final-red-T2**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/final-unwind-mutant.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-red-T2 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_environment_unwinds -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_environment_unwinds
+============================== 1 failed in 2.60s ===============================
+EXIT STATUS: 1
+```
+
+**final-red-retained-assertions**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/9ed33d54.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-red-retained-assertions /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k 'round8_fold_candidates or round5_routine or (round8_contract and exit-on-error) or round8_validator_lock_timeout or sql-literal-unknown' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_refuses_hidden_body_reference[sql-literal-unknown]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_regressions_work_from_post143_clone[hidden:sql-literal-unknown]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round5_routine_cannot_disable_validation[broken-body-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round5_routine_cannot_disable_validation[broken-body-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round5_routine_cannot_disable_validation[healthy-body-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round5_routine_cannot_disable_validation[healthy-body-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-healthy-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-healthy-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-format-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-format-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-concat-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-concat-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-operator-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-operator-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-format-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-format-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-concat-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-concat-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-operator-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-operator-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_validator_lock_timeout
+===================== 23 failed, 464 deselected in 57.31s ======================
+EXIT STATUS: 1
+```
+
+**T2 actual red observation (verbatim)**
+
+```text
+UNWIND before: pythagor|pythagor|on|5s after: pg_monitor|pg_monitor|on|5s
+```
+
+**final-pg-direct**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-pg-direct /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'not regressions_work_from_post143_clone and not round8 and not round9 and not each_fleet' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 199 passed, 288 deselected in 431.22s (0:07:11) ================
+EXIT STATUS: 0
+```
+
+**final-pg-post143**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-pg-post143 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k regressions_work_from_post143_clone -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 129 passed, 358 deselected in 435.19s (0:07:15) ================
+EXIT STATUS: 0
+```
+
+**final-pg-rounds**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-pg-rounds /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'round8 or round9' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 153 passed, 334 deselected in 369.56s (0:06:09) ================
+EXIT STATUS: 0
+```
+
+**final-pg-fleet-support**
+
+```sh
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-pg-fleet-support /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py tests/test_owner_target_guard.py -v --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+======================= 196 passed in 117.68s (0:01:57) ========================
+EXIT STATUS: 0
+```
+
+**Fleet cases at f5ae4993 (verbatim)**
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template] PASSED [  0%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01] PASSED [  1%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02] PASSED [  1%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05] PASSED [  3%]
+```
+
+**Shipped unwind observation (verbatim)**
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_environment_unwinds UNWIND before: pythagor|pythagor|on|5s after: pythagor|pythagor|on|5s
+```
+
+**final-offline-root**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-offline-root /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p no:cacheprovider tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util --ignore=tests/proofs
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1972 passed, 478 skipped, 8 warnings in 395.79s (0:06:35)
+EXIT STATUS: 0
+```
+
+**final-offline-directories**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-offline-directories /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util tests/config tests/proofs
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+958 passed, 81 skipped, 7 warnings in 133.46s (0:02:13)
+EXIT STATUS: 0
+```
+
+**final-offline-api-orrery**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-offline-api-orrery /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_api tests/test_orrery
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1865 passed, 1308 skipped, 7 warnings in 46.04s
+EXIT STATUS: 0
+```
+
+**final-black**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-black /Users/pythagor/nexus/.venv/bin/python -m black --check tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+EXIT STATUS: 0
+```
+
+**final-flake8**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-flake8 /Users/pythagor/nexus/.venv/bin/python -m flake8 tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+EXIT STATUS: 0
+```
+
+**final-mypy**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-mypy /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+Success: no issues found in 1 source file
+EXIT STATUS: 0
+```
+
+**final-comments**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-comments /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+**final-exceptions**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-exceptions /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+### R6 Compatibility Consequence: Actual Calls, Not Assumed Health
+
+The inherited USAGE/$user control has no SELECT grant and already fails with 42501. Calling it healthy before this probe was premature. `r6_outcomes.py` only prints the existing real call result: it is permission-denied before and after rollback. A separate diagnostic plugin `r6_granted_outcomes.py` adds SELECT on the disposable role's shadow table (no production exception); the same actual call now returns 0 before and after rollback. The shipped migration-user-context validator still refuses with relation items does not exist: skipping identity settings means $user expands to the migration user, not the routine's role. The inherited test now requires the exact validator refusal for USAGE=true and the exact scanner refusal for USAGE=false. Schema/data/stamps and actual call outcomes remain unchanged after refusal.
+
+This follows literal R6. No path canonicalization or role exception was invented. A healthy routine with a fully qualified surviving relation and revoked EXECUTE no longer suffers the old validator-access failure; the two new role/session-authorization cases prove that acceptance. The compatibility policy for role-specific $user paths is an open coordinator question below, not an unreported broadened assertion.
+
+**final-r6-outcome**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-r6-outcome /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p r6_outcomes 'tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-role-False]' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+============================== 1 passed in 2.85s ===============================
+EXIT STATUS: 0
+```
+
+```text
+R6 actual routine outcome: (False, ('42501', 'permission denied for table items'))
+R6 actual routine outcome: (False, ('42501', 'permission denied for table items'))
+```
+
+**final-r6-granted-outcome**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py final-r6-granted-outcome /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p r6_granted_outcomes 'tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-role-False]' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+============================== 1 passed in 2.90s ===============================
+EXIT STATUS: 0
+```
+
+```text
+R6 diagnostic grants SELECT on the shadow table
+R6 actual routine outcome: (True, (0,))
+R6 actual routine outcome: (True, (0,))
+```
+
+### Iteration Record and Reproducibility
+
+The first scratch attempt was corrected before crediting proof: noncapturing dollar groups, no top-level dynamic validator dispatch, literal-only F12. `r9-red-definitions` contains a test-only missing surviving keyword in the first TOAST probe and is **not** its red proof. `r9-red-corrected` and the final consolidated red run replace that result. `r9-inherited-environments` exposed assertions superseded by R2/R3/R6 and an incorrect catalog-first diagnostic in the old scratch test copy; these were corrected without suppressing refusals or rollback assertions. `r9-proof-migration-0` has one unknown-prefix refusal-stage assertion failure; `final-pg-direct` and `final-pg-post143` rerun both corrected cases and every original case, with zero failures. The two other preliminary shards pass, but the complete final proof above supersedes all preliminary proof counts. The final token-kind audit added three red/green cases and was followed by the complete committed-head proof. No draft failure is counted as final green proof.
+
+All scratch scripts, plugins, frozen SQL and logs are under the assigned after-review-r9 directory. The following SHA256 inventory makes the old SQL/plugin/mutant provenance reproducible:
+
+```text
+9ed33d54.sql: f5ecadc5004c63fdfb9aa94c35d9b681a6011ab6f9b47392805b7ecc96217c8a
+ebcfbe15.sql: 3167adb319a8e8306c46d0d015a398c8c117d85cbe8388f0ae19a20cb2e6bec7
+old_scanner.py: f452bad964b4e5cf88e4841163ffe754659445ceb4e4d8134fe86c8a5045285d
+run.py: 678f039bee60c168297da27351f159e8b56617ea8b3d63065c782d57ef411acd
+final-unwind-mutant.sql: dfbbdd3149fe86d90a12eaefeb572899674987a16b4566d6320b60eb2ccf9319
+r6_outcomes.py: 69948d297685735e054dae6cdb0b30e79c50fd5513e1c711412af95a38018dbc
+r6_granted_outcomes.py: c060d5f9df0f5f2720fe6493a9a44259f973fb2156353eb9a99ac2f6d5d4fc05
+```
+
+### Sequencing, Landing and Coordinator Questions
+
+Migrations 140/141/142 precede 143; KNOWN_GAPS and the frozen permitted closure remain unchanged. No nexus.toml update or persistent helper is introduced. The six vector-helper definitions and debt entries remain for #812; Q3 labels and Q5's separate MEMNON SQL slice remain deferred. The coordinator owns the fresh raw full-data six-source TEST-clone rehearsal, owner fleet/template application, final whole-tree PostgreSQL gate, and named gateway restart after the product-code pull. No UI rebuild is owed. This PR is not merged; the third panel and Astra tenth pass are subsequent review work.
+
+Open coordinator question: retain R6's specified migration-user-context refusal for a healthy routine using a role-specific $user path, or separately order canonicalization of that path before identity-free validation? The current shipment follows literal R6 and has no fleet instance or exemption. No R1–R6/F1–F14/T1–T4 implementation is deferred.
+
+Latest fetched main was 160134540517f6b74aacd1d1e1f3f584454eef86; git merge origin/main reported Already up to date. A final fetch/merge and normal push are recorded in the closeout below. No rebase, stash, history rewrite, paid provider call, service start, or main/other-worktree edit occurred. Both accepted stop-report heads remain in ancestry.
+
+The read-only postgres cleanup probe reports:
+
+```text
+admin read-only identity: ('postgres', 'on')
+qa640_813_case_* databases remaining: []
+qa640_813_case_* roles remaining: []
+```
+
+### Pre-Push Closeout
+
+The final fetch again confirms origin/main at 160134540517f6b74aacd1d1e1f3f584454eef86. The required merge reports `Already up to date.` The code proof head f5ae4993 remains unchanged; only the identity wording in its contract comment and this evidence record follow it. Both accepted stop-report commits remain ancestors. The mandatory lints are rerun after that comment correction; the final read-only cleanup still reports zero implementation databases or roles. No command remains running. The normal push and PR-body update are the remaining external closeout actions; neither authorizes a PR merge.
+
+**closeout-comments**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py closeout-comments /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+**closeout-exceptions**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py closeout-exceptions /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+**closeout-cleanup**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py closeout-cleanup /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/cleanup_read.py
+```
+
+```text
+admin read-only identity: ('postgres', 'on')
+qa640_813_case_* databases remaining: []
+qa640_813_case_* roles remaining: []
+EXIT STATUS: 0
+```
+
+Authored by Codex, running GPT-6.

@@ -18,7 +18,7 @@
 -- decoded string literal resolving to a drop target refuses, and a form the
 -- lexer cannot classify refuses. After the drops, PostgreSQL's own validators
 -- check every surviving application routine's body under that environment, with
--- identity settings reserved for scanner lookups and validators run as the creator.
+-- identity settings reserved for scanner lookups and validators run as the migration user.
 -- A routine whose environment, body or definition uses a form this guard does not
 -- model is refused, and section 1 of this order names those forms.
 -- Outside this contract, a name arriving as data at runtime (a nonliteral text
