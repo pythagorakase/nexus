@@ -523,7 +523,7 @@ html {
 
   /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
   --state-map-rest: hsl(15 75% 60%);
-  --state-map-current: hsl(330.2439024390244 70% 50%);
+  --state-map-current: hsl(330.2439024390244 60% 50%);
   --state-map-selected: hsl(330.2439024390244 50.20408163265306% 70%);
   --state-map-hovered: hsl(330.2439024390244 60% 30%);
   --state-key-absent: hsl(42 20% 50%);

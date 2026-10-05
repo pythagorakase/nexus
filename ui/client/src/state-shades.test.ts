@@ -2,9 +2,9 @@ import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import postcss from "postcss";
-import ts from "typescript";
+import { inputs } from "../../scripts/state-surfaces/inputs.mjs";
 import { describe, expect, it } from "vitest";
-import { ciede2000, composite, deutanLab, hslRgb, type Triple } from "./state-shades-measurement";
+import { ciede2000, deutanLab, hslRgb, type Triple } from "./state-shades-measurement";
 // Typed from Sharma, Wu, Dalal's published supplementary table, not our helper.
 // https://hajim.rochester.edu/ece/sites/gsharma/ciede2000/dataNprograms/ciede2000testdata.txt
 const SHARMA: readonly (readonly [
@@ -99,12 +99,10 @@ function declaration(selector: string, property: string): string {
   declarationCache.set(key, result);
   return result;
 }
-const measuredRoots = new Set<string>();
 function rootOf(value: string): string {
   const root = value.match(/var\((--[a-z-]+)\)/)?.[1];
   if (!root) throw new Error(`Missing production token ${value}`);
-  measuredRoots.add(root);
-  return ["--danger", "--warning"].includes(root) ? rootOf(declaration(".settings-pane-v2", root)) : root;
+  return root;
 }
 const pairwise = (states: readonly string[]) => states.flatMap((a, i) => states.slice(i + 1).map(b => [a, b] as const));
 // Exactly 14 base pairs, expanded below into production opacity contexts.
@@ -138,269 +136,71 @@ const SIGNATURES: Record<Surface, Record<string, string>> = {
   key: { "optional-absent": "Circle", "required-missing": "AlertTriangle", present: "CircleDot", verified: "CircleCheck" },
 };
 type Palette = Record<string, Triple>;
-type Context = { surface: Surface; name: string; render: (state: string, p: Palette, before: boolean, theme: Theme) => Triple };
-// CSS interpolation/compositing is encoded sRGB (CSS `in srgb`), THEN the
-// simulation linearizes. Interior fill/stroke samples exclude edge AA/glow.
-function background(value: string, p: Palette, under?: Triple): Triple {
-  if (value === "none" || value === "transparent") {
-    if (!under) throw new Error("Transparent background needs parent");
-    return under;
-  }
-  const mix = value.match(/^color-mix\(in srgb, var\((--[a-z0-9-]+)\) ([\d.]+)%, (.+)\)$/);
-  if (mix) { measuredRoots.add(mix[1]); return composite(p[mix[1]], background(mix[3], p, under), Number(mix[2]) / 100); }
-  const root = value.match(/^var\((--[a-z0-9-]+)\)$/)?.[1];
-  if (root) { measuredRoots.add(root); if (!p[root]) throw new Error(`Unmodeled background token ${root}`); return p[root]; }
-  return rgb(value);
+type Layer = {
+  tag: string; classes: string; opacity: string; backgroundColor: string;
+  backgroundImage: string; stackingContext: boolean;
+  underlay?: { color: string; opacity: string; source: string };
+};
+type Sample = { property: string; color: string; chain: Layer[] };
+type Receipt = {
+  inputs: ReturnType<typeof inputs>;
+  themes: Record<Theme, Record<"shipped" | "before", Record<string, Record<string, Sample>>>>;
+  candidateColors: Record<Theme, Record<string, string>>;
+};
+const receipt = JSON.parse(readFileSync(resolve(import.meta.dirname, "state-surfaces.resolved.json"), "utf8")) as Receipt;
+const currentInputs = inputs(resolve(import.meta.dirname, "../.."));
+if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))
+  throw new Error("Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).");
+// The browser has already resolved selectors, inheritance, media, specificity,
+// !important, custom properties and color-mix. Only numeric source-over remains.
+function browserColor(value: string): { rgb: Triple; alpha: number } {
+  const srgb = value.match(/^color\(srgb ([\d.e+-]+) ([\d.e+-]+) ([\d.e+-]+)(?: \/ ([\d.e+-]+))?\)$/);
+  const legacy = value.match(/^rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)$/);
+  const match = srgb ?? legacy;
+  if (!match) throw new Error(`Unsupported browser color serialization: ${value}`);
+  return { rgb: match.slice(1, 4).map(v => Number(v) / (srgb ? 1 : 255)) as unknown as Triple, alpha: Number(match[4] ?? 1) };
 }
-// Trace real JSX ancestors, including SettingsCard's children slot. This is
-// source inspection only: it cannot mount the key card or read the secret store.
-const settingsSource = readFileSync(resolve(import.meta.dirname, "components/nexus/SettingsPane.tsx"), "utf8");
-const localSource = readFileSync(resolve(import.meta.dirname, "components/nexus/LocalModelRows.tsx"), "utf8");
-const productionTags = new Map<string, string>();
-function jsxAncestors(source: string, marker: string, tag = false, full = false): string[][] {
-  const ast = ts.createSourceFile("surface.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let target: ts.Node | undefined;
-  function classes(node: ts.Node): string[] {
-    if (!ts.isJsxElement(node) && !ts.isJsxSelfClosingElement(node)) return [];
-    const opening = ts.isJsxElement(node) ? node.openingElement : node;
-    const attr = opening.attributes.properties.find(a => ts.isJsxAttribute(a) && a.name.getText(ast) === "className");
-    if (!attr || !ts.isJsxAttribute(attr) || !attr.initializer) return [];
-    const init = attr.initializer;
-    // The first literal is the unconditional class prefix in the shipped JSX.
-    const value = ts.isStringLiteral(init) ? init.text : init.getText(ast).match(/[`"]([^`"$]+)[`"$]/)?.[1];
-    const names = value?.trim().split(/\s+/) ?? [];
-    const tagName = opening.tagName.getText(ast);
-    if (/^[a-z]/.test(tagName)) for (const name of names) {
-      productionTags.set(name, productionTags.has(name) && productionTags.get(name) !== tagName ? "ambiguous" : tagName);
-    }
-    return names;
-  }
-  function visit(node: ts.Node) {
-    const opening = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : undefined;
-    if ((tag && opening?.tagName.getText(ast) === marker) || (!tag && classes(node).includes(marker))) {
-      if (target) throw new Error(`Ambiguous production element ${marker}`);
-      target = node;
-    }
-    ts.forEachChild(node, visit);
-  }
-  visit(ast);
-  if (!target) throw new Error(`Missing production element ${marker}`);
-  const result: string[][] = [];
-  for (let node: ts.Node | undefined = target.parent; node; node = node.parent) {
-    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "SettingsCard") {
-      // Find the real insertion point rather than copying the wrapper classes.
-      const slot = settingsSource.indexOf("{children}");
-      const slotAst = ts.createSourceFile("card.tsx", settingsSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-      let child: ts.Node | undefined;
-      function find(n: ts.Node) {
-        if (ts.isJsxExpression(n) && n.getStart(slotAst) === slot) child = n;
-        ts.forEachChild(n, find);
-      }
-      find(slotAst);
-      if (!child) throw new Error("SettingsCard children slot changed");
-      for (let n: ts.Node | undefined = child.parent; n; n = n.parent) {
-        const names = classes(n);
-        if (names.length) result.push(names);
-        else if (full && ts.isJsxElement(n) && /^[a-z]/.test(n.openingElement.tagName.getText(slotAst))) result.push([`proof-tag-${n.openingElement.tagName.getText(slotAst)}`]);
-      }
-    } else {
-      const names = classes(node);
-      if (names.length) result.push(names);
-      else if (full && ts.isJsxElement(node) && /^[a-z]/.test(node.openingElement.tagName.getText(ast))) result.push([`proof-tag-${node.openingElement.tagName.getText(ast)}`]);
-    }
-  }
-  return result;
+function over(front: { rgb: Triple; alpha: number }, back: { rgb: Triple; alpha: number }) {
+  const alpha = front.alpha + back.alpha * (1 - front.alpha);
+  return { alpha, rgb: (alpha === 0 ? [0, 0, 0] : front.rgb.map((v, i) =>
+    (v * front.alpha + back.rgb[i] * back.alpha * (1 - front.alpha)) / alpha)) as Triple };
 }
-// Model both shipped theme roots, the production class ancestry and the
-// measured interaction. Unsupported contexts fail closed before cascade lookup.
-const shellSource = readFileSync(resolve(import.meta.dirname, "components/nexus/NexusLayout.tsx"), "utf8");
-const topbarSource = readFileSync(resolve(import.meta.dirname, "components/nexus/TopBar.tsx"), "utf8");
-const keyAncestors = [...jsxAncestors(settingsSource, "key-row", false, true), ...jsxAncestors(settingsSource, "KeysSection", true, true), ...jsxAncestors(shellSource, "SettingsPane", true, true)];
-const deleteAncestors = [...jsxAncestors(localSource, "lm-quant", false, true), ...jsxAncestors(settingsSource, "LocalModelRows", true, true), ...jsxAncestors(settingsSource, "ModelSection", true, true), ...jsxAncestors(shellSource, "SettingsPane", true, true)];
-const mapOuter = jsxAncestors(shellSource, "MapPane", true, true);
-const sidebarAncestors = [...jsxAncestors(mapSource, "map-place-dot", false, true), ...mapOuter];
-const canvasAncestors = [...jsxAncestors(mapSource, "mappane-svg", false, true), ...mapOuter];
-const memoryAncestors = [...jsxAncestors(topbarSource, "mem-fill", false, true), ...jsxAncestors(topbarSource, "MemoryMeter", true, true), ...jsxAncestors(shellSource, "TopBar", true, true)];
-const warningAncestors = [...jsxAncestors(topbarSource, "mem-over-glyph", false, true), ...jsxAncestors(topbarSource, "MemoryMeter", true, true), ...jsxAncestors(shellSource, "TopBar", true, true)];
-const pinAncestors = [...jsxAncestors(mapSource, "map-pin", false, true), ...mapOuter];
-const leaderAncestors = [...jsxAncestors(mapSource, "map-pin-leader", false, true), ...mapOuter];
-const cssRules = [postcss.parse(shippedCss, { from: resolve(import.meta.dirname, "index.css") }), postcss.parse(layoutCss, { from: resolve(import.meta.dirname, "components/nexus/nexus-layout.css") })].flatMap(ast => {
-  const rules: postcss.Rule[] = []; ast.walkRules(rule => { rules.push(rule); }); return rules;
-});
-const modeledClasses = new Set([...keyAncestors, ...deleteAncestors, ...sidebarAncestors, ...canvasAncestors, ...memoryAncestors, ...warningAncestors, ...pinAncestors, ...leaderAncestors].flat().concat([
-  "dark", "theme-veil", "theme-gilded", "theme-vector", "key-row", "optional", "missing", "present", "verified", "key-status",
-  "lm-quant", "ready", "exceeds", "blocked", "staged", "dl", "active", "loading", "required", "lm-action", "lm-trash", "armed", "mem-fill", "over", "mem-over-glyph",
-  "map-pin", "map-state-glyph", "map-state-fill", "map-state-ring", "map-pin-leader", "map-place-dot", "on", "here", "animate-pulse",
-  ...Object.keys(MAPPINGS.key).map(state => `key-glyph-${state}`),
-]));
-// Additional source stylesheets cannot silently add an unmeasured override.
-// Their bundler order is outside this resolver's two-file model, so any rule
-// that can affect these elements must be explicitly modeled before acceptance.
-const unorderedRules = new Set<postcss.Rule>();
-function otherStyles(dir: string): void {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = resolve(dir, entry.name);
-    if (entry.isDirectory()) { otherStyles(path); continue; }
-    if (!path.endsWith(".css") || [resolve(import.meta.dirname, "index.css"), resolve(import.meta.dirname, "components/nexus/nexus-layout.css")].includes(path)) continue;
-    postcss.parse(readFileSync(path, "utf8"), { from: path }).walkRules(rule => { unorderedRules.add(rule); cssRules.push(rule); });
+function painted(sample: Sample, candidate?: Triple): Triple {
+  let pixel = candidate ? { rgb: candidate, alpha: 1 } : browserColor(sample.color);
+  for (const [i, layer] of sample.chain.entries()) {
+    // A background-color surface IS the leaf background. Substitution replaces
+    // that one token value, never its browser-reported opacity or any backdrop.
+    let back = i === 0 && sample.property === "background-color"
+      ? { rgb: [0, 0, 0] as Triple, alpha: 0 } : browserColor(layer.backgroundColor);
+    if (layer.underlay) {
+      const underlay = browserColor(layer.underlay.color);
+      back = over({ ...underlay, alpha: underlay.alpha * Number(layer.underlay.opacity) }, back);
+    }
+    pixel = over(pixel, back);
+    pixel.alpha *= Number(layer.opacity);
   }
+  if (Math.abs(pixel.alpha - 1) > 1e-12) throw new Error("Browser chain has no opaque final backdrop");
+  return pixel.rgb;
 }
-otherStyles(import.meta.dirname);
-let themeForm = "compound";
-function model(ancestors: string[][], theme: Theme, interaction = "rest", form = themeForm): HTMLElement[] {
-  const root = document.createElement("html");
-  root.className = `proof-root ${form === "compound" ? "dark " : ""}theme-${theme.toLowerCase()}`;
-  const body = document.createElement("body"); root.appendChild(body);
-  const appRoot = document.createElement("div"); appRoot.id = "root"; body.appendChild(appRoot);
-  // main.tsx mounts App/NexusLayout into #root. Context providers add no box.
-  let parent: HTMLElement = appRoot;
-  if (form === "descendant") parent.className = "dark";
-  const nodes: HTMLElement[] = [];
-  for (const classes of [...ancestors].reverse()) {
-    const shape = classes.find(c => c.startsWith("proof-shape-"))?.slice("proof-shape-".length) ?? classes.find(c => c.startsWith("proof-tag-"))?.slice("proof-tag-".length) ?? (classes.some(c => c.startsWith("key-glyph-")) ? "svg" : undefined);
-    const tags: Record<string, string> = { "lm-trash": "button", "lm-action": "span", "lm-quant": "li", "key-status": "span", "key-row": "li", "map-pin": "g", "map-state-glyph": "g", "mem-fill": "span", "mem-over-glyph": "svg", "map-pin-leader": "line", "map-place-dot": "svg" };
-    const node = document.createElement(shape ?? classes.map(c => tags[c] ?? productionTags.get(c)).find(t => t && t !== "ambiguous") ?? "div"); node.className = classes.join(" ");
-    if (interaction === "hover") node.classList.add("proof-hover");
-    if (interaction === "focus") node.classList.add("proof-focus-within");
-    parent.appendChild(node); parent = node; nodes.unshift(node);
-  }
-  modeledPaths.set(`${theme}/${form}/${interaction}/${ancestors.map(c => c.join(".")).join("/")}`, nodes);
-  return nodes;
-}
-type Paint = { selector: string; value: string };
-const modeledPaths = new Map<string, HTMLElement[]>();
-const cascadeCache = new Map<string, Paint | undefined>();
-function cascade(nodes: HTMLElement[], index: number, property: string): Paint | undefined {
-  const node = nodes[index];
-  const key = `${node.localName}.${node.className}:${Array.from(function* () { for (let n = node.parentElement; n; n = n.parentElement) yield n.className; }()).join("/")}:${property}`;
-  if (cascadeCache.has(key)) return cascadeCache.get(key);
-  let paint: (Paint & { specificity: number[] }) | undefined;
-  for (const rule of cssRules) {
-    const declarations = rule.nodes.filter((n): n is postcss.Declaration => n.type === "decl" &&
-      (n.prop === property || (property === "background" && n.prop === "background-color")));
-    if (!declarations.length) continue;
-    for (const selector of rule.selectors) {
-      // A separate scrollbar box does not paint any measured element.
-      if (selector.includes("::-webkit-scrollbar")) continue;
-      // Conservative potential match: unknown context cannot hide a rule whose
-      // subject names this element (including classes inside functional pseudos).
-      const subject = selector.replace(/\([^)]*\)/g, m => m.replace(/\s+/g, "")).split(/[ >+~]+/).at(-1)!;
-      const subjectClasses = [...subject.matchAll(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g)].map(m => m[1]);
-      const generic = new Set(["on", "here", "ready", "exceeds", "optional", "missing", "present", "verified", "over", "armed"]);
-      const potential = subjectClasses.length ? subjectClasses.some(c => !generic.has(c) && node.classList.contains(c)) || (subjectClasses.every(c => node.classList.contains(c)) && (!subject.match(/^([a-z][\w-]*)/) || subject.match(/^([a-z][\w-]*)/)![1] === node.localName)) : /^(?:\*|:)/.test(subject) || subject.match(/^([a-z][\w-]*)/)?.[1] === node.localName;
-      if (!potential) continue;
-      const label = `${rule.source?.input.file ?? "shipped CSS"}: ${rule.selector} { ${declarations.map(d => d.toString()).join("; ")} }`;
-      function unsupported(reason: string): never { throw new Error(`Unmodeled ${reason}: ${label}`); }
-      const identity = subjectClasses.some(c => !generic.has(c) && node.classList.contains(c));
-      if (identity && /[#>+~]/.test(selector)) unsupported("ancestor, child or sibling context");
-      const classes = [...selector.matchAll(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g)].map(m => m[1]);
-      if (identity && classes.some(c => !modeledClasses.has(c))) unsupported("ancestor or compound class");
-      // Remove unsupported pseudo/attribute conditions only to establish
-      // possible relevance. An unrelated pane cannot match the real ancestry.
-      // The real selector is never resolved through this relaxed skeleton.
-      const skeleton = selector.replace(/:[a-z-]+\([^)]*\)/g, "").replace(/::?[a-z-]+/g, "").replace(/\[[^\]]*\]/g, "");
-      try { if (skeleton.trim() && !node.matches(skeleton)) continue; } catch { /* Unsupported grammar is rejected below. */ }
-      if (/[#>+~[\]]/.test(selector) || /::|:(?!root\b|hover\b|focus-within\b|disabled\b)/.test(selector)) unsupported("selector context");
-      const evaluated = selector.replace(/:root\b/g, ".proof-root").replace(/:hover\b/g, ".proof-hover").replace(/:focus-within\b/g, ".proof-focus-within");
-      if (!node.matches(evaluated)) continue;
-      if (unorderedRules.has(rule)) unsupported("stylesheet ordering");
-      if (rule.parent?.type !== "root") unsupported(`at-rule context ${rule.parent?.type === "atrule" ? "@" + rule.parent.name + " " + rule.parent.params : rule.parent?.type}`);
-      if (declarations.some(d => d.important)) unsupported("!important conflict");
-      const residue = selector.replace(/[.#][a-zA-Z_-][a-zA-Z0-9_-]*/g, "").replace(/:(?:root|hover|focus-within|disabled)\b/g, "").replace(/\bhtml\b|[\s>*]/g, "");
-      if (residue) unsupported("element or selector syntax");
-      const specificity = [(selector.match(/#/g) ?? []).length, (selector.match(/\.|:(?!:)/g) ?? []).length, (selector.match(/\bhtml\b/g) ?? []).length];
-      const difference = paint ? specificity.findIndex((v, i) => v !== paint!.specificity[i]) : -1;
-      const wins = !paint || difference === -1 || specificity[difference] > paint.specificity[difference];
-      if (wins) for (const decl of declarations) paint = { selector, value: decl.value, specificity };
-    }
-  }
-  const result = paint && { selector: paint.selector, value: paint.value };
-  cascadeCache.set(key, result); return result;
-}
-function resolved(ancestors: string[][], property: string, theme: Theme, interaction = "rest", fallback?: string, form = themeForm): string {
-  const paint = cascade(model(ancestors, theme, interaction, form), 0, property);
-  if (paint) return paint.value;
-  if (fallback !== undefined) return fallback;
-  throw new Error(`Missing production ${property}: ${ancestors[0].join(".")}, ${theme}/${interaction}`);
-}
-function paintedAncestor(ancestors: string[][], theme: Theme, interaction = "rest", form = themeForm): Paint {
-  const nodes = model(ancestors, theme, interaction, form);
-  for (let i = 0; i < nodes.length; i++) {
-    const paint = cascade(nodes, i, "background");
-    if (paint && !["none", "transparent"].includes(paint.value)) return paint;
-  }
-  throw new Error(`No production ancestor paints below opacity group: ${theme}`);
-}
-const keyBackdrop = (theme: Theme, interaction = "rest") => paintedAncestor(keyAncestors, theme, interaction);
-const deleteBackdrop = (theme: Theme, interaction = "rest") => paintedAncestor(deleteAncestors, theme, interaction);
-const opacity = (selector: string) => Number(declaration(selector, "opacity"));
-const ringOpacity = Number(mapSource.match(/opacity: outline \? ([\d.]+)/)?.[1]);
-if (!Number.isFinite(ringOpacity)) throw new Error("Missing production ring opacity");
-function contexts(): Context[] {
-  const result: Context[] = [];
-  const pigment = (surface: Surface, state: string, p: Palette, before: boolean, theme: Theme, interaction = "rest", part = "fill", requiredness = "required", sidebar = false) => {
-    let path: string[][], property = "color", fallback: string | undefined;
-    if (surface === "memory") { path = [["mem-fill", ...(state === "over" ? ["over"] : [])], ...memoryAncestors]; property = "background"; }
-    else if (surface === "delete") path = [["lm-trash", ...(state === "armed" ? ["armed"] : [])], ["lm-action"], ["lm-quant", "ready"], ...deleteAncestors];
-    else if (surface === "key") path = [["key-status", ...(state === "present" || state === "verified" ? [state] : [])], ["key-row", ...(state === "required-missing" ? ["missing"] : state === "optional-absent" || requiredness === "optional" ? ["optional"] : [])], ...keyAncestors];
-    else {
-      path = [[part === "ring" && state !== "rest" ? "map-state-ring" : "map-state-fill", `proof-shape-${state === "selected" ? "rect" : state === "hovered" ? "polygon" : "circle"}`], ["map-state-glyph"], ...(sidebar ? [["map-place-dot"], ...sidebarAncestors] : [["map-pin"], ...pinAncestors])];
-      property = part === "ring" && state !== "rest" ? "stroke" : "fill"; fallback = `var(${MAPPINGS.map[state]})`;
-    }
-    const value = resolved(path, property, theme, interaction, fallback);
-    if (!/^var\(--state-[a-z-]+\)$/.test(value)) throw new Error(`Unmodeled state-surface color expression: ${theme} ${surface}/${state} ${value}`);
-    const root = rootOf(value);
-    if (root !== MAPPINGS[surface][state]) throw new Error(`State mapping override: ${theme} ${surface}/${state} ${value}`);
-    return p[before ? BASE_ROOTS[root] : root];
-  };
-  result.push({ surface: "memory", name: "fill", render: (s, p, b, theme) => pigment("memory", s, p, b, theme) });
-  for (const row of ["ready", "ready-exceeds"])
-    for (const interaction of ["rest", "hover", "focus"]) {
-      // No hover/focus rule changes .lm-trash foreground/background. Resolve
-      // the ready row first, then its group opacity against provider parent.
-      result.push({ surface: "delete", name: `${row}/${interaction}`, render: (s, p, b, theme) => {
-        const rowBg = background(resolved([["lm-quant", "ready", ...(row === "ready-exceeds" ? ["exceeds"] : [])], ...deleteAncestors], "background", theme, interaction), p);
-        const glyph = composite(pigment("delete", s, p, b, theme, interaction), rowBg, 1);
-        return composite(glyph, background(deleteBackdrop(theme, interaction).value, p), row === "ready-exceeds" ? opacity(".lm-quant.exceeds") : 1);
-      } });
-    }
-  // Include required and optional presence/verification rows at rest and
-  // hover/focus-within; required-missing cannot be an optional row.
-  for (const requiredness of ["required", "optional"])
-    for (const interaction of ["rest", "hover", "focus"]) {
-      result.push({ surface: "key", name: `${requiredness}/${interaction}`, render: (s, p, b, theme) => {
-        const optional = s === "optional-absent" || (requiredness === "optional" && s !== "required-missing");
-        const alpha = optional ? opacity(interaction === "rest" ? ".key-row.optional" : `.key-row.optional:${interaction === "hover" ? "hover" : "focus-within"}`) : 1;
-        return composite(pigment("key", s, p, b, theme, interaction, "fill", requiredness), background(keyBackdrop(theme, interaction).value, p), alpha);
-      } });
-    }
-  for (const terrain of ["sea", "land"])
-    for (const part of ["fill", "ring"]) {
-      result.push({ surface: "map", name: `canvas-${terrain}/${part}`, render: (s, p, b, theme) => {
-        const bg = background(resolved(canvasAncestors, `--map-${terrain}`, theme), p);
-        return composite(pigment("map", s, p, b, theme, "rest", part), bg, part === "ring" && s !== "rest" ? ringOpacity : 1);
-      } });
-    }
-  // The sidebar inherits .nexus-content's fixed radial wash over --bg.
-  // Sample both zero and maximum wash endpoints; opaque fills are invariant.
-  const content = declaration(".nexus-content", "background");
-  const wash = content.match(/hsl\(([\d.]+ [\d.]+% [\d.]+%) \/ ([\d.]+)\)/);
-  if (!wash) throw new Error("Content gradient changed: extend backdrop proof");
-  for (const washAlpha of [0, Number(wash[2])])
-    for (const interaction of ["rest", "hover", "selected-current"])
-      for (const part of ["fill", "ring"]) {
-        result.push({ surface: "map", name: `sidebar-wash-${washAlpha}/${interaction}/${part}`, render: (s, p, b, theme) => {
-          const themedContent = resolved(mapOuter, "background", theme);
-          if (themedContent !== content) throw new Error(`Unmodeled sidebar gradient: ${theme} ${themedContent}`);
-          const parent = composite(rgb(wash[1]), p[rootOf(themedContent)], washAlpha);
-          const on = s === "selected" || (interaction === "selected-current" && s === "current");
-          const bg = background(resolved([["map-place-row", ...(on ? ["on"] : [])], ...sidebarAncestors.slice(1)], "background", theme, interaction), p, parent);
-          return composite(pigment("map", s, p, b, theme, interaction, part, "required", true), bg, !b && part === "ring" && s !== "rest" ? ringOpacity : 1);
-        } });
-      }
-  return result;
-}
-const CONTEXTS = contexts();
+type Context = { surface: Surface; name: string; render: (state: string, p: Palette | undefined, before: boolean, theme: Theme) => Triple };
+// Explicit inventory; adding or dropping a context cannot silently change the proof.
+const CONTEXTS: Context[] = [
+  ["memory", "fill"],
+  ...["ready", "ready-exceeds"].flatMap(row => ["rest", "hover", "focus"].map(action => ["delete", `${row}/${action}`])),
+  ...["required", "optional"].flatMap(need => ["rest", "hover", "focus"].map(action => ["key", `${need}/${action}`])),
+  ...["sea", "land"].flatMap(terrain => ["fill", "ring"].map(part => ["map", `canvas-${terrain}/${part}`])),
+  ...[0, .07].flatMap(wash => ["rest", "hover", "selected-current"].flatMap(action => ["fill", "ring"].map(part => ["map", `sidebar-wash-${wash}/${action}/${part}`]))),
+].map(([surface, name]) => ({ surface: surface as Surface, name, render: (state, p, before, theme) => {
+  const sample = receipt.themes[theme][before ? "before" : "shipped"][`${surface}/${name}`][state];
+  if (!p) return painted(sample);
+  // Joint-search substitution rule: vary only the surface's own state-token
+  // pigment. Every opacity, background and ancestor comes from Chromium. The
+  // domain is unchanged; Chromium also reports candidate RGB serialization.
+  const root = MAPPINGS[surface as Surface][state];
+  const candidate = candidates(theme, root).find(c => c.rgb.every((v, i) => Math.abs(v - p[root][i]) < 1e-12));
+  if (!candidate) throw new Error(`Candidate outside domain: ${theme}/${root}`);
+  return painted(sample, browserColor(receipt.candidateColors[theme][candidate.value]).rgb);
+} }));
 function palette(css: string, theme: Theme): Palette {
   return Object.fromEntries(Object.entries(tokens(css, theme))
     .filter(([, value]) => value === "#b83d7a" || /^(?:hsl\()?([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/.test(value))
@@ -410,7 +210,11 @@ function baselineValue(theme: Theme, root: string): string {
   return theme === "Veil" && BASE_ROOTS[root] === "--brass"
     ? `hsl(${ANCHOR_HSL})` : tokens(baseCss, theme)[BASE_ROOTS[root]];
 }
+const domainCache = new Map<string, { value: string; rgb: Triple; changed: number }[]>();
 function candidates(theme: Theme, root: string): { value: string; rgb: Triple; changed: number }[] {
+  const key = `${theme}/${root}`;
+  const cached = domainCache.get(key);
+  if (cached) return cached;
   const base = baselineValue(theme, root);
   const old = rgb(base);
   let [h, s, l] = hsl(base);
@@ -418,12 +222,14 @@ function candidates(theme: Theme, root: string): { value: string; rgb: Triple; c
   const destructive = root === "--state-delete-armed";
   const sats = [...new Set(destructive ? [80, 90, 100] : [s, Math.min(100, s + 10), Math.min(100, s + 20)])];
   const lights = [...new Set(destructive ? [50, 55, 60, 65] : [l, 30, 40, 50, 60, 70])];
-  return sats.flatMap(s => lights.map(l => {
+  const result = sats.flatMap(s => lights.map(l => {
     const next = hslRgb([h, s, l]);
     return { value: `hsl(${h} ${s}% ${l}%)`, rgb: next, changed: next.every((v, i) => Math.abs(v - old[i]) < 1e-12) ? 0 : 1 };
   }));
+  domainCache.set(key, result);
+  return result;
 }
-function measures(theme: Theme, p: Palette, before: boolean) {
+function measures(theme: Theme, p: Palette | undefined, before: boolean) {
   return CONTEXTS.flatMap(ctx => STATE_PAIRS[ctx.surface].map(states => {
     const colors = states.map(s => ctx.render(s, p, before, theme));
     return { theme, surface: ctx.surface, context: ctx.name, states, rgb: colors, delta: ciede2000(deutanLab(colors[0]), deutanLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
@@ -498,8 +304,8 @@ function jointSearch(theme: Theme) {
 }
 let searches: ReturnType<typeof jointSearch>[] | undefined;
 const searchAll = () => searches ??= THEMES.map(jointSearch);
-// Explicit one-theme exception manifests; exact context inventory is generated
-// from CSS, while shortfall IDs are committed and checked below.
+// Explicit one-theme exception manifests; the context inventory is fixed above,
+// while shortfall IDs are committed and checked below.
 const exceptions = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json"), "utf8")) as Record<Theme, string[]>;
 describe("777-S2 state shades", () => {
   it("ciede2000_matches_published_reference_vectors", () => {
@@ -513,78 +319,53 @@ describe("777-S2 state shades", () => {
     expect(CONTEXTS.filter(c => c.surface === "key")).toHaveLength(6);
     expect(CONTEXTS.filter(c => c.surface === "map")).toHaveLength(16);
     for (const theme of THEMES) {
-      const values = measures(theme, palette(shippedCss, theme), false);
+      const values = measures(theme, undefined, false);
       expect(values).toHaveLength(139);
       for (const ctx of CONTEXTS) expect(values.filter(v => v.context === ctx.name && v.surface === ctx.surface)).toHaveLength(STATE_PAIRS[ctx.surface].length);
     }
   });
-  it("opacity_backdrops_follow_the_production_painting_ancestors", () => {
-    for (const theme of THEMES) expect(keyBackdrop(theme)).toEqual({ selector: ".set-card-frame", value: declaration(".set-card-frame", "background") });
-    for (const theme of THEMES) expect(deleteBackdrop(theme)).toEqual({ selector: ".model-provider", value: declaration(".model-provider", "background") });
-    expect(jsxAncestors(settingsSource, "key-row")).toEqual([["key-list"], ["set-card-body"], ["set-card-frame"], ["set-card"]]);
-    // Assert every opacity context against an independently assembled production
-    // layer path. A context addition must extend this inventory, not pick a color.
-    for (const theme of THEMES) {
-      const p = palette(shippedCss, theme);
-      const content = declaration(".nexus-content", "background");
-      const wash = content.match(/hsl\(([^/]+) \/ ([\d.]+)\)/)!;
-      for (const ctx of CONTEXTS) for (const state of Object.keys(MAPPINGS[ctx.surface])) {
-        const pigment = p[MAPPINGS[ctx.surface][state]];
-        let expected: Triple;
-        if (ctx.surface === "memory") expected = pigment;
-        else if (ctx.surface === "key") {
-          const [need, interaction] = ctx.name.split("/");
-          const optional = state === "optional-absent" || (need === "optional" && state !== "required-missing");
-          const alpha = optional ? opacity(interaction === "rest" ? ".key-row.optional" : `.key-row.optional:${interaction === "hover" ? "hover" : "focus-within"}`) : 1;
-          expected = composite(pigment, background(paintedAncestor(keyAncestors, theme).value, p), alpha);
-        } else if (ctx.surface === "delete") {
-          const row = composite(pigment, background(declaration(".lm-quant.ready", "background"), p), 1);
-          expected = composite(row, background(paintedAncestor(deleteAncestors, theme).value, p), ctx.name.startsWith("ready-exceeds/") ? opacity(".lm-quant.exceeds") : 1);
-        } else {
-          const alpha = ctx.name.endsWith("/ring") && state !== "rest" ? ringOpacity : 1;
-          if (ctx.name.startsWith("canvas-")) {
-            // SVG terrain is painted beneath the glyph, not an HTML background.
-            expect(mapSource).toContain('fill="var(--map-sea)"');
-            expect(mapSource).toContain('fill="var(--map-land)"');
-            const terrain = ctx.name.split("/")[0].slice("canvas-".length);
-            expected = composite(pigment, background(declaration(".mappane-canvas", `--map-${terrain}`), p), alpha);
-          } else {
-            expect(jsxAncestors(mapSource, "map-place-dot")[0]).toContain("map-place-row");
-            const [, washAlpha, interaction] = ctx.name.match(/^sidebar-wash-([\d.]+)\/(.*?)\//)!;
-            const parent = composite(rgb(wash[1].trim()), p[rootOf(content)], Number(washAlpha));
-            const on = state === "selected" || (interaction === "selected-current" && state === "current");
-            expected = composite(pigment, background(declaration(on ? ".map-place-row.on" : interaction === "hover" ? ".map-place-row:hover" : ".map-place-row", "background"), p, parent), alpha);
+  it("browser_measurements_cover_production_compositing_chains", () => {
+    for (const theme of THEMES) for (const phase of ["before", "shipped"] as const) {
+      const contexts = receipt.themes[theme][phase];
+      expect(Object.keys(contexts)).toEqual(CONTEXTS.map(c => `${c.surface}/${c.name}`));
+      for (const ctx of CONTEXTS) {
+        const samples = contexts[`${ctx.surface}/${ctx.name}`];
+        expect(Object.keys(samples)).toEqual(Object.keys(MAPPINGS[ctx.surface]));
+        for (const [state, sample] of Object.entries(samples)) {
+          if (phase === "before") {
+            // Historical declarations are immutable and use legacy HSL RGB
+            // serialization. Check the pigment independently of the fixture's
+            // theme overlay; opacity/backdrops still come only from the receipt.
+            const value = tokens(baseCss, theme)[BASE_ROOTS[MAPPINGS[ctx.surface][state]]];
+            const actual = browserColor(sample.color).rgb;
+            // Chromium serializes legacy RGB to 8-bit channels. A half-channel
+            // bound avoids imposing JavaScript's floating-point tie rounding.
+            rgb(value).forEach((v, i) => expect(Math.abs(actual[i] - v) * 255,
+              `${theme} before/${ctx.surface}/${state}`).toBeLessThanOrEqual(.5 + 1e-9));
           }
+          expect(sample.chain.length).toBeGreaterThan(0);
+          for (const layer of sample.chain)
+            expect(layer.stackingContext).toBe(Number(layer.opacity) < 1);
+          expect(() => painted(sample)).not.toThrow();
         }
-        expect(ctx.render(state, p, false, theme), `${theme}/${ctx.surface}/${ctx.name}/${state}`).toEqual(expected);
       }
+      const optional = contexts["key/optional/rest"].present.chain;
+      expect(optional.some(n => n.classes.split(" ").includes("optional") && n.stackingContext)).toBe(true);
+      expect(optional.at(-1)?.classes.split(" ")).toContain("set-card-frame");
+      const exceeds = contexts["delete/ready-exceeds/rest"].unarmed.chain;
+      expect(exceeds.some(n => n.classes.split(" ").includes("exceeds") && n.stackingContext)).toBe(true);
+      expect(exceeds.at(-1)?.classes.split(" ")).toContain("model-provider");
     }
   });
-  it("theme_ancestry_and_every_relevant_rule_are_modeled", () => {
-    try {
-      for (const theme of THEMES) {
-        themeForm = "compound";
-        const compound = measures(theme, palette(shippedCss, theme), false);
-        themeForm = "descendant";
-        expect(measures(theme, palette(shippedCss, theme), false), `${theme}: compound and descendant theme contexts`).toEqual(compound);
-      }
-      for (const theme of THEMES) for (const form of ["compound", "descendant"]) {
-        model([["mem-over-glyph"], ...warningAncestors], theme, "rest", form);
-        for (const state of Object.keys(MAPPINGS.key)) model([[`key-glyph-${state}`], ["key-status"], ["key-row"], ...keyAncestors], theme, "rest", form);
-        model([["map-pin-leader"], ...leaderAncestors], theme, "rest", form);
-      }
-      const properties = new Set<string>([...ROOTS, ...measuredRoots, "--map-sea", "--map-land"]);
-      for (const rule of cssRules) rule.walkDecls(decl => {
-        if (/^(?:color|fill|stroke|background(?:$|-)|border(?:$|-.*color$)|outline(?:$|-color$)|box-shadow$|text-shadow$|filter$|opacity$)/.test(decl.prop)) properties.add(decl.prop);
-      });
-      for (const nodes of modeledPaths.values()) for (let i = 0; i < nodes.length; i++) {
-        for (const property of properties) {
-          const paint = cascade(nodes, i, property);
-          if (property.startsWith("--") && paint && !["--map-sea", "--map-land", "--map-coast"].includes(property))
-            throw new Error(`Unmodeled local custom-property cascade: ${paint.selector} { ${property}: ${paint.value} }`);
-        }
-      }
-    } finally { themeForm = "compound"; }
+  it("browser_measurements_match_recorded_tables", () => {
+    // The browser is the oracle; this consistency check makes a changed
+    // measurement require refreshed evidence as well as a refreshed receipt.
+    for (const theme of THEMES) {
+      const evidence = JSON.parse(readFileSync(resolve(import.meta.dirname,
+        `../../../docs/qa/777-glyph-first-states/amendment-2/${theme.toLowerCase()}-joint.json`), "utf8"));
+      expect(measures(theme, undefined, false)).toEqual(evidence.measurements);
+      expect(measures(theme, undefined, true)).toEqual(evidence.before);
+    }
   });
   it("reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures", () => {
     expect(MAPPINGS).toEqual({
@@ -594,13 +375,12 @@ describe("777-S2 state shades", () => {
       key: { "optional-absent": "--state-key-absent", "required-missing": "--state-key-missing", present: "--state-key-present", verified: "--state-key-verified" },
     });
     const results = searchAll();
-    if (process.env.STATE_SHADES_EVIDENCE_DIR) for (const result of results) writeFileSync(resolve(process.env.STATE_SHADES_EVIDENCE_DIR, `${result.theme.toLowerCase()}-joint.json`), JSON.stringify({ ...result, before: measures(result.theme, palette(baseCss, result.theme), true) }, null, 2) + "\n");
     for (const result of results) {
       console.log(JSON.stringify({ ...result, maxima: undefined, measurements: undefined }));
-      if (process.env.STATE_SHADES_EVIDENCE_DIR) writeFileSync(resolve(process.env.STATE_SHADES_EVIDENCE_DIR, `${result.theme.toLowerCase()}-joint.json`), JSON.stringify({ ...result, before: measures(result.theme, palette(baseCss, result.theme), true) }, null, 2) + "\n");
+      if (process.env.STATE_SHADES_EVIDENCE_DIR) writeFileSync(resolve(process.env.STATE_SHADES_EVIDENCE_DIR, `${result.theme.toLowerCase()}-joint.json`), JSON.stringify({ ...result, measurements: measures(result.theme, undefined, false), before: measures(result.theme, undefined, true) }, null, 2) + "\n");
       const actual = palette(shippedCss, result.theme);
       for (const root of ROOTS) expect(candidates(result.theme, root).some(c => c.rgb.every((v, i) => Math.abs(v - actual[root][i]) < 1e-12)), `${result.theme} ${root} outside domain`).toBe(true);
-      const shipped = measures(result.theme, actual, false);
+      const shipped = measures(result.theme, undefined, false);
       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(result.best, 10);
       const shortfalls = shipped.filter(m => m.delta < 15);
       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${m.surface}/${m.context}/${m.states.join("/")}`));
