@@ -1,4 +1,10 @@
-# Painted Control-Capture Oracle
+# Painted Control-Capture Oracle (Acceptance Blocked)
+
+The fifth clarification is implemented. Acceptance is blocked by a reachable
+Vector delete glyph under a sibling tooltip shadow: its mode is 44 device
+pixels, below the fixed floor of 64. See the
+[absolute-floor stop report](../../../docs/qa/777-glyph-first-states/after-review-r4/absolute-floor-stop-report.md).
+The checked receipt remains stale; no diagnostic is an acceptance receipt.
 
 The painted pixel is the measurement. Each surface is captured twice under
 identical conditions. A unique attribute tags its subtree; the control sets

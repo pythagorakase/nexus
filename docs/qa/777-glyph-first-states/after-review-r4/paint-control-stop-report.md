@@ -1,3 +1,5 @@
+> Historical: the fifth clarification resolves the own-shadow and fraction-floor blocker below. The subsequent sibling-tooltip/absolute-floor blocker is recorded in [absolute-floor-stop-report.md](absolute-floor-stop-report.md).
+
 # After the Fourth Independent Review and the Panel: Paint-Control Floor STOP-REPORT
 
 Date: 2026-10-05. Resumed local head: `2f828bd3`. Branch:

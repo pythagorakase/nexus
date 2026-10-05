@@ -609,3 +609,22 @@ selected-label/halo proof remain accepted historical evidence. The coordinator
 must resolve the fixed floor for both measured failures before acceptance.
 
 Codex, GPT-6.
+
+
+## After the Fourth Independent Review and the Panel: Fifth Clarification
+
+Resumed from `013ba941`; implemented the four-property transparent control and
+the absolute 64-device-pixel mode floor with recorded count/fraction. The sixth
+[stop-report](after-review-r4/absolute-floor-stop-report.md) retains repeated
+production captures: a reachable Vector delete glyph at width 639 sits under
+the existing sibling tooltip shadow, producing a 44/727 mode. Disabling only
+that tooltip shadow in both causal diagnostic captures restores 293/727.
+Neither timing changes nor a substitute floor were accepted. The receipt is
+unchanged and stale; no complete capture, group-search acceptance, refreshed
+tables/swatches, plants, complete final gates, PR update or push is claimed.
+[Exact commands and tails](after-review-r4/absolute-floor/commands.md) distinguish
+failed attempts, causal diagnostics and the current check/focused outcomes.
+The prior selected-label/halo evidence remains historical with the mandatory
+Veil anchor correction labeled; it was not broadened this run.
+
+Codex, GPT-6.
