@@ -96,6 +96,7 @@ function MapStateGlyph({
   x = 0,
   y = 0,
   glow = false,
+  sidebar = false,
 }: {
   state: MapState;
   color: string;
@@ -103,7 +104,10 @@ function MapStateGlyph({
   x?: number;
   y?: number;
   glow?: boolean;
+  sidebar?: boolean;
 }) {
+  const circle = (r: number) =>
+    `M ${x - r} ${y} A ${r} ${r} 0 1 0 ${x + r} ${y} A ${r} ${r} 0 1 0 ${x - r} ${y} Z`;
   const shape = (radius: number, outline: boolean) => {
     const r = radius / zoom;
     const props = {
@@ -116,30 +120,26 @@ function MapStateGlyph({
       stroke: outline ? color : undefined,
       strokeWidth: outline ? 1 / zoom : undefined,
       opacity: outline ? 0.6 : undefined,
+      pointerEvents: "none" as const,
+      display: outline && state === "rest" ? "none" : undefined,
       className:
         outline && (state === "selected" || state === "hovered")
           ? "map-state-ring animate-pulse"
           : outline ? "map-state-ring" : "map-state-fill",
     };
-    if (state === "selected") {
-      return (
-        <rect {...props} x={x - r} y={y - r} width={2 * r} height={2 * r} />
-      );
-    }
-    if (state === "hovered") {
-      return (
-        <polygon
-          {...props}
-          points={`${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`}
-        />
-      );
-    }
-    return <circle {...props} cx={x} cy={y} r={r} />;
+    const d = state === "selected"
+      ? `M ${x - r} ${y - r} L ${x + r} ${y - r} L ${x + r} ${y + r} L ${x - r} ${y + r} Z`
+      : state === "hovered"
+        ? `M ${x} ${y - r} L ${x + r} ${y} L ${x} ${y + r} L ${x - r} ${y} Z`
+        : circle(r);
+    return <path {...props} d={d} />;
   };
   return (
     <g className="map-state-glyph" data-map-state={state}>
-      {shape(PIN_RADIUS_PX, false)}
-      {state !== "rest" && shape(8, true)}
+      {/* Keep the original circular hit area stable while visible paths change. */}
+      {!sidebar && <path d={circle(PIN_RADIUS_PX / zoom)} fill="transparent" />}
+      {shape(sidebar ? 2.5 : PIN_RADIUS_PX, false)}
+      {shape(sidebar ? 4 : 8, true)}
     </g>
   );
 }
@@ -552,6 +552,13 @@ export function MapPane({ slot }: MapPaneProps) {
     hovered: "var(--state-map-hovered)",
     rest: "var(--state-map-rest)",
   };
+  // Labels retain the pre-PR global palette; only glyphs and leaders are tuned.
+  const LABEL_COLOR: Record<MapState, string> = {
+    current: "var(--brass-bright)",
+    selected: "var(--brass)",
+    hovered: "var(--brass-bright)",
+    rest: "var(--bronze)",
+  };
 
   const dataError = (placesError ?? zonesError) as Error | null;
 
@@ -600,12 +607,12 @@ export function MapPane({ slot }: MapPaneProps) {
                           >
                             <svg
                               className="map-place-dot"
-                              width={7}
-                              height={7}
-                              viewBox="-9 -9 18 18"
+                              width={9}
+                              height={9}
+                              viewBox="-4.5 -4.5 9 9"
                               aria-hidden="true"
                             >
-                              <MapStateGlyph state={state} color={PIN_COLOR[state]} />
+                              <MapStateGlyph state={state} color={PIN_COLOR[state]} sidebar />
                             </svg>
                             <span className="map-place-name">{place.name}</span>
                             {!placeCoordinates.has(place.id) && (
@@ -759,7 +766,7 @@ export function MapPane({ slot }: MapPaneProps) {
                   <text
                     x={coords.x}
                     y={coords.y - 13 / zoom}
-                    fill={pinColor}
+                    fill={LABEL_COLOR[state]}
                     fontSize={fontSize}
                     textAnchor="middle"
                     style={{

@@ -110,7 +110,7 @@ Inside the `<svg>`, in order back-to-front:
 
 ### 3.1 Static Pin Shapes
 
-Canvas and 7px sidebar SVGs share one `MapStateGlyph` contract. Precedence
+Canvas and 9px sidebar SVGs share one `MapStateGlyph` contract. Precedence
 is **current > selected > hovered > rest**:
 
 | State | Fill | Outline | Theme Token |
@@ -123,7 +123,10 @@ is **current > selected > hovered > rest**:
 Circle radius, square half-side and diamond vertex distance are
 `PIN_RADIUS_PX / zoom` on the canvas. The canvas fill glow blur also
 divides by zoom (`8 / zoom` pixels). The sidebar uses
-`viewBox="-9 -9 18 18"` with the same geometry at zoom 1.
+`viewBox="-4.5 -4.5 9 9"` with a 2.5px fill radius/half-side/vertex distance,
+4px outline radius/half-side/vertex distance and a 1px stroke. The box is
+centered in the existing row; its vertical rhythm is unchanged. Fill and ring
+use stable path elements, with an unchanged circular canvas hit target.
 Shape carries state when an in-family deutan pair stays below ΔE 15;
 color and motion are never the only distinctions. Leaders use the same
 theme-token mapping. True-coordinate centering and inverse-zoom fan-out
@@ -131,9 +134,10 @@ remain unchanged.
 
 ### 3.2 Outline Rings
 
-Every non-rest state has its corresponding outline at radius, half-side
+Every non-rest state has its corresponding canvas outline at radius, half-side
 or vertex distance `8 / zoom`, no fill, `strokeWidth={1 / zoom}` and
-opacity `0.6`. Current is static. Selected and hovered outlines pulse
+opacity `0.6`. Sidebar outlines use 4px and a 1px stroke in their 9px box.
+Current is static. Selected and hovered outlines pulse
 only without reduced motion; the app-wide reduced-motion guard disables
 the pulse with `animation: none !important`. Fill and outline dimensions
 divide by zoom to keep their screen size constant.

@@ -529,3 +529,27 @@ Final focused client **22 passed**; full client **500 passed**; check/build pass
 `git fetch origin main` and `git merge origin/main` reported **Already up to date** at `160134540517f6b74aacd1d1e1f3f584454eef86`. Fix commits preserve all previous commit IDs. No `git stash` command, rebase, history rewrite, force push or PR merge. Commit hooks ran normally; their temporary pre-commit patch handling restored unstaged evidence. No paid call, gateway/app lane, owner-service or secret-store action, product Python/config/migration edit or owner-database write. No new UI text, label, legend, tooltip, control or runtime tunable. The authorized Playwright tooling dependency is the only added dependency. No migration/fleet application or gateway restart owed; coordinator builds the client after landing and runs the whole-tree PostgreSQL gate at the final commit. PR #1099 remains open. Open coordinator questions: **none**.
 
 Codex, GPT-6.
+
+
+## After the Fourth Independent Review and the Panel — Stop Report, 2026-10-05
+
+The product-first work is committed locally, with stable map fill/ring/hit nodes,
+the separate global label mapping, the restored global memory halo, and 9px
+sidebar geometry. The literal equality requirement for the selected Veil label
+conflicts with the mandatory exact Veil anchor: Chromium paints 815 changed
+device pixels against 8ccd3008 in an otherwise identical label clip. Gilded and
+Vector selected-label comparisons are identical; all six isolated halo
+comparisons are identical. Real corner-pointer sequences pass in all three
+themes, and focused product/motion tests pass 18/18 with a green UI type-check.
+
+[Complete stop report, exact commands/tails, unfinished gates and coordinator
+question](after-review-r4/stop-report.md), [painted pixel and pointer
+receipt](after-review-r4/product-proof.json), [replay
+script](after-review-r4/product-probe.mjs). This diagnostic is not the completed
+production-shell/candidate/media oracle. The prior state-surface receipt is
+stale after the product edits; no Amendment-4 maxima, exceptions, regeneration,
+full proof pass, merge-main, PR update or push is claimed. Earlier sections stay
+historical. The common escape hatch applies until the coordinator resolves the
+selected-label equality/anchor conflict.
+
+Codex, GPT-6.

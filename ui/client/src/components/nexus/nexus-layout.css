@@ -194,27 +194,11 @@
 .topbar .mem-fill {
   display: block; height: 100%;
   background: var(--state-mem-normal);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--state-mem-normal) 55%, transparent), 0 0 18px color-mix(in srgb, var(--state-mem-normal) 25%, transparent);
+  box-shadow: var(--glow-soft);
   transition: width .35s ease;
 }
 .topbar .mem-over-glyph { color: var(--state-mem-over); flex-shrink: 0; }
-.topbar .mem-fill.over { background: var(--state-mem-over); box-shadow: 0 0 8px color-mix(in srgb, var(--state-mem-over) 55%, transparent), 0 0 18px color-mix(in srgb, var(--state-mem-over) 25%, transparent); }
-.dark.theme-gilded .topbar .mem-fill,
-.theme-gilded .dark .topbar .mem-fill {
-  box-shadow: 0 0 8px color-mix(in srgb, var(--state-mem-normal) 50%, transparent), 0 0 16px color-mix(in srgb, var(--state-mem-normal) 25%, transparent);
-}
-.dark.theme-gilded .topbar .mem-fill.over,
-.theme-gilded .dark .topbar .mem-fill.over {
-  box-shadow: 0 0 8px color-mix(in srgb, var(--state-mem-over) 50%, transparent), 0 0 16px color-mix(in srgb, var(--state-mem-over) 25%, transparent);
-}
-.dark.theme-vector .topbar .mem-fill,
-.theme-vector .dark .topbar .mem-fill {
-  box-shadow: 0 0 8px color-mix(in srgb, var(--state-mem-normal) 60%, transparent), 0 0 16px color-mix(in srgb, var(--state-mem-normal) 30%, transparent);
-}
-.dark.theme-vector .topbar .mem-fill.over,
-.theme-vector .dark .topbar .mem-fill.over {
-  box-shadow: 0 0 8px color-mix(in srgb, var(--state-mem-over) 60%, transparent), 0 0 16px color-mix(in srgb, var(--state-mem-over) 30%, transparent);
-}
+.topbar .mem-fill.over { background: var(--state-mem-over); }
 .topbar .mem-fill.loading { animation: nexus-pulse 1.8s ease-in-out infinite; }
 .topbar .mem-text { letter-spacing: .1em; white-space: nowrap; }
 
@@ -1193,8 +1177,8 @@
   text-shadow: var(--glow-soft);
 }
 .map-place-dot {
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   flex-shrink: 0;
 }
 .map-place-name {

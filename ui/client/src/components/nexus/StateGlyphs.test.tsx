@@ -60,15 +60,24 @@ function map() {
 function glyph(id: number, sidebar = false) {
   return screen.getByTestId(sidebar ? `map-place-row-${id}` : `map-pin-${id}`).querySelector("[data-map-state]")!;
 }
+function visibleParts(node: Element) {
+  return Array.from(node.querySelectorAll("[data-map-part]")).filter(n => n.getAttribute("display") !== "none");
+}
 function signature(node: Element) {
-  return Array.from(node.querySelectorAll("[data-map-part]")).map(n => `${n.tagName}:${n.getAttribute("data-map-part")}`).join(";");
+  return visibleParts(node).map(n => {
+    const d = n.getAttribute("d")!;
+    // Remove translation and scale: arcs are circular; straight paths are
+    // square when the first edge is horizontal and diamond otherwise.
+    const values = d.match(/-?(?:\d*\.)?\d+(?:e[+-]?\d+)?/gi)!.map(Number);
+    const kind = d.includes("A") ? "circle" : values[1] === values[3] ? "square" : "diamond";
+    return `${kind}:${n.getAttribute("data-map-part")}`;
+  }).join(";");
 }
 function center(node: Element) {
-  const shape = node.querySelector('[data-map-part="fill"]')!;
-  if (shape.tagName === "circle") return { x: Number(shape.getAttribute("cx")), y: Number(shape.getAttribute("cy")) };
-  if (shape.tagName === "rect") return { x: Number(shape.getAttribute("x")) + Number(shape.getAttribute("width")) / 2, y: Number(shape.getAttribute("y")) + Number(shape.getAttribute("height")) / 2 };
-  const points = shape.getAttribute("points")!.split(" ").map(p => p.split(",").map(Number));
-  return { x: points[0][0], y: points[1][1] };
+  const d = node.querySelector('[data-map-part="fill"]')!.getAttribute("d")!;
+  const v = d.match(/-?(?:\d*\.)?\d+(?:e[+-]?\d+)?/gi)!.map(Number);
+  if (d.includes("A")) return { x: (v[0] + v[7]) / 2, y: v[1] };
+  return { x: (v[0] + v[4]) / 2, y: (v[1] + v[5]) / 2 };
 }
 afterEach(() => { cleanup(); clients.splice(0).forEach(c => c.clear()); vi.unstubAllGlobals(); });
 describe("glyph-first states", () => {
@@ -99,13 +108,21 @@ describe("glyph-first states", () => {
     expect(button).not.toBeDisabled();
     expect(button.querySelector(".lucide-trash2")).toBeInTheDocument();
     expect(button).toHaveAccessibleName("Delete Fixture Q4");
+    const armedAt = performance.now();
     fireEvent.click(button);
     expect(screen.getByTestId("lm-trash-fixture-Q4")).toBe(button);
     expect(button.querySelector(".lucide-trash2")).not.toBeInTheDocument();
     expect(button.querySelector(".lucide-triangle-alert")).toHaveAttribute("width", "11");
     expect(button).toHaveAttribute("aria-pressed", "true");
     expect(button).toHaveAccessibleName("Confirm delete Fixture Q4");
-    await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "false"), { timeout: 2000 });
+    await waitFor(() => {
+      expect(button).toHaveAttribute("aria-pressed", "true");
+      expect(performance.now() - armedAt).toBeGreaterThanOrEqual(KNOBS.delete_arm_ms - 100);
+    }, { interval: 5, timeout: KNOBS.delete_arm_ms });
+    await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "false"), {
+      interval: 5, timeout: KNOBS.delete_arm_ms + 500 - (performance.now() - armedAt),
+    });
+    expect(performance.now() - armedAt).toBeLessThanOrEqual(KNOBS.delete_arm_ms + 500);
     expect(screen.getByTestId("lm-trash-fixture-Q4")).toBe(button);
     expect(button).toHaveAccessibleName("Delete Fixture Q4");
     expect(button.querySelector(".lucide-trash2")).toBeInTheDocument();
@@ -117,7 +134,15 @@ describe("glyph-first states", () => {
     const signatures = [1, 2, 3, 4].map(id => {
       expect(signature(glyph(id, true))).toBe(signature(glyph(id)));
       const svg = screen.getByTestId(`map-place-row-${id}`).querySelector("svg")!;
-      expect(svg).toHaveAttribute("viewBox", "-9 -9 18 18"); expect(svg).toHaveAttribute("width", "7");
+      expect(svg).toHaveAttribute("viewBox", "-4.5 -4.5 9 9"); expect(svg).toHaveAttribute("width", "9");
+      for (const part of visibleParts(svg)) {
+        const d = part.getAttribute("d")!;
+        const v = d.match(/-?(?:\d*\.)?\d+(?:e[+-]?\d+)?/gi)!.map(Number);
+        const radius = d.includes("A") ? v[2] : Math.max(v[0], v[2], v[4], v[6]);
+        const outline = part.getAttribute("data-map-part") === "outline";
+        expect(radius).toBe(outline ? 4 : 2.5);
+        if (outline) expect(part).toHaveAttribute("stroke-width", "1");
+      }
       return signature(glyph(id));
     });
     expect(new Set(signatures).size).toBe(4);
@@ -129,10 +154,33 @@ describe("glyph-first states", () => {
       expect(signature(glyph(id, true))).toBe(signature(glyph(id)));
     }
     expect(glyph(4).querySelector('[data-map-part="outline"]')).not.toHaveClass("animate-pulse");
-    expect(glyph(2).querySelector('[data-map-part="outline"]')).toBeNull();
+    expect(glyph(2).querySelector('[data-map-part="outline"]')).toHaveAttribute("display", "none");
     fireEvent.click(screen.getByTestId("map-place-row-4"));
     expect(glyph(4)).toHaveAttribute("data-map-state", "current");
     expect(signature(glyph(4, true))).toBe(signature(glyph(4)));
+  });
+  it("map_layers_keep_identity_through_hover_selection_and_rest", () => {
+    map();
+    const pin = screen.getByTestId("map-pin-3");
+    const fill = pin.querySelector('[data-map-part="fill"]')!;
+    const ring = pin.querySelector('[data-map-part="outline"]')!;
+    const hit = pin.querySelector("path")!;
+    const sameLayers = () => {
+      expect(pin.querySelector('[data-map-part="fill"]')).toBe(fill);
+      expect(pin.querySelector('[data-map-part="outline"]')).toBe(ring);
+      expect(pin.querySelector("path")).toBe(hit);
+    };
+    expect(glyph(3)).toHaveAttribute("data-map-state", "rest");
+    fireEvent.pointerOver(hit);
+    expect(glyph(3)).toHaveAttribute("data-map-state", "hovered");
+    sameLayers();
+    fireEvent.click(screen.getByTestId("map-place-row-3"));
+    expect(glyph(3)).toHaveAttribute("data-map-state", "selected");
+    sameLayers();
+    fireEvent.pointerOut(hit);
+    fireEvent.click(screen.getByTestId("map-place-row-1"));
+    expect(glyph(3)).toHaveAttribute("data-map-state", "rest");
+    sameLayers();
   });
   it("map_state_geometry_keeps_its_screen_size_at_two_zooms", () => {
     const svg = map();
@@ -149,9 +197,11 @@ describe("glyph-first states", () => {
       for (const id of [1, 2, 3, 4]) {
         const pin = glyph(id), pos = center(pin), expected = displayed.get(id)!;
         expect(pos.x).toBeCloseTo(expected.x, 9); expect(pos.y).toBeCloseTo(expected.y, 9);
-        for (const shape of Array.from(pin.querySelectorAll("[data-map-part]"))) {
+        for (const shape of visibleParts(pin)) {
           const radius = shape.getAttribute("data-map-part") === "fill" ? PIN_RADIUS_PX : 8;
-          const halfSize = shape.tagName === "circle" ? Number(shape.getAttribute("r")) : shape.tagName === "rect" ? Number(shape.getAttribute("width")) / 2 : Number(shape.getAttribute("points")!.split(" ")[1].split(",")[0]) - pos.x;
+          const d = shape.getAttribute("d")!;
+          const v = d.match(/-?(?:\d*\.)?\d+(?:e[+-]?\d+)?/gi)!.map(Number);
+          const halfSize = d.includes("A") ? v[2] : Math.max(...[v[0], v[2], v[4], v[6]]) - pos.x;
           expect(halfSize * zoom).toBeCloseTo(radius, 9);
           if (radius === 8) expect(Number(shape.getAttribute("stroke-width")) * zoom).toBeCloseTo(1, 9);
         }

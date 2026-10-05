@@ -147,20 +147,10 @@ function pinCenter(placeId: number) {
   const dot = screen
     .getByTestId(`map-pin-${placeId}`)
     .querySelector('[data-map-part="fill"]')!;
-  if (dot.tagName === "rect") {
-    return {
-      x: Number(dot.getAttribute("x")) + Number(dot.getAttribute("width")) / 2,
-      y: Number(dot.getAttribute("y")) + Number(dot.getAttribute("height")) / 2,
-    };
-  }
-  if (dot.tagName === "polygon") {
-    const points = dot.getAttribute("points")!.split(" ").map(point => point.split(",").map(Number));
-    return { x: points[0][0], y: points[1][1] };
-  }
-  return {
-    x: Number(dot.getAttribute("cx")),
-    y: Number(dot.getAttribute("cy")),
-  };
+  const d = dot.getAttribute("d")!;
+  const v = d.match(/-?(?:\d*\.)?\d+(?:e[+-]?\d+)?/gi)!.map(Number);
+  if (d.includes("A")) return { x: (v[0] + v[7]) / 2, y: v[1] };
+  return { x: (v[0] + v[4]) / 2, y: (v[1] + v[5]) / 2 };
 }
 
 beforeEach(() => {
