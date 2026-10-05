@@ -36,7 +36,7 @@
 -- Unsupported languages and different SECURITY DEFINER owners refuse.
 -- Catalog-input positions additionally refuse nonliteral/unresolved operands.
 -- SET values split at the first equals sign in one shared parser. Each validator
--- runs in a subtransaction aborted by a dedicated success sentinel, restoring
+-- and every environment-applying helper run in a sentinel subtransaction, restoring
 -- the native GUC stack including privilege settings. check_function_bodies=on,
 -- the migration lock timeout and exit_on_error=off are reasserted after SETs.
 -- No runtime DDL or routine execution: definitions, OIDs, ownership, ACLs and
@@ -174,7 +174,7 @@ COMMENT ON FUNCTION pg_temp.dead143_setting(text) IS 'Migration 143 transaction-
 CREATE FUNCTION pg_temp.dead143_resolve(statement text, setting_names text[], setting_values text[]) RETURNS text
 LANGUAGE plpgsql SET search_path = pg_catalog AS $resolve$
 -- Precompute under pg_catalog. Only qualified statements run under the routine
--- environment; native subtransaction/exit GUC unwind restores it without fresh assignments.
+-- environment; native sentinel-subtransaction GUC unwind restores it without fresh assignments.
 DECLARE
     result text;
     startup_path text := (SELECT reset_val FROM pg_catalog.pg_settings WHERE name='search_path');
@@ -194,14 +194,14 @@ BEGIN
         EXECUTE statement INTO result;
         -- A helper's SET search_path saves that GUC alone. Abort the local
         -- subtransaction to unwind every arbitrary SET, including privileges.
-        RAISE SQLSTATE 'D1431' USING MESSAGE='dead143 resolution complete';
-    EXCEPTION WHEN SQLSTATE 'D1431' THEN
-        IF SQLERRM <> 'dead143 resolution complete' THEN RAISE; END IF;
+        RAISE SQLSTATE 'D1430' USING MESSAGE='dead143 validation complete';
+    EXCEPTION WHEN SQLSTATE 'D1430' THEN
+        IF SQLERRM <> 'dead143 validation complete' THEN RAISE; END IF;
     END;
     RETURN result;
 END
 $resolve$;
-COMMENT ON FUNCTION pg_temp.dead143_resolve(text, text[], text[]) IS 'Migration 143 transaction-local prebuilt qualified lookup/decoding under every routine SET clause; native GUC unwind on exit; removed before stamping.';
+COMMENT ON FUNCTION pg_temp.dead143_resolve(text, text[], text[]) IS 'Migration 143 transaction-local prebuilt qualified lookup/decoding under every routine SET clause; native sentinel-subtransaction GUC unwind; removed before stamping.';
 
 CREATE FUNCTION pg_temp.dead143_body(body text, function_oid oid, targets oid[], relation_targets oid[], names text[], setting_names text[], setting_values text[], nesting integer DEFAULT 0) RETURNS void
 LANGUAGE plpgsql SET search_path = pg_catalog AS $scanner$

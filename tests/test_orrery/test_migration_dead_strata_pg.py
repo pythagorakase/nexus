@@ -534,6 +534,7 @@ def test_migration_143_round6_search_path(
         refuses = broken
         before = _snapshot(dbname, surviving=not refuses)
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        routine_before = _routine_outcome(dbname, "SELECT public.probe813_path()")
         caplog.clear()
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute("SELECT pg_catalog.current_setting('search_path')")
@@ -551,6 +552,7 @@ def test_migration_143_round6_search_path(
                     dbname,
                     case,
                     "SELECT public.probe813_path()",
+                    routine_before,
                     target=case == "overload-broken",
                     already_broken=broken and case != "overload-broken",
                 )
@@ -927,7 +929,8 @@ def _column_consumers(dbname: str) -> None:
         "COMMENT ON FUNCTION public.probe813_percent() "
         "IS '813 unrelated percent type'; "
         "CREATE FUNCTION public.probe813_dynamic() RETURNS void LANGUAGE plpgsql "
-        "SET search_path=pg_catalog AS $$BEGIN EXECUTE pg_catalog.format('SELECT %L','item_type'); END$$; "
+        "SET search_path=pg_catalog AS $$BEGIN EXECUTE "
+        "pg_catalog.format('SELECT %L','item_type'); END$$; "
         "COMMENT ON FUNCTION public.probe813_dynamic() IS '813 constant safe SQL'; "
         "CREATE TYPE assets.item_type AS ENUM ('other'); "
         "COMMENT ON TYPE assets.item_type IS '813 namespace shadow'; "
@@ -1381,10 +1384,13 @@ def test_migration_143_round3_literal_grammar(
         refuses = reference in ("public.items", "public.item_type")
         before = _snapshot(dbname, surviving=not refuses)
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        routine_before = _routine_outcome(dbname, "SELECT public.probe813()")
         caplog.clear()
         applied = _apply(dbname)
         if applied:
-            _old_verdict(dbname, case, "SELECT public.probe813()", target=refuses)
+            _old_verdict(
+                dbname, case, "SELECT public.probe813()", routine_before, target=refuses
+            )
         assert applied is not refuses, caplog.text
         if refuses:
             _defense(caplog.text, "scanner")
@@ -1537,6 +1543,7 @@ def test_migration_143_round4_unicode_forms(
         refuses = case != "escaped-unicode"
         before = _snapshot(dbname, surviving=not refuses)
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        routine_before = _routine_outcome(dbname, "SELECT public.probe813_unicode()")
         caplog.clear()
         applied = _apply(dbname)
         if applied:
@@ -1544,6 +1551,7 @@ def test_migration_143_round4_unicode_forms(
                 dbname,
                 case,
                 "SELECT public.probe813_unicode()",
+                routine_before,
                 target=case.endswith("gap"),
             )
         assert applied is not refuses, caplog.text
@@ -1745,12 +1753,14 @@ ROUND8 = {
         "scanner",
     ),
     "update-qualified-settings": (
-        "BEGIN UPDATE pg_catalog.pg_settings SET setting='public' WHERE name='search_path'; END",
+        "BEGIN UPDATE pg_catalog.pg_settings SET setting='public' "
+        "WHERE name='search_path'; END",
         "",
         "scanner",
     ),
     "select-into-config": (
-        "DECLARE x text; BEGIN SELECT pg_catalog.set_config('search_path','public',true) INTO x; END",
+        "DECLARE x text; BEGIN SELECT "
+        "pg_catalog.set_config('search_path','public',true) INTO x; END",
         "",
         "scanner",
     ),
@@ -1760,12 +1770,15 @@ ROUND8 = {
         "scanner",
     ),
     "json-returning": (
-        "BEGIN PERFORM json_value('{}'::jsonb, '$' RETURNING emotional_valence) FROM public.character_relationships; END",
+        "BEGIN PERFORM json_value('{}'::jsonb, '$' "
+        "RETURNING emotional_valence) FROM public.character_relationships; END",
         "",
         "scanner",
     ),
     "dml-returning": (
-        "BEGIN UPDATE public.character_relationships SET emotional_valence=emotional_valence RETURNING emotional_valence INTO STRICT v; END",
+        "BEGIN UPDATE public.character_relationships "
+        "SET emotional_valence=emotional_valence "
+        "RETURNING emotional_valence INTO STRICT v; END",
         "",
         None,
     ),
@@ -1851,7 +1864,8 @@ def test_migration_143_round8_contract(
             "SET LOCAL check_function_bodies=off; "
             f"CREATE FUNCTION {schema}.probe813_r8({signature}) RETURNS {result} "
             f"LANGUAGE {language} {clauses} AS $probe${body}$probe$; "
-            f"COMMENT ON FUNCTION {schema}.probe813_r8({'text' if signature else ''}) IS '813 round-eight recipe'",
+            f"COMMENT ON FUNCTION {schema}.probe813_r8("
+            f"{'text' if signature else ''}) IS '813 round-eight recipe'",
         )
         before = _snapshot(dbname, surviving=defense is None)
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
@@ -1881,10 +1895,18 @@ def test_migration_143_round8_fold_candidates(
     with _clone(archives, tmp_path) as dbname:
         _round3_prepare(dbname, post)
         if candidate == "operator":
-            definition = "CREATE FUNCTION public.probe813_concat(text,text) RETURNS text LANGUAGE sql AS $$SELECT 'SELECT 1'$$; CREATE OPERATOR public.|| (LEFTARG=text, RIGHTARG=text, FUNCTION=public.probe813_concat)"
+            definition = (
+                "CREATE FUNCTION public.probe813_concat(text,text) RETURNS text "
+                "LANGUAGE sql AS $$SELECT 'SELECT 1'$$; "
+                "CREATE OPERATOR public.|| (LEFTARG=text, RIGHTARG=text, "
+                "FUNCTION=public.probe813_concat)"
+            )
             expression = "'SELECT ' || '1'"
         else:
-            definition = f"CREATE FUNCTION public.{candidate}(text,text) RETURNS text LANGUAGE sql AS $$SELECT 'SELECT 1'$$"
+            definition = (
+                f"CREATE FUNCTION public.{candidate}(text,text) RETURNS text "
+                "LANGUAGE sql AS $$SELECT 'SELECT 1'$$"
+            )
             expression = (
                 "format('SELECT %s','1')"
                 if candidate == "format"
@@ -1927,7 +1949,8 @@ def test_migration_143_round8_role_resolution(
         routine = (
             "RETURNS bigint LANGUAGE sql AS $$SELECT count(*) FROM items$$"
             if usage
-            else "RETURNS void LANGUAGE plpgsql AS $$BEGIN PERFORM 'items'::regclass; END$$"
+            else "RETURNS void LANGUAGE plpgsql "
+            "AS $$BEGIN PERFORM 'items'::regclass; END$$"
         )
         # Put SET clauses before AS while preserving the literal body.
         declaration, body = routine.split(" AS ", 1)
@@ -1941,11 +1964,16 @@ def test_migration_143_round8_role_resolution(
                 f'SET search_path={path} SET {setting}="{role}" AS {body}',
             )
             before = _snapshot(dbname, surviving=usage)
+            routine_before = _routine_outcome(dbname, "SELECT public.probe813_role()")
             caplog.clear()
             applied = _apply(dbname)
             if applied and not usage:
                 _old_verdict(
-                    dbname, setting, "SELECT public.probe813_role()", target=True
+                    dbname,
+                    setting,
+                    "SELECT public.probe813_role()",
+                    routine_before,
+                    target=True,
                 )
             assert applied is usage, caplog.text
             if not usage:
@@ -2026,32 +2054,90 @@ def test_migration_143_round8_runner_recompiles(
         assert not any(s[0] == "902" for s in _stamps(dbname))
 
 
+def _routine_outcome(dbname: str, call: str) -> tuple[bool, Any]:
+    """Call on a fresh disposable backend and preserve success or exact failure."""
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        try:
+            cur.execute(call)
+            return True, cur.fetchone()
+        except psycopg2.Error as failure:
+            return False, (failure.pgcode, str(failure).splitlines()[0])
+
+
 def _old_verdict(
     dbname: str,
     case: str,
     call: str,
+    before: tuple[bool, Any],
     *,
     target: bool = False,
     already_broken: bool = False,
 ) -> None:
-    """A destructive verdict requires an actual post-drop routine failure."""
-    with closing(connect(dbname)) as conn, conn.cursor() as cur:
-        if target or already_broken:
-            with pytest.raises(psycopg2.Error) as failure:
-                cur.execute(call)
-            if target:
-                assert failure.value.pgcode in ("42P01", "42704"), str(failure.value)
-            label = (
-                "OLD DESTRUCTIVE VERDICT"
-                if target
-                else "OLD VERDICT: applied (routine already broken)"
-            )
-            print(label, case, "call failed:", str(failure.value).splitlines()[0])
-        else:
-            cur.execute(call)
-            print(
-                "OLD VERDICT: applied (healthy routine)",
-                case,
-                "result:",
-                cur.fetchone(),
-            )
+    """Classify already broken, newly broken, or intact from both actual calls."""
+    after = _routine_outcome(dbname, call)
+    if already_broken:
+        assert not before[0] and not after[0], (before, after)
+    elif target:
+        assert before[0] and not after[0], (before, after)
+        assert after[1][0] in ("42P01", "42704"), after
+    else:
+        assert before[0] and after[0], (before, after)
+        assert before[1] == after[1], (before, after)
+    verdict = (
+        "already broken"
+        if not before[0]
+        else "newly broken" if not after[0] else "intact"
+    )
+    label = (
+        "OLD DESTRUCTIVE VERDICT: applied (newly broken)"
+        if verdict == "newly broken"
+        else (
+            "OLD VERDICT: applied (routine already broken)"
+            if verdict == "already broken"
+            else "OLD VERDICT: applied (healthy routine)"
+        )
+    )
+    print(label, case, "before:", before, "after:", after, flush=True)
+
+
+def test_migration_143_round8_environment_unwinds(
+    archives: dict[str, Path], tmp_path: Path
+) -> None:
+    """Every scan helper restores identity and GUCs before drops in the same txn."""
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        _sql(
+            dbname,
+            "CREATE FUNCTION public.probe813_unwind() RETURNS void LANGUAGE plpgsql "
+            "SET search_path=pg_catalog SET role=pg_monitor "
+            "SET session_authorization=pg_monitor "
+            "SET standard_conforming_strings=off SET lock_timeout=0 "
+            "AS $$BEGIN EXECUTE 'SELECT 1'; END$$",
+        )
+        probe = """
+DO $probe$
+BEGIN
+    RAISE NOTICE 'UNWIND %: %|%|%|%', '{phase}', current_user, session_user,
+        pg_catalog.current_setting('standard_conforming_strings'),
+        pg_catalog.current_setting('lock_timeout');
+END
+$probe$;
+"""
+        sql = MIGRATION.read_text()
+        assert sql.count("DO $guard$") == sql.count("$guard$;") == 1
+        sql = sql.replace("DO $guard$", probe.format(phase="before") + "DO $guard$")
+        sql = sql.replace("$guard$;", "$guard$;" + probe.format(phase="after"))
+        migration = tmp_path / "143_unwind.sql"
+        migration.write_text(sql)
+        with closing(connect(dbname)) as conn:
+            applied = migrate.apply_migration(conn, "143", "unwind_probe", migration)
+            notices = [n.strip() for n in conn.notices if "UNWIND " in n]
+            assert len(notices) == 2, notices
+            before = notices[0].split("UNWIND before: ")[1]
+            after = notices[1].split("UNWIND after: ")[1]
+            print("UNWIND before:", before, "after:", after, flush=True)
+            assert before == after, notices
+            assert applied
+            assert before.split("|")[2:] == ["on", "5s"], notices
+            with conn.cursor() as cur:
+                _post_state(cur)
