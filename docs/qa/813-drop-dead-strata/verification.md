@@ -4166,7 +4166,11 @@ dbname audit: owner targets: none
 ```
 
 `scripts/check_migration_comments.py`: OK. Black and flake8 on the test module:
-clean. The full module and the whole-tree gate run at the final head below.
+clean. The full module and whole-tree gate were first recorded at `ebcfbe15`
+(round 7), and again at `9ed33d54` (round 8: 615 ordered proof cases;
+coordinator gate 6535 passed / 0 failed / 65 skipped on 2026-10-05,
+as supplied by the round-nine order). No full gate at the round-five or
+round-six head is claimed.
 
 ## After the Sixth Independent Review (Coordinator Fix)
 
@@ -4263,8 +4267,11 @@ dbname audit: owner targets: none
 ```
 
 `scripts/check_migration_comments.py`: OK. Black and flake8 on the test
-module: clean. The full module, the runner and schema-documentation suites and
-the whole-tree gate run at this head below.
+module: clean. The full module and whole-tree gate were first recorded at `ebcfbe15`
+(round 7), and again at `9ed33d54` (round 8: 615 ordered proof cases;
+coordinator gate 6535 passed / 0 failed / 65 skipped on 2026-10-05,
+as supplied by the round-nine order). No full gate at the round-five or
+round-six head is claimed.
 
 ## After the Seventh Independent Review (Coordinator Fix)
 
@@ -5085,7 +5092,7 @@ tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_en
 UNWIND before: pythagor|pythagor|on|5s after: pythagor|pythagor|on|5s
 ```
 
-**unwind-green**
+**unwind-green (uncommitted draft; shipped green is pg-round8)**
 
 ```sh
 NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r8/run.py unwind-green /Users/pythagor/nexus/.venv/bin/python -m pytest tests/test_orrery/test_migration_dead_strata_pg.py -k environment_unwinds -vs --tb=short
@@ -5101,13 +5108,13 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 EXIT STATUS: 0
 ```
 
-**unwind-red observations (verbatim)**
+**unwind-red observations (verbatim; uncommitted draft, not shipped-test proof)**
 
 ```text
 tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_environment_unwinds 813 source dump: NEXUS_template
 ```
 
-**unwind-red**
+**unwind-red (uncommitted draft; superseded by unwind-red-values)**
 
 ```sh
 NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r8/exit_unwind_mutant.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r8/run.py unwind-red /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k environment_unwinds -vs --tb=short
@@ -5957,5 +5964,326 @@ The existing sequencing/deferral/landing notes remain. PR #1098 remains open
 and unmerged. This checkpoint documents the stop and does not make the PR ready
 to land. Resume needs the coordinator's amendment; the third panel/Astra tenth
 pass and the coordinator's whole-tree PostgreSQL gate remain later work.
+
+Authored by Codex, running GPT-6.
+
+
+## After the Ninth Independent Review and the Second Panel: Clarified Resume
+
+### Stop Report: F12 Refuses Existing Fleet Views
+
+The coordinator's clarification is accepted: under the default path, the
+fully qualified `pg_catalog.format` control uses the surviving literal
+`character_relationships`; the `item_type` version refuses under the literal
+rule. The old control's acceptance was superseded by the literal rule in round
+8. R1 removes the candidate check regardless. The prior control-conflict
+stop-report above is historical and that question is closed.
+
+This resume stops under T4: "R1, R2, R3, R4, F1 and F12 may surface a fleet
+routine or object that the new rules refuse — if so, that is a stop-report
+naming it, not an exemption." The common rules also require a stop-report
+rather than improvisation when the ordered premise cannot be satisfied.
+**Round nine is not shipped.** Production migration 143 and its test module
+are restored byte-for-byte to `982a4c7e`/`9ed33d54`. The only committed change
+is this evidence record. There is no green-after round-nine proof, no claim
+that R1–R6/F1–F14/T1–T4 are complete, and no production exemption.
+
+I first attempted R1–R6 and F1–F14 in the assigned worktree. A first control
+probe exposed an overbroad new DO detector reading `ON CONFLICT ... DO UPDATE`
+as a DO statement; that implementation mistake was corrected to require a
+statement-initial DO. The corrected attempt then refused the template's view,
+and the corpus-gated fleet run refused all six sources. The unvalidated attempt
+and test edits are preserved only in `after-review-r9/attempt-round9.sql` and
+`attempt-round9-tests.py`; they are not a reusable fix or a completed order.
+
+To isolate F12, `9ed33d54-f12-only.sql` contains the frozen migration plus only
+one non-routine deparse loop immediately before `END $guard$`. It calls the
+unchanged scanner with `standard_conforming_strings=on`, as F12 requires.
+Its SHA256 is
+`b6b28caa8cc4f0bb90c7d54d62d7ee56ff5d7f97833e7dddd9cfa5bb718a2d4a`.
+It changes no lexer, token classifier, candidate check, routine environment,
+validator, closure or test assertion. All six raw-dump fleet clones refuse
+with this isolated copy too. No R1–R6 change is needed to trigger the blocker.
+
+| Source | First refusal in the F12-only run |
+| --- | --- |
+| NEXUS_template | view public.character_relationship_pairs: cr1.relationship_type |
+| save_01 | view public.entity_relationships_v: cr.relationship_type |
+| save_02 | view public.character_relationship_pairs: cr1.relationship_type |
+| save_03 | view public.character_relationship_pairs: cr1.relationship_type |
+| save_04 | view public.entity_relationships_v: cr.relationship_type |
+| save_05 | view public.character_relationship_pairs: cr1.relationship_type |
+
+The unvalidated attempt's first offender varied between the same two views;
+iteration order is unspecified, so neither run establishes a complete offender
+inventory. No fleet routine was reported before these object refusals.
+
+### Diagnosis From the Disposable Catalog
+
+The audited `f12-view-catalog-audited` run prints the deparsed views and the
+actual column types from its disposable template clone. Both relationship
+columns are `character varying(50)`. `pg_get_viewdef` renders these FROM items:
+
+```sql
+-- public.character_relationship_pairs
+FROM (((character_relationships cr1
+  JOIN character_relationships cr2 ON (...))
+  JOIN characters c1_min ON (...))
+  JOIN characters c2_max ON (...))
+-- public.entity_relationships_v
+FROM ((character_relationships cr
+  JOIN characters c1 ON (...))
+  JOIN characters c2 ON (...))
+```
+
+The shipped scanner at `migrations/143_drop_dead_schema_strata.sql:467` only
+proves a relation when a FROM/JOIN/UPDATE/INTO token is immediately followed
+by an identifier. Here FROM is followed by punctuation. The relation aliases
+`cr1` and `cr` therefore provide no catalog column proof. `to_regtype` and
+`to_regclass` on the qualified column name find no object, so line 508 raises
+`unsupported or unresolved body identifier`. The same failure occurs with
+the frozen scanner and F12 alone, independently of the attempted exact fixes.
+This is a conservative refusal of healthy existing views, not a literal naming
+a target and not a destructive escape. Extending that classifier or weakening
+F12 is a coordinator decision under the explicit T4 stop rule.
+
+### Shipped Contract and Six Refusals
+
+The shipped contract remains the round-eight paragraph:
+
+> PostgreSQL decides catalog dependencies: every drop is RESTRICT, and
+> SQL-standard bodies (prosqlbody) carry real dependencies. String-bodied
+> routines are decided lexically under every declared SET clause (search_path,
+> role, session_authorization, standard_conforming_strings and the rest) on top
+> of session startup settings: a token naming a drop target refuses, every
+> decoded string literal resolving to a drop target refuses, and a form the
+> lexer cannot classify refuses. After the drops, PostgreSQL's own validators
+> check every surviving application routine's body under that same environment.
+> Outside this contract, a name arriving as data at runtime (a nonliteral text
+> argument to a catalog-input function or reg* parameter), dynamic SQL assembled
+> from nonconstants, or a path/role changed through an unrecognized form cannot
+> be seen statically and is not claimed. Late-bound PL/pgSQL expression references
+> and polymorphic SQL bodies remain: fmgr_sql_validator only syntax-checks
+> polymorphic SQL; plpgsql_validator checks syntax and declared types.
+
+The six round-nine rules are ordered but **none is shipped**:
+
+1. R1: refuse non-extension format/concat/concat_ws functions and || operators
+   outside pg_catalog, naming them; remove candidate/path-order modeling.
+2. R2: apply only search_path, role, session_authorization,
+   standard_conforming_strings, backslash_quote, DateStyle, IntervalStyle,
+   TimeZone, extra_float_digits, default_text_search_config, client_min_messages
+   and application_name; any other setting refuses by name before application.
+3. R3: refuse statement-initial bare SET/RESET and any set_config identifier.
+4. R4: refuse enabled event triggers by name before helper DDL.
+5. R5: pin migration parsing with standard_conforming_strings=on and
+   backslash_quote=safe_encoding beside search_path=pg_catalog.
+6. R6: apply identity settings only in scanner lookups; skip them in validators.
+
+F12 is the new rule that refused the two fleet views in the scratch candidate.
+It was not applied to any owner database. All other implementation and proof
+work remains outstanding. T3's dangling round-five/six promises are corrected
+above using the coordinator's supplied facts; the earlier unwind draft logs
+are labeled, but the ordered T2 shipped-test mutant rerun remains outstanding.
+
+### Exact Commands and Verbatim Tails
+
+All commands ran from the assigned worktree with the shared interpreter. The
+import preflight printed its own `nexus/__init__.py`. The runner keeps scratch,
+logs and temporary archives under `after-review-r9`, sets PYTHONPATH to this
+worktree plus scratch, enables NEXUS_DBNAME_AUDIT, unsets gateway/slot/live-LLM
+variables, and bounds each foreground child to 540 seconds and 120 seconds
+of silence. Save sources were read only by read-only pg_dump subprocesses and
+only with NEXUS_RUN_CORPUS=1. Only disposable qa640_813_case_* clones were
+mutated and every context manager dropped its allocation.
+
+`fleet-f12-only` is a **shipped-migration baseline**, despite its misleading
+scratch label: the first plugin swapped only direct MIGRATION calls, whereas
+the fleet test discovers migrations through the runner. Its six green cases
+are not F12 acceptance. The corrected plugin also swaps the discovered 143
+path; `fleet-f12-discovery-swapped` is the valid isolated F12 run. No assertion
+was weakened in either run.
+
+One discarded scratch-only inspection (`f12-view-catalog`) collected outside
+the repository conftest, lacking the mandatory guards; it is not proof. Its
+clones were dropped. I corrected this by running the existing repository
+control with `inspect_catalog_plugin` under the normal conftest and audit;
+only `f12-view-catalog-audited` is cited for catalog evidence.
+
+**initial-control**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py initial-control /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k accepts_live_relationship_column_names -vs --tb=short
+```
+
+```text
+dbname audit: 2 targets: postgres, qa640_813_case_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names
+====================== 1 failed, 424 deselected in 1.74s =======================
+EXIT STATUS: 1
+```
+
+**clarified-control**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py clarified-control /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k accepts_live_relationship_column_names -vs --tb=short
+```
+
+```text
+dbname audit: 2 targets: postgres, qa640_813_case_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names
+====================== 1 failed, 424 deselected in 2.01s =======================
+EXIT STATUS: 1
+```
+
+**fleet-r9-stop-check**
+
+```sh
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py fleet-r9-stop-check /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k each_fleet -vs --tb=short
+```
+
+```text
+dbname audit: 7 targets: postgres, qa640_813_case_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05]
+====================== 6 failed, 419 deselected in 45.37s ======================
+EXIT STATUS: 1
+```
+
+**fleet-f12-only**
+
+```sh
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/9ed33d54-f12-only.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py fleet-f12-only /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k each_fleet -vs --tb=short
+```
+
+```text
+dbname audit: 7 targets: postgres, qa640_813_case_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+================= 6 passed, 419 deselected in 83.88s (0:01:23) =================
+EXIT STATUS: 0
+```
+
+**fleet-f12-discovery-swapped**
+
+```sh
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/9ed33d54-f12-only.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py fleet-f12-discovery-swapped /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k each_fleet -vs --tb=short
+```
+
+```text
+dbname audit: 7 targets: postgres, qa640_813_case_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05]
+====================== 6 failed, 419 deselected in 42.94s ======================
+EXIT STATUS: 1
+```
+
+**f12-view-catalog-audited**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/9ed33d54-f12-only.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py f12-view-catalog-audited /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner -p inspect_catalog_plugin -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k accepts_live_relationship_column_names -vs --tb=short
+```
+
+```text
+dbname audit: 2 targets: postgres, qa640_813_case_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names
+====================== 1 failed, 424 deselected in 2.10s =======================
+EXIT STATUS: 1
+```
+
+**stop-r9-migration-comments**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py stop-r9-migration-comments /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+**stop-r9-exception-dispositions**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py stop-r9-exception-dispositions /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+**stop-r9-cleanup**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py stop-r9-cleanup /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/cleanup_read.py
+```
+
+```text
+admin read-only identity: ('postgres', 'on')
+qa640_813_case_* databases remaining: []
+qa640_813_case_* roles remaining: []
+EXIT STATUS: 0
+```
+
+### Git, Cleanup, and Coordinator Question
+
+`git fetch origin main` and `git merge origin/main` were run after restoring
+production files. Main remains `160134540517f6b74aacd1d1e1f3f584454eef86` and
+the merge reports `Already up to date.` No history rewrite, stash, force-push,
+service start, paid provider call, main-checkout edit or other-worktree edit
+occurred. Both mandatory lints pass. Black/flake8/mypy and the remaining
+ordered proof were not run for the discarded implementation; no Python or SQL
+change is being committed.
+
+The final read-only postgres catalog check reports zero qa640_813_case_*
+databases and roles. Archives were removed by TemporaryDirectory. The shipped
+baseline's six sources pass, and the isolated new F12 candidate's six sources
+refuse; these are diagnostic comparisons, not red-before/green-after fix proof.
+No process remains running. PR #1098 remains open and unmerged.
+
+Coordinator question: how should F12 handle existing deparsed view column
+references in parenthesized FROM/JOIN groups? Authorize a narrowly specified
+catalog-proof extension for that form, or amend F12's token-rule scope while
+retaining its literal rule? No exemption, silent weakening, or fleet object
+edit has been made. The control clarification is settled; this F12/T4 conflict
+is the remaining resume blocker. Fresh landing rehearsal, third panel/Astra
+pass ten, fleet application and whole-tree PostgreSQL gate remain with the
+coordinator.
 
 Authored by Codex, running GPT-6.
