@@ -1,0 +1,2510 @@
+[
+  {
+    "condition": "width-639",
+    "context": "delete/ready-exceeds/row-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 521.859375,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.050361741048091324,
+        0.04324632557635752,
+        0.028116607784609532
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            69,
+            64,
+            51
+          ],
+          "count": 78
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            55
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            72,
+            67,
+            53
+          ],
+          "count": 37
+        },
+        {
+          "rgb": [
+            73,
+            68,
+            54
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            72,
+            66,
+            53
+          ],
+          "count": 35
+        },
+        {
+          "rgb": [
+            75,
+            70,
+            55
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            67,
+            62,
+            49
+          ],
+          "count": 24
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 521.859375,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-639",
+    "context": "delete/ready-exceeds/button-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 521.859375,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.050361741048091324,
+        0.04324632557635752,
+        0.028116607784609532
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            69,
+            64,
+            51
+          ],
+          "count": 78
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            55
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            72,
+            67,
+            53
+          ],
+          "count": 37
+        },
+        {
+          "rgb": [
+            73,
+            68,
+            54
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            72,
+            66,
+            53
+          ],
+          "count": 35
+        },
+        {
+          "rgb": [
+            75,
+            70,
+            55
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            67,
+            62,
+            49
+          ],
+          "count": 24
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 521.859375,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-640",
+    "context": "delete/ready-exceeds/row-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 522.859375,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.050361741048091324,
+        0.04324632557635752,
+        0.028116607784609532
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            69,
+            64,
+            51
+          ],
+          "count": 78
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            55
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            72,
+            67,
+            53
+          ],
+          "count": 37
+        },
+        {
+          "rgb": [
+            73,
+            68,
+            54
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            72,
+            66,
+            53
+          ],
+          "count": 35
+        },
+        {
+          "rgb": [
+            75,
+            70,
+            55
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            67,
+            62,
+            49
+          ],
+          "count": 24
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 522.859375,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-640",
+    "context": "delete/ready-exceeds/button-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 522.859375,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.050361741048091324,
+        0.04324632557635752,
+        0.028116607784609532
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            69,
+            64,
+            51
+          ],
+          "count": 78
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            55
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            72,
+            67,
+            53
+          ],
+          "count": 37
+        },
+        {
+          "rgb": [
+            73,
+            68,
+            54
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            72,
+            66,
+            53
+          ],
+          "count": 35
+        },
+        {
+          "rgb": [
+            75,
+            70,
+            55
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            67,
+            62,
+            49
+          ],
+          "count": 24
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 522.859375,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-760",
+    "context": "delete/ready-exceeds/row-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 643,
+        "y": 350,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.05500522759053872,
+        0.047146384201606904,
+        0.030566924748380523
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            76,
+            70,
+            56
+          ],
+          "count": 69
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            56
+          ],
+          "count": 59
+        },
+        {
+          "rgb": [
+            75,
+            69,
+            55
+          ],
+          "count": 47
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            57
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            73,
+            68,
+            54
+          ],
+          "count": 39
+        },
+        {
+          "rgb": [
+            72,
+            67,
+            53
+          ],
+          "count": 33
+        },
+        {
+          "rgb": [
+            75,
+            70,
+            55
+          ],
+          "count": 33
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 643,
+        "y": 350,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-760",
+    "context": "delete/ready-exceeds/button-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 643,
+        "y": 350,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.05500522759053872,
+        0.047146384201606904,
+        0.030566924748380523
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            76,
+            70,
+            56
+          ],
+          "count": 69
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            56
+          ],
+          "count": 59
+        },
+        {
+          "rgb": [
+            75,
+            69,
+            55
+          ],
+          "count": 47
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            57
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            73,
+            68,
+            54
+          ],
+          "count": 39
+        },
+        {
+          "rgb": [
+            72,
+            67,
+            53
+          ],
+          "count": 33
+        },
+        {
+          "rgb": [
+            75,
+            70,
+            55
+          ],
+          "count": 33
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 643,
+        "y": 350,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-761",
+    "context": "delete/ready-exceeds/row-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 644,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.05516965064301499,
+        0.04731004615214254,
+        0.030661706501862198
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            76,
+            70,
+            56
+          ],
+          "count": 71
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            56
+          ],
+          "count": 59
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            57
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            73,
+            68,
+            54
+          ],
+          "count": 41
+        },
+        {
+          "rgb": [
+            75,
+            69,
+            55
+          ],
+          "count": 40
+        },
+        {
+          "rgb": [
+            75,
+            70,
+            55
+          ],
+          "count": 34
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            55
+          ],
+          "count": 33
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 644,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-761",
+    "context": "delete/ready-exceeds/button-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 644,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.05516965064301499,
+        0.04731004615214254,
+        0.030661706501862198
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            76,
+            70,
+            56
+          ],
+          "count": 71
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            56
+          ],
+          "count": 59
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            57
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            73,
+            68,
+            54
+          ],
+          "count": 41
+        },
+        {
+          "rgb": [
+            75,
+            69,
+            55
+          ],
+          "count": 40
+        },
+        {
+          "rgb": [
+            75,
+            70,
+            55
+          ],
+          "count": 34
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            55
+          ],
+          "count": 33
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 644,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-767",
+    "context": "delete/ready-exceeds/row-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 650,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.05623222980142324,
+        0.04819422123465096,
+        0.031227593128682344
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            77,
+            71,
+            56
+          ],
+          "count": 85
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            56
+          ],
+          "count": 78
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 56
+        },
+        {
+          "rgb": [
+            77,
+            72,
+            57
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            75,
+            69,
+            55
+          ],
+          "count": 45
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            57
+          ],
+          "count": 34
+        },
+        {
+          "rgb": [
+            45,
+            42,
+            35
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            78,
+            72,
+            57
+          ],
+          "count": 28
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 650,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-767",
+    "context": "delete/ready-exceeds/button-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 650,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.05623222980142324,
+        0.04819422123465096,
+        0.031227593128682344
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            77,
+            71,
+            56
+          ],
+          "count": 85
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            56
+          ],
+          "count": 78
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 56
+        },
+        {
+          "rgb": [
+            77,
+            72,
+            57
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            75,
+            69,
+            55
+          ],
+          "count": 45
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            57
+          ],
+          "count": 34
+        },
+        {
+          "rgb": [
+            45,
+            42,
+            35
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            78,
+            72,
+            57
+          ],
+          "count": 28
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 650,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-768",
+    "context": "delete/ready-exceeds/row-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 651,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.05638644473054654,
+        0.0483374538882456,
+        0.031308526904236744
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            77,
+            71,
+            56
+          ],
+          "count": 87
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            56
+          ],
+          "count": 76
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            77,
+            72,
+            57
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            75,
+            69,
+            55
+          ],
+          "count": 45
+        },
+        {
+          "rgb": [
+            78,
+            72,
+            57
+          ],
+          "count": 38
+        },
+        {
+          "rgb": [
+            45,
+            42,
+            35
+          ],
+          "count": 34
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            57
+          ],
+          "count": 34
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 651,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover row",
+      "pseudos": {
+        "hover": false,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": false,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  },
+  {
+    "condition": "width-768",
+    "context": "delete/ready-exceeds/button-hover",
+    "state": "unarmed",
+    "root": "--state-delete-unarmed",
+    "value": "hsl(43 40% 70%)",
+    "shipped": {
+      "meanLinear": [
+        0.0608907941279547,
+        0.05213770183327664,
+        0.03369916187771196
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            79,
+            73,
+            58
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            46,
+            43,
+            36
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            57,
+            53,
+            43
+          ],
+          "count": 46
+        },
+        {
+          "rgb": [
+            63,
+            58,
+            47
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            24,
+            23,
+            20
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            30,
+            28,
+            24
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            56,
+            52,
+            42
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            47,
+            44,
+            36
+          ],
+          "count": 5
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 651,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    },
+    "candidate": {
+      "meanLinear": [
+        0.05638644473054654,
+        0.0483374538882456,
+        0.031308526904236744
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            77,
+            71,
+            56
+          ],
+          "count": 87
+        },
+        {
+          "rgb": [
+            76,
+            70,
+            56
+          ],
+          "count": 76
+        },
+        {
+          "rgb": [
+            74,
+            68,
+            54
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            77,
+            72,
+            57
+          ],
+          "count": 49
+        },
+        {
+          "rgb": [
+            75,
+            69,
+            55
+          ],
+          "count": 45
+        },
+        {
+          "rgb": [
+            78,
+            72,
+            57
+          ],
+          "count": 38
+        },
+        {
+          "rgb": [
+            45,
+            42,
+            35
+          ],
+          "count": 34
+        },
+        {
+          "rgb": [
+            77,
+            71,
+            57
+          ],
+          "count": 34
+        }
+      ],
+      "width": 44,
+      "height": 44,
+      "selector": ".lm-trash svg",
+      "box": {
+        "x": 651,
+        "y": 362,
+        "width": 11,
+        "height": 11
+      },
+      "action": "expand model family by click; mouse hover button",
+      "pseudos": {
+        "hover": true,
+        "focusVisible": false,
+        "pinHover": false,
+        "ancestorHover": true,
+        "focusWithin": false
+      },
+      "target": {
+        "hover": true,
+        "focusVisible": false
+      },
+      "stateAttributes": {
+        "mapState": null,
+        "keyNeed": null,
+        "armed": "false"
+      },
+      "animationsRunning": 0
+    }
+  }
+]

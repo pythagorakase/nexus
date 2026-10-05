@@ -1,0 +1,50 @@
+{
+  "pillowChecks": [
+    {
+      "name": "shipping-immediate",
+      "maskSize": 727,
+      "meanLinear": [
+        0.05605721524082507,
+        0.05387367006191958,
+        0.04741274392336297
+      ],
+      "top8Matches": true
+    },
+    {
+      "name": "shipping-tooltip-visible",
+      "maskSize": 727,
+      "meanLinear": [
+        0.04637252372546521,
+        0.044699618011784265,
+        0.03937882163616762
+      ],
+      "top8Matches": true
+    },
+    {
+      "name": "candidate-tooltip-visible",
+      "maskSize": 727,
+      "meanLinear": [
+        0.04637252372546521,
+        0.044699618011784265,
+        0.03937882163616762
+      ],
+      "top8Matches": true
+    },
+    {
+      "name": "candidate-repeat",
+      "maskSize": 727,
+      "meanLinear": [
+        0.04637252372546521,
+        0.044699618011784265,
+        0.03937882163616762
+      ],
+      "top8Matches": true
+    }
+  ],
+  "receiptSampleCount": 64008,
+  "minimumMask": [
+    326,
+    "default/Gilded/--state-map-current/hsl(45 55% 30%)/map/sidebar/hover/fill"
+  ],
+  "floor": 16
+}

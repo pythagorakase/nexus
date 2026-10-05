@@ -2,9 +2,10 @@ import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import postcss from "postcss";
+import { decodePng, foreground } from "../../scripts/state-surfaces/png.mjs";
 import { inputs } from "../../scripts/state-surfaces/inputs.mjs";
 import { describe, expect, it } from "vitest";
-import { ciede2000, deutanLab, hslRgb, type Triple } from "./state-shades-measurement";
+import { ciede2000, deutanLinearLab, hslRgb, type Triple } from "./state-shades-measurement";
 // Typed from Sharma, Wu, Dalal's published supplementary table, not our helper.
 // https://hajim.rochester.edu/ece/sites/gsharma/ciede2000/dataNprograms/ciede2000testdata.txt
 const SHARMA: readonly (readonly [
@@ -137,7 +138,7 @@ const SIGNATURES: Record<Surface, Record<string, string>> = {
 };
 type Palette = Record<string, Triple>;
 type Sample = {
-  painted: [number, number, number]; maskSize: number; modeCount: number; modeFraction: number;
+  meanLinear: [number, number, number]; maskSize: number;
   histogram: { rgb: number[]; count: number }[]; width: number; height: number;
   action: string; animationsRunning: number;
   pseudos: { pinHover: boolean; hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean };
@@ -148,7 +149,7 @@ type ContextSamples = Record<string, Record<string, Sample>>;
 type Receipt = {
   inputs: Awaited<ReturnType<typeof inputs>>;
   media: { preludes: string[]; unsupported: string[]; variants: { id: string }[] };
-  proof: { acceptanceComplete: boolean; minimumModePixels: number; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
+  proof: { acceptanceComplete: boolean; minimumMaskPixels: number; measurement: string; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
   conditions: Record<string, Record<Theme, {
     shipped: ContextSamples; before: ContextSamples;
     candidates: Record<string, Record<string, Record<string, Sample>>>;
@@ -161,7 +162,7 @@ if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))
   throw new Error("Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).");
 if (receipt.proof.acceptanceComplete !== true)
   throw new Error("Incomplete painted state surfaces: filtered/probe captures are not acceptance receipts.");
-const painted = (sample: Sample): Triple => sample.painted.map(v => v / 255) as unknown as Triple;
+const painted = (sample: Sample): Triple => sample.meanLinear;
 // No DOM/cascade/compositing model: only browser-painted candidate captures.
 const contextNames = [
   "memory/fill",
@@ -222,7 +223,7 @@ function candidates(theme: Theme, root: string): { value: string; rgb: Triple; c
 function measures(theme: Theme, p: Palette | undefined, before: boolean) {
   return CONTEXTS.flatMap(ctx => pairsIn(`${ctx.surface}/${ctx.name}`).map(states => {
     const colors = states.map(s => ctx.render(s, p, before, theme));
-    return { theme, surface: ctx.surface, context: ctx.name, condition: ctx.condition, states, rgb: colors, delta: ciede2000(deutanLab(colors[0]), deutanLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
+    return { theme, surface: ctx.surface, context: ctx.name, condition: ctx.condition, states, rgb: colors, delta: ciede2000(deutanLinearLab(colors[0]), deutanLinearLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
   }));
 }
 /** Exact exhaustive factorization: fixed global backgrounds mean that the
@@ -245,7 +246,7 @@ function jointSearch(theme: Theme) {
       for (const ctx of ctxs.filter(c => [a, b].every(s => statesIn(`${surface}/${c.name}`).includes(s)))) {
         const labs = [a, b].map(state => {
           const root = MAPPINGS[surface][state];
-          return domains[root].map(c => { p[root] = c.rgb; return deutanLab(ctx.render(state, p, false, theme)); });
+          return domains[root].map(c => { p[root] = c.rgb; return deutanLinearLab(ctx.render(state, p, false, theme)); });
         });
         let maximum = -Infinity, witness: Record<string, string> = {};
         let count = 0;
@@ -298,6 +299,28 @@ const searchAll = () => searches ??= THEMES.map(jointSearch);
 // while shortfall IDs are committed and checked below.
 const exceptions = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json"), "utf8")) as Record<Theme, string[]>;
 describe("777-S2 state shades", () => {
+  it("tooltip_gradient_uses_every_mask_pixel_in_linear_light_without_a_mode_floor", () => {
+    const dir = resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/after-review-r4/absolute-floor");
+    const paintedBytes = readFileSync(resolve(dir, "tooltip-repeat-1-painted.png"));
+    const controlBytes = readFileSync(resolve(dir, "tooltip-repeat-1-control.png"));
+    const sample = foreground(paintedBytes, controlBytes, "tooltip regression");
+    const a = decodePng(paintedBytes), b = decodePng(controlBytes);
+    const sums = [0, 0, 0]; let count = 0;
+    for (let i = 0; i < a.pixels.length; i += a.channels) {
+      if (a.pixels.subarray(i, i + a.channels).equals(b.pixels.subarray(i, i + b.channels))) continue;
+      count++;
+      for (let channel = 0; channel < 3; channel++) {
+        const v = a.pixels[i + channel] / 255;
+        sums[channel] += v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+      }
+    }
+    expect(sample.maskSize).toBe(727);
+    expect(sample.histogram[0].count).toBe(44);
+    expect(sample.histogram.reduce((n, bucket) => n + bucket.count, 0)).toBeLessThan(count);
+    sums.forEach((sum, channel) => expect(sample.meanLinear[channel]).toBeCloseTo(sum / count, 14));
+    expect(() => foreground(controlBytes, controlBytes, "empty context")).toThrow("empty context: empty foreground mask");
+  });
+
   it("ciede2000_matches_published_reference_vectors", () => {
     expect(SHARMA).toHaveLength(34);
     for (const [l1, a1, b1, l2, a2, b2, expected] of SHARMA)
@@ -322,14 +345,19 @@ describe("777-S2 state shades", () => {
       expect(measures(theme, undefined, false).filter(m => m.condition === id)).toHaveLength(contextNames.reduce((n, c) => n + pairsIn(c).length, 0));
     }
   });
-  it("painted_control_masks_are_strong_and_interactions_are_real_and_settled", () => {
-    expect(receipt.proof.minimumModePixels).toBe(64);
+  it("painted_mask_means_are_linear_and_interactions_are_real_and_settled", () => {
+    expect(receipt.proof.minimumMaskPixels).toBe(16);
+    expect(receipt.proof.measurement).toContain("mean in linear sRGB");
     const check = (sample: Sample, context: string) => {
-      expect(sample.maskSize, `${context}: empty mask`).toBeGreaterThan(0);
-      expect(sample.modeCount, `${context}: weak mask`).toBeGreaterThanOrEqual(receipt.proof.minimumModePixels);
-      expect(sample.histogram[0].rgb).toEqual(sample.painted);
-      expect(sample.histogram[0].count).toBe(sample.modeCount);
-      expect(sample.histogram[0].count / sample.maskSize).toBe(sample.modeFraction);
+      expect(sample.maskSize, `${context}: surface did not paint`).toBeGreaterThanOrEqual(receipt.proof.minimumMaskPixels);
+      expect(sample.meanLinear).toHaveLength(3);
+      for (const channel of sample.meanLinear) {
+        expect(Number.isFinite(channel)).toBe(true);
+        expect(channel).toBeGreaterThanOrEqual(0);
+        expect(channel).toBeLessThanOrEqual(1);
+      }
+      expect(sample.histogram.length).toBeGreaterThan(0);
+      expect(sample.histogram.reduce((n, bucket) => n + bucket.count, 0)).toBeLessThanOrEqual(sample.maskSize);
       expect(sample.animationsRunning).toBe(0);
       if (context.endsWith("focus-visible")) {
         expect(sample.target.focusVisible, `${context}: Tab focus-visible`).toBe(true);

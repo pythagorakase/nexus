@@ -67,8 +67,8 @@ const browser = await chromium.launch({ headless: true });
 let renderCount = 0;
 const progress = setInterval(() => console.log(`Painted capture progress: renders=${renderCount}; wall=${((performance.now()-started)/1000).toFixed(3)}s`), 45000);
 const errors = [], requests = [];
-const results = { inputs: fingerprint, media, conditions: {}, proof: { minimumModePixels: 64,
-  measurement: 'painted/paint-suppressed control foreground mask; RGB mode over changed device pixels; visibility and layout retained',
+const results = { inputs: fingerprint, media, conditions: {}, proof: { minimumMaskPixels: 16,
+  measurement: 'painted/paint-suppressed control foreground mask; mean in linear sRGB over changed device pixels; visibility and layout retained',
   stylesheet: 'production Vite build emitted CSS, production order', pageErrors: errors, networkRequests: requests } };
 let activeConditions = 0; const queue = [];
 async function acquire() { if (activeConditions >= 4) await new Promise(r => queue.push(r)); activeConditions++; }

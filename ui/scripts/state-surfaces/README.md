@@ -1,23 +1,18 @@
-# Painted Control-Capture Oracle (Acceptance Blocked)
+# Painted Mask-Mean Oracle
 
-The fifth clarification is implemented. Acceptance is blocked by a reachable
-Vector delete glyph under a sibling tooltip shadow: its mode is 44 device
-pixels, below the fixed floor of 64. See the
-[absolute-floor stop report](../../../docs/qa/777-glyph-first-states/after-review-r4/absolute-floor-stop-report.md).
-The checked receipt remains stale; no diagnostic is an acceptance receipt.
+The sixth clarification defines the painted color as the **mean of all
+foreground-mask pixel colors in linear sRGB**. Each surface is captured twice
+under identical conditions. A unique attribute tags its subtree; the control
+sets only **fill, stroke, background-color and color** to transparent with
+`!important`. Layout, visibility, shadows and filters retain their declarations
+in both captures. A drop-shadow can still change with its source alpha.
 
-The painted pixel is the measurement. Each surface is captured twice under
-identical conditions. A unique attribute tags its subtree; the control sets
-only **fill, stroke, background-color and color** to transparent with
-`!important`. Layout and visibility remain intact. Shadows and filters retain
-their painted declarations in both captures. A drop-shadow can still change
-because its source alpha changes.
-
-Foreground is the exact painted/control device-pixel difference. Its RGB mode
-must contain at least **64 device pixels** (4 CSS px² at device scale 4).
-Empty masks or smaller modes fail with the context name. Receipts retain the
-mode count, fraction, mask size and top eight mask colors. The test requires
-this absolute floor; the fraction is an audit value, not an acceptance floor.
+Foreground is the exact painted/control device-pixel difference. Every channel
+is linearized before averaging. The receipt keeps the linear triple for
+Machado deutan simulation and D65 CIELAB, the mask size, and its top eight exact
+RGB/count buckets for audit. The only mask-size failure is fewer than **16
+device pixels**, including an empty mask, named by context. There is no mode or
+fraction floor. Swatches encode the retained mean only for display.
 
 The fixture mounts real NexusLayout, KeysSection, ModelSection and MapPane
 with seeded local data and the production Vite build's emitted CSS in shipped

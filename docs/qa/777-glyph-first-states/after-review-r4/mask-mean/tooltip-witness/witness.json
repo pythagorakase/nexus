@@ -1,0 +1,429 @@
+{
+  "conditions": {
+    "viewport": {
+      "width": 639,
+      "height": 900
+    },
+    "deviceScaleFactor": 4,
+    "colorScheme": "dark",
+    "reducedMotion": "reduce"
+  },
+  "chromium": "153.0.8010.12",
+  "samples": [
+    {
+      "name": "shipping-immediate",
+      "box": {
+        "x": 521.671875,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "readback": {
+        "color": "rgb(201, 188, 156)",
+        "armed": "false",
+        "rowHover": true,
+        "buttonHover": false,
+        "focusVisible": false,
+        "tooltip": [],
+        "animations": []
+      },
+      "meanLinear": [
+        0.05605721524082507,
+        0.05387367006191957,
+        0.04741274392336297
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            76,
+            74,
+            68
+          ],
+          "count": 450
+        },
+        {
+          "rgb": [
+            44,
+            45,
+            47
+          ],
+          "count": 47
+        },
+        {
+          "rgb": [
+            60,
+            59,
+            57
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            54,
+            54,
+            53
+          ],
+          "count": 26
+        },
+        {
+          "rgb": [
+            27,
+            30,
+            36
+          ],
+          "count": 24
+        },
+        {
+          "rgb": [
+            22,
+            26,
+            32
+          ],
+          "count": 23
+        },
+        {
+          "rgb": [
+            54,
+            54,
+            54
+          ],
+          "count": 23
+        },
+        {
+          "rgb": [
+            25,
+            28,
+            34
+          ],
+          "count": 4
+        }
+      ],
+      "width": 44,
+      "height": 44
+    },
+    {
+      "name": "shipping-tooltip-visible",
+      "box": {
+        "x": 521.671875,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "readback": {
+        "color": "rgb(201, 188, 156)",
+        "armed": "false",
+        "rowHover": true,
+        "buttonHover": false,
+        "focusVisible": false,
+        "tooltip": [
+          {
+            "text": "needs 96 gb · 32 gb memory",
+            "box": {
+              "x": 551.109375,
+              "y": 357.5,
+              "width": 1,
+              "height": 1,
+              "top": 357.5,
+              "right": 552.109375,
+              "bottom": 358.5,
+              "left": 551.109375
+            },
+            "state": "delayed-open"
+          }
+        ],
+        "animations": []
+      },
+      "meanLinear": [
+        0.046372523725465194,
+        0.044699618011784265,
+        0.03937882163616763
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            73,
+            71,
+            65
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            66,
+            65,
+            59
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            67,
+            65,
+            60
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            70,
+            68,
+            63
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            71,
+            69,
+            63
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            69,
+            67,
+            62
+          ],
+          "count": 35
+        },
+        {
+          "rgb": [
+            72,
+            71,
+            65
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            65,
+            63,
+            58
+          ],
+          "count": 30
+        }
+      ],
+      "width": 44,
+      "height": 44
+    },
+    {
+      "name": "candidate-tooltip-visible",
+      "box": {
+        "x": 521.671875,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "readback": {
+        "color": "rgb(201, 188, 156)",
+        "armed": "false",
+        "rowHover": true,
+        "buttonHover": false,
+        "focusVisible": false,
+        "tooltip": [
+          {
+            "text": "needs 96 gb · 32 gb memory",
+            "box": {
+              "x": 551.109375,
+              "y": 357.5,
+              "width": 1,
+              "height": 1,
+              "top": 357.5,
+              "right": 552.109375,
+              "bottom": 358.5,
+              "left": 551.109375
+            },
+            "state": "delayed-open"
+          }
+        ],
+        "animations": []
+      },
+      "meanLinear": [
+        0.046372523725465194,
+        0.044699618011784265,
+        0.03937882163616763
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            73,
+            71,
+            65
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            66,
+            65,
+            59
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            67,
+            65,
+            60
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            70,
+            68,
+            63
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            71,
+            69,
+            63
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            69,
+            67,
+            62
+          ],
+          "count": 35
+        },
+        {
+          "rgb": [
+            72,
+            71,
+            65
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            65,
+            63,
+            58
+          ],
+          "count": 30
+        }
+      ],
+      "width": 44,
+      "height": 44
+    },
+    {
+      "name": "candidate-repeat",
+      "box": {
+        "x": 521.671875,
+        "y": 395,
+        "width": 11,
+        "height": 11
+      },
+      "readback": {
+        "color": "rgb(201, 188, 156)",
+        "armed": "false",
+        "rowHover": true,
+        "buttonHover": false,
+        "focusVisible": false,
+        "tooltip": [
+          {
+            "text": "needs 96 gb · 32 gb memory",
+            "box": {
+              "x": 551.109375,
+              "y": 357.5,
+              "width": 1,
+              "height": 1,
+              "top": 357.5,
+              "right": 552.109375,
+              "bottom": 358.5,
+              "left": 551.109375
+            },
+            "state": "delayed-open"
+          }
+        ],
+        "animations": []
+      },
+      "meanLinear": [
+        0.046372523725465194,
+        0.044699618011784265,
+        0.03937882163616763
+      ],
+      "maskSize": 727,
+      "histogram": [
+        {
+          "rgb": [
+            73,
+            71,
+            65
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            66,
+            65,
+            59
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            67,
+            65,
+            60
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            70,
+            68,
+            63
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            71,
+            69,
+            63
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            69,
+            67,
+            62
+          ],
+          "count": 35
+        },
+        {
+          "rgb": [
+            72,
+            71,
+            65
+          ],
+          "count": 32
+        },
+        {
+          "rgb": [
+            65,
+            63,
+            58
+          ],
+          "count": 30
+        }
+      ],
+      "width": 44,
+      "height": 44
+    }
+  ],
+  "requests": [],
+  "errors": []
+}

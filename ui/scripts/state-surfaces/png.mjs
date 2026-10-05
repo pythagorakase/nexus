@@ -56,7 +56,7 @@ export function histogramPng(bytes) {
 }
 
 /** Foreground is exclusively the device pixels changed by suppressing paint. */
-export function foreground(paintedBytes, controlBytes, label, minimumModePixels = 64) {
+export function foreground(paintedBytes, controlBytes, label, minimumMaskPixels = 16) {
   const a = decodePng(paintedBytes), b = decodePng(controlBytes);
   if (a.width !== b.width || a.height !== b.height || a.channels !== b.channels)
     throw new Error(`Measurement failure ${label}: control dimensions differ`);
@@ -70,9 +70,12 @@ export function foreground(paintedBytes, controlBytes, label, minimumModePixels 
   const histogram = [...counts].map(([key, count]) => ({ rgb: key.split(',').map(Number), count }))
     .sort((a, b) => b.count - a.count || a.rgb[0] - b.rgb[0] || a.rgb[1] - b.rgb[1] || a.rgb[2] - b.rgb[2]);
   if (!maskSize) throw new Error(`Measurement failure ${label}: empty foreground mask`);
-  const modeCount = histogram[0].count, modeFraction = modeCount / maskSize;
-  if (modeCount < minimumModePixels)
-    throw new Error(`Measurement failure ${label}: weak foreground mask; mode=${modeCount} device pixels < ${minimumModePixels}; fraction=${modeFraction.toFixed(6)}; top8=${JSON.stringify(histogram.slice(0, 8))}`);
-  return { painted: histogram[0].rgb, maskSize, modeCount, modeFraction, histogram: histogram.slice(0, 8),
+  if (maskSize < minimumMaskPixels)
+    throw new Error(`Measurement failure ${label}: foreground mask=${maskSize} device pixels < ${minimumMaskPixels}`);
+  const linear = v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
+  // Use the full mask histogram, never just the audit's top eight buckets.
+  const meanLinear = [0, 1, 2].map(channel =>
+    histogram.reduce((sum, { rgb, count }) => sum + linear(rgb[channel]) * count, 0) / maskSize);
+  return { meanLinear, maskSize, histogram: histogram.slice(0, 8),
     width: a.width, height: a.height };
 }

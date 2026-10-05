@@ -33,7 +33,11 @@ export function deutanRgb(rgb: Triple): Triple {
   return DEUTAN_1.map(row => encoded(Math.max(0, Math.min(1, row.reduce((sum, v, i) => sum + v * input[i], 0))))) as unknown as Triple;
 }
 export function deutanLab(rgb: Triple): Triple {
-  const [r, g, b] = deutanRgb(rgb).map(linear);
+  return deutanLinearLab(rgb.map(linear) as unknown as Triple);
+}
+/** Apply Machado directly to the retained linear-sRGB mask mean, then D65 Lab. */
+export function deutanLinearLab(input: Triple): Triple {
+  const [r, g, b] = DEUTAN_1.map(row => Math.max(0, Math.min(1, row.reduce((sum, v, i) => sum + v * input[i], 0))));
   const f = (v: number) => v > (6 / 29) ** 3 ? Math.cbrt(v) : v / (3 * (6 / 29) ** 2) + 4 / 29;
   const x = f((.4124564 * r + .3575761 * g + .1804375 * b) / .95047);
   const y = f(.2126729 * r + .7151522 * g + .072175 * b);
