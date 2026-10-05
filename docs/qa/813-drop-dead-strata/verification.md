@@ -4236,9 +4236,16 @@ FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_ro
 6 failed, 8 passed, 318 deselected in 41.00s
 ```
 
-Under the previous migration the six path cases applied destructively (the
-drop targets are gone although the broken body was never validated); the
-eight remaining cases already had their intended outcome.
+Correction recorded during round 8: the red run above is explicitly against
+`23bf8aa9`, not `bbabe984`. The old `OLD DESTRUCTIVE VERDICT` labels establish
+only that the targets disappeared, not that a routine broke. Two already-broken
+`shadow-broken` cases applied without validation; four healthy `shadow-healthy`
+and `session-path` cases applied. The eight remaining cases had their intended
+outcome. The old output is retained verbatim as a historical artifact; its
+"destructive" labels must not be treated as demonstrated post-drop failures.
+Round-8 item 14 names `bbabe984`, which already refuses those explicit public-first
+paths. That revision attribution requires coordinator correction before this
+frozen order can be completed.
 
 ### Green With the Fix
 
@@ -4362,3 +4369,616 @@ OK (an `EXECUTE` of a prebuilt validator call was replaced by a precomputed
 boolean dispatch because the lint refuses run-time `EXECUTE` in top-level
 blocks regardless of statement kind). The full module and the whole-tree gate
 run at this head below.
+
+
+### Coordinator-Reported Round-7 Gate Tails at `ebcfbe15`
+
+The round-8 order supplies these completed coordinator runs dated 2026-10-05.
+These are coordinator-reported tails, not runs repeated by this implementer:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+524 passed in 746.20s (0:12:26)
+6450 passed, 59 skipped, 35 warnings in 3226.36s (0:53:46)
+GATE-1098 EXIT=0
+```
+
+## After the Eighth Independent Review and the Panel
+
+### Stop Report: Item 14 Attributes the Historical Run to the Wrong Revision
+
+This round is **incomplete and not pushed**. The working rules explicitly require
+"If the order's premise turns out to be false, write a stop-report instead of
+improvising." Item 14 requires a claim that `bbabe984` applied the two broken and
+four healthy path cases. The evidence's actual old run is headed `23bf8aa9`.
+Reading `bbabe984:migrations/143_drop_dead_schema_strata.sql` proves that its
+scanner already refuses an effective path preceding pg_catalog:
+
+```sh
+git show bbabe984:migrations/143_drop_dead_schema_strata.sql | sed -n '1083,1105p'
+```
+
+```text
+            SELECT (pg_temp.dead143_setting(setting))[2] INTO effective_path FROM unnest(f.proconfig) setting WHERE setting LIKE 'search_path=%';
+            PERFORM pg_catalog.set_config('search_path',coalesce(effective_path,saved_path),true);
+            IF pg_temp.dead143_path_first() IS DISTINCT FROM 'pg_catalog' THEN
+                RAISE EXCEPTION 'search_path places a schema before pg_catalog (%): builtin resolution is not deterministic; unresolved context',pg_catalog.current_setting('search_path');
+            END IF;
+```
+
+Coordinator question: should item 14 name `23bf8aa9`, and describe the two
+already-broken routines as applied without validation rather than newly broken
+by the drops? The checkpoint does not invent the requested `bbabe984` verdict.
+
+### Implemented Checkpoint and Limits
+
+- Scanner uses complete parsed proconfig, PostgreSQL-parsed effective string
+  settings, spaceless typed-literal tokens, all decoded literal target lookups,
+  strict noncatalog fold-candidate checks, mutation forms, parenthesis-scoped
+  JSON RETURNING, catalog index identities, and normal-OID/window selection.
+- Resolver initially relied on normal function exit, as item 3 describes. The
+  real declared-role test showed that a helper's SET search_path saves that GUC
+  alone; other locally applied GUCs leaked and drops failed with "must be owner
+  of table items". The checkpoint uses the protocol's native success-sentinel
+  subtransaction pattern for the resolver too (D1431), without manual restore.
+  The six focused role/lock/cache tests then passed. No routine is executed by
+  the migration, and no runtime DDL was added.
+- The lock policy remains a single top-level SET LOCAL value ('5s'), captured as
+  a CONSTANT before routine SETs in the helper and validator; both reassert it.
+  Both reassert exit_on_error=off; validators reassert check_function_bodies=on.
+- Runner closes the tracking/bootstrap connection and uses a fresh maintenance
+  connection per pending migration, preserving the locked-slot override.
+- Ordinary archives dump NEXUS_template only. The separate fleet fixture requires
+  NEXUS_RUN_CORPUS=1 and a selected requires_corpus marker. It logs every dump;
+  marked six-source corpus rehearsal passed. No fleet routine was refused by
+  the new literal rule and no exemption was introduced. The default template
+  has an extension-owned public.|| candidate, so the literal EXECUTE controls
+  explicitly declare search_path=pg_catalog; separate public-path tests require
+  unresolved-context refusals. The accepted column-control routine likewise
+  declares that safe path for its constant format call.
+- Every migration refusal assertion now identifies scanner/validator/catalog/
+  manifest/lock provenance. Historical verdict helpers execute routines after
+  an old apply and require missing-relation/type errors for destructive labels;
+  healthy and already-broken routines get distinct labels.
+- All work remained in this worktree. The immutable SQL and old runner, recreated
+  OLD_MIGRATION collection plugin, log runner and logs are in after-review-r8.
+  The runner sets worktree PYTHONPATH, scratch TMPDIR, and (after the first red
+  run) NEXUS_DBNAME_AUDIT=1, bounded at 540 seconds and 120 seconds silence.
+  The first red run lacked the dbname audit; its immediately repeated audited
+  run is the authoritative red cohort.
+- The two mandatory lints passed. The full ordered PG proof, offline splits,
+  no-new-diagnostics flake8/mypy comparison, final Black check, head-wide green
+  rerun, PR-body update and push are **not completed**. Earlier focused green
+  runs are not a green gate for the checkpoint. In particular, the final USAGE
+  filtering and additional window/system-schema validator cases have red proof
+  but no final green run. No paid calls, owner writes or service starts occurred.
+
+### Exact Executed Commands and Verbatim Tails
+
+All commands ran from the ordered worktree. `PY` below denotes the shared
+`/Users/pythagor/nexus/.venv/bin/python`; `S` denotes the full after-review-r8
+scratch path. These variables abbreviate the absolute paths in the executed
+commands. Each entry also preserves its exact pytest/script argv. Log files
+remain under S and are not repository artifacts.
+
+**red-r8**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=$S/ebcfbe15.sql OLD_RUNNER=$S/old_runner.py $PY $S/run.py red-r8 /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k round8 -vs --tb=short
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-on-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-on-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-quote-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-quote-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[national-off-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[national-off-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[typed-date-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[typed-date-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[ordinary-data-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[ordinary-data-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[escaped-data-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[escaped-data-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[dollar-data-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[dollar-data-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[national-data-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[national-data-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[relation-size-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[relation-size-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[regclass-variable-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[regclass-variable-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[regtype-variable-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[regtype-variable-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-pkey-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-pkey-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-name-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-name-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-notebook-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-notebook-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-schema-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-schema-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-local-schema-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-local-schema-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-session-schema-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-session-schema-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[session-auth-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[session-auth-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-settings-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-settings-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-qualified-settings-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-qualified-settings-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[json-returning-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[json-returning-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-target-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-target-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[system-schema-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[system-schema-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-format-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-format-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-operator-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-operator-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-format-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-format-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-operator-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-operator-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[role-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[role-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[session_authorization-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[session_authorization-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_validator_lock_timeout
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_runner_recompiles
+==== 64 failed, 16 passed, 334 deselected, 6 warnings in 150.36s (0:02:30) =====
+EXIT STATUS: 1
+```
+
+**red-r8-audited**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=$S/ebcfbe15.sql OLD_RUNNER=$S/old_runner.py $PY $S/run.py red-r8-audited /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k round8 -vs --tb=short
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 83 targets: postgres, qa640_813_case_* x82
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-quote-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-quote-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[national-off-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[national-off-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[typed-date-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[typed-date-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[ordinary-data-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[ordinary-data-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[escaped-data-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[escaped-data-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[dollar-data-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[dollar-data-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[national-data-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[national-data-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[relation-size-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[relation-size-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[regclass-variable-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[regclass-variable-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[regtype-variable-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[regtype-variable-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-pkey-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-pkey-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-name-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-name-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-notebook-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[index-notebook-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-schema-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-schema-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-local-schema-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-local-schema-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-session-schema-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-session-schema-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[session-auth-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[session-auth-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-settings-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-settings-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-qualified-settings-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-qualified-settings-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[json-returning-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[json-returning-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-target-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-target-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[system-schema-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[system-schema-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-healthy-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-healthy-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-format-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-format-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-operator-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-operator-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-format-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-format-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-operator-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-operator-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[role-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[role-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[session_authorization-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[session_authorization-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_validator_lock_timeout
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_runner_recompiles
+===== 64 failed, 18 passed, 334 deselected, 1 warning in 154.30s (0:02:34) =====
+EXIT STATUS: 1
+```
+
+**green-r8-initial**
+
+```sh
+NEXUS_RUN_POSTGRES=1 $PY $S/run.py green-r8-initial /Users/pythagor/nexus/.venv/bin/python -m pytest tests/test_orrery/test_migration_dead_strata_pg.py -k round8 -vs --tb=short -x
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 416 items / 334 deselected / 82 selected
+
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-False] 813 source dump: NEXUS_template
+PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-on-False] FAILED
+
+=================================== FAILURES ===================================
+_______________ test_migration_143_round8_contract[scs-on-False] _______________
+tests/test_orrery/test_migration_dead_strata_pg.py:1741: in test_migration_143_round8_contract
+    assert applied is (defense is None), caplog.text
+E   AssertionError: ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r8() refuses: unresolved constant EXECUTE context: noncatalog format/concat/|| candidate
+E     CONTEXT:  PL/pgSQL function inline_code_block line 637 at RAISE
+E     
+E     
+E   assert False is (None is None)
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r8() refuses: unresolved constant EXECUTE context: noncatalog format/concat/|| candidate
+CONTEXT:  PL/pgSQL function inline_code_block line 637 at RAISE
+dbname audit: 4 targets: postgres, qa640_813_case_* x3
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-on-False]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+================= 1 failed, 2 passed, 334 deselected in 6.26s ==================
+EXIT STATUS: 1
+```
+
+**green-r8-second**
+
+```sh
+NEXUS_RUN_POSTGRES=1 $PY $S/run.py green-r8-second /Users/pythagor/nexus/.venv/bin/python -m pytest tests/test_orrery/test_migration_dead_strata_pg.py -k round8 -vs --tb=short -x
+```
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-schema-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-local-schema-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-local-schema-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-session-schema-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[set-session-schema-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[session-auth-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[session-auth-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-settings-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-settings-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-qualified-settings-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[update-qualified-settings-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[select-into-config-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[select-into-config-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[perform-config-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[perform-config-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[json-returning-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[json-returning-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[dml-returning-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[dml-returning-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-target-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-target-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-healthy-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-healthy-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[system-schema-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[system-schema-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-healthy-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-healthy-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[exit-on-error-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[runtime-data-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[runtime-data-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-format-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-format-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-concat-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-concat-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-operator-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[public,pg_catalog-operator-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-format-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-format-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-concat-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-concat-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-operator-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_fold_candidates[pg_catalog,public-operator-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[role-False] FAILED
+
+=================================== FAILURES ===================================
+____________ test_migration_143_round8_role_resolution[role-False] _____________
+tests/test_orrery/test_migration_dead_strata_pg.py:1796: in test_migration_143_round8_role_resolution
+    assert _apply(dbname), caplog.text
+E   AssertionError: ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - must be owner of table items
+E     
+E     
+E   assert False
+E    +  where False = _apply('qa640_813_case_ba4349cfa925')
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - must be owner of table items
+dbname audit: 78 targets: postgres, qa640_813_case_* x77
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[role-False]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+=========== 1 failed, 76 passed, 334 deselected in 166.37s (0:02:46) ===========
+EXIT STATUS: 1
+```
+
+**green-r8-env**
+
+```sh
+NEXUS_RUN_POSTGRES=1 $PY $S/run.py green-r8-env /Users/pythagor/nexus/.venv/bin/python -m pytest tests/test_orrery/test_migration_dead_strata_pg.py -k 'round8_role or round8_validator or round8_runner' -vs --tb=short
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 416 items / 410 deselected / 6 selected
+
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[role-False] 813 source dump: NEXUS_template
+PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[role-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[session_authorization-False] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[session_authorization-True] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_validator_lock_timeout PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_runner_recompiles PASSED
+
+dbname audit: 7 targets: postgres, qa640_813_case_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+====================== 6 passed, 410 deselected in 16.85s ======================
+EXIT STATUS: 0
+```
+
+**fleet**
+
+```sh
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 $PY $S/run.py fleet /Users/pythagor/nexus/.venv/bin/python -m pytest tests/test_orrery/test_migration_dead_strata_pg.py -k each_fleet -vs --tb=short
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 416 items / 410 deselected / 6 selected
+
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template] 813 source dump: NEXUS_template
+813 source dump: save_01
+813 source dump: save_02
+813 source dump: save_03
+813 source dump: save_04
+813 source dump: save_05
+PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04] PASSED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05] PASSED
+
+dbname audit: 7 targets: postgres, qa640_813_case_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+================= 6 passed, 410 deselected in 82.30s (0:01:22) =================
+EXIT STATUS: 0
+```
+
+**red-r8-final-additions**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=$S/ebcfbe15.sql $PY $S/run.py red-r8-final-additions /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k 'round8 and (scs or role or window-broken or system-schema-broken)' -vs --tb=short
+```
+
+```text
+    assert _apply(dbname) is usage, caplog.text
+E   AssertionError: ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_role() refuses: target items: hidden body identifier reference
+E     CONTEXT:  PL/pgSQL function inline_code_block line 628 at RAISE
+E     
+E     
+E   assert False is True
+E    +  where False = _apply('qa640_813_case_a9993d690a29')
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_role() refuses: target items: hidden body identifier reference
+CONTEXT:  PL/pgSQL function inline_code_block line 628 at RAISE
+__________ test_migration_143_round8_role_resolution[True-role-True] ___________
+tests/test_orrery/test_migration_dead_strata_pg.py:1936: in test_migration_143_round8_role_resolution
+    assert _apply(dbname) is usage, caplog.text
+E   AssertionError: ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_role() refuses: target items: hidden body identifier reference
+E     CONTEXT:  PL/pgSQL function inline_code_block line 628 at RAISE
+E     
+E     
+E   assert False is True
+E    +  where False = _apply('qa640_813_case_9407769f3ab4')
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_role() refuses: target items: hidden body identifier reference
+CONTEXT:  PL/pgSQL function inline_code_block line 628 at RAISE
+_ test_migration_143_round8_role_resolution[True-session_authorization-False] __
+tests/test_orrery/test_migration_dead_strata_pg.py:1936: in test_migration_143_round8_role_resolution
+    assert _apply(dbname) is usage, caplog.text
+E   AssertionError: ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_role() refuses: target items: hidden body identifier reference
+E     CONTEXT:  PL/pgSQL function inline_code_block line 628 at RAISE
+E     
+E     
+E   assert False is True
+E    +  where False = _apply('qa640_813_case_e322105ed5b5')
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_role() refuses: target items: hidden body identifier reference
+CONTEXT:  PL/pgSQL function inline_code_block line 628 at RAISE
+__ test_migration_143_round8_role_resolution[True-session_authorization-True] __
+tests/test_orrery/test_migration_dead_strata_pg.py:1936: in test_migration_143_round8_role_resolution
+    assert _apply(dbname) is usage, caplog.text
+E   AssertionError: ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_role() refuses: target items: hidden body identifier reference
+E     CONTEXT:  PL/pgSQL function inline_code_block line 628 at RAISE
+E     
+E     
+E   assert False is True
+E    +  where False = _apply('qa640_813_case_dcb60f5258d8')
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_role() refuses: target items: hidden body identifier reference
+CONTEXT:  PL/pgSQL function inline_code_block line 628 at RAISE
+dbname audit: 19 targets: postgres, qa640_813_case_* x18
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-quote-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[scs-off-quote-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-broken-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[window-broken-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[system-schema-broken-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_contract[system-schema-broken-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-role-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-role-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-session_authorization-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[True-session_authorization-True]
+================ 12 failed, 6 passed, 406 deselected in 31.96s =================
+EXIT STATUS: 1
+```
+
+**red-r8-usage**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=$S/ebcfbe15.sql $PY $S/run.py red-r8-usage /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k 'round8_role and False-role' -vs --tb=short
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0 -- /Users/pythagor/nexus/.venv/bin/python
+cachedir: .pytest_cache
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+rootdir: /Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata
+configfile: pytest.ini
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 424 items / 422 deselected / 2 selected
+
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[False-role-False] 813 source dump: NEXUS_template
+OLD DESTRUCTIVE VERDICT role call failed: relation "items" does not exist
+FAILED
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[False-role-True] OLD DESTRUCTIVE VERDICT role call failed: relation "items" does not exist
+FAILED
+
+=================================== FAILURES ===================================
+_________ test_migration_143_round8_role_resolution[False-role-False] __________
+tests/test_orrery/test_migration_dead_strata_pg.py:1946: in test_migration_143_round8_role_resolution
+    assert applied is usage, caplog.text
+E   AssertionError: 
+E   assert True is False
+__________ test_migration_143_round8_role_resolution[False-role-True] __________
+tests/test_orrery/test_migration_dead_strata_pg.py:1946: in test_migration_143_round8_role_resolution
+    assert applied is usage, caplog.text
+E   AssertionError: 
+E   assert True is False
+dbname audit: 3 targets: postgres, qa640_813_case_* x2
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[False-role-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round8_role_resolution[False-role-True]
+====================== 2 failed, 422 deselected in 3.79s =======================
+EXIT STATUS: 1
+```
+
+**migration-comment-lint**
+
+```sh
+PYTHONPATH=$PWD $PY $S/run.py migration-comment-lint /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+**exception-lint**
+
+```sh
+PYTHONPATH=$PWD $PY $S/run.py exception-lint /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+### Git State and Handoff
+
+`git fetch origin main` resolved main to
+`160134540517f6b74aacd1d1e1f3f584454eef86`. `git merge origin/main` returned
+`Already up to date.`; this main revision was already in the frozen head's
+ancestry. No rebase, rewrite, stash or main-checkout edit occurred. The current
+changes are checkpointed locally because useful work must not remain unstaged
+at handoff. They are not ready for push or merge; the frozen-order discrepancy
+and the incomplete proof gates above remain explicit.

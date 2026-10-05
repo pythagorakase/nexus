@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
+import tempfile
+import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
@@ -245,17 +248,16 @@ def _load_fixture(dbname: str) -> None:
         _assert_manifest(cur)
 
 
-@pytest.fixture(scope="session")
-def archives(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
-    """Cache read-only full-data source dumps; no driver opens an owner source."""
-    directory = tmp_path_factory.mktemp("813-archives")
+def _dump_sources(sources: tuple[str, ...], directory: Path) -> dict[str, Path]:
+    """Use the corpus policy's temporary, read-only custom dump/clone transport."""
     result = {}
-    for source in SOURCES:
+    for source in sources:
         archive = directory / (source + ".dump")
         env = subprocess_env()
         env["PGOPTIONS"] = (
             env.get("PGOPTIONS", "") + " -c default_transaction_read_only=on"
         )
+        print("813 source dump:", source, flush=True)
         subprocess.run(
             ["pg_dump", "--format=custom", "--file", str(archive), "--dbname", source],
             env=env,
@@ -266,6 +268,28 @@ def archives(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
         )
         result[source] = archive
     return result
+
+
+@pytest.fixture(scope="session")
+def archives() -> Iterator[dict[str, Path]]:
+    """Ordinary regressions dump only the template and delete the archive at exit."""
+    with tempfile.TemporaryDirectory(prefix="813-template-") as directory:
+        yield _dump_sources(("NEXUS_template",), Path(directory))
+
+
+@pytest.fixture(scope="session")
+def fleet_archives(
+    archives: dict[str, Path], request: pytest.FixtureRequest
+) -> Iterator[dict[str, Path]]:
+    """Only the corpus-selected fleet test may read save slots, via pg_dump."""
+    if not any(
+        item.get_closest_marker("requires_corpus") for item in request.session.items
+    ):
+        raise RuntimeError("fleet_archives requires a requires_corpus test")
+    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
+        raise RuntimeError("fleet archives require NEXUS_RUN_CORPUS=1")
+    with tempfile.TemporaryDirectory(prefix="813-corpus-") as directory:
+        yield {**archives, **_dump_sources(SOURCES[1:], Path(directory))}
 
 
 @contextmanager
@@ -357,7 +381,8 @@ def _function_catalog(dbname: str) -> list[Any]:
             "CASE WHEN p.oid='public.set_updated_at()'::regprocedure THEN NULL "
             "ELSE obj_description(p.oid,'pg_proc') END "
             "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
-            "WHERE n.nspname IN ('public','assets') AND p.prokind IN ('f','p') "
+            "WHERE p.oid >= 16384 AND n.nspname !~ '^pg_(temp|toast)' "
+            "AND p.prokind IN ('f','p','w') "
             "ORDER BY p.oid"
         )
         return cur.fetchall()
@@ -384,14 +409,15 @@ def _stamps(dbname: str) -> list[Any]:
         return cur.fetchall()
 
 
+@pytest.mark.requires_corpus
 @pytest.mark.parametrize("source", SOURCES)
 def test_migration_143_drops_only_manifest_on_each_fleet_clone(
-    archives: dict[str, Path],
+    fleet_archives: dict[str, Path],
     tmp_path: Path,
     source: str,
 ) -> None:
     """Preserve full source data, all surviving definitions, and repeat-run state."""
-    with _clone(archives, tmp_path, source) as dbname:
+    with _clone(fleet_archives, tmp_path, source) as dbname:
         # Frozen full-data pre-143 rehearsal is separate from reconstruction.
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM schema_migrations WHERE version='143'")
@@ -520,12 +546,14 @@ def test_migration_143_round6_search_path(
             applied = migrate.apply_migration(
                 conn, "143", "drop_dead_schema_strata", MIGRATION
             )
-            if applied and refuses:
-                cur.execute(
-                    "SELECT pg_catalog.to_regclass('public.items'),"
-                    "pg_catalog.to_regtype('public.item_type')"
+            if applied:
+                _old_verdict(
+                    dbname,
+                    case,
+                    "SELECT public.probe813_path()",
+                    target=case == "overload-broken",
+                    already_broken=broken and case != "overload-broken",
                 )
-                print("OLD DESTRUCTIVE VERDICT:", case, "targets:", cur.fetchone())
             assert applied is not refuses, caplog.text
             cur.execute("SELECT pg_catalog.current_setting('search_path')")
             assert cur.fetchone() == original_path
@@ -534,6 +562,9 @@ def test_migration_143_round6_search_path(
                 cur.execute("SELECT public.probe813_path()")
                 assert cur.fetchone() == (1,)
         if refuses:
+            _defense(
+                caplog.text, "scanner" if case == "overload-broken" else "validator"
+            )
             assert "probe813_path" in caplog.text, caplog.text
             if case == "overload-broken":
                 assert "public.items" in caplog.text
@@ -762,6 +793,16 @@ def _refusal(dbname: str, case: str, caplog: pytest.LogCaptureFixture) -> None:
     assert not _apply(dbname), case
     assert offender in caplog.text, caplog.text
     assert "target public." in caplog.text, caplog.text
+    _defense(
+        caplog.text,
+        (
+            "scanner"
+            if group == "hidden" and name != "sql-atomic"
+            else (
+                "catalog" if group == "external" or name == "sql-atomic" else "manifest"
+            )
+        ),
+    )
     expected_reference = {
         "sql-array-cast": "public._item_type",
         "sql-quoted-array-cast": "public._item_type",
@@ -840,6 +881,7 @@ def _lock_refusal(dbname: str, caplog: pytest.LogCaptureFixture) -> None:
         cur.execute("LOCK TABLE public.items IN ACCESS SHARE MODE")
         caplog.clear()
         assert not _apply(dbname)
+        _defense(caplog.text, "lock")
         assert "lock timeout" in caplog.text, caplog.text
         blocker.rollback()
     assert _snapshot(dbname, surviving=False) == before
@@ -885,7 +927,7 @@ def _column_consumers(dbname: str) -> None:
         "COMMENT ON FUNCTION public.probe813_percent() "
         "IS '813 unrelated percent type'; "
         "CREATE FUNCTION public.probe813_dynamic() RETURNS void LANGUAGE plpgsql "
-        "AS $$BEGIN EXECUTE pg_catalog.format('SELECT %L','item_type'); END$$; "
+        "SET search_path=pg_catalog AS $$BEGIN EXECUTE pg_catalog.format('SELECT %L','item_type'); END$$; "
         "COMMENT ON FUNCTION public.probe813_dynamic() IS '813 constant safe SQL'; "
         "CREATE TYPE assets.item_type AS ENUM ('other'); "
         "COMMENT ON TYPE assets.item_type IS '813 namespace shadow'; "
@@ -1198,6 +1240,7 @@ def test_migration_143_validation_refuses_without_scanner(
             assert not migrate.apply_migration(
                 conn, "143", "drop_dead_schema_strata", scratch
             )
+        _defense(caplog.text, "validator")
         assert "probe813" in caplog.text and "post-drop" in caplog.text, caplog.text
         assert _snapshot(dbname, surviving=False) == before
         assert _function_catalog(dbname) == functions
@@ -1340,20 +1383,11 @@ def test_migration_143_round3_literal_grammar(
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
         caplog.clear()
         applied = _apply(dbname)
-        # Record the actual destructive verdict before asserting the fixed rule.
-        if applied and refuses:
-            with closing(connect(dbname)) as conn, conn.cursor() as cur:
-                cur.execute(
-                    "SELECT to_regclass('public.items'),to_regtype('public.item_type')"
-                )
-                print(
-                    "OLD DESTRUCTIVE VERDICT:",
-                    case,
-                    "applied; targets:",
-                    cur.fetchone(),
-                )
+        if applied:
+            _old_verdict(dbname, case, "SELECT public.probe813()", target=refuses)
         assert applied is not refuses, caplog.text
         if refuses:
+            _defense(caplog.text, "scanner")
             assert reference is not None
             assert "probe813" in caplog.text and reference in caplog.text, caplog.text
             assert _stamps(dbname) == stamps
@@ -1447,9 +1481,8 @@ def test_migration_143_round3_invalid_setting_refuses(
         )
         caplog.clear()
         assert not _apply(dbname), caplog.text
-        assert (
-            "post-drop" in caplog.text and "probe813_setting" in caplog.text
-        ), caplog.text
+        _defense(caplog.text, "scanner")
+        assert "probe813_setting" in caplog.text, caplog.text
         assert "probe813_config" in caplog.text, caplog.text
         assert _snapshot(dbname, surviving=False) == before
         assert _function_catalog(dbname) == functions
@@ -1506,19 +1539,16 @@ def test_migration_143_round4_unicode_forms(
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
         caplog.clear()
         applied = _apply(dbname)
-        if applied and refuses:
-            with closing(connect(dbname)) as conn, conn.cursor() as cur:
-                cur.execute(
-                    "SELECT to_regclass('public.items'),to_regtype('public.item_type')"
-                )
-                print(
-                    "OLD DESTRUCTIVE VERDICT:",
-                    case,
-                    "applied; targets:",
-                    cur.fetchone(),
-                )
+        if applied:
+            _old_verdict(
+                dbname,
+                case,
+                "SELECT public.probe813_unicode()",
+                target=case.endswith("gap"),
+            )
         assert applied is not refuses, caplog.text
         if refuses:
+            _defense(caplog.text, "scanner")
             assert "probe813_unicode" in caplog.text, caplog.text
             assert (
                 "unicode-escape literal or identifier; edit the routine" in caplog.text
@@ -1647,8 +1677,381 @@ def test_migration_143_round5_routine_cannot_disable_validation(
                 cur.execute("SELECT public.probe813_bodies()")
                 assert cur.fetchone() == (1,)
         if refuses:
+            _defense(caplog.text, "validator")
             assert "probe813_bodies" in caplog.text, caplog.text
             assert "post-drop" in caplog.text and "missing_column" in caplog.text
             assert _stamps(dbname) == stamps
         assert _snapshot(dbname, surviving=not refuses) == before
         assert _function_catalog(dbname) == functions
+
+
+# (body, declarations, expected defense). None means a healthy application.
+ROUND8 = {
+    "scs-off": (
+        r"BEGIN EXECUTE 'SELECT 1 FROM public.\151tems'; END",
+        "SET search_path=pg_catalog SET standard_conforming_strings=off",
+        "scanner",
+    ),
+    "scs-on": (
+        r"BEGIN EXECUTE 'SELECT 1 FROM public.\151tems'; END",
+        "SET search_path=pg_catalog SET standard_conforming_strings=on",
+        None,
+    ),
+    "scs-off-quote": (
+        r"BEGIN PERFORM 'escaped\'quote'; END",
+        "SET standard_conforming_strings=off",
+        None,
+    ),
+    "national-off": (
+        r"BEGIN PERFORM N'public.\151tems'; END",
+        "SET standard_conforming_strings=off",
+        "scanner",
+    ),
+    "typed-date": ("BEGIN PERFORM date'2026-01-01'; END", "", None),
+    "typed-target": ("BEGIN PERFORM item_type'weapon'; END", "", "scanner"),
+    "ordinary-data": ("BEGIN PERFORM 'public.items'; END", "", "scanner"),
+    "escaped-data": (r"BEGIN PERFORM E'public.\151tems'; END", "", "scanner"),
+    "dollar-data": ("BEGIN PERFORM $x$public.items$x$; END", "", "scanner"),
+    "national-data": ("BEGIN PERFORM N'public.items'; END", "", "scanner"),
+    "relation-size": (
+        "BEGIN PERFORM pg_relation_size('public.items'); END",
+        "",
+        "scanner",
+    ),
+    "regclass-variable": (
+        "DECLARE x regclass := 'public.items'; BEGIN NULL; END",
+        "",
+        "scanner",
+    ),
+    "regtype-variable": (
+        "DECLARE x regtype := 'public.item_type'; BEGIN NULL; END",
+        "",
+        "scanner",
+    ),
+    "index-pkey": ("BEGIN PERFORM 'public.items_pkey'; END", "", "scanner"),
+    "index-name": (
+        "BEGIN PERFORM 'public.items_name_key'::regclass; END",
+        "",
+        "scanner",
+    ),
+    "index-notebook": ("BEGIN PERFORM 'public.ai_notebook_pkey'; END", "", "scanner"),
+    "set-schema": ("BEGIN SET SCHEMA 'public'; END", "", "scanner"),
+    "set-local-schema": ("BEGIN SET LOCAL SCHEMA 'public'; END", "", "scanner"),
+    "set-session-schema": ("BEGIN SET SESSION SCHEMA 'public'; END", "", "scanner"),
+    "session-auth": ("BEGIN SET SESSION AUTHORIZATION DEFAULT; END", "", "scanner"),
+    "update-settings": (
+        "BEGIN UPDATE pg_settings SET setting='public' WHERE name='search_path'; END",
+        "",
+        "scanner",
+    ),
+    "update-qualified-settings": (
+        "BEGIN UPDATE pg_catalog.pg_settings SET setting='public' WHERE name='search_path'; END",
+        "",
+        "scanner",
+    ),
+    "select-into-config": (
+        "DECLARE x text; BEGIN SELECT pg_catalog.set_config('search_path','public',true) INTO x; END",
+        "",
+        "scanner",
+    ),
+    "perform-config": (
+        "BEGIN PERFORM pg_catalog.set_config('role','none',true); END",
+        "",
+        "scanner",
+    ),
+    "json-returning": (
+        "BEGIN PERFORM json_value('{}'::jsonb, '$' RETURNING emotional_valence) FROM public.character_relationships; END",
+        "",
+        "scanner",
+    ),
+    "dml-returning": (
+        "BEGIN UPDATE public.character_relationships SET emotional_valence=emotional_valence RETURNING emotional_valence INTO STRICT v; END",
+        "",
+        None,
+    ),
+    "window-target": ("SELECT count(*) FROM public.items", "WINDOW", "scanner"),
+    "window-broken": (
+        "SELECT missing_column FROM public.characters",
+        "WINDOW",
+        "validator",
+    ),
+    "system-schema-broken": (
+        "SELECT missing_column FROM public.characters",
+        "",
+        "validator",
+    ),
+    "window-healthy": ("SELECT 1::bigint", "WINDOW", None),
+    "system-schema": ("SELECT count(*) FROM public.items", "", "scanner"),
+    "exit-on-error-healthy": ("SELECT 1::bigint", "SET exit_on_error=on", None),
+    "exit-on-error": (
+        "SELECT missing_column FROM public.characters",
+        "SET exit_on_error=on",
+        "validator",
+    ),
+    "runtime-data": (
+        "BEGIN PERFORM pg_relation_size(input::regclass); END",
+        "",
+        "scanner",
+    ),
+}
+
+
+def _defense(log: str, expected: str) -> None:
+    """Distinguish catalog, scanner, validator and lock refusals explicitly."""
+    if expected == "scanner":
+        assert "function/procedure" in log and "refuses:" in log, log
+        assert "post-drop" not in log, log
+    elif expected == "validator":
+        assert (
+            "post-drop function/procedure" in log and "validation refuses:" in log
+        ), log
+    elif expected == "catalog":
+        assert "unexpected dependent" in log or "unexpected dependency edge" in log, log
+        assert "post-drop" not in log, log
+    elif expected == "manifest":
+        assert "target public." in log and "function/procedure" not in log, log
+    elif expected == "lock":
+        assert "lock timeout" in log, log
+    else:
+        raise AssertionError(expected)
+
+
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize("case", ROUND8)
+def test_migration_143_round8_contract(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+    post: bool,
+) -> None:
+    """Panel literal, context, selection and environment recipes run on real clones."""
+    body, clauses, defense = ROUND8[case]
+    language = (
+        "sql"
+        if case.startswith("window")
+        or case
+        in (
+            "system-schema",
+            "system-schema-broken",
+            "exit-on-error",
+            "exit-on-error-healthy",
+        )
+        else "plpgsql"
+    )
+    result = "bigint" if language == "sql" else "void"
+    schema = "pg_catalog" if case.startswith("system-schema") else "public"
+    signature = "input text" if case == "runtime-data" else ""
+    if case == "dml-returning":
+        body = "DECLARE v text; " + body
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        _sql(
+            dbname,
+            "SET LOCAL check_function_bodies=off; "
+            f"CREATE FUNCTION {schema}.probe813_r8({signature}) RETURNS {result} "
+            f"LANGUAGE {language} {clauses} AS $probe${body}$probe$; "
+            f"COMMENT ON FUNCTION {schema}.probe813_r8({'text' if signature else ''}) IS '813 round-eight recipe'",
+        )
+        before = _snapshot(dbname, surviving=defense is None)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        assert applied is (defense is None), caplog.text
+        if defense:
+            assert "probe813_r8" in caplog.text, caplog.text
+            _defense(caplog.text, defense)
+            assert _stamps(dbname) == stamps
+        assert _function_catalog(dbname) == functions
+        assert _snapshot(dbname, surviving=defense is None) == before
+
+
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize("candidate", ("format", "concat", "operator"))
+@pytest.mark.parametrize("path", ("public,pg_catalog", "pg_catalog,public"))
+def test_migration_143_round8_fold_candidates(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    post: bool,
+    candidate: str,
+    path: str,
+) -> None:
+    """Even a later exact overload invalidates a builtin-only constant fold."""
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        if candidate == "operator":
+            definition = "CREATE FUNCTION public.probe813_concat(text,text) RETURNS text LANGUAGE sql AS $$SELECT 'SELECT 1'$$; CREATE OPERATOR public.|| (LEFTARG=text, RIGHTARG=text, FUNCTION=public.probe813_concat)"
+            expression = "'SELECT ' || '1'"
+        else:
+            definition = f"CREATE FUNCTION public.{candidate}(text,text) RETURNS text LANGUAGE sql AS $$SELECT 'SELECT 1'$$"
+            expression = (
+                "format('SELECT %s','1')"
+                if candidate == "format"
+                else "concat('SELECT ','1')"
+            )
+        _sql(
+            dbname,
+            definition
+            + "; CREATE FUNCTION public.probe813_fold() RETURNS void LANGUAGE plpgsql "
+            f"SET search_path={path} AS $probe$BEGIN EXECUTE {expression}; END$probe$; "
+            "COMMENT ON FUNCTION public.probe813_fold() IS '813 fold context recipe'",
+        )
+        before, stamps = _snapshot(dbname, surviving=False), _stamps(dbname)
+        caplog.clear()
+        assert not _apply(dbname), caplog.text
+        assert (
+            "probe813_fold" in caplog.text and "unresolved" in caplog.text
+        ), caplog.text
+        _defense(caplog.text, "scanner")
+        assert _stamps(dbname) == stamps
+        assert _snapshot(dbname, surviving=False) == before
+
+
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize("setting", ("role", "session_authorization"))
+@pytest.mark.parametrize("usage", (True, False))
+def test_migration_143_round8_role_resolution(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    post: bool,
+    setting: str,
+    usage: bool,
+) -> None:
+    """USAGE filtering and $user resolve under the routine's declared role."""
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        role = dbname + "_role"
+        path = '"$user",public' if usage else f'"{role}",public'
+        routine = (
+            "RETURNS bigint LANGUAGE sql AS $$SELECT count(*) FROM items$$"
+            if usage
+            else "RETURNS void LANGUAGE plpgsql AS $$BEGIN PERFORM 'items'::regclass; END$$"
+        )
+        # Put SET clauses before AS while preserving the literal body.
+        declaration, body = routine.split(" AS ", 1)
+        try:
+            _sql(
+                dbname,
+                f'CREATE ROLE "{role}" NOLOGIN; CREATE SCHEMA "{role}"; '
+                + (f'GRANT USAGE ON SCHEMA "{role}" TO "{role}"; ' if usage else "")
+                + f'CREATE TABLE "{role}".items(id integer); '
+                f"CREATE FUNCTION public.probe813_role() {declaration} "
+                f'SET search_path={path} SET {setting}="{role}" AS {body}',
+            )
+            before = _snapshot(dbname, surviving=usage)
+            caplog.clear()
+            applied = _apply(dbname)
+            if applied and not usage:
+                _old_verdict(
+                    dbname, setting, "SELECT public.probe813_role()", target=True
+                )
+            assert applied is usage, caplog.text
+            if not usage:
+                _defense(caplog.text, "scanner")
+                assert "probe813_role" in caplog.text, caplog.text
+            assert _snapshot(dbname, surviving=usage) == before
+        finally:
+            _sql(dbname, f'DROP OWNED BY "{role}"; DROP ROLE "{role}"')
+
+
+def test_migration_143_round8_validator_lock_timeout(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A routine SET lock_timeout=0 cannot suppress the migration's bound."""
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        _sql(
+            dbname,
+            "CREATE TABLE public.probe813_locked(id integer); "
+            "CREATE FUNCTION public.probe813_wait() RETURNS integer LANGUAGE sql "
+            "SET lock_timeout=0 AS $$SELECT id FROM public.probe813_locked$$",
+        )
+        stamps = _stamps(dbname)
+        with closing(connect(dbname)) as locker, locker.cursor() as lockcur:
+            lockcur.execute(
+                "LOCK TABLE public.probe813_locked IN ACCESS EXCLUSIVE MODE"
+            )
+            with closing(connect(dbname)) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SET statement_timeout='10s'")
+                caplog.clear()
+                start = time.monotonic()
+                assert not migrate.apply_migration(
+                    conn, "143", "drop_dead_schema_strata", MIGRATION
+                )
+                elapsed = time.monotonic() - start
+                assert 4 <= elapsed < 8, (elapsed, caplog.text)
+                _defense(caplog.text, "validator")
+                assert "probe813_wait" in caplog.text and "lock timeout" in caplog.text
+        assert _stamps(dbname) == stamps
+
+
+def test_migration_143_round8_runner_recompiles(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A second pending migration validates on a fresh backend, without cache reuse."""
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        tree = tmp_path / "cache-proof"
+        tree.mkdir()
+        (tree / "901_compile.sql").write_text(
+            "CREATE FUNCTION public.probe813_cached() RETURNS void LANGUAGE plpgsql "
+            "AS $$DECLARE x public.agent_type; BEGIN NULL; END$$; "
+            "COMMENT ON FUNCTION public.probe813_cached() IS '813 cached type recipe'; "
+            "SELECT public.probe813_cached();"
+        )
+        second = re.sub(
+            r"^            PERFORM pg_temp.dead143_body\(CASE.*;\n",
+            "",
+            MIGRATION.read_text(),
+            flags=re.MULTILINE,
+        )
+        assert second != MIGRATION.read_text()
+        (tree / "902_validate.sql").write_text(second)
+        caplog.clear()
+        assert migrate.migrate_database(
+            dbname, skip_locked=False, migrations_dir=tree
+        ) == (1, 1), caplog.text
+        assert (
+            "probe813_cached" in caplog.text and "agent_type" in caplog.text
+        ), caplog.text
+        _defense(caplog.text, "validator")
+        assert any(s[0] == "901" for s in _stamps(dbname))
+        assert not any(s[0] == "902" for s in _stamps(dbname))
+
+
+def _old_verdict(
+    dbname: str,
+    case: str,
+    call: str,
+    *,
+    target: bool = False,
+    already_broken: bool = False,
+) -> None:
+    """A destructive verdict requires an actual post-drop routine failure."""
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        if target or already_broken:
+            with pytest.raises(psycopg2.Error) as failure:
+                cur.execute(call)
+            if target:
+                assert failure.value.pgcode in ("42P01", "42704"), str(failure.value)
+            label = (
+                "OLD DESTRUCTIVE VERDICT"
+                if target
+                else "OLD VERDICT: applied (routine already broken)"
+            )
+            print(label, case, "call failed:", str(failure.value).splitlines()[0])
+        else:
+            cur.execute(call)
+            print(
+                "OLD VERDICT: applied (healthy routine)",
+                case,
+                "result:",
+                cur.fetchone(),
+            )
