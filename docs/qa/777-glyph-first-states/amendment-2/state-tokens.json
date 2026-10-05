@@ -8,7 +8,7 @@
     "--state-map-current": {
       "source": "--brass-bright",
       "baseline": "hsl(320 60% 60%)",
-      "shipped": "hsl(330.2439024390244 70% 50%)"
+      "shipped": "hsl(330.2439024390244 60% 50%)"
     },
     "--state-map-selected": {
       "source": "--brass",
