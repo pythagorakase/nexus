@@ -628,3 +628,31 @@ The prior selected-label/halo evidence remains historical with the mandatory
 Veil anchor correction labeled; it was not broadened this run.
 
 Codex, GPT-6.
+
+
+## After the Fourth Independent Review and the Panel: Sixth Clarification, Mask Mean
+
+The linear-sRGB full-mask mean and 16-device-pixel floor are implemented from
+8052f547. The full selected-palette capture completes: 64,008 renders across
+all 18 conditions, 1,312.694 seconds summed across four bounded shards, zero
+network/page errors; module-graph hash fffe47582568f6e74f43ea8a5cc77f8d28b982b250e054f1a72786b60df851d6.
+The 3,726 pair comparisons, token tables and 144 mean swatches are regenerated,
+but clearly uncertified: delayed tooltip opening makes sixteen same-value
+shipping/candidate delete witnesses disagree. Veil delete actual minimum
+13.404111071186673 exceeds the candidate maximum 12.665473691002235, so the
+unchanged acceptance gate correctly fails. The direct tooltip-visible replay
+makes shipping and candidate means repeat exactly, without fixed sleeps or
+changing any paint; that settling change is diagnostic, pending scope ruling.
+
+The [stop-report](after-review-r4/mask-mean-stop-report.md) contains every group
+maximum/choice/shortfall, exact failure, unreachable list and causal PNG proof.
+Fresh native pointer, label-anchor and six pixel-identical halo comparisons
+pass. Focused UI has 1 failed/23 passed; full UI 1 failed/501 passed; check/build
+pass. Owner-audit 80 passed/0 targets, complete offline suites 4,795 passed/
+1,380 skipped, reachability 54 passed. The executed unplanted plants control
+fails the same acceptance check; no named plant is applied or counted. PR
+body update, final main merge, push and PR merge are not claimed.
+[Commands and verbatim tails](after-review-r4/mask-mean/commands.md) retain all
+failures and retries. No paid call, gateway lane or protected database write.
+
+Codex, GPT-6.
