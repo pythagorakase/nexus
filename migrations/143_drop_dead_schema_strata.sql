@@ -17,11 +17,17 @@
 -- of session startup settings: a token naming a drop target refuses, every
 -- decoded string literal resolving to a drop target refuses, and a form the
 -- lexer cannot classify refuses. After the drops, PostgreSQL's own validators
--- check every surviving application routine's body under that same environment.
+-- check every surviving application routine's body under that environment, with
+-- identity settings reserved for scanner lookups and validators run as the creator.
+-- A routine whose environment, body or definition uses a form this guard does not
+-- model is refused, and section 1 of this order names those forms.
 -- Outside this contract, a name arriving as data at runtime (a nonliteral text
 -- argument to a catalog-input function or reg* parameter), dynamic SQL assembled
--- from nonconstants, or a path/role changed through an unrecognized form cannot
--- be seen statically and is not claimed. Late-bound PL/pgSQL expression references
+-- from nonconstants (SQL text that is not a constant), or a path/role changed
+-- through an unrecognized form cannot be seen statically and is not claimed.
+-- Constant SQL text executed through a means this guard does not fold is not
+-- outside the contract: supported constant forms fold; unresolved forms refuse.
+-- Late-bound PL/pgSQL expression references
 -- and polymorphic SQL bodies remain: fmgr_sql_validator only syntax-checks
 -- polymorphic SQL; plpgsql_validator checks syntax and declared types.
 --
@@ -31,14 +37,22 @@
 -- Typed literals, casts, declarations and nested JSON RETURNING are type contexts;
 -- query/trigger columns require catalog proof and cannot supply type proof.
 -- Candidate targets include catalog-generated row/array types and owned indexes.
--- Constant EXECUTE folds only after its effective schema order is proven free of
--- noncatalog format/concat functions and || operators. Other folds refuse.
+-- Constant EXECUTE, DO and query_to_xml/query_to_xmlschema/
+-- query_to_xml_and_xmlschema/ts_stat/cursor_to_xml inputs fold through builtin
+-- format/concat/|| only. Non-extension overloads outside pg_catalog
+-- refuse globally; extension-owned overloads are excluded. Other folds refuse.
 -- Unsupported languages and different SECURITY DEFINER owners refuse.
 -- Catalog-input positions additionally refuse nonliteral/unresolved operands.
 -- SET values split at the first equals sign in one shared parser. Each validator
 -- and every environment-applying helper run in a sentinel subtransaction, restoring
 -- the native GUC stack including privilege settings. check_function_bodies=on,
--- the migration lock timeout and exit_on_error=off are reasserted after SETs.
+-- the migration lock timeout are reasserted after the allowlisted SETs.
+-- Only search_path, role, session_authorization, standard_conforming_strings,
+-- backslash_quote, DateStyle, IntervalStyle, TimeZone, extra_float_digits,
+-- default_text_search_config, client_min_messages and application_name apply.
+-- Statement-initial SET/RESET and any set_config identifier refuse. Enabled
+-- event triggers refuse before helper DDL. Non-routine stored definitions and
+-- aggregate initial values meet the literal rule only; pg_depend decides their identifier references.
 -- No runtime DDL or routine execution: definitions, OIDs, ownership, ACLs and
 -- comments survive unchanged. Refusals roll back drops/comments/stamping.
 -- Scanner guards precede DROP; validators run inside the same atomic transaction.
@@ -54,8 +68,35 @@
 -- candidate signature across the path, so a more specific overload in a later
 -- schema can win over a variadic or polymorphic builtin.
 SET LOCAL search_path = pg_catalog;
+SET LOCAL standard_conforming_strings = on;
+SET LOCAL backslash_quote = safe_encoding;
 -- Single policy value: pinned helpers/validator capture this before routine SETs.
 SET LOCAL lock_timeout = '5s';
+
+-- R1/R4 run before helper DDL, so no event-trigger routine is invoked.
+DO $refusals$
+DECLARE
+    offenders text;
+BEGIN
+    SELECT string_agg(identity, ', ' ORDER BY identity) INTO offenders FROM (
+        SELECT pg_catalog.pg_describe_object('pg_proc'::regclass,p.oid,0) AS identity
+        FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname<>'pg_catalog' AND p.proname IN ('format','concat','concat_ws')
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.classid='pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e')
+        UNION ALL
+        SELECT pg_catalog.pg_describe_object('pg_operator'::regclass,o.oid,0)
+        FROM pg_catalog.pg_operator o JOIN pg_catalog.pg_namespace n ON n.oid=o.oprnamespace
+        WHERE n.nspname<>'pg_catalog' AND o.oprname='||'
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.classid='pg_operator'::regclass AND d.objid=o.oid AND d.deptype='e')
+    ) overloads;
+    IF offenders IS NOT NULL THEN
+        RAISE EXCEPTION 'noncatalog fold overloads refuse: %',offenders;
+    END IF;
+    SELECT string_agg(evtname, ', ' ORDER BY evtname) INTO offenders
+    FROM pg_catalog.pg_event_trigger WHERE evtenabled<>'D';
+    IF offenders IS NOT NULL THEN RAISE EXCEPTION 'enabled event triggers refuse: %',offenders; END IF;
+END
+$refusals$;
 
 CREATE FUNCTION pg_temp.dead143_tokens(body text, effective_scs text, setting_names text[], setting_values text[]) RETURNS jsonb
 LANGUAGE plpgsql SET search_path = pg_catalog AS $lexer$
@@ -79,7 +120,7 @@ BEGIN
     END IF;
     WHILE i <= length(body) LOOP
         ch := substr(body, i, 1);
-        IF ch ~ '\s' THEN i := i + 1; CONTINUE; END IF;
+        IF ch ~ '[ \t\n\r\f\v]' THEN i := i + 1; CONTINUE; END IF;
         IF substr(body, i, 2) = '--' THEN
             WHILE i <= length(body) AND substr(body, i, 1) NOT IN (E'\n',E'\r') LOOP i := i + 1; END LOOP;
             CONTINUE;
@@ -95,8 +136,8 @@ BEGIN
             CONTINUE;
         END IF;
         start_at := i; value := ''; escaped := false;
-        prefix := substring(substr(body,i) FROM '^([a-zA-Z]+)''');
-        IF prefix IS NOT NULL AND lower(prefix) NOT IN ('e','b','x','n') THEN prefix := NULL; END IF;
+        prefix := substring(substr(body,i) FROM '^([eEbBxXnN])''');
+        IF i>1 AND substr(body,i-1,1) ~ '[A-Za-z_0-9$]|[^\x00-\x7F]' THEN prefix := NULL; END IF;
         IF ch = '''' OR prefix IS NOT NULL THEN
             escaped := lower(coalesce(prefix,''))='e' OR
                 (lower(coalesce(prefix,'')) IN ('','n') AND effective_scs='off');
@@ -139,16 +180,16 @@ BEGIN
                     ELSE EXIT; END IF;
                 ELSE value := value || ch; END IF;
             END LOOP;
-            kind := 'id';
-        ELSIF ch = '$' AND substr(body,i) ~ '^\$[a-zA-Z_0-9]*\$' THEN
-            delimiter := substring(substr(body,i) FROM '^\$[a-zA-Z_0-9]*\$');
+            kind := 'qid';
+        ELSIF ch = '$' AND substr(body,i) ~ '^\$(?:(?:[A-Za-z_]|[^\x00-\x7F])(?:[A-Za-z_0-9]|[^\x00-\x7F])*)?\$' THEN
+            delimiter := substring(substr(body,i) FROM '^\$(?:(?:[A-Za-z_]|[^\x00-\x7F])(?:[A-Za-z_0-9]|[^\x00-\x7F])*)?\$');
             i := i + length(delimiter);
             depth := strpos(substr(body,i),delimiter);
             IF depth = 0 THEN RAISE EXCEPTION 'unclosed dollar literal'; END IF;
             value := substr(body,i,depth-1); i := i + depth-1 + length(delimiter);
             kind := 'string';
-        ELSIF ch ~ '[a-zA-Z_]' THEN
-            WHILE i <= length(body) AND substr(body,i,1) ~ '[a-zA-Z_0-9$]' LOOP i := i + 1; END LOOP;
+        ELSIF ch ~ '[A-Za-z_]|[^\x00-\x7F]' THEN
+            WHILE i <= length(body) AND substr(body,i,1) ~ '[A-Za-z_0-9$]|[^\x00-\x7F]' LOOP i := i + 1; END LOOP;
             value := lower(substr(body,start_at,i-start_at)); kind := 'id';
         ELSE
             value := ch; kind := 'punct'; i := i + 1;
@@ -165,9 +206,17 @@ $lexer$;
 COMMENT ON FUNCTION pg_temp.dead143_tokens(text, text, text[], text[]) IS 'Migration 143 transaction-local SQL lexer: distinguish identifiers from comments and diagnostic literals; removed before stamping.';
 
 CREATE FUNCTION pg_temp.dead143_setting(setting text) RETURNS text[]
-LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $setting$
-    SELECT ARRAY[substr(setting,1,strpos(setting,'=')-1),
-                 substr(setting,strpos(setting,'=')+1)]
+LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog AS $setting$
+DECLARE
+    parsed text[] := ARRAY[substr(setting,1,strpos(setting,'=')-1), substr(setting,strpos(setting,'=')+1)];
+BEGIN
+    IF lower(parsed[1]) NOT IN ('search_path','role','session_authorization',
+        'standard_conforming_strings','backslash_quote','datestyle','intervalstyle',
+        'timezone','extra_float_digits','default_text_search_config','client_min_messages','application_name') THEN
+        RAISE EXCEPTION 'unresolved environment setting: %',parsed[1];
+    END IF;
+    RETURN parsed;
+END
 $setting$;
 COMMENT ON FUNCTION pg_temp.dead143_setting(text) IS 'Migration 143 transaction-local proconfig parser: name before first equals, complete value after it, shared by scanner and validator; removed before stamping.';
 
@@ -190,7 +239,7 @@ BEGIN
             PERFORM pg_catalog.set_config(setting_names[i],setting_values[i],true);
         END LOOP;
         PERFORM pg_catalog.set_config('lock_timeout',lock_policy,true);
-        PERFORM pg_catalog.set_config('exit_on_error','off',true);
+        PERFORM pg_catalog.set_config('check_function_bodies','on',true);
         EXECUTE statement INTO result;
         -- A helper's SET search_path saves that GUC alone. Abort the local
         -- subtransaction to unwind every arbitrary SET, including privileges.
@@ -203,7 +252,7 @@ END
 $resolve$;
 COMMENT ON FUNCTION pg_temp.dead143_resolve(text, text[], text[]) IS 'Migration 143 transaction-local prebuilt qualified lookup/decoding under every routine SET clause; native sentinel-subtransaction GUC unwind; removed before stamping.';
 
-CREATE FUNCTION pg_temp.dead143_body(body text, function_oid oid, targets oid[], relation_targets oid[], names text[], setting_names text[], setting_values text[], nesting integer DEFAULT 0) RETURNS void
+CREATE FUNCTION pg_temp.dead143_body(body text, function_oid oid, targets oid[], relation_targets oid[], names text[], setting_names text[], setting_values text[], nesting integer DEFAULT 0, literal_only boolean DEFAULT false) RETURNS void
 LANGUAGE plpgsql SET search_path = pg_catalog AS $scanner$
 DECLARE
     effective_scs text := pg_temp.dead143_resolve('SELECT pg_catalog.current_setting(''standard_conforming_strings'')',setting_names,setting_values);
@@ -233,69 +282,68 @@ DECLARE
     expression_right integer;
     depth integer;
     column_position boolean;
-    returning_depth integer;
     clause text;
     catalog_types text[] := ARRAY['regclass','regtype','regproc','regprocedure','regoper','regoperator','regconfig','regdictionary','regnamespace','regrole','regcollation'];
     r record;
+    token jsonb;
+    fold_end text;
+    statement_initial boolean;
+    group_openers integer[];
+    opener integer;
+    returning_type boolean;
 BEGIN
     IF nesting > 8 THEN RAISE EXCEPTION 'unresolved nested dynamic SQL'; END IF;
-    WHILE i < count_tokens LOOP
-        name := tokens->i->>'v'; kind := tokens->i->>'k';
-        IF kind='id' AND name='set_config' AND tokens->(i+1)->>'v'='('
-            AND (tokens->(i+2)->>'k' IS DISTINCT FROM 'string'
-                OR tokens->(i+3)->>'v' IS DISTINCT FROM ','
-                OR lower(tokens->(i+2)->>'v') IN ('search_path','role','session_authorization')) THEN
-            RAISE EXCEPTION 'target public.items/public.ai_notebook or enum: unresolved runtime search_path mutation';
-        END IF;
-        IF kind='id' AND name IN ('set','reset') THEN
-            j := i+1;
-            IF tokens->j->>'v' IN ('local','session') THEN j := j+1; END IF;
-            IF (lower(tokens->j->>'v') IN ('search_path','role','session_authorization','schema','authorization')
-                OR (name='reset' AND lower(tokens->j->>'v')='all')) AND (
-                (SELECT prosqlbody IS NULL FROM pg_proc WHERE oid=function_oid)
-                OR EXISTS (SELECT 1 FROM jsonb_array_elements(tokens) WITH ORDINALITY t(token,position)
-                    WHERE position<=i AND token->>'k'='id' AND token->>'v'='begin')
-            ) THEN
-                RAISE EXCEPTION 'target public.items/public.ai_notebook or enum: unresolved runtime search_path mutation';
-            END IF;
-        END IF;
-        IF kind='id' AND name='update' AND (
-            tokens->(i+1)->>'v'='pg_settings' OR
-            (tokens->(i+1)->>'v'='pg_catalog' AND tokens->(i+2)->>'v'='.' AND tokens->(i+3)->>'v'='pg_settings')
-        ) THEN RAISE EXCEPTION 'unresolved runtime pg_settings mutation'; END IF;
-        IF kind='string' THEN
+    FOR token IN SELECT value FROM jsonb_array_elements(tokens) LOOP
+        name := token->>'v';
+        IF token->>'k'='string' THEN
             -- Each input parser may reject non-name data independently: a type
             -- name such as item_type[] need not be a valid relation name.
             BEGIN
                 relation_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regclass('||quote_literal(name)||')::pg_catalog.oid::pg_catalog.text',setting_names,setting_values)::oid;
-            EXCEPTION WHEN syntax_error OR invalid_name OR invalid_text_representation THEN relation_oid := NULL; END;
+            EXCEPTION WHEN OTHERS THEN relation_oid := NULL; END;
             BEGIN
                 type_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regtype('||quote_literal(name)||')::pg_catalog.oid::pg_catalog.text',setting_names,setting_values)::oid;
-            EXCEPTION WHEN syntax_error OR invalid_name OR invalid_text_representation THEN type_oid := NULL; END;
+            EXCEPTION WHEN OTHERS THEN type_oid := NULL; END;
             IF relation_oid=ANY(relation_targets) OR type_oid=ANY(targets) THEN
                 RAISE EXCEPTION 'literal names a drop target: %',name;
             END IF;
         END IF;
-        IF kind = 'id' AND name = 'execute' THEN
-            IF pg_temp.dead143_resolve($candidates$SELECT EXISTS (
-                SELECT 1 FROM pg_catalog.pg_namespace n
-                WHERE n.nspname = ANY(pg_catalog.current_schemas(true))
-                AND n.nspname OPERATOR(pg_catalog.!~) '^pg_temp'
-                AND n.nspname OPERATOR(pg_catalog.<>) 'pg_catalog'
-                AND (EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
-                     WHERE p.pronamespace OPERATOR(pg_catalog.=) n.oid
-                     AND p.proname::pg_catalog.text = ANY(ARRAY['format','concat']::pg_catalog.text[]))
-                  OR EXISTS (SELECT 1 FROM pg_catalog.pg_operator o
-                     WHERE o.oprnamespace OPERATOR(pg_catalog.=) n.oid
-                     AND o.oprname OPERATOR(pg_catalog.=) '||'))
-            )::pg_catalog.text$candidates$,setting_names,setting_values)::boolean THEN
-                RAISE EXCEPTION 'unresolved constant EXECUTE context: noncatalog format/concat/|| candidate';
-            END IF;
-            expression := ''; j := i + 1;
-            WHILE j < count_tokens AND tokens->j->>'v' NOT IN (';', 'into', 'using') LOOP
-                IF tokens->j->>'k' = 'string' OR tokens->j->>'v' IN ('(',')',',','||') THEN
+    END LOOP;
+    IF literal_only THEN RETURN; END IF;
+    WHILE i < count_tokens LOOP
+        name := tokens->i->>'v'; kind := tokens->i->>'k';
+        statement_initial := i=0 OR (tokens->(i-1)->>'k'='punct' AND tokens->(i-1)->>'v'=';')
+            OR (tokens->(i-1)->>'k'='id' AND tokens->(i-1)->>'v' IN ('begin','then','else','loop'))
+            OR (tokens->(i-1)->>'k'='id' AND tokens->(i-1)->>'v'='atomic' AND tokens->(i-2)->>'v'='begin');
+        IF kind IN ('id','qid') AND name='set_config' THEN
+            RAISE EXCEPTION 'unresolved runtime environment change: set_config';
+        END IF;
+        IF kind='id' AND name IN ('set','reset') AND statement_initial THEN
+            RAISE EXCEPTION 'unresolved runtime environment change: %',name;
+        END IF;
+        j := i+1;
+        IF tokens->j->>'k'='id' AND tokens->j->>'v'='only' THEN j := j+1; END IF;
+        IF kind='id' AND name='update' AND (
+            tokens->j->>'v'='pg_settings' OR
+            (tokens->j->>'v'='pg_catalog' AND tokens->(j+1)->>'v'='.' AND tokens->(j+2)->>'v'='pg_settings')
+        ) THEN RAISE EXCEPTION 'unresolved runtime pg_settings mutation'; END IF;
+        IF (kind='id' AND (name='execute' OR (name='do' AND statement_initial)))
+            OR (kind IN ('id','qid') AND name IN ('query_to_xml','query_to_xmlschema',
+                'query_to_xml_and_xmlschema','ts_stat','cursor_to_xml')
+                AND tokens->(i+1)->>'k'='punct' AND tokens->(i+1)->>'v'='(') THEN
+            expression := ''; j := i+1; depth := 0;
+            fold_end := CASE WHEN name IN ('execute','do') THEN 'statement' ELSE 'argument' END;
+            IF name='do' AND tokens->j->>'k'='id' AND tokens->j->>'v'='language' THEN j := j+2; END IF;
+            IF fold_end='argument' THEN j := j+1; END IF;
+            WHILE j<count_tokens LOOP
+                IF depth=0 AND ((tokens->j->>'k'='punct' AND tokens->j->>'v'=';')
+                    OR (fold_end='statement' AND tokens->j->>'k'='id' AND tokens->j->>'v' IN ('into','using','loop','language'))
+                    OR (fold_end='argument' AND tokens->j->>'k'='punct' AND tokens->j->>'v' IN (',',')'))) THEN EXIT; END IF;
+                IF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN depth := depth+1;
+                ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN depth := depth-1; END IF;
+                IF tokens->j->>'k' = 'string' OR (tokens->j->>'k'='punct' AND tokens->j->>'v' IN ('(',')',',','||')) THEN
                     expression := expression || ' ' || (tokens->j->>'raw');
-                ELSIF tokens->j->>'v' = 'pg_catalog' AND tokens->(j+1)->>'v' = '.' AND tokens->(j+2)->>'v' IN ('format','concat') THEN
+                ELSIF tokens->j->>'k'='id' AND tokens->j->>'v' = 'pg_catalog' AND tokens->(j+1)->>'v' = '.' AND tokens->(j+2)->>'v' IN ('format','concat') THEN
                     expression := expression || ' pg_catalog.' || (tokens->(j+2)->>'v');
                     j := j + 2;
                 ELSIF tokens->j->>'k' = 'id' AND tokens->j->>'v' IN ('format','concat')
@@ -329,27 +377,27 @@ BEGIN
             ELSIF tokens->(i+1)->>'v'='(' THEN
                 expression_left := i+2; j := i+2; depth := 0;
                 WHILE j<count_tokens LOOP
-                    IF tokens->j->>'v'='(' THEN depth := depth+1;
-                    ELSIF tokens->j->>'v'=')' THEN
+                    IF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN depth := depth+1;
+                    ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN
                         IF depth=0 THEN EXIT; END IF;
                         depth := depth-1;
-                    ELSIF depth=0 AND tokens->j->>'v'=',' THEN EXIT; END IF;
+                    ELSIF depth=0 AND tokens->j->>'k'='punct' AND tokens->j->>'v'=',' THEN EXIT; END IF;
                     j := j+1;
                 END LOOP;
                 expression_right := j-1;
             ELSE catalog_kind := NULL; END IF;
-        ELSIF name='::' THEN
+        ELSIF kind='punct' AND name='::' THEN
             catalog_at := i+1;
             IF tokens->catalog_at->>'v'='pg_catalog' AND tokens->(catalog_at+1)->>'v'='.' THEN
                 catalog_at := catalog_at+2;
             END IF;
             catalog_kind := tokens->catalog_at->>'v';
             expression_right := i-1; expression_left := expression_right;
-            IF tokens->expression_right->>'v'=')' THEN
+            IF tokens->expression_right->>'k'='punct' AND tokens->expression_right->>'v'=')' THEN
                 depth := 1; expression_left := expression_right-1;
                 WHILE expression_left>=0 AND depth>0 LOOP
-                    IF tokens->expression_left->>'v'=')' THEN depth := depth+1;
-                    ELSIF tokens->expression_left->>'v'='(' THEN depth := depth-1; END IF;
+                    IF tokens->expression_left->>'k'='punct' AND tokens->expression_left->>'v'=')' THEN depth := depth+1;
+                    ELSIF tokens->expression_left->>'k'='punct' AND tokens->expression_left->>'v'='(' THEN depth := depth-1; END IF;
                     IF depth>0 THEN expression_left := expression_left-1; END IF;
                 END LOOP;
                 -- A function call is computed, even if all its arguments are literals.
@@ -361,11 +409,11 @@ BEGIN
         ELSIF kind='id' AND name='cast' AND tokens->(i+1)->>'v'='(' THEN
             depth := 0; j := i+2;
             WHILE j<count_tokens LOOP
-                IF tokens->j->>'v'='(' THEN depth := depth+1;
-                ELSIF tokens->j->>'v'=')' THEN
+                IF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN depth := depth+1;
+                ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN
                     IF depth=0 THEN EXIT; END IF;
                     depth := depth-1;
-                ELSIF depth=0 AND tokens->j->>'v'='as' THEN
+                ELSIF depth=0 AND tokens->j->>'k'='id' AND tokens->j->>'v'='as' THEN
                     expression_left := i+2; expression_right := j-1;
                     catalog_at := j+1;
                     IF tokens->catalog_at->>'v'='pg_catalog' AND tokens->(catalog_at+1)->>'v'='.' THEN
@@ -378,12 +426,12 @@ BEGIN
         END IF;
         IF catalog_kind=ANY(catalog_types) OR catalog_kind='regtypeoid' THEN
             -- Strip only parentheses enclosing the complete expression.
-            WHILE expression_left<expression_right AND tokens->expression_left->>'v'='('
-                AND tokens->expression_right->>'v'=')' LOOP
+            WHILE expression_left<expression_right AND tokens->expression_left->>'k'='punct' AND tokens->expression_left->>'v'='('
+                AND tokens->expression_right->>'k'='punct' AND tokens->expression_right->>'v'=')' LOOP
                 depth := 0; j := expression_left;
                 WHILE j<expression_right LOOP
-                    IF tokens->j->>'v'='(' THEN depth := depth+1;
-                    ELSIF tokens->j->>'v'=')' THEN depth := depth-1; END IF;
+                    IF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN depth := depth+1;
+                    ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN depth := depth-1; END IF;
                     IF depth=0 THEN EXIT; END IF;
                     j := j+1;
                 END LOOP;
@@ -409,16 +457,19 @@ BEGIN
                 RAISE EXCEPTION 'target %: catalog body reference',folded;
             END IF;
         END IF;
-        IF kind = 'id' AND name = ANY(names) THEN
+        IF kind IN ('id','qid') AND name = ANY(names) THEN
             qualified := quote_ident(name);
-            IF i >= 2 AND tokens->(i-1)->>'v' = '.' AND tokens->(i-2)->>'k' = 'id' THEN
+            IF i >= 2 AND tokens->(i-1)->>'v' = '.' AND tokens->(i-2)->>'k' IN ('id','qid') THEN
                 qualified := quote_ident(tokens->(i-2)->>'v') || '.' || qualified;
             END IF;
-            type_context := tokens->(i+1)->>'k'='string' OR tokens->(i+1)->>'v'='('
-                OR (tokens->(i+1)->>'k'='id' AND tokens->(i+2)->>'k'='string')
-                OR (i>0 AND tokens->(i-1)->>'v' IN ('::','as'));
+            type_context := tokens->(i+1)->>'k'='string'
+                OR (tokens->(i+1)->>'k'='punct' AND tokens->(i+1)->>'v'='(')
+                OR (i>0 AND ((tokens->(i-1)->>'k'='punct' AND tokens->(i-1)->>'v'='::')
+                    OR (tokens->(i-1)->>'k'='id' AND tokens->(i-1)->>'v'='as')));
             IF i>=3 AND tokens->(i-1)->>'v'='.' THEN
-                type_context := coalesce(type_context,false) OR tokens->(i-3)->>'v' IN ('::','as');
+                type_context := coalesce(type_context,false)
+                    OR (tokens->(i-3)->>'k'='punct' AND tokens->(i-3)->>'v'='::')
+                    OR (tokens->(i-3)->>'k'='id' AND tokens->(i-3)->>'v'='as');
             END IF;
             -- NEW/OLD is a column use, not an enum use, only with catalog proof.
             IF i >= 2 AND tokens->(i-1)->>'v' = '.' AND tokens->(i-2)->>'v' IN ('new','old')
@@ -438,36 +489,55 @@ BEGIN
                 -- Recognize direct relation names and FROM/JOIN/UPDATE/INTO aliases.
                 -- Cast/declaration type contexts cannot borrow a column's proof.
                 left_edge := i; right_edge := i;
-                WHILE left_edge>0 AND tokens->(left_edge-1)->>'v'<>';' LOOP left_edge := left_edge-1; END LOOP;
-                WHILE right_edge<count_tokens-1 AND tokens->(right_edge+1)->>'v'<>';' LOOP right_edge := right_edge+1; END LOOP;
+                WHILE left_edge>0 AND NOT (tokens->(left_edge-1)->>'k'='punct' AND tokens->(left_edge-1)->>'v'=';') LOOP left_edge := left_edge-1; END LOOP;
+                WHILE right_edge<count_tokens-1 AND NOT (tokens->(right_edge+1)->>'k'='punct' AND tokens->(right_edge+1)->>'v'=';') LOOP right_edge := right_edge+1; END LOOP;
                 qualifier := NULL;
                 IF i>=2 AND tokens->(i-1)->>'v'='.' THEN qualifier := tokens->(i-2)->>'v'; END IF;
                 found_column := false;
                 -- Classify expression clauses, rather than only SELECT's
                 -- first column. Declarations/types never borrow column proof.
-                clause := NULL; depth := 0; returning_depth := 0;
+                clause := NULL; group_openers := ARRAY[]::integer[];
+                returning_type := false;
                 FOR j IN left_edge..i LOOP
-                    IF tokens->j->>'v'='(' THEN depth := depth+1;
-                    ELSIF tokens->j->>'v'=')' THEN depth := depth-1; END IF;
-                    IF returning_depth>depth THEN returning_depth := 0; END IF;
-                    IF tokens->j->>'v'='returning' AND depth>0 THEN returning_depth := depth; END IF;
+                    IF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN
+                        group_openers := array_append(group_openers,j);
+                    ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN
+                        group_openers := group_openers[1:coalesce(array_length(group_openers,1),0)-1];
+                        returning_type := false;
+                    END IF;
+                    IF tokens->j->>'k'='id' AND tokens->j->>'v'='returning' THEN
+                        opener := group_openers[array_length(group_openers,1)];
+                        IF opener IS NULL OR (tokens->(opener+1)->>'k'='id' AND tokens->(opener+1)->>'v' IN ('insert','update','delete','merge')) THEN
+                            returning_type := false;
+                        ELSIF tokens->(opener-1)->>'k' IN ('id','qid')
+                            AND NOT (tokens->(opener-1)->>'k'='id' AND tokens->(opener-1)->>'v' IN ('as','in','exists')) THEN
+                            returning_type := true;
+                        ELSE RAISE EXCEPTION 'unclassifiable RETURNING context'; END IF;
+                    END IF;
                     IF tokens->j->>'k'='id' AND tokens->j->>'v' IN
                         ('select','where','having','on','group','order','returning','set',
                          'from','join','update','into','declare','begin','returns') THEN
-                        IF tokens->j->>'v'<>'returning' OR depth=0 THEN clause := tokens->j->>'v'; END IF;
+                        clause := tokens->j->>'v';
                     END IF;
                 END LOOP;
-                type_context := coalesce(type_context,false) OR returning_depth>0;
+                FOREACH opener IN ARRAY group_openers LOOP
+                    IF (tokens->(opener-1)->>'k'='id' AND tokens->(opener-1)->>'v'='columns')
+                        OR (tokens->(opener-2)->>'k'='id' AND tokens->(opener-2)->>'v'='as'
+                            AND tokens->(opener-3)->>'k'='punct' AND tokens->(opener-3)->>'v'=')') THEN
+                        RAISE EXCEPTION 'unclassifiable column-definition list: %',name;
+                    END IF;
+                END LOOP;
+                type_context := coalesce(type_context,false) OR returning_type;
                 column_position := clause IN ('select','where','having','on','group','order','returning','set');
                 IF clause IN ('declare','returns') AND NOT (
                     tokens->(i+1)->>'v'='%' AND tokens->(i+2)->>'v'='type'
                 ) THEN type_context := true; END IF;
                 IF coalesce(column_position,false) AND NOT coalesce(type_context,false) THEN
                     FOR j IN left_edge..right_edge LOOP
-                        IF tokens->j->>'v' IN ('from','join','update','into') AND tokens->(j+1)->>'k'='id' THEN
+                        IF tokens->j->>'k'='id' AND tokens->j->>'v' IN ('from','join','update','into') AND tokens->(j+1)->>'k' IN ('id','qid') THEN
                             relation_at := j+1;
                             relation_name := quote_ident(tokens->relation_at->>'v');
-                            IF tokens->(relation_at+1)->>'v'='.' AND tokens->(relation_at+2)->>'k'='id' THEN
+                            IF tokens->(relation_at+1)->>'v'='.' AND tokens->(relation_at+2)->>'k' IN ('id','qid') THEN
                                 relation_at := relation_at+2;
                                 relation_name := relation_name||'.'||quote_ident(tokens->relation_at->>'v');
                             END IF;
@@ -494,7 +564,7 @@ BEGIN
                 -- A qualified column must resolve to a real, unrelated column.
                 IF i >= 2 AND tokens->(i-1)->>'v' = '.' AND NOT coalesce(type_context,false) THEN
                     relation_name := quote_ident(tokens->(i-2)->>'v');
-                    IF i>=4 AND tokens->(i-3)->>'v'='.' AND tokens->(i-4)->>'k'='id' THEN
+                    IF i>=4 AND tokens->(i-3)->>'v'='.' AND tokens->(i-4)->>'k' IN ('id','qid') THEN
                         relation_name := quote_ident(tokens->(i-4)->>'v')||'.'||relation_name;
                     END IF;
                     relation_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regclass('||quote_literal(relation_name)||')::pg_catalog.oid',setting_names,setting_values)::oid;
@@ -513,7 +583,7 @@ BEGIN
     END LOOP;
 END
 $scanner$;
-COMMENT ON FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], text[], text[], integer) IS 'Migration 143 transaction-local catalog-aware body guard, including constant dynamic SQL folding; removed before stamping.';
+COMMENT ON FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], text[], text[], integer, boolean) IS 'Migration 143 transaction-local catalog-aware body guard, including constant dynamic SQL folding; removed before stamping.';
 
 DO $guard$
 DECLARE
@@ -1101,6 +1171,7 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
         -- Normalize only TOASTs actually owned by the two targets and RI triggers
         -- actually attached to the frozen FK with definitions checked above.
         IF offender.classid='pg_class'::regclass THEN
+            relation_targets := array_append(relation_targets,offender.objid);
             FOR f IN SELECT oid AS table_oid FROM pg_class WHERE oid=ANY(tables) LOOP
                 key := replace(key,'pg_toast_'||f.table_oid::text,'pg_toast_TABLEOID');
                 edge_key := replace(edge_key,'pg_toast_'||f.table_oid::text,'pg_toast_TABLEOID');
@@ -1125,7 +1196,6 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
         (SELECT unnest(enums) UNION SELECT reltype FROM pg_class WHERE oid=ANY(tables))
         UNION SELECT t.oid FROM pg_type t JOIN types b ON t.typbasetype=b.oid OR t.typelem=b.oid
     ) SELECT array_agg(oid) INTO targets FROM types;
-    relation_targets := tables || ARRAY[to_regclass('public.items_id_seq')::oid,to_regclass('public.ai_notebook_id_seq')::oid,to_regclass('public.items_pkey')::oid,to_regclass('public.items_name_key')::oid,to_regclass('public.ai_notebook_pkey')::oid];
     -- typname supplies the actual generated array names, never guessed spellings.
     SELECT array_agg(DISTINCT candidate) INTO names FROM (
         SELECT typname AS candidate FROM pg_type WHERE oid=ANY(targets)
@@ -1135,25 +1205,78 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
 
     FOR f IN SELECT p.*,l.lanname,format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)) AS identity
         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
-        WHERE p.prokind IN ('f','p','w') AND p.oid>=16384 AND n.nspname !~ '^pg_(temp|toast)'
+        WHERE p.prokind IN ('f','p','w','a') AND p.oid>=16384 AND n.nspname !~ '^pg_(temp|toast)'
         AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid='pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e')
     LOOP
         BEGIN
             IF f.prosecdef AND f.proowner<>current_user::regrole::oid THEN
                 RAISE EXCEPTION 'unresolved SECURITY DEFINER owner/search_path context';
             END IF;
-            IF f.lanname NOT IN ('sql','plpgsql') THEN RAISE EXCEPTION 'unsupported application body language %',f.lanname; END IF;
+            IF f.prokind<>'a' AND f.lanname NOT IN ('sql','plpgsql') THEN RAISE EXCEPTION 'unsupported application body language %',f.lanname; END IF;
             setting_names := ARRAY[]::text[]; setting_values := ARRAY[]::text[];
             FOR setting IN SELECT unnest(f.proconfig) LOOP
                 parsed_setting := pg_temp.dead143_setting(setting);
                 setting_names := array_append(setting_names,parsed_setting[1]);
                 setting_values := array_append(setting_values,parsed_setting[2]);
             END LOOP;
-            PERFORM pg_temp.dead143_body(CASE WHEN f.prosqlbody IS NULL THEN f.prosrc ELSE pg_get_functiondef(f.oid) END,f.oid,targets,relation_targets,names,setting_names,setting_values);
+            IF f.prokind='a' THEN
+                FOR setting IN SELECT quote_literal(v) FROM pg_aggregate a,
+                    LATERAL unnest(ARRAY[a.agginitval,a.aggminitval]) v WHERE a.aggfnoid=f.oid AND v IS NOT NULL LOOP
+                    PERFORM pg_temp.dead143_body(setting,f.oid,targets,relation_targets,names,
+                        array_append(setting_names,'standard_conforming_strings'),array_append(setting_values,'on'),0,true);
+                END LOOP;
+            ELSE
+                IF f.prosqlbody IS NULL THEN
+                    PERFORM pg_temp.dead143_body(f.prosrc,f.oid,targets,relation_targets,names,setting_names,setting_values);
+                    PERFORM pg_temp.dead143_body(pg_get_function_arguments(f.oid),f.oid,targets,relation_targets,names,
+                        array_append(setting_names,'standard_conforming_strings'),array_append(setting_values,'on'));
+                ELSE
+                    PERFORM pg_temp.dead143_body(pg_get_functiondef(f.oid),f.oid,targets,relation_targets,names,
+                        array_append(setting_names,'standard_conforming_strings'),array_append(setting_values,'on'));
+                END IF;
+            END IF;
         EXCEPTION WHEN OTHERS THEN
             RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: function/procedure % refuses: %',f.identity,SQLERRM;
         END;
     END LOOP;
+    -- Deparsers render with the migration's pinned string convention. Resolve
+    -- their names under the session startup path, never under the DDL pin.
+    FOR offender IN
+        SELECT pg_describe_object('pg_class'::regclass,c.oid,0) AS identity,
+               pg_get_viewdef(c.oid) AS definition
+        FROM pg_class c WHERE c.oid>=16384 AND c.relkind IN ('v','m')
+        AND NOT c.oid=ANY(relation_targets)
+        AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid='pg_class'::regclass AND d.objid=c.oid AND d.deptype='e')
+        UNION ALL
+        SELECT pg_describe_object('pg_constraint'::regclass,c.oid,0),pg_get_expr(c.conbin,c.conrelid)
+        FROM pg_constraint c WHERE c.oid>=16384 AND c.conbin IS NOT NULL
+        AND NOT c.conrelid=ANY(relation_targets) AND NOT c.contypid=ANY(targets)
+        UNION ALL
+        SELECT pg_describe_object('pg_attrdef'::regclass,a.oid,0),pg_get_expr(a.adbin,a.adrelid)
+        FROM pg_attrdef a WHERE a.oid>=16384 AND NOT a.adrelid=ANY(relation_targets)
+        UNION ALL
+        SELECT pg_describe_object('pg_trigger'::regclass,t.oid,0),pg_get_triggerdef(t.oid)
+        FROM pg_trigger t WHERE t.oid>=16384 AND t.tgqual IS NOT NULL AND NOT t.tgrelid=ANY(relation_targets)
+        UNION ALL
+        SELECT pg_describe_object('pg_class'::regclass,i.indexrelid,0),
+               pg_get_expr(i.indexprs,i.indrelid) || ';' || coalesce(pg_get_expr(i.indpred,i.indrelid),'')
+        FROM pg_index i WHERE i.indexprs IS NOT NULL AND NOT i.indexrelid=ANY(relation_targets)
+        UNION ALL
+        SELECT pg_describe_object('pg_class'::regclass,i.indexrelid,0),pg_get_expr(i.indpred,i.indrelid)
+        FROM pg_index i WHERE i.indpred IS NOT NULL AND NOT i.indexrelid=ANY(relation_targets)
+        UNION ALL
+        SELECT pg_describe_object('pg_policy'::regclass,p.oid,0),
+               coalesce(pg_get_expr(p.polqual,p.polrelid),'') || ';' || coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'')
+        FROM pg_policy p WHERE NOT p.polrelid=ANY(relation_targets)
+    LOOP
+        BEGIN
+            PERFORM pg_temp.dead143_body(offender.definition,0,targets,relation_targets,names,
+                ARRAY['standard_conforming_strings'],ARRAY['on'],0,true);
+        EXCEPTION WHEN OTHERS THEN
+            RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: object % refuses: %',offender.identity,SQLERRM;
+        END;
+    END LOOP;
+
 END
 $guard$;
 
@@ -1186,13 +1309,7 @@ DECLARE
     parsed_setting text[];
     setting_names text[];
     setting_values text[];
-    validator_is_sql boolean;
-    lock_policy CONSTANT text := pg_catalog.current_setting('lock_timeout');
-    i integer;
-    -- The environment a routine executes in: the session's startup path
-    -- (reset_val, not the SET LOCAL at the top of this file), then its own
-    -- SET clauses on top, exactly as CREATE FUNCTION validates it.
-    saved_path text := (SELECT reset_val FROM pg_catalog.pg_settings WHERE name='search_path');
+    validator_statement text;
 BEGIN
     FOR f IN SELECT p.oid,p.proconfig,l.lanname,
         format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)) AS identity
@@ -1204,36 +1321,21 @@ BEGIN
         -- Parse every SET clause and choose the validator under pg_catalog, before
         -- any setting is applied: once a routine's own environment is in force,
         -- only prebuilt, qualified statements run.
-        validator_is_sql := CASE f.lanname WHEN 'sql' THEN true WHEN 'plpgsql' THEN false END;
-        IF validator_is_sql IS NULL THEN
+        validator_statement := CASE f.lanname WHEN 'sql' THEN 'SELECT pg_catalog.fmgr_sql_validator(' WHEN 'plpgsql' THEN 'SELECT pg_catalog.plpgsql_validator(' END || f.oid::text || '::pg_catalog.oid)';
+        IF validator_statement IS NULL THEN
             RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: unsupported application body language %',f.identity,f.lanname;
         END IF;
         setting_names := ARRAY[]::text[];
         setting_values := ARRAY[]::text[];
         FOR setting IN SELECT pg_catalog.unnest(f.proconfig) LOOP
             parsed_setting := pg_temp.dead143_setting(setting);
+            IF parsed_setting[1] IN ('role','session_authorization') THEN CONTINUE; END IF;
             setting_names := pg_catalog.array_append(setting_names,parsed_setting[1]);
             setting_values := pg_catalog.array_append(setting_values,parsed_setting[2]);
         END LOOP;
         BEGIN
-            PERFORM pg_catalog.set_config('search_path',saved_path,true);
-            FOR i IN 1..COALESCE(pg_catalog.array_length(setting_names,1),0) LOOP
-                PERFORM pg_catalog.set_config(setting_names[i],setting_values[i],true);
-            END LOOP;
-            -- A routine's own SET check_function_bodies=off would switch the
-            -- validator off; the second line validates every routine regardless.
-            PERFORM pg_catalog.set_config('check_function_bodies','on',true);
-            PERFORM pg_catalog.set_config('lock_timeout',lock_policy,true);
-            PERFORM pg_catalog.set_config('exit_on_error','off',true);
-            IF validator_is_sql THEN PERFORM pg_catalog.fmgr_sql_validator(f.oid);
-            ELSE PERFORM pg_catalog.plpgsql_validator(f.oid); END IF;
-            -- Abort even on success: PostgreSQL unwinds the entire GUC stack.
-            RAISE SQLSTATE 'D1430' USING MESSAGE='dead143 validation complete';
+            PERFORM pg_temp.dead143_resolve(validator_statement,setting_names,setting_values);
         EXCEPTION
-            WHEN SQLSTATE 'D1430' THEN
-                IF SQLERRM <> 'dead143 validation complete' THEN
-                    RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: %',f.identity,SQLERRM;
-                END IF;
             WHEN OTHERS THEN
                 RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: %',f.identity,SQLERRM;
         END;
@@ -1241,7 +1343,7 @@ BEGIN
 END
 $validate$;
 COMMENT ON FUNCTION public.set_updated_at() IS 'BEFORE UPDATE trigger on characters and places (trg_characters_set_updated, trg_places_set_updated): stamps updated_at with now(), the transaction start time.';
-DROP FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], text[], text[], integer);
+DROP FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], text[], text[], integer, boolean);
 DROP FUNCTION pg_temp.dead143_resolve(text, text[], text[]);
 DROP FUNCTION pg_temp.dead143_tokens(text, text, text[], text[]);
 DROP FUNCTION pg_temp.dead143_setting(text);

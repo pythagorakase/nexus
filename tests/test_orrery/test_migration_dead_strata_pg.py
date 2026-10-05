@@ -477,7 +477,8 @@ def test_migration_143_round6_search_path(
     above the catalog's variadic one even under ``pg_catalog, public``) must
     change nothing: the guard runs under a single-schema path, so the scanner
     still sees every token and the validator still runs. A broken body refuses
-    on the body; a healthy body applies; the paths themselves are not refused.
+    on the body; a healthy body applies unless R3 refuses its runtime setting
+    change. The paths themselves are not refused.
     """
     with _clone(archives, tmp_path) as dbname:
         _round3_prepare(dbname, post)
@@ -494,8 +495,7 @@ def test_migration_143_round6_search_path(
         if case == "quoted-equals":
             _sql(dbname, 'CREATE SCHEMA "a=b"')
         if case.startswith("shadow"):
-            # Healthy and explicitly qualified itself; it survives the scanner
-            # and would stand in for the builtin under the routine's path.
+            # R3 now refuses this runtime setting change before validation.
             _sql(
                 dbname,
                 "CREATE FUNCTION public.set_config(text,text,boolean) RETURNS text "
@@ -531,7 +531,7 @@ def test_migration_143_round6_search_path(
         )
         if case == "session-path":
             _sql(dbname, f'ALTER DATABASE "{dbname}" SET search_path=public,pg_catalog')
-        refuses = broken
+        refuses = broken or case.startswith("shadow")
         before = _snapshot(dbname, surviving=not refuses)
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
         routine_before = _routine_outcome(dbname, "SELECT public.probe813_path()")
@@ -564,15 +564,16 @@ def test_migration_143_round6_search_path(
                 cur.execute("SELECT public.probe813_path()")
                 assert cur.fetchone() == (1,)
         if refuses:
-            _defense(
-                caplog.text, "scanner" if case == "overload-broken" else "validator"
-            )
-            assert "probe813_path" in caplog.text, caplog.text
-            if case == "overload-broken":
-                assert "public.items" in caplog.text
-                assert "post-drop" not in caplog.text
+            scanner = case == "overload-broken" or case.startswith("shadow")
+            _defense(caplog.text, "scanner" if scanner else "validator")
+            if case.startswith("shadow"):
+                assert "public.set_config(text, text, boolean)" in caplog.text
+                assert (
+                    "unresolved runtime environment change: set_config" in caplog.text
+                )
             else:
-                assert "post-drop" in caplog.text and "missing_column" in caplog.text
+                assert "probe813_path" in caplog.text, caplog.text
+                assert ("public.items" if scanner else "missing_column") in caplog.text
             assert "search_path places a schema" not in caplog.text
             assert _stamps(dbname) == stamps
         assert _snapshot(dbname, surviving=not refuses) == before
@@ -798,10 +799,16 @@ def _refusal(dbname: str, case: str, caplog: pytest.LogCaptureFixture) -> None:
     _defense(
         caplog.text,
         (
-            "scanner"
-            if group == "hidden" and name != "sql-atomic"
+            "validator"
+            if group == "hidden" and name == "sql-literal-unknown"
             else (
-                "catalog" if group == "external" or name == "sql-atomic" else "manifest"
+                "scanner"
+                if group == "hidden" and name != "sql-atomic"
+                else (
+                    "catalog"
+                    if group == "external" or name == "sql-atomic"
+                    else "manifest"
+                )
             )
         ),
     )
@@ -929,8 +936,8 @@ def _column_consumers(dbname: str) -> None:
         "COMMENT ON FUNCTION public.probe813_percent() "
         "IS '813 unrelated percent type'; "
         "CREATE FUNCTION public.probe813_dynamic() RETURNS void LANGUAGE plpgsql "
-        "SET search_path=pg_catalog AS $$BEGIN EXECUTE "
-        "pg_catalog.format('SELECT %L','item_type'); END$$; "
+        "AS $$BEGIN EXECUTE "
+        "pg_catalog.format('SELECT %L','character_relationships'); END$$; "
         "COMMENT ON FUNCTION public.probe813_dynamic() IS '813 constant safe SQL'; "
         "CREATE TYPE assets.item_type AS ENUM ('other'); "
         "COMMENT ON TYPE assets.item_type IS '813 namespace shadow'; "
@@ -1228,7 +1235,7 @@ def test_migration_143_validation_refuses_without_scanner(
         scratch = tmp_path / MIGRATION.name
         sql = MIGRATION.read_text()
         sql, removed = re.subn(
-            r"^            PERFORM pg_temp.dead143_body\(CASE.*;\n",
+            r"^                    PERFORM pg_temp.dead143_body\(f.prosrc,.*;\n",
             "",
             sql,
             flags=re.MULTILINE,
@@ -1426,7 +1433,7 @@ def test_migration_143_round3_validator_settings(
             dbname,
             "CREATE FUNCTION public.probe813_date() RETURNS date LANGUAGE sql "
             "SET DateStyle='ISO, DMY' SET search_path=public,pg_catalog "
-            "SET probe813.note='a=b' AS $$SELECT DATE '31/12/2026'$$; "
+            "SET application_name='a=b' AS $$SELECT DATE '31/12/2026'$$; "
             "COMMENT ON FUNCTION public.probe813_date() IS '813 DMY "
             "validation environment'; "
             "REVOKE ALL ON FUNCTION public.probe813_date() FROM PUBLIC; "
@@ -1443,7 +1450,7 @@ def test_migration_143_round3_validator_settings(
             )
             settings = cur.fetchone()
             assert settings[0] == "ISO, MDY"
-            cur.execute("SELECT set_config('probe813.note','maintenance',false)")
+            cur.execute("SELECT set_config('application_name','maintenance',false)")
             conn.commit()
             assert migrate.apply_migration(
                 conn, "143", "drop_dead_schema_strata", MIGRATION
@@ -1452,7 +1459,7 @@ def test_migration_143_round3_validator_settings(
                 "SELECT current_setting('DateStyle'),current_setting('search_path')"
             )
             assert cur.fetchone() == settings
-            cur.execute("SELECT current_setting('probe813.note')")
+            cur.execute("SELECT current_setting('application_name')")
             assert cur.fetchone() == ("maintenance",)
         assert _snapshot(dbname, surviving=True) == before
         assert _function_catalog(dbname) == functions
@@ -1589,7 +1596,7 @@ def test_migration_143_round4_validator_scope(
                 _sql(dbname, f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER')
                 created_role = True
                 clauses = (
-                    "SET log_min_messages='notice' "
+                    "SET client_min_messages='notice' "
                     f"SET session_authorization='{role}'"
                 )
             else:
@@ -1611,7 +1618,8 @@ def test_migration_143_round4_validator_scope(
                 settings_sql = (
                     "SELECT current_setting('session_authorization'),"
                     "current_setting('role'),"
-                    "current_setting('log_min_messages'),current_setting('search_path')"
+                    "current_setting('client_min_messages'),current_setting('se"
+                    "arch_path')"
                 )
                 cur.execute(settings_sql)
                 settings = cur.fetchone()
@@ -1667,7 +1675,7 @@ def test_migration_143_round5_routine_cannot_disable_validation(
             f"SET check_function_bodies = off AS $$ {body} $$; "
             "COMMENT ON FUNCTION public.probe813_bodies() IS '813 validator-off probe'",
         )
-        refuses = case == "broken-body"
+        refuses = True
         before = _snapshot(dbname, surviving=not refuses)
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
         caplog.clear()
@@ -1685,9 +1693,11 @@ def test_migration_143_round5_routine_cannot_disable_validation(
                 cur.execute("SELECT public.probe813_bodies()")
                 assert cur.fetchone() == (1,)
         if refuses:
-            _defense(caplog.text, "validator")
+            _defense(caplog.text, "scanner")
             assert "probe813_bodies" in caplog.text, caplog.text
-            assert "post-drop" in caplog.text and "missing_column" in caplog.text
+            assert (
+                "unresolved environment setting: check_function_bodies" in caplog.text
+            )
             assert _stamps(dbname) == stamps
         assert _snapshot(dbname, surviving=not refuses) == before
         assert _function_catalog(dbname) == functions
@@ -1795,11 +1805,11 @@ ROUND8 = {
     ),
     "window-healthy": ("SELECT 1::bigint", "WINDOW", None),
     "system-schema": ("SELECT count(*) FROM public.items", "", "scanner"),
-    "exit-on-error-healthy": ("SELECT 1::bigint", "SET exit_on_error=on", None),
+    "exit-on-error-healthy": ("SELECT 1::bigint", "SET exit_on_error=on", "scanner"),
     "exit-on-error": (
         "SELECT missing_column FROM public.characters",
         "SET exit_on_error=on",
-        "validator",
+        "scanner",
     ),
     "runtime-data": (
         "BEGIN PERFORM pg_relation_size(input::regclass); END",
@@ -1922,10 +1932,12 @@ def test_migration_143_round8_fold_candidates(
         before, stamps = _snapshot(dbname, surviving=False), _stamps(dbname)
         caplog.clear()
         assert not _apply(dbname), caplog.text
+        assert "noncatalog fold overloads refuse:" in caplog.text, caplog.text
         assert (
-            "probe813_fold" in caplog.text and "unresolved" in caplog.text
-        ), caplog.text
-        _defense(caplog.text, "scanner")
+            "operator public.||"
+            if candidate == "operator"
+            else f"function public.{candidate}"
+        ) in caplog.text
         assert _stamps(dbname) == stamps
         assert _snapshot(dbname, surviving=False) == before
 
@@ -1963,23 +1975,24 @@ def test_migration_143_round8_role_resolution(
                 f"CREATE FUNCTION public.probe813_role() {declaration} "
                 f'SET search_path={path} SET {setting}="{role}" AS {body}',
             )
-            before = _snapshot(dbname, surviving=usage)
+            before = _snapshot(dbname, surviving=False)
             routine_before = _routine_outcome(dbname, "SELECT public.probe813_role()")
             caplog.clear()
             applied = _apply(dbname)
-            if applied and not usage:
-                _old_verdict(
-                    dbname,
-                    setting,
-                    "SELECT public.probe813_role()",
-                    routine_before,
-                    target=True,
-                )
-            assert applied is usage, caplog.text
-            if not usage:
+            assert not applied, caplog.text
+            assert "probe813_role" in caplog.text, caplog.text
+            if usage:
+                # R6 skips identity SETs for validators. The creator's $user
+                # path cannot find the role's shadow table; refuse atomically.
+                _defense(caplog.text, "validator")
+                assert 'relation "items" does not exist' in caplog.text
+            else:
                 _defense(caplog.text, "scanner")
-                assert "probe813_role" in caplog.text, caplog.text
-            assert _snapshot(dbname, surviving=usage) == before
+            assert (
+                _routine_outcome(dbname, "SELECT public.probe813_role()")
+                == routine_before
+            )
+            assert _snapshot(dbname, surviving=False) == before
         finally:
             _sql(dbname, f'DROP OWNED BY "{role}"; DROP ROLE "{role}"')
 
@@ -2012,9 +2025,12 @@ def test_migration_143_round8_validator_lock_timeout(
                     conn, "143", "drop_dead_schema_strata", MIGRATION
                 )
                 elapsed = time.monotonic() - start
-                assert 4 <= elapsed < 8, (elapsed, caplog.text)
-                _defense(caplog.text, "validator")
-                assert "probe813_wait" in caplog.text and "lock timeout" in caplog.text
+                assert elapsed < 8, (elapsed, caplog.text)
+                _defense(caplog.text, "scanner")
+                assert (
+                    "probe813_wait" in caplog.text
+                    and "unresolved environment setting: lock_timeout" in caplog.text
+                )
         assert _stamps(dbname) == stamps
 
 
@@ -2035,7 +2051,7 @@ def test_migration_143_round8_runner_recompiles(
             "SELECT public.probe813_cached();"
         )
         second = re.sub(
-            r"^            PERFORM pg_temp.dead143_body\(CASE.*;\n",
+            r"^                    PERFORM pg_temp.dead143_body\(f.prosrc,.*;\n",
             "",
             MIGRATION.read_text(),
             flags=re.MULTILINE,
@@ -2111,7 +2127,7 @@ def test_migration_143_round8_environment_unwinds(
             "CREATE FUNCTION public.probe813_unwind() RETURNS void LANGUAGE plpgsql "
             "SET search_path=pg_catalog SET role=pg_monitor "
             "SET session_authorization=pg_monitor "
-            "SET standard_conforming_strings=off SET lock_timeout=0 "
+            "SET standard_conforming_strings=off "
             "AS $$BEGIN EXECUTE 'SELECT 1'; END$$",
         )
         probe = """
@@ -2141,3 +2157,456 @@ $probe$;
             assert before.split("|")[2:] == ["on", "5s"], notices
             with conn.cursor() as cur:
                 _post_state(cur)
+
+
+# Round nine recipes from panel-1098-9ed33d54 and the coordinator's clarifications.
+# None requires a paid provider or a connection to an owner database.
+ROUND9_DEFINITIONS = {
+    "F7-cursor-to-xml": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN PERFORM cursor_to_xml('SELECT count(*) FROM "
+        "public.items',1,true,false,''); END$$",
+        "hidden body identifier reference",
+    ),
+    "F7-ts-stat": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN PERFORM ts_stat('SELECT count(*) FROM public.items'); END$$",
+        "hidden body identifier reference",
+    ),
+    "F7-query-to-xml-and-xmlschema": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN PERFORM query_to_xml_and_xmlschema('SELECT "
+        "count(*) FROM public.items',true,false,''); END$$",
+        "hidden body identifier reference",
+    ),
+    "F7-query-to-xmlschema": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN PERFORM query_to_xmlschema('SELECT count(*) "
+        "FROM public.items',true,false,''); END$$",
+        "hidden body identifier reference",
+    ),
+    "R2-custom-setting": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS integer LANGUAGE sql "
+        "SET probe813.note='a=b' AS $$SELECT 1$$",
+        "unresolved environment setting: probe813.note",
+    ),
+    "R2-log-min-messages": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS integer LANGUAGE sql "
+        "SET log_min_messages=notice AS $$SELECT 1$$",
+        "unresolved environment setting: log_min_messages",
+    ),
+    "F13-default-target-literal": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN EXECUTE pg_catalog.format('SELECT %L','item_type'); END$$",
+        "literal names a drop target: item_type",
+    ),
+    "R1-default-format-control": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN EXECUTE pg_catalog.format('SELECT "
+        "%L','character_relationships'); END$$",
+        None,
+    ),
+    "R1-unreachable-format": (
+        "CREATE SCHEMA probe813_shadow; CREATE FUNCTION probe813_shadow.format(text) "
+        "RETURNS text LANGUAGE sql AS $$SELECT $1$$",
+        "noncatalog fold overloads refuse: function probe813_shadow.format(text)",
+    ),
+    "R1-unreachable-concat-ws": (
+        "CREATE SCHEMA probe813_shadow; CREATE FUNCTION "
+        "probe813_shadow.concat_ws(text,text) "
+        "RETURNS text LANGUAGE sql AS $$SELECT $2$$",
+        "noncatalog fold overloads refuse: function "
+        "probe813_shadow.concat_ws(text,text)",
+    ),
+    "R2-statement-timeout": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS integer LANGUAGE sql "
+        "SET statement_timeout=0 AS $$SELECT 1$$",
+        "unresolved environment setting: statement_timeout",
+    ),
+    "R2-transaction-timeout": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS integer LANGUAGE sql "
+        "SET transaction_timeout='1s' AS $$SELECT 1$$",
+        "unresolved environment setting: transaction_timeout",
+    ),
+    "R3-set-local": (
+        r"CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE plpgsql "
+        "SET search_path=pg_catalog AS $f$ DECLARE n bigint; BEGIN "
+        "SET LOCAL standard_conforming_strings=off; "
+        r"EXECUTE 'SELECT count(*) FROM public.\151tems' INTO n; RETURN n; END $f$",
+        "unresolved runtime environment change: set",
+    ),
+    "R3-reset": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN RESET application_name; END$$",
+        "unresolved runtime environment change: reset",
+    ),
+    "R3-quoted-set-config": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN PERFORM "
+        "pg_catalog.\"set_config\"('application_name','x',true); "
+        "END$$",
+        "unresolved runtime environment change: set_config",
+    ),
+    "R3-update-only-settings": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql AS $$BEGIN "
+        "UPDATE ONLY pg_catalog.pg_settings SET setting='public' "
+        "WHERE name='search_path'; END$$",
+        "unresolved runtime pg_settings mutation",
+    ),
+    "R4-event-trigger": (
+        "CREATE TABLE public.probe813_log(tag text); "
+        "CREATE FUNCTION public.probe813_ddl() RETURNS event_trigger LANGUAGE plpgsql "
+        "AS $$BEGIN INSERT INTO probe813_log VALUES(tg_tag); END$$; "
+        "CREATE EVENT TRIGGER probe813_event ON ddl_command_end "
+        "EXECUTE FUNCTION public.probe813_ddl()",
+        "enabled event triggers refuse: probe813_event",
+    ),
+    "R6-revoked-role": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE sql "
+        "SET role=pg_monitor AS $$SELECT 1::bigint$$; "
+        "REVOKE EXECUTE ON FUNCTION public.probe813_r9() FROM PUBLIC",
+        None,
+    ),
+    "R6-revoked-session-authorization": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE sql "
+        "SET session_authorization=pg_monitor AS $$SELECT 1::bigint$$; "
+        "REVOKE EXECUTE ON FUNCTION public.probe813_r9() FROM PUBLIC",
+        None,
+    ),
+    "F1-dollar-high-byte": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE plpgsql AS $f$ "
+        "DECLARE n bigint; BEGIN PERFORM $é$'$é$; n:=(SELECT "
+        "count(*) FROM public.items); "
+        "PERFORM $é$'$é$; RETURN n; END $f$",
+        "hidden body identifier reference",
+    ),
+    "F1-identifier-dollar": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE plpgsql AS $f$ "
+        "DECLARE n bigint; BEGIN PERFORM 1 AS é$t$; n:=(SELECT "
+        "count(*) FROM public.ai_notebook); "
+        "PERFORM 1 AS é$t$; RETURN n; END $f$",
+        "hidden body identifier reference",
+    ),
+    "F1-prefix-boundary": (
+        'CREATE DOMAIN public."ée" AS text; '
+        r"CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE plpgsql AS $f$ "
+        r"DECLARE n bigint; BEGIN PERFORM éE'\';"
+        "\n"
+        "n:=(SELECT count(*) FROM public.items); -- '\nRETURN n; END $f$",
+        "hidden body identifier reference",
+    ),
+    "F1-nbsp-dollar": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE plpgsql AS $f$ "
+        "DECLARE n bigint; BEGIN PERFORM 1 AS \xa0$t$; n:=(SELECT "
+        "count(*) FROM public.ai_notebook); "
+        "PERFORM 1 AS \u00a0$t$; RETURN n; END $f$",
+        "hidden body identifier reference",
+    ),
+    "F1-unrelated-identifier-control": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS integer LANGUAGE plpgsql "
+        "AS $$DECLARE été integer:=1; BEGIN RETURN été; END$$",
+        None,
+    ),
+    "F2-three-part-data": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE sql "
+        "AS $$SELECT 'a.b.c' || 'x'::text$$",
+        None,
+    ),
+    "F2-target-literal-control": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS text "
+        "LANGUAGE sql AS $$SELECT 'public.items'$$",
+        "literal names a drop target: public.items",
+    ),
+    "F3-string-close-paren": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE plpgsql AS $f$ "
+        "DECLARE v text; BEGIN SELECT json_value('{\"v\":\"0|neutral\"}'::jsonb, '$.v' "
+        "PASSING ')' AS p RETURNING emotional_valence)::text INTO v "
+        "FROM public.character_relationships; RETURN v; END $f$",
+        "hidden body identifier reference",
+    ),
+    "F3-string-semicolon": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE plpgsql AS $f$ "
+        "DECLARE v text; BEGIN SELECT json_value('{\"v\":\"0|neutral\"}'::jsonb, '$.v' "
+        "PASSING ';' AS p RETURNING emotional_valence)::text INTO v "
+        "FROM public.character_relationships; RETURN v; END $f$",
+        "hidden body identifier reference",
+    ),
+    "F3-quoted-close-paren": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE plpgsql AS $f$ "
+        "DECLARE v text; BEGIN SELECT json_value('{\"v\":\"0|neutral\"}'::jsonb, '$.v' "
+        'PASSING 1 AS ")" RETURNING emotional_valence)::text INTO v '
+        "FROM public.character_relationships; RETURN v; END $f$",
+        "hidden body identifier reference",
+    ),
+    "F4-quoted-keyword-column": (
+        'CREATE TABLE public.probe813_columns(trait text,"set" text,"order" text); '
+        "CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE plpgsql AS $$BEGIN "
+        "RETURN (SELECT trait FROM public.probe813_columns WHERE "
+        '"set"="order" LIMIT 1); END$$',
+        None,
+    ),
+    "F5-record-column-definition": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE plpgsql AS $f$ "
+        "DECLARE v text; BEGIN SELECT r.v::text INTO v FROM public.characters c "
+        "JOIN public.character_relationships cr ON cr.character1_id=c.id, "
+        'jsonb_to_record(\'{"v":"0|neutral"}\') AS r(v '
+        "emotional_valence); RETURN v; END $f$",
+        "unclassifiable column-definition list: emotional_valence",
+    ),
+    "F5-json-table-column-definition": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE plpgsql AS $f$ "
+        "DECLARE v text; BEGIN SELECT jt.v::text INTO v FROM public.characters c "
+        "JOIN public.character_relationships cr ON cr.character1_id=c.id, "
+        "JSON_TABLE(jsonb '{\"v\":\"friend\"}', '$' COLUMNS (v "
+        "relationship_type)) jt; RETURN v; END $f$",
+        "unclassifiable column-definition list: relationship_type",
+    ),
+    "F4-F5-quoted-json-column": (
+        "CREATE TABLE public.probe813_columns(item_type text); "
+        "CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE plpgsql AS $f$ "
+        'BEGIN RETURN (SELECT jt."set"::text FROM public.probe813_columns, '
+        'JSON_TABLE(jsonb \'{"set":"tool"}\', \'$\' COLUMNS ("set" '
+        "item_type)) jt LIMIT 1); END $f$",
+        "unclassifiable column-definition list: item_type",
+    ),
+    "F6-parameter-default": (
+        "CREATE FUNCTION public.probe813_r9(k text, known boolean DEFAULT "
+        "pg_input_is_valid('weapon','public.item_type')) RETURNS "
+        "boolean LANGUAGE plpgsql "
+        "AS $$BEGIN RETURN known; END$$",
+        "literal names a drop target: public.item_type",
+    ),
+    "F6-aggregate-initcond": (
+        "CREATE FUNCTION public.probe813_keep(acc regclass,x integer) RETURNS regclass "
+        "LANGUAGE sql IMMUTABLE AS $$SELECT acc$$; CREATE "
+        "AGGREGATE public.probe813_agg(integer) "
+        "(sfunc=public.probe813_keep,stype=regclass,initcond='public.items')",
+        "literal names a drop target: public.items",
+    ),
+    "F6-atomic-scs-target": (
+        r"CREATE FUNCTION public.probe813_r9(x text) RETURNS text LANGUAGE sql "
+        r"SET standard_conforming_strings=off BEGIN ATOMIC SELECT concat(E'\\','--',"
+        "pg_input_is_valid(x,'public.item_type')); END",
+        "literal names a drop target: public.item_type",
+    ),
+    "F6-atomic-scs-data": (
+        r"CREATE FUNCTION public.probe813_r9() RETURNS text LANGUAGE sql "
+        r"SET standard_conforming_strings=off BEGIN ATOMIC SELECT E'C:\\temp\\'; END",
+        None,
+    ),
+    "F7-quoted-query-to-xml": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS xml LANGUAGE plpgsql "
+        'AS $$BEGIN RETURN pg_catalog."query_to_xml"('
+        "'SELECT count(*) FROM public.items',true,false,''); END$$",
+        "hidden body identifier reference",
+    ),
+    "F7-query-to-xml": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS xml LANGUAGE plpgsql AS $$BEGIN "
+        "RETURN query_to_xml('SELECT count(*) AS n FROM "
+        "public.items',true,false,''); END$$",
+        "hidden body identifier reference",
+    ),
+    "F7-sql-do": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE sql AS $f$ "
+        "DO $d$ BEGIN PERFORM count(*) FROM public.ai_notebook; END $d$; $f$",
+        "hidden body identifier reference",
+    ),
+    "F7-plpgsql-do": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql AS $f$ "
+        "BEGIN DO $d$ BEGIN PERFORM count(*) FROM public.items; END $d$; END $f$",
+        "hidden body identifier reference",
+    ),
+    "F7-nonconstant-query": (
+        "CREATE FUNCTION public.probe813_r9(q text) RETURNS xml "
+        "LANGUAGE plpgsql AS $$BEGIN "
+        "RETURN query_to_xml(q,true,false,''); END$$",
+        "unresolved dynamic EXECUTE expression",
+    ),
+    "F9-for-execute-loop": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE plpgsql "
+        "SET search_path=pg_catalog AS $$DECLARE r record; n bigint:=0; BEGIN "
+        "FOR r IN EXECUTE 'SELECT id FROM public.characters' LOOP "
+        "n:=n+1; END LOOP; RETURN n; END$$",
+        None,
+    ),
+    "F10-case-column": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE sql AS $$"
+        "SELECT count(CASE relationship_type WHEN 'friend' THEN 1 "
+        "END) FROM public.character_relationships$$",
+        None,
+    ),
+    "F10-like-column": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint "
+        "LANGUAGE plpgsql AS $$BEGIN "
+        "RETURN (SELECT count(*) FROM "
+        "public.character_relationships cr WHERE "
+        "cr.emotional_valence LIKE '+%'); END$$",
+        None,
+    ),
+    "F11-cte-returning": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS bigint "
+        "LANGUAGE plpgsql AS $$DECLARE n bigint; BEGIN "
+        "WITH u AS (UPDATE public.character_relationships SET "
+        "emotional_valence=emotional_valence "
+        "WHERE false RETURNING emotional_valence) SELECT count(*) "
+        "INTO n FROM u; RETURN n; END$$",
+        None,
+    ),
+    "F12-view": (
+        "CREATE VIEW public.probe813_view AS SELECT "
+        "pg_input_is_valid('weapon','public.item_type') AS ok",
+        "literal names a drop target: public.item_type",
+    ),
+    "F12-materialized-view": (
+        "CREATE MATERIALIZED VIEW public.probe813_view AS SELECT "
+        "pg_input_is_valid('weapon','public.item_type') AS ok",
+        "literal names a drop target: public.item_type",
+    ),
+    "F12-check": (
+        "CREATE TABLE public.probe813_columns(kind text "
+        "CHECK(pg_input_is_valid(kind,'public.item_type')))",
+        "literal names a drop target: public.item_type",
+    ),
+    "F12-default": (
+        "CREATE TABLE public.probe813_columns(id bigint DEFAULT "
+        "nextval('public.items_id_seq'::text))",
+        "literal names a drop target: public.items_id_seq",
+    ),
+    "F12-domain": (
+        "CREATE DOMAIN public.probe813_domain AS text "
+        "CHECK(pg_input_is_valid(VALUE,'public.log_level_type'))",
+        "literal names a drop target: public.log_level_type",
+    ),
+    "F12-trigger-when": (
+        "CREATE TABLE public.probe813_columns(kind text,updated_at timestamptz); "
+        "CREATE TRIGGER probe813_when BEFORE INSERT ON "
+        "public.probe813_columns FOR EACH ROW "
+        "WHEN (pg_input_is_valid(NEW.kind,'public.item_type')) "
+        "EXECUTE FUNCTION public.set_updated_at()",
+        "literal names a drop target: public.item_type",
+    ),
+    "F12-index-expression": (
+        "CREATE TABLE public.probe813_columns(kind text); "
+        "CREATE INDEX probe813_index ON public.probe813_columns "
+        "((kind || 'public.item_type'))",
+        "literal names a drop target: public.item_type",
+    ),
+    "F12-index-predicate": (
+        "CREATE TABLE public.probe813_columns(kind text); "
+        "CREATE INDEX probe813_index ON "
+        "public.probe813_columns(kind) WHERE "
+        "kind<>'public.item_type'",
+        "literal names a drop target: public.item_type",
+    ),
+    "F12-policy": (
+        "CREATE TABLE public.probe813_columns(kind text); "
+        "CREATE POLICY probe813_policy ON public.probe813_columns "
+        "USING(pg_input_is_valid(kind,'public.item_type'))",
+        "literal names a drop target: public.item_type",
+    ),
+    "F12-generated": (
+        "CREATE TABLE public.probe813_columns(kind text, note text "
+        "GENERATED ALWAYS AS (kind || 'public.item_type') STORED)",
+        "literal names a drop target: public.item_type",
+    ),
+    "F13-format-operand": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "SET search_path=pg_catalog AS $$BEGIN EXECUTE "
+        "format('SELECT 1 /* %s */','public.items'); END$$",
+        "literal names a drop target: public.items",
+    ),
+    "T1-concat-healthy": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "SET search_path=pg_catalog AS $$BEGIN EXECUTE concat('SELECT ','1'); END$$",
+        None,
+    ),
+    "T1-concat-target-split": (
+        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
+        "SET search_path=pg_catalog AS $$BEGIN EXECUTE "
+        "concat('SELECT count(*) FROM public.it','ems'); END$$",
+        "hidden body identifier reference",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", ROUND9_DEFINITIONS)
+def test_migration_143_round9_definitions(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+) -> None:
+    """Panel recipes exercise real catalogs; refusals leave schema,
+
+    data and stamp intact."""
+    definition, reason = ROUND9_DEFINITIONS[case]
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        _sql(dbname, definition)
+        before = _snapshot(dbname, surviving=reason is None)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        print(
+            "ROUND9",
+            case,
+            "applied:",
+            applied,
+            "expected:",
+            reason or "apply",
+            flush=True,
+        )
+        assert applied is (reason is None), caplog.text
+        if reason is not None:
+            assert reason in caplog.text, caplog.text
+            assert _stamps(dbname) == stamps
+        assert _snapshot(dbname, surviving=reason is None) == before
+        assert _function_catalog(dbname) == functions
+
+
+@pytest.mark.parametrize("startup_scs", ("on", "off"))
+def test_migration_143_round9_startup_pin(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    startup_scs: str,
+) -> None:
+    """Migration parsing is pinned while routine resolution keeps the
+
+    startup setting."""
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        _sql(
+            dbname,
+            f'ALTER DATABASE "{dbname}" SET standard_conforming_strings={startup_scs}',
+        )
+        before = _snapshot(dbname, surviving=True)
+        caplog.clear()
+        assert _apply(dbname), caplog.text
+        assert _snapshot(dbname, surviving=True) == before
+
+
+def test_migration_143_round9_toast_literal(
+    archives: dict[str, Path], tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The actual TOAST relation name from the frozen closure is a literal target."""
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT reltoastrelid::regclass::text FROM pg_class WHERE "
+                "oid='public.items'::regclass"
+            )
+            toast_name = cur.fetchone()[0]
+        _sql(
+            dbname,
+            "CREATE FUNCTION public.probe813_r9() RETURNS bigint LANGUAGE plpgsql "
+            f"AS $$BEGIN RETURN pg_catalog.pg_relation_size('{toast_name}'); END$$",
+        )
+        before, stamps = _snapshot(dbname, surviving=False), _stamps(dbname)
+        caplog.clear()
+        assert not _apply(dbname), caplog.text
+        assert f"literal names a drop target: {toast_name}" in caplog.text
+        assert (
+            _snapshot(dbname, surviving=False) == before and _stamps(dbname) == stamps
+        )
