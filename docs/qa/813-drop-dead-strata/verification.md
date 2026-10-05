@@ -5744,3 +5744,218 @@ introduced here. The coordinator still owns the fresh raw-dump landing rehearsal
 fleet application, gateway restart and final whole-tree PostgreSQL gate.
 
 Authored by Codex, running GPT-6.
+
+
+## After the Ninth Independent Review and the Second Panel
+
+### Stop Report: R1's Exact Restored Control Conflicts With the Literal Rule
+
+Round 9 is **not implemented**. The production SQL and tests remain byte-identical
+to frozen head `9ed33d5484b43e49b698181c2615e18d64007dcb`. The common working
+rules say: "If the order's premise turns out to be false, write a stop-report
+instead of improvising." This is a documentation-only checkpoint of that stop,
+not a green round-nine gate.
+
+R1 requires restoring `probe813_dynamic` to its `ebcfbe15` form and accepting it
+under the default path:
+
+```sql
+CREATE FUNCTION public.probe813_dynamic() RETURNS void LANGUAGE plpgsql
+AS $$BEGIN EXECUTE pg_catalog.format('SELECT %L','item_type'); END$$;
+```
+
+That function has no proconfig. On each fresh clone its startup path is
+`"$user", public`, and `to_regtype('item_type')::oid` equals
+`'public.item_type'::regtype::oid`. It executes successfully before migration.
+The round-eight contract retained by section 0 says every decoded string literal
+resolving to a drop target refuses; F13 strengthens that rule for fold operands.
+The folded SQL is `SELECT 'item_type'`, so it also meets the literal rule after
+folding. Accepting this exact routine cannot satisfy both rules. The second panel
+already states this qualification explicitly at lines 2964-2968: the original
+control refuses without pgvector because of the literal rule, and the candidate
+false refusal reproduces with neutral `'x'`.
+
+Four real-runner observations isolate the conflict:
+
+- Byte-identical `ebcfbe15` SQL accepts the restored original: one pass.
+- Byte-identical `9ed33d54` SQL refuses it first on the candidate check: one failure.
+- A diagnostic scratch copy deleting only the candidate-check IF block refuses
+  it on `literal names a drop target: item_type`: one failure.
+- The same diagnostic copy with neutral `'x'` accepts: one pass, with surviving
+  schema/data/function identity preservation and the real relationship write.
+
+The diagnostic copy is **not** an R9 implementation: it does not add R1's global
+refusal or any other fix. It establishes why removing the candidate mechanism
+cannot make the exact original an accepted control while retaining the literal
+contract. No production file was temporarily swapped or reverted. The scratch
+collection plugin selects immutable SQL copies and removes only the dynamic
+control's SET clause while creating the routine on a disposable clone. Its neutral
+variant changes only that control's `'item_type'` argument to `'x'`.
+
+Coordinator question: amend R1 to use `'x'` as the accepted default-path,
+fully qualified `pg_catalog.format` control, retaining the exact original
+`'item_type'` case as a refusal regression? A clarification is pending; silence
+has not been treated as authorization to change the ordered acceptance.
+
+### Contract and Refusals: Shipping Status
+
+The shipped contract remains the round-eight paragraph in the preceding section.
+The section-0 addition and R1-R6 below are **ordered but unshipped**:
+
+1. R1: globally refuse non-extension, non-pg_catalog format/concat/concat_ws
+   functions and || operators; remove candidate/path-order modeling.
+2. R2: admit only the twelve specified proconfig setting names; other settings
+   refuse as an unresolved environment.
+3. R3: refuse statement-initial bare SET/RESET and any set_config identifier.
+4. R4: refuse any enabled event trigger before the migration's helper DDL.
+5. R5: pin the migration's standard_conforming_strings=on and
+   backslash_quote=safe_encoding alongside search_path=pg_catalog.
+6. R6: apply identity settings in scanner lookups, skip them for validators.
+
+No fleet routine or object was evaluated under these new rules. No fleet cases,
+full ordered proof, offline suite or round-nine static comparison ran: there are
+no implementation changes to certify. This does not claim that the fleet would
+pass R1-R6. The fourteen exact fixes and four record repairs remain outstanding.
+The coordinator's round-seven/eight results in the order are historical evidence,
+not tests run by this implementer.
+
+### Exact Diagnostic Commands and Verbatim Tails
+
+Every command ran from the assigned worktree. The import preflight resolved
+`nexus/__init__.py` there. All scratch, SQL, plugin, archives, temporary pytest
+files and logs are confined to `after-review-r9`. The runner sets PYTHONPATH to
+this worktree plus that directory, TMPDIR there, and NEXUS_DBNAME_AUDIT=1;
+unsets NEXUS_GATEWAY_PORT, NEXUS_API_URL, NEXUS_SLOT and NEXUS_RUN_LIVE_LLM;
+and bounds each foreground child at 540 seconds/120 seconds of silence.
+Only TEST pins are used. The original acceptance assertions are unchanged.
+These are diagnostic red/control runs, **not red-before/green-after fix proof**.
+
+**r1-original-old**
+
+```sh
+NEXUS_RUN_POSTGRES=1 RESTORE_CONTROL=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/ebcfbe15.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py r1-original-old /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k accepts_live_relationship_column_names -vs --tb=short
+```
+
+```text
+CONTROL environment and literal resolution: ('"$user", public', 227935486, 227935486, None)
+CONTROL executes before migration: ('',)
+PASSED
+
+dbname audit: 2 targets: postgres, qa640_813_case_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+====================== 1 passed, 424 deselected in 1.96s =======================
+EXIT STATUS: 0
+```
+
+**r1-original-head**
+
+```sh
+NEXUS_RUN_POSTGRES=1 RESTORE_CONTROL=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/9ed33d54.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py r1-original-head /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k accepts_live_relationship_column_names -vs --tb=short
+```
+
+```text
+CONTROL environment and literal resolution: ('"$user", public', 227943906, 227943906, None)
+CONTROL executes before migration: ('',)
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_dynamic() refuses: unresolved constant EXECUTE context: noncatalog format/concat/|| candidate
+dbname audit: 2 targets: postgres, qa640_813_case_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names
+====================== 1 failed, 424 deselected in 1.91s =======================
+EXIT STATUS: 1
+```
+
+**r1-conflict**
+
+```sh
+NEXUS_RUN_POSTGRES=1 RESTORE_CONTROL=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/9ed33d54-without-candidates.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py r1-conflict /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k accepts_live_relationship_column_names -vs --tb=short
+```
+
+```text
+CONTROL environment and literal resolution: ('"$user", public', 227931270, 227931270, None)
+CONTROL executes before migration: ('',)
+ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_dynamic() refuses: literal names a drop target: item_type
+dbname audit: 2 targets: postgres, qa640_813_case_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_accepts_live_relationship_column_names
+====================== 1 failed, 424 deselected in 2.15s =======================
+EXIT STATUS: 1
+```
+
+**r1-neutral**
+
+```sh
+NEXUS_RUN_POSTGRES=1 RESTORE_CONTROL=1 NEUTRAL_CONTROL=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/9ed33d54-without-candidates.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py r1-neutral /Users/pythagor/nexus/.venv/bin/python -m pytest -p old_scanner -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k accepts_live_relationship_column_names -vs --tb=short
+```
+
+```text
+CONTROL environment and literal resolution: ('"$user", public', 227939702, 227939702, None)
+CONTROL executes before migration: ('',)
+PASSED
+
+dbname audit: 2 targets: postgres, qa640_813_case_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+====================== 1 passed, 424 deselected in 2.35s =======================
+EXIT STATUS: 0
+```
+
+### Mandatory Lints and Final State
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py migration-comments /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r9/run.py exception-dispositions /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+`git fetch origin main` followed by `git merge origin/main` reports
+`Already up to date.` Latest main is
+`160134540517f6b74aacd1d1e1f3f584454eef86`, already in the frozen head's ancestry.
+No rebase, history rewrite, stash, baseline edit or lint bypass occurred.
+Both mandatory lints pass. Only this evidence file changes in the repository.
+
+All diagnostic clones were dropped by the repository context managers; archive
+fixtures removed their temporary dumps. No roles were created. A read-only
+postgres catalog check after the probes reports:
+
+```text
+admin read-only identity: ('postgres', 'on', 'PostgreSQL 17.11 (Postgres.app) on aarch64-apple-darwin23.6.0, compiled by Apple clang version 15.0.0 (clang-1500.3.9.4), 64-bit')
+qa640_813_case_* databases remaining: []
+qa640_813_case_* roles remaining: []
+```
+
+No save_NN, template or ref database writes, paid calls, services, main-checkout
+edits or other-worktree edits occurred. The template was read solely by read-only
+pg_dump; save_01-save_05 were not read. Every pytest tail has the active
+secret-store guard and owner targets: none. No command remains running.
+
+The existing sequencing/deferral/landing notes remain. PR #1098 remains open
+and unmerged. This checkpoint documents the stop and does not make the PR ready
+to land. Resume needs the coordinator's amendment; the third panel/Astra tenth
+pass and the coordinator's whole-tree PostgreSQL gate remain later work.
+
+Authored by Codex, running GPT-6.
