@@ -19,7 +19,8 @@
       "afterColor": "rgb(184, 61, 122)",
       "changedPixels": 815,
       "width": 136,
-      "height": 52
+      "height": 52,
+      "disposition": "Mandatory Veil anchor correction; 815 changed pixels; --brass paints #b83d7a exactly"
     },
     {
       "theme": "gilded",
@@ -28,7 +29,8 @@
       "afterColor": "rgb(209, 158, 31)",
       "changedPixels": 0,
       "width": 212,
-      "height": 64
+      "height": 64,
+      "disposition": "Pixel-identical to 8ccd3008"
     },
     {
       "theme": "vector",
@@ -37,7 +39,8 @@
       "afterColor": "rgb(0, 234, 255)",
       "changedPixels": 0,
       "width": 208,
-      "height": 48
+      "height": 48,
+      "disposition": "Pixel-identical to 8ccd3008"
     }
   ],
   "halo": [
@@ -110,5 +113,6 @@
       "restIdentity": true
     }
   ],
-  "pageErrors": []
+  "pageErrors": [],
+  "clarification": "Coordinator clarification after round-four stop-report retains the seven-token Veil anchor exception. No old pigment is authorized."
 }

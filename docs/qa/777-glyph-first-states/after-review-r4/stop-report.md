@@ -1,5 +1,12 @@
 # After the Fourth Independent Review and the Panel — Stop Report
 
+**Historical stop, resolved by the coordinator clarification.** The selected
+Veil label retains `--brass`; its 815-pixel difference is the mandatory anchor
+correction, and its painted color equals `#b83d7a`. The existing capture pair is
+now labeled accordingly in `product-proof.json`. The halo evidence remains
+6/6 pixel-identical. The original report below is preserved as history. A
+separate measured oracle premise is documented in [the resumed stop-report](histogram-stop-report.md).
+
 Date: 2026-10-05. Started at `f648a18a2468ddb785a62380e54090ab391166d5` on
 `claude/777-glyph-first-states`, PR #1099. **STOP: the literal selected-label
 pixel-equality requirement conflicts with the retained exact Veil anchor.**

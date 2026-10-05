@@ -553,3 +553,33 @@ historical. The common escape hatch applies until the coordinator resolves the
 selected-label equality/anchor conflict.
 
 Codex, GPT-6.
+
+
+## After the Fourth Independent Review and the Panel — Resumed
+
+The coordinator clarification resolves the historical `afbb2756` stop. The
+selected Veil label's 815-pixel difference is explicitly recorded as the
+mandatory anchor correction to `#b83d7a`; Gilded/Vector selected-label captures
+remain identical, and the retained halo-only comparisons remain 6/6 identical.
+The old report and capture bytes are preserved.
+
+A new **measured false premise** blocks the frozen oracle rule: removing the
+most frequent pixel from each solid fill's own clip removes the foreground,
+then selects the background. Real NexusLayout / real TopBar / production Vite
+CSS at device scale 4 give the same second-ranked `[8,11,18]` for normal and
+over memory, reporting ΔE 0 for visibly different pigments. The checked-in
+replay reproduced the three diagnostic clips exactly with zero page errors or
+network requests. These are diagnostic captures, not acceptance regeneration.
+
+[Resumed stop-report, exact replay/test commands and verbatim tails](after-review-r4/histogram-stop-report.md).
+Focused retained-product tests pass **18/18**. No replacement oracle, new
+per-group maxima/exceptions, acceptance regeneration, full proof gate, PR-body
+update, main integration or push is claimed. `afbb2756` remains in ancestry;
+the old acceptance receipt is still stale. No product source/config/schema
+change, paid call, gateway, owner-database write or other-worktree write.
+
+Coordinator question: specify the browser-painted foreground-identification
+rule when foreground is the most frequent color. The Veil anchor clarification
+is settled.
+
+Codex, GPT-6.
