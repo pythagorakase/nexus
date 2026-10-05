@@ -1,0 +1,92 @@
+[
+  {
+    "theme": "veil",
+    "state": "optional-absent",
+    "size": [
+      48,
+      48
+    ],
+    "maskSize": 2304,
+    "mode": [
+      10,
+      15,
+      24
+    ],
+    "count": 1683
+  },
+  {
+    "theme": "veil",
+    "state": "present",
+    "size": [
+      48,
+      48
+    ],
+    "maskSize": 2304,
+    "mode": [
+      10,
+      15,
+      24
+    ],
+    "count": 1626
+  },
+  {
+    "theme": "gilded",
+    "state": "optional-absent",
+    "size": [
+      48,
+      48
+    ],
+    "maskSize": 2304,
+    "mode": [
+      13,
+      13,
+      13
+    ],
+    "count": 1687
+  },
+  {
+    "theme": "gilded",
+    "state": "present",
+    "size": [
+      48,
+      48
+    ],
+    "maskSize": 2304,
+    "mode": [
+      13,
+      13,
+      13
+    ],
+    "count": 1626
+  },
+  {
+    "theme": "vector",
+    "state": "optional-absent",
+    "size": [
+      48,
+      48
+    ],
+    "maskSize": 1299,
+    "mode": [
+      6,
+      12,
+      12
+    ],
+    "count": 373
+  },
+  {
+    "theme": "vector",
+    "state": "present",
+    "size": [
+      48,
+      48
+    ],
+    "maskSize": 2304,
+    "mode": [
+      6,
+      12,
+      12
+    ],
+    "count": 916
+  }
+]

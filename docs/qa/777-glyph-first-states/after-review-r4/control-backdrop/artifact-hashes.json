@@ -1,0 +1,138 @@
+[
+  {
+    "path": "capture-inputs.json",
+    "sha256": "e5b9140602e64e5aef224a3fac75626b9547941e68eb9f41c12ddb244f91fade"
+  },
+  {
+    "path": "capture-manifest.json",
+    "sha256": "b7da43d02e73d5ec1a98f0b760fa188246f5baa6582b50dc83c1cf6684acf431"
+  },
+  {
+    "path": "commands.json",
+    "sha256": "c3ae84b71d5b381634ab5198ce58a85b270eb0622089da7005453c2367a6e259"
+  },
+  {
+    "path": "commands.md",
+    "sha256": "506b3982db67fb34129842618e852e9b1a643b58439f6a3ce0a618a4c628f333"
+  },
+  {
+    "path": "control-causality.json",
+    "sha256": "a1920bd2a33bd308aa1d7e583e16dfe24c6e83f310b948351b4ed1743cf4ab19"
+  },
+  {
+    "path": "control-causality.mjs",
+    "sha256": "e6f91d9d226b9a2ea3e5fb861ea608e27d61f5119adde0960b494e2b6c6fa270"
+  },
+  {
+    "path": "control-diagnostic.json",
+    "sha256": "5c9ec646f9ec44b5f9601b1596a0421237b03dd219b38e14de45496e4ef8e781"
+  },
+  {
+    "path": "control-diagnostic.mjs",
+    "sha256": "040a7b0b74c27d258688d8b06be835d5d05601e2898c6736f0cfbc6cf4cbea2f"
+  },
+  {
+    "path": "default-Veil-key-optional.png",
+    "sha256": "4b40782eed2349ffe46960dd6116579eae62a515a41956256d8c175b575a11d1"
+  },
+  {
+    "path": "default-Veil-key-required.png",
+    "sha256": "f25218c0d4832643825dd13bdce70e71949229d0b4aad21af6d2e43ede666ec9"
+  },
+  {
+    "path": "gilded-optional-absent-hidden-control.png",
+    "sha256": "75fd9809f3a8dc9ed5aae3636867033926ab760dc5f610bc54a837e259d39d43"
+  },
+  {
+    "path": "gilded-optional-absent-hidden-painted.png",
+    "sha256": "2e77de6451be3ebb36bf9909a012a6b6c648f37c53683ad9d9dc9770514fda98"
+  },
+  {
+    "path": "gilded-optional-absent-transparent-stroke-control.png",
+    "sha256": "43fcd83aa93857d9a4c802d1d7b38c8bec813be6771ff6632e6830f7be6d32b9"
+  },
+  {
+    "path": "gilded-present-hidden-control.png",
+    "sha256": "75fd9809f3a8dc9ed5aae3636867033926ab760dc5f610bc54a837e259d39d43"
+  },
+  {
+    "path": "gilded-present-hidden-painted.png",
+    "sha256": "78c888d4a0427464076a0a8b05205305605910bbbc7c4c2dba44c1c8eb287e1c"
+  },
+  {
+    "path": "gilded-present-transparent-stroke-control.png",
+    "sha256": "43fcd83aa93857d9a4c802d1d7b38c8bec813be6771ff6632e6830f7be6d32b9"
+  },
+  {
+    "path": "gilded-provisional-joint.json",
+    "sha256": "60a32021ba57d112369a8999e80c4b98f74211471e6c2163aa2c1c7b134f0f89"
+  },
+  {
+    "path": "independent-png-check.json",
+    "sha256": "59f5c546ba58a58fc663a88f374f3b64f6b6801960e7502e48424def4fc5e5a2"
+  },
+  {
+    "path": "key-reachability.json",
+    "sha256": "249dc039acf3f9313cb4ed4a2a9f28e4913ac4b6ef97d9a561a9875df45e821b"
+  },
+  {
+    "path": "run_gate.py",
+    "sha256": "39dc1c96fa582f1b61425a04ab9530f3c6a3acf4c2189f60ee522b2e324e81d9"
+  },
+  {
+    "path": "vector-optional-absent-hidden-control.png",
+    "sha256": "1eeae97446e1aa0362d937427b4aa38c0be133cae11f4897c82a6649e980aa50"
+  },
+  {
+    "path": "vector-optional-absent-hidden-painted.png",
+    "sha256": "9ce5eca49987d31a9b5575d50467ae44a3dc6a5d437c5c9341c691e5d35eba61"
+  },
+  {
+    "path": "vector-optional-absent-transparent-stroke-control.png",
+    "sha256": "9d2248a7ef42d9ed48f37ce20a1d127bae171f479991ec7b98556d208023d006"
+  },
+  {
+    "path": "vector-present-hidden-control.png",
+    "sha256": "bfb694a359bd5931044c2609e26f4165b363523bf1020cda951648b5fc40bcbb"
+  },
+  {
+    "path": "vector-present-hidden-painted.png",
+    "sha256": "bfeba3c18c24e3c7c85bdee14d774940a46837a5332c771c91c11b355f85e6e6"
+  },
+  {
+    "path": "vector-present-transparent-stroke-control.png",
+    "sha256": "df209f25f05767851e9de73dbf7bc812d697edcf76b03b8b9ebdbd07d995c392"
+  },
+  {
+    "path": "vector-provisional-joint.json",
+    "sha256": "fd4315c82973aebefb201970d5a712710bdf808b384c89e097e0dd7abeaa3869"
+  },
+  {
+    "path": "veil-optional-absent-hidden-control.png",
+    "sha256": "93bbd2c7c1eb96b5897270b26991770dcf1d932aeaebdcf85d4ff6b867c99ca2"
+  },
+  {
+    "path": "veil-optional-absent-hidden-painted.png",
+    "sha256": "581d6b33cea8205ddf4ba153c8c90d083e218a485d2898036b0e8ff107b6746f"
+  },
+  {
+    "path": "veil-optional-absent-transparent-stroke-control.png",
+    "sha256": "7b79867e28a838d065872c08702826bc52323796c10999cdfcd7eb008df8d759"
+  },
+  {
+    "path": "veil-present-hidden-control.png",
+    "sha256": "93bbd2c7c1eb96b5897270b26991770dcf1d932aeaebdcf85d4ff6b867c99ca2"
+  },
+  {
+    "path": "veil-present-hidden-painted.png",
+    "sha256": "e1be16f46fcbc1896c6a1ca4e1bd80981eb5bd1687ba3f20f91b565f0815e98b"
+  },
+  {
+    "path": "veil-present-transparent-stroke-control.png",
+    "sha256": "7b79867e28a838d065872c08702826bc52323796c10999cdfcd7eb008df8d759"
+  },
+  {
+    "path": "veil-provisional-joint.json",
+    "sha256": "781519b6b702d63ebab32ff41fceeba58be3287fad8554c400b6c438a0bde571"
+  }
+]

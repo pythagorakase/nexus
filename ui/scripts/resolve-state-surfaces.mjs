@@ -30,7 +30,7 @@ if (process.argv.includes('--assemble')) {
     if (JSON.stringify(shard.inputs) !== JSON.stringify(fingerprint) || JSON.stringify(shard.media) !== JSON.stringify(merged.media) || shard.proof.failure)
       throw new Error('Stale, failed, or incompatible capture shard; run npm --prefix ui run resolve-state-surfaces');
     for (const [id, data] of Object.entries(shard.conditions)) {
-      if (merged.conditions[id] || Object.keys(data).sort().join() !== 'Gilded,Veil,Vector') throw new Error(`Duplicate/incomplete shard ${id}`);
+      if (merged.conditions[id] || Object.keys(data).sort().join() !== 'Gilded,Vector,Veil') throw new Error(`Duplicate/incomplete shard ${id}`);
       merged.conditions[id] = data;
     }
     Object.assign(merged.proof.matchedMedia, shard.proof.matchedMedia);
@@ -42,7 +42,7 @@ if (process.argv.includes('--assemble')) {
   if (ids.some(id => !merged.conditions[id]) || Object.keys(merged.conditions).length !== ids.length) throw new Error('Incomplete media inventory');
   merged.conditions = Object.fromEntries(ids.map(id => [id, merged.conditions[id]]));
   const output = process.env.STATE_SURFACES_OUTPUT ?? resolve(ui, 'client/src/state-surfaces.resolved.json');
-  writeFileSync(output, JSON.stringify(merged, null, 2) + '\n');
+  writeFileSync(output, JSON.stringify(merged) + '\n');
   console.log(`Resolved painted state surfaces: renders=${merged.proof.renderCount}; wall=${merged.proof.wallSeconds.toFixed(3)}s (sum of bounded capture shards); Chromium ${fingerprint.chromium}; Playwright ${fingerprint.playwright}`);
   console.log(`Emulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; ${ids.length} media conditions; file://; network aborted; requests=0; errors=0`);
   console.log(`Wrote ${output}; module graph=${fingerprint.moduleGraph.length} inputs; SHA-256 ${fingerprint.sha256}`);
@@ -199,7 +199,12 @@ try {
             // are rendered on the same accepted geometry and production CSS.
             overlay = await page.addStyleTag({ content: `html.dark${theme === 'Veil' ? '' : `.theme-${theme.toLowerCase()}`} { ${Object.entries(baseline).filter(([p]) => p.startsWith('--')).map(([p,v]) => `${p}:${v};`).join('')} }` });
           }
-          await page.evaluate(({ prop, value }) => document.documentElement.style.setProperty(prop, value), { prop, value: roots[group][state] === '--destructive' && phase === 'before' ? `hsl(${value})` : value });
+          if (phase === 'shipped') {
+            // Measure the production cascade, including media root overrides.
+            await page.evaluate(p => document.documentElement.style.removeProperty(p), prop);
+          } else {
+            await page.evaluate(({ prop, value }) => document.documentElement.style.setProperty(prop, value), { prop, value: roots[group][state] === '--destructive' && phase === 'before' ? `hsl(${value})` : value });
+          }
           const measured = await sample(selector, action, `${condition.id}/${theme}/${phase}/${context}/${state}/${value}`);
           if (phase === 'candidate') { result.candidates[prop][value] ??= {}; result.candidates[prop][value][context] = measured; }
           else { result[phase][context] ??= {}; result[phase][context][state] = measured; }
