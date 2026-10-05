@@ -39,12 +39,12 @@ export async function inputs(uiRoot, bundle = undefined) {
   for (const name of readdirSync(resolve(uiRoot, 'scripts/state-surfaces')))
     if (/\.(?:mjs|tsx|css)$/.test(name)) paths.add(`scripts/state-surfaces/${name}`);
   for (const path of ['scripts/resolve-state-surfaces.mjs', 'package.json', 'package-lock.json',
-    'tailwind.config.ts', 'postcss.config.js', 'vite.config.ts', 'client/src/main.tsx']) paths.add(path);
+    'tailwind.config.ts', 'postcss.config.js', 'vite.config.ts', 'client/index.html', 'client/src/main.tsx']) paths.add(path);
   // Tailwind's content scan affects shipped CSS even for modules outside the fixture graph.
   const content = dir => { for (const entry of readdirSync(resolve(uiRoot, dir), { withFileTypes: true })) {
     const path = `${dir}/${entry.name}`;
     if (entry.isDirectory()) content(path);
-    else if (/\.(?:tsx?|css)$/.test(path)) paths.add(path);
+    else if (/\.(?:[jt]sx?|css)$/.test(path)) paths.add(path);
   } };
   content('client/src');
   const hash = createHash('sha256'), files = {};

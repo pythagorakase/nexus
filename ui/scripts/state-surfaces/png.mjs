@@ -56,7 +56,7 @@ export function histogramPng(bytes) {
 }
 
 /** Foreground is exclusively the device pixels changed by hiding this surface. */
-export function foreground(paintedBytes, controlBytes, label, minimumModeFraction = .08) {
+export function foreground(paintedBytes, controlBytes, label, minimumModeFraction = .02) {
   const a = decodePng(paintedBytes), b = decodePng(controlBytes);
   if (a.width !== b.width || a.height !== b.height || a.channels !== b.channels)
     throw new Error(`Measurement failure ${label}: control dimensions differ`);

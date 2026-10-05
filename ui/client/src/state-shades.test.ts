@@ -105,12 +105,12 @@ function rootOf(value: string): string {
   return root;
 }
 const pairwise = (states: readonly string[]) => states.flatMap((a, i) => states.slice(i + 1).map(b => [a, b] as const));
-// Exactly 14 base pairs, expanded below into browser-painted contexts.
+// Thirteen reachable pairs. Optional-absent/required-missing has no shared row context.
 const STATE_PAIRS = {
   memory: pairwise(["normal", "over"]),
   delete: pairwise(["unarmed", "armed"]),
   map: pairwise(["rest", "current", "selected", "hovered"]),
-  key: pairwise(["optional-absent", "required-missing", "present", "verified"]),
+  key: pairwise(["optional-absent", "required-missing", "present", "verified"]).filter(([a, b]) => !(a === "optional-absent" && b === "required-missing")),
 };
 type Surface = keyof typeof STATE_PAIRS;
 const MAPPINGS: Record<Surface, Record<string, string>> = {
@@ -140,8 +140,9 @@ type Sample = {
   painted: [number, number, number]; maskSize: number; modeFraction: number;
   histogram: { rgb: number[]; count: number }[]; width: number; height: number;
   action: string; animationsRunning: number;
-  pseudos: { hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean };
+  pseudos: { pinHover: boolean; hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean };
   target: { hover: boolean; focusVisible: boolean };
+  stateAttributes: { mapState: string | null; keyNeed: string | null; armed: string | null };
 };
 type ContextSamples = Record<string, Record<string, Sample>>;
 type Receipt = {
@@ -169,6 +170,15 @@ const contextNames = [
   ...["sea", "land"].flatMap(terrain => ["fill", "ring"].map(part => `map/canvas-${terrain}/${part}`)),
   ...["rest", "hover", "selected-current"].flatMap(action => ["fill", "ring"].map(part => `map/sidebar/${action}/${part}`)),
 ];
+function statesIn(context: string): string[] {
+  const surface = context.split("/")[0] as Surface;
+  return Object.keys(MAPPINGS[surface]).filter(state =>
+    !(context.startsWith("map/sidebar/") && state === "hovered") &&
+    !(context.startsWith("key/required/") && state === "optional-absent") &&
+    !(context.startsWith("key/optional/") && state === "required-missing"));
+}
+const pairsIn = (context: string) => STATE_PAIRS[context.split("/")[0] as Surface]
+  .filter(pair => pair.every(state => statesIn(context).includes(state)));
 const CONTEXTS = receipt.media.variants.flatMap(({ id: condition }) => contextNames.map(context => {
   const [surface, ...name] = context.split("/");
   return { surface: surface as Surface, name: name.join("/"), condition,
@@ -210,7 +220,7 @@ function candidates(theme: Theme, root: string): { value: string; rgb: Triple; c
   return result;
 }
 function measures(theme: Theme, p: Palette | undefined, before: boolean) {
-  return CONTEXTS.flatMap(ctx => STATE_PAIRS[ctx.surface].map(states => {
+  return CONTEXTS.flatMap(ctx => pairsIn(`${ctx.surface}/${ctx.name}`).map(states => {
     const colors = states.map(s => ctx.render(s, p, before, theme));
     return { theme, surface: ctx.surface, context: ctx.name, condition: ctx.condition, states, rgb: colors, delta: ciede2000(deutanLab(colors[0]), deutanLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
   }));
@@ -229,10 +239,10 @@ function jointSearch(theme: Theme) {
   const factors = (Object.keys(STATE_PAIRS) as Surface[]).map(surface => {
     const roots = Object.values(MAPPINGS[surface]);
     const ctxs = CONTEXTS.filter(c => c.surface === surface);
-    const edges = STATE_PAIRS[surface].map(([a, b]) => {
+    const edges = STATE_PAIRS[surface].filter(pair => ctxs.some(ctx => pairsIn(`${surface}/${ctx.name}`).some(p => p.join() === pair.join()))).map(([a, b]) => {
       const ra = MAPPINGS[surface][a], rb = MAPPINGS[surface][b];
       const scores = domains[ra].map(() => domains[rb].map(() => Infinity));
-      for (const ctx of ctxs) {
+      for (const ctx of ctxs.filter(c => [a, b].every(s => statesIn(`${surface}/${c.name}`).includes(s)))) {
         const labs = [a, b].map(state => {
           const root = MAPPINGS[surface][state];
           return domains[root].map(c => { p[root] = c.rgb; return deutanLab(ctx.render(state, p, false, theme)); });
@@ -294,7 +304,7 @@ describe("777-S2 state shades", () => {
       expect(Math.abs(ciede2000([l1, a1, b1], [l2, a2, b2]) - expected)).toBeLessThan(.00005);
   });
   it("every_state_pair_is_measured_under_every_declared_media_condition", () => {
-    expect(Object.values(STATE_PAIRS).flat()).toHaveLength(14);
+    expect(Object.values(STATE_PAIRS).flat()).toHaveLength(13);
     expect(receipt.media.unsupported, "Unemulatable media/container prelude").toEqual([]);
     expect(Object.keys(receipt.conditions)).toEqual(receipt.media.variants.map(v => v.id));
     expect(receipt.media.preludes.length).toBeGreaterThan(0);
@@ -306,11 +316,10 @@ describe("777-S2 state shades", () => {
         const contexts = receipt.conditions[id][theme][phase];
         expect(Object.keys(contexts)).toEqual(contextNames);
         for (const context of contextNames) {
-          const surface = context.split("/")[0] as Surface;
-          expect(Object.keys(contexts[context])).toEqual(Object.keys(MAPPINGS[surface]));
+          expect(Object.keys(contexts[context])).toEqual(statesIn(context));
         }
       }
-      expect(measures(theme, undefined, false).filter(m => m.condition === id)).toHaveLength(105);
+      expect(measures(theme, undefined, false).filter(m => m.condition === id)).toHaveLength(contextNames.reduce((n, c) => n + pairsIn(c).length, 0));
     }
   });
   it("painted_control_masks_are_strong_and_interactions_are_real_and_settled", () => {
@@ -325,18 +334,26 @@ describe("777-S2 state shades", () => {
         expect(sample.pseudos.focusWithin).toBe(true);
         expect(sample.action).toContain("Tab");
       }
-      if (context.endsWith("hover")) expect(sample.pseudos.ancestorHover, `${context}: row hover`).toBe(true);
+      if (context.endsWith("hover") && !context.endsWith("button-hover")) expect(sample.pseudos.ancestorHover, `${context}: row hover`).toBe(true);
       if (context.endsWith("button-hover")) expect(sample.target.hover).toBe(true);
     };
     for (const { id } of receipt.media.variants) for (const theme of THEMES) {
       const data = receipt.conditions[id][theme];
       for (const phase of ["before", "shipped"] as const)
-        for (const [context, samples] of Object.entries(data[phase])) Object.values(samples).forEach(s => check(s, context));
+        for (const [context, samples] of Object.entries(data[phase])) Object.entries(samples).forEach(([state, s]) => {
+          check(s, context);
+          if (context.startsWith("map/")) {
+            expect(s.stateAttributes.mapState).toBe(state);
+            if (state === "hovered") expect(s.pseudos.pinHover).toBe(true);
+          }
+          if (context.startsWith("key/")) expect(s.stateAttributes.keyNeed).toBe(context.split("/")[1]);
+          if (context.startsWith("delete/")) expect(s.stateAttributes.armed).toBe(state === "armed" ? "true" : "false");
+        });
       for (const root of ROOTS) {
         expect(Object.keys(data.candidates[root])).toEqual(candidates(theme, root).map(c => c.value));
         const group = Object.entries(MAPPINGS).find(([, states]) => Object.values(states).includes(root))![0];
         for (const samples of Object.values(data.candidates[root])) {
-          expect(Object.keys(samples)).toEqual(contextNames.filter(c => c.startsWith(`${group}/`)));
+          expect(Object.keys(samples)).toEqual(contextNames.filter(c => c.startsWith(`${group}/`) && statesIn(c).includes(Object.entries(MAPPINGS[group as Surface]).find(([, r]) => r === root)![0])));
           for (const [context, sample] of Object.entries(samples)) check(sample, context);
         }
       }
@@ -360,6 +377,8 @@ describe("777-S2 state shades", () => {
       key: { "optional-absent": "--state-key-absent", "required-missing": "--state-key-missing", present: "--state-key-present", verified: "--state-key-verified" },
     });
     const results = searchAll();
+    if (process.env.STATE_SHADES_EVIDENCE_DIR) for (const result of results)
+      writeFileSync(resolve(process.env.STATE_SHADES_EVIDENCE_DIR, `${result.theme.toLowerCase()}-joint.json`), JSON.stringify({ ...result, measurements: measures(result.theme, undefined, false), before: measures(result.theme, undefined, true) }, null, 2) + "\n");
     for (const result of results) {
       console.log(JSON.stringify({ ...result, maxima: undefined, measurements: undefined }));
       if (process.env.STATE_SHADES_EVIDENCE_DIR) writeFileSync(resolve(process.env.STATE_SHADES_EVIDENCE_DIR, `${result.theme.toLowerCase()}-joint.json`), JSON.stringify({ ...result, measurements: measures(result.theme, undefined, false), before: measures(result.theme, undefined, true) }, null, 2) + "\n");

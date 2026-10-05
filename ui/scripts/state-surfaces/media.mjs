@@ -18,7 +18,7 @@ export function mediaConditions(css) {
       const set = dimension === 'width' ? widths : heights;
       set.add(Number(value)); set.add(Number(value) + (bound === 'max' ? 1 : -1)); return '';
     });
-    rest = rest.replace(/\(prefers-color-scheme:\s*(dark|light)\)/g, (_, v) => { add(`color-${v === 'dark' ? 'light' : 'dark'}`, { colorScheme: v === 'dark' ? 'light' : 'dark' }); return ''; });
+    rest = rest.replace(/\(prefers-color-scheme:\s*(dark|light)\)/g, (_, v) => { add('color-light', { colorScheme: 'light' }); add('color-dark', { colorScheme: 'dark' }); return ''; });
     rest = rest.replace(/\(prefers-reduced-motion:\s*(reduce|no-preference)\)/g, () => { add('motion-start', { reducedMotion: 'no-preference', animationPhase: 0 }); add('motion-trough', { reducedMotion: 'no-preference', animationPhase: .5 }); return ''; });
     rest = rest.replace(/\(forced-colors:\s*(active|none)\)/g, () => { add('forced-colors', { forcedColors: 'active' }); return ''; });
     rest = rest.replace(/\((?:any-)?(?:hover|pointer):\s*(hover|none|fine|coarse)\)/g, () => { add('touch', { hasTouch: true, isMobile: true }); return ''; });

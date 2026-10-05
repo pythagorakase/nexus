@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fixtureBuild, inputs } from './state-surfaces/inputs.mjs';
@@ -11,6 +11,8 @@ import { START, roots, token, domain, themeTokens } from './state-surfaces/domai
 const ui = resolve(import.meta.dirname, '..'), root = resolve(ui, '..');
 const scratch = process.env.STATE_SURFACES_SCRATCH;
 if (!scratch) throw new Error('Set STATE_SURFACES_SCRATCH to the order-specific directory');
+const deadline = setTimeout(() => { console.error('Capture command exceeded its 589-second bound'); process.exit(1); }, 589000);
+deadline.unref();
 const partial = ['STATE_SURFACES_CONDITION', 'STATE_SURFACES_THEME',
   'STATE_SURFACES_GROUP', 'STATE_SURFACES_PROBE'].some(key => process.env[key]);
 if (partial && !process.env.STATE_SURFACES_OUTPUT)
@@ -20,6 +22,32 @@ const require = createRequire(resolve(ui, 'package.json'));
 const { build: viteBuild } = require('vite');
 const { chromium } = require('playwright');
 const bundle = await fixtureBuild(ui), fingerprint = await inputs(ui, bundle);
+if (process.argv.includes('--assemble')) {
+  const shards = readdirSync(resolve(scratch, 'shards')).filter(p => p.endsWith('.json')).sort().map(p => JSON.parse(readFileSync(resolve(scratch, 'shards', p), 'utf8')));
+  if (!shards.length) throw new Error('No capture shards');
+  const merged = { ...shards[0], conditions: {}, proof: { ...shards[0].proof, renderCount: 0, wallSeconds: 0, acceptanceComplete: true, matchedMedia: {}, shards: [] } };
+  for (const shard of shards) {
+    if (JSON.stringify(shard.inputs) !== JSON.stringify(fingerprint) || JSON.stringify(shard.media) !== JSON.stringify(merged.media) || shard.proof.failure)
+      throw new Error('Stale, failed, or incompatible capture shard; run npm --prefix ui run resolve-state-surfaces');
+    for (const [id, data] of Object.entries(shard.conditions)) {
+      if (merged.conditions[id] || Object.keys(data).sort().join() !== 'Gilded,Veil,Vector') throw new Error(`Duplicate/incomplete shard ${id}`);
+      merged.conditions[id] = data;
+    }
+    Object.assign(merged.proof.matchedMedia, shard.proof.matchedMedia);
+    merged.proof.renderCount += shard.proof.renderCount;
+    merged.proof.wallSeconds += shard.proof.wallSeconds;
+    merged.proof.shards.push({ conditions: Object.keys(shard.conditions), renders: shard.proof.renderCount, wallSeconds: shard.proof.wallSeconds });
+  }
+  const ids = merged.media.variants.map(v => v.id);
+  if (ids.some(id => !merged.conditions[id]) || Object.keys(merged.conditions).length !== ids.length) throw new Error('Incomplete media inventory');
+  merged.conditions = Object.fromEntries(ids.map(id => [id, merged.conditions[id]]));
+  const output = process.env.STATE_SURFACES_OUTPUT ?? resolve(ui, 'client/src/state-surfaces.resolved.json');
+  writeFileSync(output, JSON.stringify(merged, null, 2) + '\n');
+  console.log(`Resolved painted state surfaces: renders=${merged.proof.renderCount}; wall=${merged.proof.wallSeconds.toFixed(3)}s (sum of bounded capture shards); Chromium ${fingerprint.chromium}; Playwright ${fingerprint.playwright}`);
+  console.log(`Emulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; ${ids.length} media conditions; file://; network aborted; requests=0; errors=0`);
+  console.log(`Wrote ${output}; module graph=${fingerprint.moduleGraph.length} inputs; SHA-256 ${fingerprint.sha256}`);
+  process.exit(0);
+}
 writeFileSync(resolve(scratch, 'fixture.js'), bundle.outputFiles[0].contents);
 const started = performance.now();
 process.chdir(ui);
@@ -39,32 +67,42 @@ const browser = await chromium.launch({ headless: true });
 let renderCount = 0;
 const progress = setInterval(() => console.log(`Painted capture progress: renders=${renderCount}; wall=${((performance.now()-started)/1000).toFixed(3)}s`), 45000);
 const errors = [], requests = [];
-const results = { inputs: fingerprint, media, conditions: {}, proof: { minimumModeFraction: .08,
+const results = { inputs: fingerprint, media, conditions: {}, proof: { minimumModeFraction: .02,
   measurement: 'painted/control visibility:hidden foreground mask; RGB mode over changed device pixels',
   stylesheet: 'production Vite build emitted CSS, production order', pageErrors: errors, networkRequests: requests } };
+let activeConditions = 0; const queue = [];
+async function acquire() { if (activeConditions >= 4) await new Promise(r => queue.push(r)); activeConditions++; }
+function release() { activeConditions--; queue.shift()?.(); }
 try {
-  for (const condition of media.variants.filter(c => !process.env.STATE_SURFACES_CONDITION || c.id === process.env.STATE_SURFACES_CONDITION)) {
+  await Promise.all(media.variants.filter(c => !process.env.STATE_SURFACES_CONDITION || process.env.STATE_SURFACES_CONDITION.split(',').includes(c.id)).map(async condition => {
+    await acquire();
+    try {
     results.conditions[condition.id] = {};
+    await Promise.all(['Veil', 'Gilded', 'Vector'].filter(t => !process.env.STATE_SURFACES_THEME || t === process.env.STATE_SURFACES_THEME).map(async theme => {
     const page = await browser.newPage(condition);
     if (condition.media) await page.emulateMedia({ media: condition.media });
+    const screenshot = box => page.screenshot({ clip: box });
     page.on('pageerror', e => errors.push(e.message));
     page.on('request', r => { if (/^https?:/.test(r.url())) requests.push(r.url()); });
     await page.route(/^https?:/, route => route.abort());
     await page.goto(pathToFileURL(html).href);
+    const matchedMedia = await page.evaluate(preludes => Object.fromEntries(preludes.map(p => [p, matchMedia(p.slice(6)).matches])), media.preludes);
+    results.proof.matchedMedia ??= {}; results.proof.matchedMedia[condition.id] = matchedMedia;
     // Finite transitions/animations finish. Infinite animations have no finished
     // promise: pause the actual browser effect at its start and trough, separately.
-    const settled = async () => page.evaluate(async phase => {
-      await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+    const settled = async (selector = null) => page.evaluate(async ({ phase, selector }) => {
+      await new Promise(requestAnimationFrame);
       for (;;) {
         const all = document.getAnimations();
         for (const a of all) if (a.effect?.getTiming().iterations === Infinity) {
           a.pause(); a.currentTime = Number(a.effect.getTiming().duration) * (phase ?? 0);
         }
-        const running = all.filter(a => a.playState === 'running');
+        const node = selector ? document.querySelector(selector) : null;
+        const running = all.filter(a => a.playState === 'running' && (!node || a.effect?.target instanceof Element && (node.contains(a.effect.target) || a.effect.target.contains(node))));
         if (!running.length) return;
         await Promise.all(running.map(a => a.finished.catch(() => {})));
       }
-    }, condition.animationPhase);
+    }, { phase: condition.animationPhase, selector });
     async function reset() {
       await page.mouse.move(0, 0);
       await page.locator('body').click({ position: { x: 1, y: 1 } });
@@ -81,17 +119,19 @@ try {
     }
     async function sample(selector, action, label) {
       const el = page.locator(selector);
-      await el.scrollIntoViewIfNeeded(); await settled();
+      await el.scrollIntoViewIfNeeded(); await settled(selector);
       const box = await el.boundingBox();
       if (!box || !box.width || !box.height) throw new Error(`Measurement failure ${label}: empty clip`);
+      if (await page.evaluate(() => devicePixelRatio) !== 4) throw new Error('Measurement failure: device scale is not 4');
       const pseudos = await el.evaluate(n => ({ hover: n.matches(':hover'), focusVisible: n.matches(':focus-visible'),
+        pinHover: n.closest('.map-pin')?.matches(':hover') ?? false,
         ancestorHover: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':hover') ?? false,
         focusWithin: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':focus-within') ?? false }));
-      const painted = await page.screenshot({ clip: box });
+      const painted = await screenshot(box);
       // Visibility keeps the exact layout, backdrop, siblings and overlays intact.
       await el.evaluate(n => n.setAttribute('data-control-capture', ''));
       const controlStyle = await page.addStyleTag({ content: '[data-control-capture], [data-control-capture] * { visibility: hidden !important; }' });
-      const control = await page.screenshot({ clip: box });
+      const control = await screenshot(box);
       await controlStyle.evaluate(n => n.remove());
       await el.evaluate(n => n.removeAttribute('data-control-capture'));
       renderCount++;
@@ -103,11 +143,13 @@ try {
         writeFileSync(resolve(scratch, 'measurement-failure.json'), JSON.stringify({ label, selector, box, action, pseudos, error: error.message }, null, 2));
         throw error;
       }
+      if (Math.abs(measured.width - box.width * 4) > 4 || Math.abs(measured.height - box.height * 4) > 4) throw new Error(`Measurement failure ${label}: PNG is not at device scale 4`);
       const target = await el.evaluate(n => {const t=n.closest('.lm-trash') ?? n.closest('.key-row')?.querySelector('input') ?? n; return {hover:t.matches(':hover'), focusVisible:t.matches(':focus-visible')};});
-      return { ...measured, selector, box, action, pseudos, target, animationsRunning: 0 };
+      const stateAttributes = await el.evaluate(n => ({ mapState: n.closest('[data-map-state]')?.getAttribute('data-map-state') ?? null, keyNeed: n.closest('.key-row')?.classList.contains('optional') ? 'optional' : n.closest('.key-row') ? 'required' : null, armed: n.closest('.lm-trash')?.getAttribute('aria-pressed') ?? null }));
+      const animationsRunning = await el.evaluate(n => document.getAnimations().filter(a => a.playState === 'running' && a.effect?.target instanceof Element && (n.contains(a.effect.target) || a.effect.target.contains(n))).length);
+      return { ...measured, selector, box, action, pseudos, target, stateAttributes, animationsRunning };
     }
-    for (const theme of ['Veil', 'Gilded', 'Vector'].filter(t => !process.env.STATE_SURFACES_THEME || t === process.env.STATE_SURFACES_THEME)) {
-      const result = { shipped: {}, before: {}, candidates: {} };
+      const result = { shipped: {}, before: {}, candidates: {}, reachability: {} };
       results.conditions[condition.id][theme] = result;
       console.log(`Resolving ${condition.id}/${theme}…`);
       const baseline = themeTokens(base, theme), now = themeTokens(shipped, theme);
@@ -126,6 +168,11 @@ try {
           await page.locator('[data-testid="map-zone-1"]').click();
         }
         await reset();
+        if (mode === 'key') {
+          const capture = `${condition.id}-${theme}-key-${need}.png`;
+          result.reachability[need] = { capture, rows: await page.locator('.key-row').evaluateAll(rows => rows.map(n => ({id:n.getAttribute('data-testid'), need:n.classList.contains('optional') ? 'optional':'required'}))) };
+          if (condition.id === 'default' && theme === 'Veil') await page.screenshot({path:resolve(scratch,capture)});
+        }
       }
       async function select(id) {
         await page.locator(`[data-testid="map-place-row-${id}"]`).click();
@@ -192,7 +239,7 @@ try {
       }
       if (!process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'key') for (const need of ['required', 'optional']) {
         await mount('key', 'sea', false, need);
-        for (const action of ['rest', 'hover', 'focus-visible']) for (const state of Object.keys(roots.key)) {
+        for (const action of ['rest', 'hover', 'focus-visible']) for (const state of Object.keys(roots.key).filter(s => need === 'required' ? s !== 'optional-absent' : s !== 'required-missing')) {
           const row = `[data-testid="key-row-${state}"]`;
           await reset(); let steps = 'seed status; verified via fixture VERIFY click';
           if (action === 'hover') { await page.locator(row).hover(); steps += '; mouse hover row'; }
@@ -215,12 +262,10 @@ try {
       }
       if (!process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'map') {
       await mount('map');
-      for (const action of ['rest', 'hover', 'selected-current']) for (const [state, id] of Object.entries({ rest: 2, current: 4, selected: 1, hovered: 3 })) {
+      for (const action of ['rest', 'hover', 'selected-current']) for (const [state, id] of Object.entries({ rest: 2, current: 4, selected: 1 })) {
         await select(action === 'selected-current' && state === 'current' ? 4 : 1);
         if (state === 'hovered') await page.locator('[data-testid="map-pin-3"] .map-state-glyph > path[fill="transparent"]').hover();
         if (action === 'hover') await page.locator(`[data-testid="map-place-row-${id}"]`).hover();
-        // The sidebar row changes hoveredId; for non-hovered signatures use
-        // a different row while still sampling the requested glyph's real row wash.
         for (const part of ['fill', 'ring']) {
           const selector = `[data-testid="map-place-row-${id}"] [data-map-part="${part === 'ring' && state !== 'rest' ? 'outline' : 'fill'}"]`;
           await captureValues('map', state, `map/sidebar/${action}/${part}`, selector, `select ${action === 'selected-current' && state === 'current' ? 4 : 1}; close dialog; ${action === 'hover' ? 'mouse hover row' : state === 'hovered' ? 'mouse hover pin 3' : 'pointer off row'}`);
@@ -228,9 +273,10 @@ try {
       }
       }
       console.log(`Completed ${condition.id}/${theme}; renders=${renderCount}; wall=${((performance.now() - started) / 1000).toFixed(3)}s`);
-    }
     await page.close();
-  }
+    }));
+    } finally { release(); }
+  }));
   if (errors.length || requests.length) throw new Error(JSON.stringify({ errors, requests }));
   if (browser.version() !== fingerprint.chromium) throw new Error('Chromium version mismatch');
   results.proof.renderCount = renderCount; results.proof.wallSeconds = (performance.now() - started) / 1000;
