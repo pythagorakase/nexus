@@ -137,7 +137,7 @@ const SIGNATURES: Record<Surface, Record<string, string>> = {
 };
 type Palette = Record<string, Triple>;
 type Sample = {
-  painted: [number, number, number]; maskSize: number; modeFraction: number;
+  painted: [number, number, number]; maskSize: number; modeCount: number; modeFraction: number;
   histogram: { rgb: number[]; count: number }[]; width: number; height: number;
   action: string; animationsRunning: number;
   pseudos: { pinHover: boolean; hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean };
@@ -148,7 +148,7 @@ type ContextSamples = Record<string, Record<string, Sample>>;
 type Receipt = {
   inputs: Awaited<ReturnType<typeof inputs>>;
   media: { preludes: string[]; unsupported: string[]; variants: { id: string }[] };
-  proof: { acceptanceComplete: boolean; minimumModeFraction: number; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
+  proof: { acceptanceComplete: boolean; minimumModePixels: number; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
   conditions: Record<string, Record<Theme, {
     shipped: ContextSamples; before: ContextSamples;
     candidates: Record<string, Record<string, Record<string, Sample>>>;
@@ -323,11 +323,12 @@ describe("777-S2 state shades", () => {
     }
   });
   it("painted_control_masks_are_strong_and_interactions_are_real_and_settled", () => {
-    expect(receipt.proof.minimumModeFraction).toBe(.30);
+    expect(receipt.proof.minimumModePixels).toBe(64);
     const check = (sample: Sample, context: string) => {
       expect(sample.maskSize, `${context}: empty mask`).toBeGreaterThan(0);
-      expect(sample.modeFraction, `${context}: weak mask`).toBeGreaterThanOrEqual(receipt.proof.minimumModeFraction);
+      expect(sample.modeCount, `${context}: weak mask`).toBeGreaterThanOrEqual(receipt.proof.minimumModePixels);
       expect(sample.histogram[0].rgb).toEqual(sample.painted);
+      expect(sample.histogram[0].count).toBe(sample.modeCount);
       expect(sample.histogram[0].count / sample.maskSize).toBe(sample.modeFraction);
       expect(sample.animationsRunning).toBe(0);
       if (context.endsWith("focus-visible")) {

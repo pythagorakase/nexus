@@ -1,46 +1,58 @@
-# Painted Control-Capture Oracle (Round-Four Work in Progress)
+# Painted Control-Capture Oracle
 
-The fourth clarification's control is implemented: a unique attribute tags the
-sampled surface, and one rule suppresses fill, stroke, background-color, color,
-box-shadow, filter and text-shadow on that subtree. Visibility and layout remain
-intact. Foreground is the exact painted/control pixel difference; the RGB mode,
-mask size and top eight mask colors are retained. Empty masks or a mode below
-the fixed **30%** floor fail with the full context name. The shade test also
-requires the receipt's floor to equal 30%.
+The painted pixel is the measurement. Each surface is captured twice under
+identical conditions. A unique attribute tags its subtree; the control sets
+only **fill, stroke, background-color and color** to transparent with
+`!important`. Layout and visibility remain intact. Shadows and filters retain
+their painted declarations in both captures. A drop-shadow can still change
+because its source alpha changes.
 
-**Acceptance remains blocked.** The prescribed control rejects the real verified
-key: its glow changes the full clip, leaving the mode at 18.36% in Veil/Gilded
-and 12.63% in Vector. An unfiltered regeneration also rejects a Vector delete
-candidate at width 639. See the [paint-control stop report](../../../docs/qa/777-glyph-first-states/after-review-r4/paint-control-stop-report.md)
-for repeated captures, independent PNG checks, exact commands and tails. No
-lower floor, product glow change, substitute mask or accepted measurement is
-authorized by this diagnostic. The checked acceptance receipt remains stale.
+Foreground is the exact painted/control device-pixel difference. Its RGB mode
+must contain at least **64 device pixels** (4 CSS px² at device scale 4).
+Empty masks or smaller modes fail with the context name. Receipts retain the
+mode count, fraction, mask size and top eight mask colors. The test requires
+this absolute floor; the fraction is an audit value, not an acceptance floor.
 
-The accepted reachable inventory, real NexusLayout/KeysSection/ModelSection/
-MapPane fixture, production Vite CSS order, module-graph hash, bounded batches
-and per-group search remain in place. Candidates are painted in Chromium,
-never composited by hand. The measurement convention is file:// with HTTP(S)
-aborted, device scale 4, 1200×900 default, dark scheme and reduced motion, plus
-every CSS-derived emulatable media condition. Real mouse hover and keyboard Tab
-produce contexts; finite animations/transitions finish before capture, and
-infinite animations pause at declared phases.
+The fixture mounts real NexusLayout, KeysSection, ModelSection and MapPane
+with seeded local data and the production Vite build's emitted CSS in shipped
+order. No DOM/cascade/compositing model determines a color. The convention is
+file://, HTTP(S) aborted, device scale 4, 1200×900 default, dark scheme and
+reduced motion, plus every CSS-derived emulatable media condition. Mouse hover
+and keyboard Tab produce the recorded contexts. Finite animations/transitions
+finish before capture; infinite animations pause at declared start/trough phases.
+
+The inventory holds reachable states only. Sidebar hovered glyphs, absent
+keys in required rows, missing keys in optional rows, and the absent/missing
+pair without a shared context are excluded and documented in the evidence.
 
 Freshness hashes every esbuild metafile input, recursive CSS imports, tooling,
 configs, lockfile, browser versions and the full Tailwind client-source scan.
 Vitest recomputes it in a clean Node process without launching a browser.
 
-After a coordinator ruling, regenerate with:
+Run from the worktree root, using bounded condition batches:
 
 ```sh
-STATE_SURFACES_SCRATCH=<order-scratch>/capture npm --prefix ui run resolve-state-surfaces
+STATE_SURFACES_SCRATCH=<order-scratch>/capture/batch-1 \
+STATE_SURFACES_CONDITION=<comma-separated-condition-ids> \
+STATE_SURFACES_OUTPUT=<order-scratch>/capture/shards/batch-1.json \
+npm --prefix ui run resolve-state-surfaces
+# Repeat for all remaining conditions, then assemble the complete inventory:
+STATE_SURFACES_SCRATCH=<order-scratch>/capture \
+npm --prefix ui run resolve-state-surfaces -- --assemble
 npm --prefix ui test -- state-shades StateGlyphs shell-accessibility
 ```
 
-Capture commands have a 589-second bound. Full candidate coverage requires
-bounded condition batches and `--assemble` as in the accepted batch mechanics.
-Filtered/probe runs require STATE_SURFACES_OUTPUT in scratch and cannot replace
-the acceptance receipt. Failures write incomplete-probe.json and diagnostic
-captures; acceptanceComplete=false is never an accepted receipt. The plants
-protocol still requires an unplanted passing control before running plants.
+Each capture command has a 589-second bound. Filtered/probe runs require a
+scratch output and cannot replace the acceptance receipt. Assembly requires
+complete unique conditions, all themes and identical current fingerprints.
+Failed captures retain named diagnostic PNGs and acceptanceComplete=false.
+The per-group exhaustive search accepts 15 when reachable, otherwise the
+group's maximum; ties prefer the fewest changed tokens. Tables, swatches and
+exception manifests must be refreshed alongside a changed accepted palette.
+
+The checked-in plants protocol runs in bounded stages; see `plants.mjs`.
+It first requires a passing unplanted control, then records stale rejection,
+full regeneration (or a named measurement failure), fresh rejection and
+restoration for each named plant. Scratch copies alone are mutated.
 
 Codex, GPT-6.

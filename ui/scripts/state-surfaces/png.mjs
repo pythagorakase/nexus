@@ -56,7 +56,7 @@ export function histogramPng(bytes) {
 }
 
 /** Foreground is exclusively the device pixels changed by suppressing paint. */
-export function foreground(paintedBytes, controlBytes, label, minimumModeFraction = .30) {
+export function foreground(paintedBytes, controlBytes, label, minimumModePixels = 64) {
   const a = decodePng(paintedBytes), b = decodePng(controlBytes);
   if (a.width !== b.width || a.height !== b.height || a.channels !== b.channels)
     throw new Error(`Measurement failure ${label}: control dimensions differ`);
@@ -70,9 +70,9 @@ export function foreground(paintedBytes, controlBytes, label, minimumModeFractio
   const histogram = [...counts].map(([key, count]) => ({ rgb: key.split(',').map(Number), count }))
     .sort((a, b) => b.count - a.count || a.rgb[0] - b.rgb[0] || a.rgb[1] - b.rgb[1] || a.rgb[2] - b.rgb[2]);
   if (!maskSize) throw new Error(`Measurement failure ${label}: empty foreground mask`);
-  const modeFraction = histogram[0].count / maskSize;
-  if (modeFraction < minimumModeFraction)
-    throw new Error(`Measurement failure ${label}: weak foreground mask; mode=${modeFraction.toFixed(6)} < ${minimumModeFraction}; top8=${JSON.stringify(histogram.slice(0, 8))}`);
-  return { painted: histogram[0].rgb, maskSize, modeFraction, histogram: histogram.slice(0, 8),
+  const modeCount = histogram[0].count, modeFraction = modeCount / maskSize;
+  if (modeCount < minimumModePixels)
+    throw new Error(`Measurement failure ${label}: weak foreground mask; mode=${modeCount} device pixels < ${minimumModePixels}; fraction=${modeFraction.toFixed(6)}; top8=${JSON.stringify(histogram.slice(0, 8))}`);
+  return { painted: histogram[0].rgb, maskSize, modeCount, modeFraction, histogram: histogram.slice(0, 8),
     width: a.width, height: a.height };
 }
