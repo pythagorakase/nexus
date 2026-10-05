@@ -323,6 +323,7 @@ describe("777-S2 state shades", () => {
     }
   });
   it("painted_control_masks_are_strong_and_interactions_are_real_and_settled", () => {
+    expect(receipt.proof.minimumModeFraction).toBe(.30);
     const check = (sample: Sample, context: string) => {
       expect(sample.maskSize, `${context}: empty mask`).toBeGreaterThan(0);
       expect(sample.modeFraction, `${context}: weak mask`).toBeGreaterThanOrEqual(receipt.proof.minimumModeFraction);

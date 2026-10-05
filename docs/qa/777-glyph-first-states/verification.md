@@ -583,3 +583,29 @@ rule when foreground is the most frequent color. The Veil anchor clarification
 is settled.
 
 Codex, GPT-6.
+
+
+## After the Fourth Independent Review and the Panel — Paint Suppression
+
+The fourth clarification's exact paint-only control and fixed 30% mask-mode
+floor are implemented on top of `2f828bd3`; visibility and layout remain.
+A fresh unfiltered regeneration fails after **2,317 renders / 55.086s** on the
+Vector unarmed delete candidate at width 639 (96/728 mask pixels in its mode).
+A separate real verified-key probe and three repeated capture pairs per theme
+fail at 18.36% in Veil/Gilded and 12.63% in Vector because bloom enlarges the
+mask. Tagging its glow-bearing parent produces the same result. A diagnostic
+that disables that glow in both captures passes; it is never acceptance data.
+
+[Complete new stop-report](after-review-r4/paint-control-stop-report.md),
+[replay and raw capture readbacks](after-review-r4/paint-control/diagnostic.json),
+[independent PNG verification](after-review-r4/paint-control/independent-png-check.json),
+and [exact commands and verbatim tails](after-review-r4/paint-control/commands.md)
+retain the evidence. The checked acceptance receipt is unchanged and stale.
+Focused UI: 15 product/motion tests pass, shade suite fails stale receipt.
+UI check passes. No approved per-group maxima/exceptions, regenerated
+swatches/tables, executed plants, full UI/offline/reachability gate, PR update,
+main integration or push is claimed. Earlier reachable-inventory work and
+selected-label/halo proof remain accepted historical evidence. The coordinator
+must resolve the fixed floor for both measured failures before acceptance.
+
+Codex, GPT-6.

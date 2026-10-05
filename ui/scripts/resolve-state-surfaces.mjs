@@ -67,8 +67,8 @@ const browser = await chromium.launch({ headless: true });
 let renderCount = 0;
 const progress = setInterval(() => console.log(`Painted capture progress: renders=${renderCount}; wall=${((performance.now()-started)/1000).toFixed(3)}s`), 45000);
 const errors = [], requests = [];
-const results = { inputs: fingerprint, media, conditions: {}, proof: { minimumModeFraction: .02,
-  measurement: 'painted/control visibility:hidden foreground mask; RGB mode over changed device pixels',
+const results = { inputs: fingerprint, media, conditions: {}, proof: { minimumModeFraction: .30,
+  measurement: 'painted/paint-suppressed control foreground mask; RGB mode over changed device pixels; visibility and layout retained',
   stylesheet: 'production Vite build emitted CSS, production order', pageErrors: errors, networkRequests: requests } };
 let activeConditions = 0; const queue = [];
 async function acquire() { if (activeConditions >= 4) await new Promise(r => queue.push(r)); activeConditions++; }
@@ -128,9 +128,11 @@ try {
         ancestorHover: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':hover') ?? false,
         focusWithin: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':focus-within') ?? false }));
       const painted = await screenshot(box);
-      // Visibility keeps the exact layout, backdrop, siblings and overlays intact.
-      await el.evaluate(n => n.setAttribute('data-control-capture', ''));
-      const controlStyle = await page.addStyleTag({ content: '[data-control-capture], [data-control-capture] * { visibility: hidden !important; }' });
+      // Suppress only this tagged subtree's paint. Visibility, geometry and
+      // opacity compositing remain identical to the painted capture.
+      const captureId = `surface-${renderCount}`;
+      await el.evaluate((n, id) => n.setAttribute('data-control-capture', id), captureId);
+      const controlStyle = await page.addStyleTag({ content: `[data-control-capture="${captureId}"], [data-control-capture="${captureId}"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }` });
       const control = await screenshot(box);
       await controlStyle.evaluate(n => n.remove());
       await el.evaluate(n => n.removeAttribute('data-control-capture'));

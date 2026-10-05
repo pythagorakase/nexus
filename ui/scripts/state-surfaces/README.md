@@ -1,51 +1,46 @@
 # Painted Control-Capture Oracle (Round-Four Work in Progress)
 
-The reachable inventory now follows the coordinator's third clarification.
-The control-capture replacement is blocked because hiding a real optional key
-SVG changes backdrop pixels and makes the mask select the background.
-See [the control-backdrop stop-report](../../../docs/qa/777-glyph-first-states/after-review-r4/control-backdrop-stop-report.md).
-The checked acceptance receipt remains stale. No tables, swatches, group maxima
-or exceptions have been regenerated or approved from this partial work.
+The fourth clarification's control is implemented: a unique attribute tags the
+sampled surface, and one rule suppresses fill, stroke, background-color, color,
+box-shadow, filter and text-shadow on that subtree. Visibility and layout remain
+intact. Foreground is the exact painted/control pixel difference; the RGB mode,
+mask size and top eight mask colors are retained. Empty masks or a mode below
+the fixed **30%** floor fail with the full context name. The shade test also
+requires the receipt's floor to equal 30%.
 
-The draft bundles the real NexusLayout and production settings sections. Vite
-emits the production CSS in its normal order; the reversed fixture stylesheet
-has been removed. Browser captures use file://, aborted HTTP(S), device scale 4,
-1200×900 default, dark scheme and reduced motion. Media preludes are inventoried
-with additional emulation variants. The current production CSS yielded 18
-conditions; all were captured in three bounded batches. Hover uses the actual
-mouse; focus-visible uses keyboard Tab.
-Finite browser animations/transitions are awaited. Infinite animations are
-paused at declared phases. Candidates are rendered, never composited by hand.
+**Acceptance remains blocked.** The prescribed control rejects the real verified
+key: its glow changes the full clip, leaving the mode at 18.36% in Veil/Gilded
+and 12.63% in Vector. An unfiltered regeneration also rejects a Vector delete
+candidate at width 639. See the [paint-control stop report](../../../docs/qa/777-glyph-first-states/after-review-r4/paint-control-stop-report.md)
+for repeated captures, independent PNG checks, exact commands and tails. No
+lower floor, product glow change, substitute mask or accepted measurement is
+authorized by this diagnostic. The checked acceptance receipt remains stale.
 
-Each bounding-box sample has a painted PNG and a visibility:hidden control.
-The mask contains changed device pixels; its RGB mode, mask size and top eight
-colors are recorded. The fixed trial mode floor is 2%: 40% rejected a real
-verified key whose own shadow enlarged the mask; 8%/5% rejected Vector rings.
-The full capture passed the 2% floor, but optional-key background modes exceed
-70%. A mode floor cannot establish that changed pixels belong to the glyph.
-The literal control convention needs a ruling before use as acceptance evidence.
-Empty or weak masks throw named measurement failures.
+The accepted reachable inventory, real NexusLayout/KeysSection/ModelSection/
+MapPane fixture, production Vite CSS order, module-graph hash, bounded batches
+and per-group search remain in place. Candidates are painted in Chromium,
+never composited by hand. The measurement convention is file:// with HTTP(S)
+aborted, device scale 4, 1200×900 default, dark scheme and reduced motion, plus
+every CSS-derived emulatable media condition. Real mouse hover and keyboard Tab
+produce contexts; finite animations/transitions finish before capture, and
+infinite animations pause at declared phases.
 
-Freshness hashes path-delimited file bytes from the esbuild metafile, recursive
-CSS imports, tooling, Chromium/Playwright configuration and Tailwind's complete
-client source scan. Vitest computes the fingerprint in a clean Node process,
-then refuses stale or incomplete receipts before using samples. The per-group
-search ran provisionally over all 64,008 baseline/shipped/candidate samples;
-its results were rejected because key colors resolved to backdrop modes. The
-nine-plant protocol awaits a valid unplanted receipt. Plants have not been run;
-their command splitting,
-acceptance-failure classification and complete media coverage remain unfinished.
+Freshness hashes every esbuild metafile input, recursive CSS imports, tooling,
+configs, lockfile, browser versions and the full Tailwind client-source scan.
+Vitest recomputes it in a clean Node process without launching a browser.
 
-Run final regeneration only after the coordinator settles the control convention:
+After a coordinator ruling, regenerate with:
 
 ```sh
 STATE_SURFACES_SCRATCH=<order-scratch>/capture npm --prefix ui run resolve-state-surfaces
 npm --prefix ui test -- state-shades StateGlyphs shell-accessibility
 ```
 
-Filtered probes require an explicit STATE_SURFACES_OUTPUT scratch path and
-cannot overwrite ui/client/src/state-surfaces.resolved.json. A partial success
-is marked acceptanceComplete=false; a failure writes incomplete-probe.json in
-scratch and names its context. No partial probe satisfies the acceptance gates.
+Capture commands have a 589-second bound. Full candidate coverage requires
+bounded condition batches and `--assemble` as in the accepted batch mechanics.
+Filtered/probe runs require STATE_SURFACES_OUTPUT in scratch and cannot replace
+the acceptance receipt. Failures write incomplete-probe.json and diagnostic
+captures; acceptanceComplete=false is never an accepted receipt. The plants
+protocol still requires an unplanted passing control before running plants.
 
 Codex, GPT-6.
