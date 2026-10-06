@@ -33,7 +33,8 @@
 -- Nested CREATE [OR REPLACE] FUNCTION|PROCEDURE definitions refuse any SET clause
 -- and any language other than sql/plpgsql wherever the option is placed; their
 -- constant bodies are scanned under the wrapper's environment and under the session
--- startup settings. Migration parsing/deparsing pins
+-- startup settings; their parameter lists (defaults are evaluated by the caller)
+-- are scanned under the session startup settings. Migration parsing/deparsing pins
 -- search_path=pg_catalog, standard_conforming_strings=on, backslash_quote=safe_encoding,
 -- exit_on_error=off, quote_all_identifiers=off and lock_timeout=5s; validators reassert
 -- check_function_bodies=on. Role and session_authorization apply to scanner lookups and
@@ -368,6 +369,9 @@ DECLARE
     argument_commas integer;
     nested_definition boolean;
     atomic_fold boolean;
+    parameter_start integer;
+    parameter_end integer;
+    parameter_text text;
 BEGIN
     IF nesting > 8 THEN RAISE EXCEPTION 'unresolved nested dynamic SQL'; END IF;
     FOR token IN SELECT value FROM jsonb_array_elements(tokens) LOOP
@@ -421,6 +425,7 @@ BEGIN
         -- CREATE bodies are constant SQL too. Inspect options on either side
         -- of the body, then scan under both wrapper and startup environments.
         nested_definition := false; atomic_fold := false; fold_start := NULL;
+        parameter_start := NULL; parameter_end := NULL; parameter_text := '';
         IF kind='id' AND name='create' AND NOT (
             i=0 AND nesting=0 AND EXISTS (SELECT 1 FROM pg_proc
                 WHERE oid=function_oid AND prosqlbody IS NOT NULL)
@@ -430,6 +435,16 @@ BEGIN
             IF tokens->j->>'k'='id' AND tokens->j->>'v' IN ('function','procedure') THEN
                 nested_definition := true; j := j+1; depth := 0;
                 WHILE j<count_tokens LOOP
+                    IF parameter_start IS NULL AND depth=0
+                        AND tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN
+                        parameter_start := j;
+                    ELSIF parameter_start IS NOT NULL AND parameter_end IS NULL THEN
+                        IF depth=1 AND tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN
+                            parameter_end := j;
+                        ELSE
+                            parameter_text := parameter_text||' '||(tokens->j->>'raw');
+                        END IF;
+                    END IF;
                     IF tokens->j->>'k'='id' AND tokens->j->>'v'='set' THEN
                         RAISE EXCEPTION 'unresolved nested routine SET environment';
                     END IF;
@@ -464,6 +479,9 @@ BEGIN
                     ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=';' AND depth=0 THEN EXIT; END IF;
                     j := j+1;
                 END LOOP;
+                IF parameter_text<>'' THEN
+                    PERFORM pg_temp.dead143_body(parameter_text,function_oid,targets,relation_targets,names,ARRAY[]::text[],ARRAY[]::text[],nesting+1);
+                END IF;
                 IF fold_start IS NULL THEN
                     IF atomic_fold THEN i := i+1; CONTINUE; END IF;
                     RAISE EXCEPTION 'unresolved nested routine body';
