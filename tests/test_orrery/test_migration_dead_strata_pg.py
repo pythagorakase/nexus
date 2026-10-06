@@ -3009,7 +3009,8 @@ def test_migration_143_round12_column_definitions(
     """FROM position distinguishes keyword aliases/types from healthy aliases."""
     target = form != "column-alias"
     source = {
-        "rows-alias": 'jsonb_to_record(\'{"v":"0|neutral"}\') rows(v emotional_valence)',
+        "rows-alias": 'jsonb_to_record(\'{"v":"0|neutral"}\') '
+        "rows(v emotional_valence)",
         "interval-type": 'jsonb_to_record(\'{"elapsed":"1 second","v":"0|neutral"}\') '
         "r(elapsed interval, v emotional_valence)",
         "column-alias": "generate_series(1,3) g(n)",

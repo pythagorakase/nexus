@@ -340,24 +340,23 @@ DECLARE
     opener integer;
     returning_type boolean;
     bare_column_definition boolean;
+    call_close integer;
     call_open integer;
     call_name integer;
-    -- Keywords after a closing parenthesis are expression/clause syntax, not
-    -- bare aliases. Reuse this one list for the column/type token check.
-    column_definition_keywords text[] := ARRAY[
-        'filter','over','within','and','or','not','is','in','like','ilike',
-        'similar','between','on','using','where','group','having','order','limit',
-        'offset','fetch','for','union','intersect','except','returning','into',
-        'as','values','lateral','cross','natural','left','right','full','inner',
-        'outer','join','when','then','else','end','case','loop','exception',
-        'elsif','if','while','return','perform','raise','execute','select','from',
-        'set','with','window','partition','rows','range','groups','escape',
-        'collate','at','zone','operator','isnull','notnull','overlaps','to',
-        'interval','array','distinct','all','any','some','exists','cast','nulls',
-        'first','last','asc','desc','tablesample','repeatable','only','ordinality',
-        'columns','passing','path','default','error','empty','unknown','keep',
-        'omit','quotes','wrapper','conditional','unconditional','exclude','ties',
-        'others','current','preceding','following','unbounded'
+    -- PostgreSQL reserved_keyword category only: unreserved/type keywords
+    -- remain legal aliases. FROM position decides column-definition context.
+    reserved_keywords text[] := ARRAY[
+        'all','analyse','analyze','and','any','array','as','asc','asymmetric',
+        'both','case','cast','check','collate','column','constraint','create',
+        'current_catalog','current_date','current_role','current_time',
+        'current_timestamp','current_user','default','deferrable','desc',
+        'distinct','do','else','end','except','false','fetch','for','foreign',
+        'from','grant','group','having','in','initially','intersect','into',
+        'lateral','leading','limit','localtime','localtimestamp','not','null',
+        'offset','on','only','or','order','placing','primary','references',
+        'returning','select','session_user','some','symmetric','system_user',
+        'table','then','to','trailing','true','union','unique','user','using',
+        'variadic','when','where','window','with'
     ];
     literal_names text[];
     literal_name text;
@@ -680,19 +679,19 @@ BEGIN
                 END LOOP;
                 FOREACH opener IN ARRAY group_openers LOOP
                     bare_column_definition := false;
+                    call_close := opener-1;
                     IF tokens->(opener-1)->>'k' IN ('id','qid')
                         AND NOT (tokens->(opener-1)->>'k'='id'
-                            AND tokens->(opener-1)->>'v'=ANY(column_definition_keywords))
-                        AND tokens->(opener-2)->>'k'='punct' AND tokens->(opener-2)->>'v'=')'
-                        AND tokens->(opener+1)->>'k' IN ('id','qid')
-                        AND tokens->(opener+2)->>'k' IN ('id','qid')
-                        AND NOT (tokens->(opener+1)->>'k'='id'
-                            AND tokens->(opener+1)->>'v'=ANY(column_definition_keywords))
-                        AND NOT (tokens->(opener+2)->>'k'='id'
-                            AND tokens->(opener+2)->>'v'=ANY(column_definition_keywords)) THEN
+                            AND tokens->(opener-1)->>'v'=ANY(reserved_keywords)) THEN
+                        call_close := call_close-1;
+                    END IF;
+                    IF tokens->call_close->>'k'='id' AND tokens->call_close->>'v'='as' THEN
+                        call_close := call_close-1;
+                    END IF;
+                    IF tokens->call_close->>'k'='punct' AND tokens->call_close->>'v'=')' THEN
                         -- Match the closing call parenthesis, then its possibly
                         -- qualified function name, before checking FROM position.
-                        call_open := opener-3; depth := 1;
+                        call_open := call_close-1; depth := 1;
                         WHILE call_open>=left_edge AND depth>0 LOOP
                             IF tokens->call_open->>'k'='punct' AND tokens->call_open->>'v'=')' THEN depth := depth+1;
                             ELSIF tokens->call_open->>'k'='punct' AND tokens->call_open->>'v'='(' THEN depth := depth-1; END IF;
