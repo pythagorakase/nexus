@@ -8488,3 +8488,330 @@ cleanup_read.py: 807480f0ec0838de50cc1e838ece8d0e6b9323287e804a2d45b1dc6c22b3b21
 ```
 
 Authored by Codex, running GPT-6.
+
+
+## After the Fourteenth Independent Review
+
+Round fourteen fixes only Astra's one in-contract P2: the parameter list of a
+nested routine definition must meet the startup-settings scan, because omitted
+argument defaults are evaluated by its caller. Migration checkpoint `4905a2c1`
+precedes regression checkpoint `ca5a2cb1`. No prior commit is rewritten.
+
+### Shipped Contract
+
+> PostgreSQL decides catalog dependencies: every drop is RESTRICT, and SQL-standard bodies (prosqlbody) carry real dependencies. String-bodied routines are decided lexically under allowlisted declared SET clauses on top of session startup settings: a token naming a drop target refuses, every decoded string literal or decoded name-array element resolving to a drop target refuses, and an unclassifiable form refuses. After the drops, PostgreSQL's validators check every surviving application routine under that environment, with identity settings reserved for scanner lookups and validators run as the migration user. The guard refuses non-extension format/concat/concat_ws functions and || operators outside pg_catalog; proconfig names other than search_path, role, session_authorization, standard_conforming_strings, backslash_quote, DateStyle, IntervalStyle, TimeZone, extra_float_digits, default_text_search_config, client_min_messages and application_name; statement-initial bare SET/RESET, any set_config identifier and recognized pg_settings UPDATE targets; enabled event triggers before helper DDL; unsupported application languages or different SECURITY DEFINER owners; raw U&' or U&" or UESCAPE, even in comments/data; target-bearing unmodeled column-definition lists; recognized nonliteral or unresolved catalog-input operands (reg* casts, to_reg*, nextval/currval/setval); and nonconstant or unresolved SQL in recognized EXECUTE, DO, nested CREATE FUNCTION/PROCEDURE and SQL-text consumer forms. Nested CREATE [OR REPLACE] FUNCTION|PROCEDURE definitions refuse any SET clause and any language other than sql/plpgsql wherever the option is placed; their constant bodies are scanned under the wrapper's environment and under the session startup settings; their parameter lists (defaults are evaluated by the caller) are scanned under the session startup settings. Migration parsing/deparsing pins search_path=pg_catalog, standard_conforming_strings=on, backslash_quote=safe_encoding, exit_on_error=off, quote_all_identifiers=off and lock_timeout=5s; validators reassert check_function_bodies=on. Role and session_authorization apply to scanner lookups and are skipped by validators. Non-routine stored definitions meet the literal rule and constant SQL-text fold; pg_depend decides their outer identifier references. Constant SQL through an unrecognized consumer remains an in-contract residual, not a nonconstant-data exclusion. Outside the static guarantee are names arriving as runtime data (nonliteral catalog-input arguments or reg* parameters), nonconstant SQL through unrecognized forms, and unrecognized path/role mutations. Late-bound PL/pgSQL expressions and polymorphic SQL remain limited by their native validators: fmgr_sql_validator only syntax-checks polymorphic SQL; plpgsql_validator checks syntax and declared types.
+
+### Ordered Change
+
+The existing nested-definition walk captures the raw tokens between the first
+opening parenthesis at depth zero after the routine name and its matching close.
+After the walk, for both string and BEGIN ATOMIC bodies, a nonempty parameter
+list is scanned by dead143_body with empty setting_names/setting_values arrays
+and nesting+1. The main rescan under the wrapper's environment is unchanged.
+RETURNS TABLE columns are types; SET clauses and foreign languages retain their
+existing refusals. The whole-definition walk, both body environments, native
+validators, single-schema helper path and sentinel unwind are unchanged. No
+runtime DDL or routine execution is added to the migration.
+
+### Red/Green Ledger
+
+The red replay swaps only migration 143 from `7ffe2d1e` through the existing
+OLD_MIGRATION plugin. The wrapper is not called before migration; this prevents
+a materialized inner routine's top-level default scan from masking the gap.
+Every green refusal checks probe813_r14, the exact diagnostic, full catalog/data
+snapshot, routine definitions/OIDs/ownership/ACLs/settings/comments and unchanged
+schema_migrations stamps. Survivor calls occur only after the preservation checks.
+
+| Case | 7ffe2d1e Migration | Current Migration |
+| --- | --- | --- |
+| r14-nested-default | Applies; committed wrapper call returns true; fresh generated-routine call under default settings fails with 42704, item_type missing. | Refuses probe813_r14: literal names a drop target: item_type; catalogs and stamps unchanged. |
+| r14-nested-default-equals | Applies; same wrapper success and generated-routine 42704. | Same atomic refusal for the = spelling. |
+| r14-nested-default-atomic | Applies; same wrapper success and generated-routine 42704, as observed for the old SQL. | Same atomic refusal for BEGIN ATOMIC. |
+| r14-nested-default-survivor | Applies; boolean is catalog-confirmed; wrapper and generated routine both return true. | Applies; preserved catalogs/data; both calls return true. |
+| Round-10 nested-string / nested-atomic / nested-nonconstant | Refuse with their existing diagnostics. | Same verdicts. |
+| Round-10 nested-survivor | Applies and runs. | Same verdict. |
+| Round-13 SET before/after body, unsupported language, persisting inner | Refuse with their existing diagnostics. | Same verdicts. |
+| Round-13 persisting-survivor | Applies; wrapper and created routine both run. | Same verdict. |
+
+Final red: three expected assertion failures and ten passing controls. Final
+focused green: thirteen passes. The first draft of the new regression used the
+outcome helper without committing the wrapper-created routine, so its later
+lookup failed with 42883; the test was corrected to commit the wrapper call using
+_sql before the fresh generated-routine lookup. Draft logs are not proof of the
+migration failure; the final red replay above demonstrates 42704 in all three
+forms. No migration change was needed for that test correction.
+
+### Complete Ordered Proof
+
+The four ordered files are covered by five disjoint shards: 123 round-9 through
+round-14, 91 round-8, 199 direct, 129 post-143, and 196 fleet/support cases:
+**738 passed, zero failed, zero skipped**. All six fleet sources apply once with
+NEXUS_RUN_CORPUS=1; no fleet exemption or stop report was needed. The focused
+thirteen are additional checks, not included in that complete-proof count.
+Every pytest tail includes secret-store guard: active; nexus-api: denied and
+owner targets: none. Source dumps are read-only; calls and mutations target
+only disposable clones; provider models remain TEST. The runner unsets
+NEXUS_GATEWAY_PORT, NEXUS_API_URL, NEXUS_SLOT and NEXUS_RUN_LIVE_LLM; sets
+PYTHONPATH to this worktree and scratch plugin, NEXUS_DBNAME_AUDIT=1 and scratch
+TMPDIR; and preserves the prior 540-second command and 120-second silence bounds.
+
+### Exact Commands and Tails
+
+**red-final**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/tmp/nexus-813-r14/7ffe2d1e.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py red-final /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p swap_migration tests/test_orrery/test_migration_dead_strata_pg.py -k 'round14 or round13 or (round10 and nested)' -vs --tb=short
+```
+
+```text
+dbname audit: 14 targets: postgres, qa640_813_case_* x13
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round14_nested_defaults[r14-nested-default]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round14_nested_defaults[r14-nested-default-equals]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round14_nested_defaults[r14-nested-default-atomic]
+================ 3 failed, 10 passed, 535 deselected in 37.96s =================
+EXIT STATUS: 1
+```
+
+**green-final**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py green-final /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'round14 or round13 or (round10 and nested)' -vs --tb=short
+```
+
+```text
+dbname audit: 14 targets: postgres, qa640_813_case_* x13
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+===================== 13 passed, 535 deselected in 35.86s ======================
+EXIT STATUS: 0
+```
+
+**pg-rounds**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py pg-rounds /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'round9 or round10 or round11 or round12 or round13 or round14' -vs --tb=short
+```
+
+```text
+dbname audit: 124 targets: postgres, qa640_813_case_* x123
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 123 passed, 425 deselected in 282.69s (0:04:42) ================
+EXIT STATUS: 0
+```
+
+**pg-round8**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py pg-round8 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k round8 -vs --tb=short
+```
+
+```text
+dbname audit: 92 targets: postgres, qa640_813_case_* x91
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+================ 91 passed, 457 deselected in 262.34s (0:04:22) ================
+EXIT STATUS: 0
+```
+
+**pg-direct**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py pg-direct /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'not regressions_work_from_post143_clone and not round8 and not round9 and not round10 and not round11 and not round12 and not round13 and not round14 and not each_fleet' -vs --tb=short
+```
+
+```text
+dbname audit: 200 targets: postgres, qa640_813_case_* x199
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 199 passed, 349 deselected in 452.21s (0:07:32) ================
+EXIT STATUS: 0
+```
+
+**pg-post143**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py pg-post143 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k regressions_work_from_post143_clone -vs --tb=short
+```
+
+```text
+dbname audit: 130 targets: postgres, qa640_813_case_* x129
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 129 passed, 419 deselected in 458.64s (0:07:38) ================
+EXIT STATUS: 0
+```
+
+**pg-fleet-support**
+
+```sh
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py pg-fleet-support /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py tests/test_owner_target_guard.py -v --tb=short
+```
+
+```text
+dbname audit: 18 targets: postgres, qa640_813_case_* x6, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+======================= 196 passed in 135.55s (0:02:15) ========================
+EXIT STATUS: 0
+```
+
+**black-final**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py black-final /Users/pythagor/nexus/.venv/bin/python -m black --check tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+EXIT STATUS: 0
+```
+
+**flake8-final**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py flake8-final /Users/pythagor/nexus/.venv/bin/python -m flake8 tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+EXIT STATUS: 0
+```
+
+**mypy-final**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py mypy-final /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+Success: no issues found in 1 source file
+EXIT STATUS: 0
+```
+
+**comments-final**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py comments-final /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+**exceptions-final**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py exceptions-final /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+**cleanup-final**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/nexus-813-r14/run.py cleanup-final /Users/pythagor/nexus/.venv/bin/python /tmp/nexus-813-r14/cleanup_read.py
+```
+
+```text
+admin read-only identity: ('postgres', 'on')
+qa640_813_case_* databases remaining: []
+qa640_813_case_* roles remaining: []
+EXIT STATUS: 0
+```
+
+Fleet verdicts, verbatim:
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template] PASSED [  0%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01] PASSED [  1%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02] PASSED [  1%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05] PASSED [  3%]
+```
+
+Old-migration verdicts and calls, verbatim:
+
+```text
+ROUND10 nested-string applied: False expected: hidden body identifier reference
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[nested-atomic] ROUND10 nested-atomic applied: False expected: hidden body identifier reference
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[nested-survivor] ROUND10 nested-survivor applied: True expected: apply
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[nested-nonconstant] ROUND10 nested-nonconstant applied: False expected: unresolved
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round13_nested_environments[r13-set-after-body] ROUND13 r13-set-after-body applied: False
+ROUND13 REFUSAL r13-set-after-body ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r13() refuses: unresolved nested routine SET environment
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round13_nested_environments[r13-set-before-body] ROUND13 r13-set-before-body applied: False
+ROUND13 REFUSAL r13-set-before-body ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r13() refuses: unresolved nested routine SET environment
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round13_nested_environments[r13-language-after-body] ROUND13 r13-language-after-body applied: False
+ROUND13 REFUSAL r13-language-after-body ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r13() refuses: unresolved nested routine language
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round13_nested_environments[r13-persisting-inner] ROUND13 r13-persisting-inner applied: False
+ROUND13 REFUSAL r13-persisting-inner ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r13_persist() refuses: literal names a drop target: item_type
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round13_nested_environments[r13-persisting-survivor] ROUND13 r13-persisting-survivor applied: True
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round14_nested_defaults[r14-nested-default] ROUND14 r14-nested-default applied: True
+OLD OUTCOME r14-nested-default wrapper: (True, (True,)) after: (False, ('42704', 'type "item_type" does not exist'))
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round14_nested_defaults[r14-nested-default-equals] ROUND14 r14-nested-default-equals applied: True
+OLD OUTCOME r14-nested-default-equals wrapper: (True, (True,)) after: (False, ('42704', 'type "item_type" does not exist'))
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round14_nested_defaults[r14-nested-default-atomic] ROUND14 r14-nested-default-atomic applied: True
+OLD OUTCOME r14-nested-default-atomic wrapper: (True, (True,)) after: (False, ('42704', 'type "item_type" does not exist'))
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round14_nested_defaults[r14-nested-default-survivor] ROUND14 r14-nested-default-survivor applied: True
+```
+
+Current refusal diagnostics, verbatim:
+
+```text
+ROUND14 REFUSAL r14-nested-default ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r14() refuses: literal names a drop target: item_type
+ROUND14 REFUSAL r14-nested-default-equals ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r14() refuses: literal names a drop target: item_type
+ROUND14 REFUSAL r14-nested-default-atomic ERROR    nexus.migrate:migrate.py:364   FAILED: 143_drop_dead_schema_strata - target public.items/public.ai_notebook/nine enums: function/procedure public.probe813_r14() refuses: literal names a drop target: item_type
+```
+
+### Static Checks, Landing and Provenance
+
+Black, flake8 (zero diagnostics), sanctioned mypy --explicit-package-bases,
+migration-comments lint and exception-dispositions lint pass on the final code.
+No lint baseline changes. Both mandatory lints are re-run at the final evidence
+head after its commit and recorded in the live PR body. The read-only cleanup
+probe finds no qa640_813_case_* databases or roles remaining.
+
+Latest origin/main `160134540517f6b74aacd1d1e1f3f584454eef86` was fetched and merged:
+Already up to date; it is an ancestor. Only fix commits are added; no rebase or
+stash. The PR stays open and unmerged. The prior contract, six broad refusals,
+single-schema path, sentinel unwind, validators, round-12 FROM-position rule,
+round-13 whole-definition walk and two-environment body scan and residuals stand.
+
+The live PR restores Landing: fleet cases under NEXUS_RUN_CORPUS=1 at the final
+head; squash merge; python scripts/migrate.py --all, then
+python scripts/migrate.py --slot 1 --write-locked-slot; nexus doctor; the note
+on #813. Those production landing steps remain with the coordinator and have
+not been executed by this fix order.
+
+Scratch provenance, SHA-256:
+
+```text
+7ffe2d1e.sql: 592f4040f67eb17f8ee5e27c9cc37d6a3ba1f3b301bba49bb932e1f16704ff6b
+swap_migration.py: 6143bb190e712329200141c20fe157f230317c8b5549f680cdc172ae3dc76ddd
+run.py: 678f039bee60c168297da27351f159e8b56617ea8b3d63065c782d57ef411acd
+cleanup_read.py: 807480f0ec0838de50cc1e838ece8d0e6b9323287e804a2d45b1dc6c22b3b214
+```
+
+Authored by Codex, running GPT-6.
