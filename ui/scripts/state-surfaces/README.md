@@ -46,8 +46,13 @@ records the discrepancy.
 Discrete feature values
 are crossed with those bands; compound/nested preludes are conjunctions and
 comma lists are alternatives. One vector per distinct satisfied-prelude set
-is retained, and every included prelude must be satisfied. Print and forced
-colors are recorded as excluded environments, never rendered. Unsupported
+is retained, and every included prelude must be satisfied. Sixth Review:
+every media list is split at depth-zero commas (parentheses may nest); each
+kept alternative is its own prelude for bands, features and satisfied sets.
+Only alternatives with a print media type or a forced-colors feature are
+excluded, with their parent list and reason recorded in `media.excluded`.
+An entirely excluded list contributes nothing; a mixed list retains its
+screen alternatives. Unsupported
 features and container preludes fail by name. The shipped CSS has **9 width
 bands × 2 motion values = 18 vectors**, expanded into **27 condition renders**
 by motion start/trough phases. IDs name band and motion, for example
@@ -116,6 +121,10 @@ certification and do not run a reduced-domain joint search. A media plant may
 add feature names to the default ID; the diagnostic records and normalizes that
 ID solely for comparisons with the same physical shipping default. The protocol
 uses the html-qualified dark media override that wins the production cascade.
+The Sixth Review mixed-print/width plant uses Astra's exact 640–759px rule;
+its capture is the new 759×900/dark/reduce representative, compared with the
+prior 760px band receipt. The 1200px default lies outside the planted rule.
+This sole viewport exception keeps partial receipts uncertified.
 Gradient paint must regenerate successfully; element-scoped state declarations
 must fail. The gradient and redeclaration regressions are included.
 

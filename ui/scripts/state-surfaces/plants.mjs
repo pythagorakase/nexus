@@ -14,6 +14,7 @@ const plants = [
   { name: 'opaque-gradient-stop', path: layout, replace: ['radial-gradient(1200px 600px at 50% -10%, hsl(320 55% 40% / .07), transparent 60%)', 'radial-gradient(1200px 600px at 50% -10%, hsl(320 55% 40% / .07), #ffffff 60%)'] },
   { name: 'theme-provider-opacity', path: theme, replace: ['{children}', '<div style={{opacity: 0.35}}>{children}</div>'] },
   { name: 'media-root-override', path: layout, append: '\n@media (prefers-color-scheme: dark) { html.dark.theme-vector { --state-key-verified: var(--state-key-present); } }\n' },
+  { name: 'mixed-print-width', path: layout, append: '\n@media print, (min-width: 640px) and (max-width: 759px) { .key-row.optional { opacity: .35 } }\n', condition: 'w640-759/reduce', comparisonId: 'w640-760/reduce', width: 759 },
   { name: 'optional-row-opacity', path: layout, append: '\n.key-row.optional { opacity: .15; }\n' },
   { name: 'theme-backdrop', path: layout, append: '\n.dark.theme-vector .key-row { background: #ffffff; }\n' },
   { name: 'important-state-surface', path: layout, append: '\n.lm-trash.armed { color: var(--state-delete-unarmed) !important; }\n' },
@@ -63,7 +64,7 @@ async function run(name, args, env = {}) {
 const receiptPath = resolve(copiedUi, 'client/src/state-surfaces.resolved.json');
 const shipping = JSON.parse(readFileSync(resolve(ui, 'client/src/state-surfaces.resolved.json'), 'utf8'));
 const defaultId = shipping.media.variants.find(v => v.viewport.width === 1200 && v.viewport.height === 900 && v.reducedMotion === 'reduce' && v.colorScheme === 'dark').id;
-function diagnostic(path, sourceId) {
+function diagnostic(path, sourceId, comparisonId) {
   const src = resolve(copiedUi, 'client/src');
   let test = readFileSync(resolve(src, 'state-shades.test.ts'), 'utf8')
     .replaceAll('import.meta.dirname', JSON.stringify(src))
@@ -72,11 +73,11 @@ function diagnostic(path, sourceId) {
   test = test.replace('const receiptPath = resolve(' + JSON.stringify(src) + ', "state-surfaces.resolved.json");', `const receiptPath = ${JSON.stringify(path)};`);
   const guard = 'if (receipt.proof.acceptanceComplete !== true)\n  throw new Error("Incomplete painted state surfaces: filtered/probe captures are not acceptance receipts.");';
   if (!test.includes(guard)) throw new Error('Default diagnostic: acceptance guard changed');
-  // Preserve acceptanceComplete=false. Normalize only the default comparison ID:
-  // a media plant may add a feature to the ID while retaining 1200×900/dark/reduce.
-  test = test.replace(guard, `receipt.conditions = { [${JSON.stringify(defaultId)}]: receipt.conditions[${JSON.stringify(sourceId)}] };\nreceipt.media.variants = [{id: ${JSON.stringify(defaultId)}}];`);
-  test = test.replace('toEqual(evidence.measurements)', `toEqual(evidence.measurements.filter((m: {condition: string}) => m.condition === ${JSON.stringify(defaultId)}))`)
-    .replace('toEqual(evidence.before)', `toEqual(evidence.before.filter((m: {condition: string}) => m.condition === ${JSON.stringify(defaultId)}))`);
+  // Preserve acceptanceComplete=false. Normalize only the recorded comparison ID.
+  // The mixed-list regression uses its new 759px representative against the old 760px band.
+  test = test.replace(guard, `receipt.conditions = { [${JSON.stringify(comparisonId)}]: receipt.conditions[${JSON.stringify(sourceId)}] };\nreceipt.media.variants = [{id: ${JSON.stringify(comparisonId)}}];`);
+  test = test.replace('toEqual(evidence.measurements)', `toEqual(evidence.measurements.filter((m: {condition: string}) => m.condition === ${JSON.stringify(comparisonId)}))`)
+    .replace('toEqual(evidence.before)', `toEqual(evidence.before.filter((m: {condition: string}) => m.condition === ${JSON.stringify(comparisonId)}))`);
   writeFileSync(resolve(copiedUi, 'client/plant-default-r5.test.ts'), test);
 }
 const diagnosticTests = 'browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled|global_tokens_are_unchanged|state_surfaces_read_only_state_tokens';
@@ -112,7 +113,7 @@ try {
       } else if (stage === 'capture') {
         const capture = resolve(scratch, `${plant.name}-capture`); mkdirSync(capture, { recursive: true });
         const regenerated = await run(`${plant.name}-regenerate-default`, ['npm', '--prefix', copiedUi, 'run', 'resolve-state-surfaces'],
-          { STATE_SURFACES_SCRATCH: capture, STATE_SURFACES_CONDITION: 'default', STATE_SURFACES_OUTPUT: resolve(capture, 'default.json') });
+          { STATE_SURFACES_SCRATCH: capture, STATE_SURFACES_CONDITION: plant.condition ?? 'default', STATE_SURFACES_OUTPUT: resolve(capture, 'default.json') });
         if (regenerated.code !== 0 && !/Measurement failure|Calibration (?:non-vacuity )?failure|Unemulatable/.test(regenerated.tail)) throw new Error('Unrelated regeneration failure');
         if (plant.name === 'gradient-state-surface' && regenerated.code !== 0) throw new Error('Gradient must be measured successfully');
       } else if (stage === 'fresh') {
@@ -122,11 +123,11 @@ try {
         else {
           const path = resolve(scratch, `${plant.name}-capture/default.json`), partial = JSON.parse(readFileSync(path, 'utf8'));
           const [sourceId] = Object.keys(partial.conditions), condition = partial.media.variants.find(v => v.id === sourceId);
-          if (partial.proof.acceptanceComplete !== false || Object.keys(partial.conditions).length !== 1 || condition.viewport.width !== 1200 || condition.viewport.height !== 900 || condition.reducedMotion !== 'reduce' || condition.colorScheme !== 'dark') throw new Error('Diagnostic scope escaped default');
-          diagnostic(path, sourceId);
+          if (partial.proof.acceptanceComplete !== false || Object.keys(partial.conditions).length !== 1 || condition.viewport.width !== (plant.width ?? 1200) || condition.viewport.height !== 900 || condition.reducedMotion !== 'reduce' || condition.colorScheme !== 'dark') throw new Error('Diagnostic scope escaped the plant condition');
+          diagnostic(path, sourceId, plant.comparisonId ?? defaultId);
           const fresh = await run(`${plant.name}-fresh-default`, ['npm', '--prefix', copiedUi, 'test', '--', 'plant-default-r5', '-t', diagnosticTests]);
           if (fresh.code === 0) throw new Error('Regenerated default plant unexpectedly accepted');
-          report.push({ name: `${plant.name}-scope`, sourceId, comparisonId: defaultId, acceptanceComplete: false, renderCount: partial.proof.renderCount, mutatedPath: plant.path, mutation: plant.replace ?? plant.append });
+          report.push({ name: `${plant.name}-scope`, sourceId, comparisonId: plant.comparisonId ?? defaultId, viewport: condition.viewport, acceptanceComplete: false, renderCount: partial.proof.renderCount, mutatedPath: plant.path, mutation: plant.replace ?? plant.append });
         }
       } else throw new Error(`Unknown stage ${stage}`);
     }
