@@ -7312,3 +7312,389 @@ EXIT STATUS: 0
 ```
 
 Authored by Codex, running GPT-6.
+
+
+## After the Eleventh Independent Review
+
+### Scoped Fix and Proof
+
+Round 11 fixes only the bare-alias F5 regression identified in review-1098k.
+Migration 143 now requires all three ordered conditions: a non-keyword alias,
+a closing function-call parenthesis whose qualified name is in FROM/JOIN/LATERAL,
+FROM-clause comma, or ROWS FROM position, and a list beginning with column/type
+identifier tokens. One explicit 107-keyword list exactly matches the order and
+serves both alias and column/type checks. AS alias, AS without an alias, and
+XMLTABLE COLUMNS retain their round-10 refusals. No manifest, tunable, runner,
+provider, or residual policy changes.
+
+Executable proof is at `177371cc`, following the early regression checkpoint
+`11998856`; `dc0e1ae1` remains an ancestor. The new SQL and PL/pgSQL functions
+are actually called on fresh backends before migration and, for healthy forms,
+after it; routine results, surviving schema/data snapshots, and function catalogs
+remain identical. The four healthy cases are red against dc0e1ae1's migration
+through the recreated `swap_migration.py` plugin. The current migration is also
+green through that plugin. Both target-filter cases invoke the real scanner
+before the global dependency guard (which would reject the new target-typed
+table earlier), and assert the exact `target-typed query column` refusal plus
+unchanged catalog/data/stamp. No mock or paid provider call is involved.
+
+Complete ordered PostgreSQL proof: **723 passed** across five sequential shards,
+including **six fleet cases once with NEXUS_RUN_CORPUS=1**. All 533 migration-module
+cases run: 108 rounds 9–11, 91 round 8, 199 direct, 129 post-143, and six fleet;
+the fleet shard also runs 190 support cases. All offline suites: **4,795 passed**,
+with 1,913 expected gated skips. Every pytest tail contains the secret-store
+and owner-target guard confirmations. Fixture-owned support database prefixes
+are preserved, as required by the common rules; implementation clones use
+qa640_813_case_*. Fleet reads use read-only pg_dump only.
+
+### Exact Commands and Verbatim Tails
+
+All commands run from this worktree. `run.py` has a 540-second deadline and a
+120-second silence limit, strips owner slot/gateway/live-provider environment
+variables, prepends this worktree and the local scratch plugin to PYTHONPATH,
+and enables NEXUS_DBNAME_AUDIT=1. Logs and plugin live only in the assigned
+`after-review-r11` scratch directory.
+
+**red-corrected**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/dc0e1ae1.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py red-corrected /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p swap_migration tests/test_orrery/test_migration_dead_strata_pg.py -k 'round11 and not target' -vs --tb=short
+```
+
+```text
+dbname audit: 5 targets: postgres, qa640_813_case_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round11_column_contexts[filter-sql]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round11_column_contexts[filter-plpgsql]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round11_column_contexts[predicate-sql]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round11_column_contexts[predicate-plpgsql]
+====================== 4 failed, 529 deselected in 9.88s =======================
+EXIT STATUS: 1
+```
+
+**green-corrected**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py green-corrected /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'round11 or coldef' -vs --tb=short
+```
+
+```text
+dbname audit: 17 targets: postgres, qa640_813_case_* x16
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+===================== 16 passed, 517 deselected in 36.14s ======================
+EXIT STATUS: 0
+```
+
+**green-swap**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=$PWD/migrations/143_drop_dead_schema_strata.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py green-swap /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p swap_migration tests/test_orrery/test_migration_dead_strata_pg.py -k round11 -vs --tb=short
+```
+
+```text
+dbname audit: 7 targets: postgres, qa640_813_case_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+====================== 6 passed, 527 deselected in 14.44s ======================
+EXIT STATUS: 0
+```
+
+**pg-rounds**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py pg-rounds /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'round9 or round10 or round11' -vs --tb=short
+```
+
+```text
+dbname audit: 109 targets: postgres, qa640_813_case_* x108
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 108 passed, 425 deselected in 257.66s (0:04:17) ================
+EXIT STATUS: 0
+```
+
+**pg-round8**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py pg-round8 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k round8 -vs --tb=short
+```
+
+```text
+dbname audit: 92 targets: postgres, qa640_813_case_* x91
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+================ 91 passed, 442 deselected in 265.95s (0:04:25) ================
+EXIT STATUS: 0
+```
+
+**pg-direct**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py pg-direct /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'not regressions_work_from_post143_clone and not round8 and not round9 and not round10 and not round11 and not each_fleet' -vs --tb=short
+```
+
+```text
+dbname audit: 200 targets: postgres, qa640_813_case_* x199
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 199 passed, 334 deselected in 444.50s (0:07:24) ================
+EXIT STATUS: 0
+```
+
+**pg-post143**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py pg-post143 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k regressions_work_from_post143_clone -vs --tb=short
+```
+
+```text
+dbname audit: 130 targets: postgres, qa640_813_case_* x129
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 129 passed, 404 deselected in 478.22s (0:07:58) ================
+EXIT STATUS: 0
+```
+
+**pg-fleet-support**
+
+```sh
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py pg-fleet-support /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py tests/test_owner_target_guard.py -v --tb=short
+```
+
+```text
+dbname audit: 18 targets: postgres, qa640_813_case_* x6, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+======================= 196 passed in 128.48s (0:02:08) ========================
+EXIT STATUS: 0
+```
+
+**offline-root**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py offline-root /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p no:cacheprovider tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util --ignore=tests/proofs
+```
+
+```text
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+========== 1972 passed, 478 skipped, 8 warnings in 387.70s (0:06:27) ===========
+EXIT STATUS: 0
+```
+
+**offline-directories**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py offline-directories /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p no:cacheprovider tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util tests/config tests/proofs
+```
+
+```text
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========== 958 passed, 81 skipped, 7 warnings in 133.23s (0:02:13) ============
+EXIT STATUS: 0
+```
+
+**offline-api-orrery**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py offline-api-orrery /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p no:cacheprovider tests/test_api tests/test_orrery
+```
+
+```text
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 1865 passed, 1354 skipped, 7 warnings in 46.28s ================
+EXIT STATUS: 0
+```
+
+**black**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py black /Users/pythagor/nexus/.venv/bin/python -m black --check tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+EXIT STATUS: 0
+```
+
+**flake8**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py flake8 /Users/pythagor/nexus/.venv/bin/python -m flake8 tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+EXIT STATUS: 0
+```
+
+**mypy**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py mypy /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+Success: no issues found in 1 source file
+EXIT STATUS: 0
+```
+
+**comments**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py comments /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+**exceptions**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py exceptions /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+**cleanup**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py cleanup /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/cleanup_read.py
+```
+
+```text
+admin read-only identity: ('postgres', 'on')
+qa640_813_case_* databases remaining: []
+qa640_813_case_* roles remaining: []
+EXIT STATUS: 0
+```
+
+**cleanup-final**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py cleanup-final /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/cleanup_read.py
+```
+
+```text
+admin read-only identity: ('postgres', 'on')
+qa640_813_case_* databases remaining: [('qa640_813_case_326ba5ff0be1',)]
+qa640_813_case_* roles remaining: []
+EXIT STATUS: 0
+```
+
+**cleanup-recheck**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/run.py cleanup-recheck /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r11/cleanup_read.py
+```
+
+```text
+admin read-only identity: ('postgres', 'on')
+qa640_813_case_* databases remaining: [('qa640_813_case_f062c9586308',)]
+qa640_813_case_* roles remaining: []
+EXIT STATUS: 0
+```
+
+Fleet cases under NEXUS_RUN_CORPUS=1, verbatim:
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template] PASSED [  0%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01] PASSED [  1%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02] PASSED [  1%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05] PASSED [  3%]
+```
+
+### Static Checks, Drafts, and Cleanup
+
+Black, flake8, sanctioned mypy --explicit-package-bases, migration-comments lint,
+and exception-dispositions lint all pass with zero diagnostics. The only changed
+Python file is new on this branch and absent on origin/main (git show reports
+that exact absence); there is no main-side pre-existing file to compare and no
+new diagnostic to baseline. The untouched scripts/migrate.py diagnostics from
+round 10 are unchanged and outside this round's changed-file static gate.
+
+Draft logs remain in scratch. The first `red` attempt had valid SQL refusals but
+invalid PL/pgSQL RETURN SELECT syntax; it is not credited as the red proof.
+`red-corrected` uses RETURN (SELECT ...) and all four failures name the intended
+column-definition refusal. The first `green-focused` attempt exposed the old
+bare-alias branch's implicit AS-without-alias handling and the dependency guard
+preceding the target-column scanner; `green-corrected`, the complete shards,
+and `green-swap` prove both final corrections. No draft failure is counted green.
+
+The first read-only cleanup, after all full shards and before green-swap, found
+no qa640_813_case_* databases or roles. All our test commands have completed and
+the fixture contexts drop their allocations. Later global scans saw changing
+clone names: qa640_813_case_326ba5ff0be1, then qa640_813_case_f7092ff959f4, then
+qa640_813_case_f062c9586308. A read-only pg_stat_activity inspection tied the
+f7092ff959f4 backend to application_name `nexus:subprocess:24407`; ps identified
+PID 24407 as the independent whole-tree pytest process. These concurrent
+allocations are not this implementer's leftovers and were not dropped or altered.
+The guard's documented ReplicationConnection audit limitation remains visible
+in every PostgreSQL tail; no claim of a broader audit is made.
+
+### Provenance and Closeout
+
+The final fetch confirms origin/main
+`160134540517f6b74aacd1d1e1f3f584454eef86`; git merge origin/main reports
+`Already up to date.` No history rewrite, rebase, stash, owner-service action,
+owner database write, main/other-worktree edit, or PR merge occurred.
+
+Scratch provenance, SHA-256:
+
+```text
+dc0e1ae1.sql: b09543417836b71cad9275b837d4ba69afe21428ffe9eae35bceb2d4846c7aea
+swap_migration.py: 6143bb190e712329200141c20fe157f230317c8b5549f680cdc172ae3dc76ddd
+run.py: 678f039bee60c168297da27351f159e8b56617ea8b3d63065c782d57ef411acd
+cleanup_read.py: 807480f0ec0838de50cc1e838ece8d0e6b9323287e804a2d45b1dc6c22b3b214
+```
+
+### Open Questions for the Coordinator
+
+No implementation question remains for round 11. Carry forward the previously
+recorded R6 decision: retain migration-user validation, or separately order
+validation against the declared identity's effective schema list (including
+$user and USAGE filtering)? The coordinator owns the fresh raw full-data
+six-source TEST-clone rehearsal without reconstruction/stamp removal, final
+whole-tree PostgreSQL gate at the pushed head, Astra's next pass, and the
+previously recorded landing sequence (squash merge, fleet/template migration,
+locked-slot override, doctor, gateway restart, and #813 note). This PR stays open
+and unmerged. Existing stopping-rule residuals and #812/Q3/Q5 deferrals stand.
+
+Authored by Codex, running GPT-6.1 Sol (gpt-6.1-sol).
