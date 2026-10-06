@@ -2941,7 +2941,7 @@ def test_migration_143_round11_column_contexts(
         + ("public.probe813_columns" if target else "public.character_relationships")
         + " cr"
     )
-    body = query if language == "sql" else f"BEGIN RETURN {query}; END"
+    body = query if language == "sql" else f"BEGIN RETURN ({query}); END"
     with _clone(archives, tmp_path) as dbname:
         _load_fixture(dbname)
         if target:
@@ -2961,7 +2961,31 @@ def test_migration_143_round11_column_contexts(
         before = _snapshot(dbname, surviving=not target)
         functions, stamps = _function_catalog(dbname), _stamps(dbname)
         caplog.clear()
-        applied = _apply(dbname)
+        if target:
+            # The full dependency guard would refuse this table first. Invoke
+            # the same scanner before it to isolate target-typed column proof.
+            sql = MIGRATION.read_text()
+            assert sql.count("DO $guard$") == 1
+            probe = """
+DO $column_probe$
+BEGIN
+    PERFORM pg_temp.dead143_body(
+        (SELECT prosrc FROM pg_proc
+         WHERE oid='public.probe813_r11()'::regprocedure),
+        'public.probe813_r11()'::regprocedure::oid,
+        ARRAY['public.emotional_valence'::regtype::oid], ARRAY[]::oid[],
+        ARRAY['emotional_valence'], ARRAY['search_path'], ARRAY['public,pg_catalog']);
+END
+$column_probe$;
+"""
+            migration = tmp_path / "143_target_column.sql"
+            migration.write_text(sql.replace("DO $guard$", probe + "DO $guard$"))
+            with closing(connect(dbname)) as conn:
+                applied = migrate.apply_migration(
+                    conn, "143", "target_column_probe", migration
+                )
+        else:
+            applied = _apply(dbname)
         print("ROUND11", form, language, "applied:", applied, flush=True)
         assert applied is (not target), caplog.text
         if target:

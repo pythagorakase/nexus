@@ -339,6 +339,26 @@ DECLARE
     group_openers integer[];
     opener integer;
     returning_type boolean;
+    bare_column_definition boolean;
+    call_open integer;
+    call_name integer;
+    -- Keywords after a closing parenthesis are expression/clause syntax, not
+    -- bare aliases. Reuse this one list for the column/type token check.
+    column_definition_keywords text[] := ARRAY[
+        'filter','over','within','and','or','not','is','in','like','ilike',
+        'similar','between','on','using','where','group','having','order','limit',
+        'offset','fetch','for','union','intersect','except','returning','into',
+        'as','values','lateral','cross','natural','left','right','full','inner',
+        'outer','join','when','then','else','end','case','loop','exception',
+        'elsif','if','while','return','perform','raise','execute','select','from',
+        'set','with','window','partition','rows','range','groups','escape',
+        'collate','at','zone','operator','isnull','notnull','overlaps','to',
+        'interval','array','distinct','all','any','some','exists','cast','nulls',
+        'first','last','asc','desc','tablesample','repeatable','only','ordinality',
+        'columns','passing','path','default','error','empty','unknown','keep',
+        'omit','quotes','wrapper','conditional','unconditional','exclude','ties',
+        'others','current','preceding','following','unbounded'
+    ];
     literal_names text[];
     literal_name text;
     fold_start integer;
@@ -659,11 +679,61 @@ BEGIN
                     END IF;
                 END LOOP;
                 FOREACH opener IN ARRAY group_openers LOOP
+                    bare_column_definition := false;
+                    IF tokens->(opener-1)->>'k' IN ('id','qid')
+                        AND NOT (tokens->(opener-1)->>'k'='id'
+                            AND tokens->(opener-1)->>'v'=ANY(column_definition_keywords))
+                        AND tokens->(opener-2)->>'k'='punct' AND tokens->(opener-2)->>'v'=')'
+                        AND tokens->(opener+1)->>'k' IN ('id','qid')
+                        AND tokens->(opener+2)->>'k' IN ('id','qid')
+                        AND NOT (tokens->(opener+1)->>'k'='id'
+                            AND tokens->(opener+1)->>'v'=ANY(column_definition_keywords))
+                        AND NOT (tokens->(opener+2)->>'k'='id'
+                            AND tokens->(opener+2)->>'v'=ANY(column_definition_keywords)) THEN
+                        -- Match the closing call parenthesis, then its possibly
+                        -- qualified function name, before checking FROM position.
+                        call_open := opener-3; depth := 1;
+                        WHILE call_open>=left_edge AND depth>0 LOOP
+                            IF tokens->call_open->>'k'='punct' AND tokens->call_open->>'v'=')' THEN depth := depth+1;
+                            ELSIF tokens->call_open->>'k'='punct' AND tokens->call_open->>'v'='(' THEN depth := depth-1; END IF;
+                            IF depth>0 THEN call_open := call_open-1; END IF;
+                        END LOOP;
+                        call_name := call_open-1;
+                        IF depth=0 AND tokens->call_name->>'k' IN ('id','qid') THEN
+                            WHILE call_name>=left_edge+2 AND tokens->(call_name-1)->>'v'='.'
+                                AND tokens->(call_name-2)->>'k' IN ('id','qid') LOOP
+                                call_name := call_name-2;
+                            END LOOP;
+                            bare_column_definition :=
+                                (tokens->(call_name-1)->>'k'='id' AND tokens->(call_name-1)->>'v' IN ('from','join','lateral'))
+                                OR (tokens->(call_name-1)->>'v'='('
+                                    AND tokens->(call_name-2)->>'k'='id' AND tokens->(call_name-2)->>'v'='from'
+                                    AND tokens->(call_name-3)->>'k'='id' AND tokens->(call_name-3)->>'v'='rows');
+                            IF tokens->(call_name-1)->>'v'=',' THEN
+                                -- A comma counts only within a FROM clause at
+                                -- this level, never a SELECT list/call argument.
+                                j := call_name-2; depth := 0;
+                                WHILE j>=left_edge LOOP
+                                    IF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN depth := depth+1;
+                                    ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN
+                                        IF depth=0 THEN EXIT; END IF;
+                                        depth := depth-1;
+                                    ELSIF depth=0 AND tokens->j->>'k'='id' THEN
+                                        IF tokens->j->>'v' IN ('from','join') THEN
+                                            bare_column_definition := true; EXIT;
+                                        ELSIF tokens->j->>'v' IN ('select','where','group','having','order','limit','offset','returning','values','set') THEN EXIT; END IF;
+                                    END IF;
+                                    j := j-1;
+                                END LOOP;
+                            END IF;
+                        END IF;
+                    END IF;
                     IF (tokens->(opener-1)->>'k'='id' AND tokens->(opener-1)->>'v'='columns')
                         OR (tokens->(opener-2)->>'k'='id' AND tokens->(opener-2)->>'v'='as'
                             AND tokens->(opener-3)->>'k'='punct' AND tokens->(opener-3)->>'v'=')')
-                        OR (tokens->(opener-1)->>'k' IN ('id','qid')
+                        OR (tokens->(opener-1)->>'k'='id' AND tokens->(opener-1)->>'v'='as'
                             AND tokens->(opener-2)->>'k'='punct' AND tokens->(opener-2)->>'v'=')')
+                        OR coalesce(bare_column_definition,false)
                         OR (tokens->(opener-1)->>'k'='id' AND tokens->(opener-1)->>'v'='xmltable'
                             AND EXISTS (SELECT 1 FROM generate_series(opener+1,i) k
                                 WHERE tokens->k->>'k'='id' AND tokens->k->>'v'='columns')) THEN
