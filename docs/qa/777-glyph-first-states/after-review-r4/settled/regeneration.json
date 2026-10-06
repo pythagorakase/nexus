@@ -1,0 +1,17 @@
+{
+  "args": [
+    "env",
+    "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/final-capture",
+    "npm",
+    "--prefix",
+    "ui",
+    "run",
+    "resolve-state-surfaces",
+    "--",
+    "--assemble"
+  ],
+  "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+  "exit": 0,
+  "wallSeconds": 1.0589554160251282,
+  "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs --assemble\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\nResolved painted state surfaces: renders=64008; wall=1436.204s (sum of bounded capture shards); Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900 default; deviceScaleFactor=4; dark; reduced motion; 18 media conditions; file://; network aborted; requests=0; errors=0\nWrote /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/state-surfaces.resolved.json; module graph=2095 inputs; SHA-256 5fe7c407848242b61e8ce45313ab3d4cd61fb8c84319ea058dd6ffa0f6596901\n"
+}
