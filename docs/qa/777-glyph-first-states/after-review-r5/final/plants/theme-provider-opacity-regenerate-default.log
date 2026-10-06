@@ -1,0 +1,22 @@
+
+> nexus-ui@1.0.0 resolve-state-surfaces
+> node scripts/resolve-state-surfaces.mjs
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in "node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+Resolving w1101-1279/reduce/Veil…
+Completed w1101-1279/reduce/Veil; renders=74; wall=39.492s
+Incomplete painted probe: renders=74; wall=39.495s; acceptanceComplete=false
+file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390
+            throw new Error(`Calibration non-vacuity failure ${theme}/${wanted.context}/${wanted.states.join('/')}: required ${wanted.opacity} pair, got ${pair?.opacity ?? 'skipped'}; effective opacities=${wanted.states.map(s => calibration.samples[wanted.context][s].effectiveOpacity).join('/')}`);
+                  ^
+
+Error: Calibration non-vacuity failure Veil/key/required/rest/present/verified: required opaque pair, got translucent; effective opacities=0.35/0.35
+    at renderInventory (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390:19)
+    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:400:53
+
+Node.js v24.3.0
