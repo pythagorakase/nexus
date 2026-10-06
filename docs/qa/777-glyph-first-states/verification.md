@@ -845,3 +845,29 @@ GATE-1099 EXIT=0
 ```
 
 Codex, GPT-6.
+
+
+### Continuation After Clarifications 1 and 2
+
+The earlier calibration stop is superseded by the like-part, effective-opacity
+and control-core-backdrop rule, including Clarification 2's mandatory
+translucent optional key pair. Checkpoint `02018234` implements that narrow
+classification. The named full command passes all three default calibrations
+(222 samples) but stops after 477 total renders / 80.661704500s at
+`w1-639/reduce/Vector/shipped/delete/ready/rest/unarmed`: the foreground mask
+is empty. The required lowest-band midpoint is 320px; production `.lm-quants`
+is a 0px-wide overflow clip. Real Tab focus and blur leave it clipped. Painted
+and control PNGs are byte-identical. See the [complete continuation stop,
+calibration, PNGs and verbatim tail](after-review-r5/clarification-2/stop-report.md).
+The incomplete probe never replaced the accepted receipt; no new searched
+palette or acceptance-gate claim is made.
+
+The viewport-domain/unpainted-context ruling is pending. Font/provider/protocol
+changes and final gates remain pending in the ordered sequence. The Residuals
+and coordinator's frozen whole-tree gate above remain recorded; the opaque versus
+translucent calibration conflict is now resolved, while this new nonpainting
+width representative blocks full regeneration. No mask-floor or representative
+change, product layout edit, comparison removal, PR update, push or merge has
+been performed.
+
+Codex, GPT-6.
