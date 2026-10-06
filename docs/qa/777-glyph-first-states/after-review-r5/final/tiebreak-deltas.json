@@ -1,0 +1,50 @@
+[
+  {
+    "theme": "Veil",
+    "token": "--state-key-absent",
+    "from": "hsl(42 20% 70%)",
+    "to": "hsl(42 40% 70%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-key-present",
+    "from": "hsl(42 40% 30%)",
+    "to": "hsl(42 50% 30%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-key-verified",
+    "from": "hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)",
+    "to": "#b83d7a"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-mem-normal",
+    "from": "hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)",
+    "to": "#b83d7a"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-map-rest",
+    "from": "hsl(30 50% 70%)",
+    "to": "hsl(30 60% 60%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-map-current",
+    "from": "hsl(45 75% 70%)",
+    "to": "hsl(45 55% 70%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-key-verified",
+    "from": "hsl(43 84% 50%)",
+    "to": "hsl(43 94% 50%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-map-hovered",
+    "from": "hsl(190 100% 40%)",
+    "to": "hsl(190 90% 40%)"
+  }
+]

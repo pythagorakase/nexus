@@ -526,11 +526,11 @@ html {
   --state-map-current: hsl(330.2439024390244 60% 70%);
   --state-map-selected: hsl(330.2439024390244 50.20408163265306% 30%);
   --state-map-hovered: hsl(330.2439024390244 80% 50%);
-  --state-key-absent: hsl(42 20% 70%);
+  --state-key-absent: hsl(42 40% 70%);
   --state-key-missing: hsl(15 75% 60%);
-  --state-key-present: hsl(42 40% 30%);
-  --state-key-verified: hsl(330.2439024390244 50.20408163265306% 48.03921568627451%);
-  --state-mem-normal: hsl(330.2439024390244 50.20408163265306% 48.03921568627451%);
+  --state-key-present: hsl(42 50% 30%);
+  --state-key-verified: #b83d7a;
+  --state-mem-normal: #b83d7a;
   --state-mem-over: hsl(15 75% 60%);
   --state-delete-unarmed: hsl(42 30% 70%);
   --state-delete-armed: hsl(0 100% 50%);
@@ -681,14 +681,14 @@ html {
   --magenta: hsl(320 55% 48%);
 
   /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
-  --state-map-rest: hsl(30 50% 70%);
-  --state-map-current: hsl(45 75% 70%);
+  --state-map-rest: hsl(30 60% 60%);
+  --state-map-current: hsl(45 55% 70%);
   --state-map-selected: hsl(43 74% 30%);
   --state-map-hovered: hsl(45 75% 50%);
   --state-key-absent: hsl(43 30% 70%);
   --state-key-missing: hsl(30 50% 45%);
   --state-key-present: hsl(43 40% 30%);
-  --state-key-verified: hsl(43 84% 50%);
+  --state-key-verified: hsl(43 94% 50%);
   --state-mem-normal: hsl(43 74% 47%);
   --state-mem-over: hsl(30 50% 30%);
   --state-delete-unarmed: hsl(43 40% 70%);
@@ -828,7 +828,7 @@ html {
   --state-map-rest: hsl(200 90% 55%);
   --state-map-current: hsl(190 100% 50%);
   --state-map-selected: hsl(185 100% 70%);
-  --state-map-hovered: hsl(190 100% 40%);
+  --state-map-hovered: hsl(190 90% 40%);
   --state-key-absent: hsl(185 30% 30%);
   --state-key-missing: hsl(200 90% 55%);
   --state-key-present: hsl(185 40% 50%);
