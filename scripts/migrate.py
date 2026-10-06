@@ -444,6 +444,11 @@ def migrate_database(
     finally:
         conn.close()
 
+    if dry_run:
+        for version, name, _ in pending:
+            LOG.info("  [DRY-RUN] Would apply: %s_%s", version, name)
+        return (len(pending), 0)
+
     # Validators must not reuse a routine compiled by an earlier migration.
     # Bootstrap owns its connection; every pending migration gets a new backend.
     applied_count = 0

@@ -7,29 +7,41 @@
 -- Surviving triggers: public.characters.trg_characters_set_updated and
 -- public.places.trg_places_set_updated. Their definitions and body are untouched.
 --
--- Locks: ACCESS EXCLUSIVE on each dropped relation and type; each lock waits
--- at most five seconds, and a timeout rolls back the whole transaction.
+-- Locks: ACCESS EXCLUSIVE on dropped relations/types and public.characters when
+-- items RI triggers are removed; held through validators, comment, stamp and commit.
+-- Each wait is bounded at five seconds; queued characters readers can also wait.
+-- A timeout rolls back the whole transaction.
 --
--- Contract: PostgreSQL decides catalog dependencies: every drop is RESTRICT,
--- and SQL-standard bodies (prosqlbody) carry real dependencies. String-bodied
--- routines are decided lexically under every declared SET clause (search_path,
--- role, session_authorization, standard_conforming_strings and the rest) on top
--- of session startup settings: a token naming a drop target refuses, every
--- decoded string literal resolving to a drop target refuses, and a form the
--- lexer cannot classify refuses. After the drops, PostgreSQL's own validators
--- check every surviving application routine's body under that environment, with
--- identity settings reserved for scanner lookups and validators run as the migration user.
--- A routine whose environment, body or definition uses a form this guard does not
--- model is refused, and section 1 of this order names those forms.
--- Outside this contract, a name arriving as data at runtime (a nonliteral text
--- argument to a catalog-input function or reg* parameter), dynamic SQL assembled
--- from nonconstants (SQL text that is not a constant), or a path/role changed
--- through an unrecognized form cannot be seen statically and is not claimed.
--- Constant SQL text executed through a means this guard does not fold is not
--- outside the contract: supported constant forms fold; unresolved forms refuse.
--- Late-bound PL/pgSQL expression references
--- and polymorphic SQL bodies remain: fmgr_sql_validator only syntax-checks
--- polymorphic SQL; plpgsql_validator checks syntax and declared types.
+-- Contract: PostgreSQL decides catalog dependencies: every drop is RESTRICT, and SQL-
+-- standard bodies (prosqlbody) carry real dependencies. String-bodied routines are
+-- decided lexically under allowlisted declared SET clauses on top of session startup
+-- settings: a token naming a drop target refuses, every decoded string literal or
+-- decoded name-array element resolving to a drop target refuses, and an unclassifiable
+-- form refuses. After the drops, PostgreSQL's validators check every surviving
+-- application routine under that environment, with identity settings reserved for
+-- scanner lookups and validators run as the migration user. The guard refuses non-
+-- extension format/concat/concat_ws functions and || operators outside pg_catalog;
+-- proconfig names other than search_path, role, session_authorization,
+-- standard_conforming_strings, backslash_quote, DateStyle, IntervalStyle, TimeZone,
+-- extra_float_digits, default_text_search_config, client_min_messages and
+-- application_name; statement-initial bare SET/RESET, any set_config identifier and
+-- recognized pg_settings UPDATE targets; enabled event triggers before helper DDL;
+-- unsupported application languages or different SECURITY DEFINER owners; raw U&' or U&"
+-- or UESCAPE, even in comments/data; target-bearing unmodeled column-definition lists;
+-- and nonconstant or unresolved SQL in recognized EXECUTE, DO, nested CREATE
+-- FUNCTION/PROCEDURE and SQL-text consumer forms. Migration parsing/deparsing pins
+-- search_path=pg_catalog, standard_conforming_strings=on, backslash_quote=safe_encoding,
+-- exit_on_error=off, quote_all_identifiers=off and lock_timeout=5s; validators reassert
+-- check_function_bodies=on. Role and session_authorization apply to scanner lookups and
+-- are skipped by validators. Non-routine stored definitions meet the literal rule and
+-- constant SQL-text fold; pg_depend decides their outer identifier references. Constant
+-- SQL through an unrecognized consumer remains an in-contract residual, not a
+-- nonconstant-data exclusion. Outside the static guarantee are names arriving as runtime
+-- data (nonliteral catalog-input arguments or reg* parameters), nonconstant SQL through
+-- unrecognized forms, and unrecognized path/role mutations. Late-bound PL/pgSQL
+-- expressions and polymorphic SQL remain limited by their native validators:
+-- fmgr_sql_validator only syntax-checks polymorphic SQL; plpgsql_validator checks syntax
+-- and declared types.
 --
 -- Plain/E/N/B/X/dollar strings and newline continuation are delimited before
 -- PostgreSQL decodes them. Spaceless typed literals are identifier plus string.
@@ -38,11 +50,13 @@
 -- query/trigger columns require catalog proof and cannot supply type proof.
 -- Candidate targets include catalog-generated row/array types and owned indexes.
 -- Constant EXECUTE, DO and query_to_xml/query_to_xmlschema/
--- query_to_xml_and_xmlschema/ts_stat/cursor_to_xml inputs fold through builtin
+-- query_to_xml_and_xmlschema/ts_stat and argument two of two-argument ts_rewrite
+-- inputs fold through builtin
 -- format/concat/|| only. Non-extension overloads outside pg_catalog
 -- refuse globally; extension-owned overloads are excluded. Other folds refuse.
 -- Unsupported languages and different SECURITY DEFINER owners refuse.
--- Catalog-input positions additionally refuse nonliteral/unresolved operands.
+-- Recognized catalog-input positions (reg* casts, to_reg*, nextval/currval/setval)
+-- additionally refuse nonliteral/unresolved operands.
 -- SET values split at the first equals sign in one shared parser. Each validator
 -- and every environment-applying helper run in a sentinel subtransaction, restoring
 -- the native GUC stack including privilege settings. check_function_bodies=on,
@@ -52,11 +66,43 @@
 -- default_text_search_config, client_min_messages and application_name apply.
 -- Statement-initial SET/RESET and any set_config identifier refuse. Enabled
 -- event triggers refuse before helper DDL. Non-routine stored definitions and
--- aggregate initial values meet the literal rule only; pg_depend decides their identifier references.
+-- aggregate initial values meet the literal rule and SQL-text fold; pg_depend
+-- decides their outer identifier references. Parameter defaults use startup
+-- settings, not routine SETs; parameter names meet only the literal rule.
 -- No runtime DDL or routine execution: definitions, OIDs, ownership, ACLs and
--- comments survive unchanged. Refusals roll back drops/comments/stamping.
+-- comments survive unchanged except the prescribed set_updated_at() comment.
+-- Refusals roll back drops/comments/stamping.
 -- Scanner guards precede DROP; validators run inside the same atomic transaction.
 -- No persistent helper/debt remains.
+--
+-- Residuals:
+-- - R3 conservatively refuses statement-start set/reset variables, SET CONSTRAINTS and
+-- SET TRANSACTION; the owner renames or restructures (Astra pass 10 P3; third panel #9).
+-- - Query-column proof conservatively refuses INSERT column lists, EXCLUDED columns, and
+-- FROM in extract/substring/IS DISTINCT FROM; flat clause/alias ambiguity remains fail-
+-- closed (third panel #9; second panel column-position reproductions).
+-- - R6 validators bind names as the superuser migration user: role-specific $user and
+-- missing USAGE on an earlier schema can falsely refuse healthy routines; scanner
+-- lookups still use the declared identity (third panel #19; R9 granted $user probe).
+-- - Runtime/computed catalog names, including implicit reg* parameters such as
+-- pg_relation_size(v), and SQL or path/role changes through unrecognized forms remain
+-- outside the guarantee; pg_settings through an updatable view and set_config in a
+-- caller default are examples (third panel #10, #16, #23; second panel runtime-data
+-- reproductions).
+-- - Extension SQL-text consumers such as tablefunc.crosstab are an in-contract residual:
+-- the guard does not recognize their constant SQL arguments; non-SQL/plpgsql DO
+-- languages are unproved when the language is unavailable (third panel #3 variant;
+-- second panel F7 language reproduction).
+-- - Trigger arguments without WHEN are not read by F12; a late-binding trigger argument
+-- remains an in-contract residual (third panel #18(c)).
+-- - Healthy scalar reg*[] brace casts may conservatively refuse through the scalar
+-- catalog-cast classifier; ordinary brace data passes. Startup scs replay has code
+-- coverage but no discriminating shipped mutant proof; startup_pin proves migration
+-- parsing only (third panel #1 controls, #21).
+-- - Late-bound PL/pgSQL expressions, polymorphic SQL validation and runtime data remain
+-- outside the second-line guarantee. Unmodeled constant folds refuse when recognized;
+-- arbitrary unrecognized SQL consumers remain the residual above (both stopping-rule
+-- reviews).
 
 -- The migration's own code resolves unqualified functions, operators and
 -- types under a single-schema path, pg_catalog alone, for its whole run: this
@@ -70,6 +116,8 @@
 SET LOCAL search_path = pg_catalog;
 SET LOCAL standard_conforming_strings = on;
 SET LOCAL backslash_quote = safe_encoding;
+SET LOCAL exit_on_error = off;
+SET LOCAL quote_all_identifiers = off;
 -- Single policy value: pinned helpers/validator capture this before routine SETs.
 SET LOCAL lock_timeout = '5s';
 
@@ -291,30 +339,48 @@ DECLARE
     group_openers integer[];
     opener integer;
     returning_type boolean;
+    literal_names text[];
+    literal_name text;
+    fold_start integer;
+    argument_commas integer;
+    nested_definition boolean;
+    atomic_fold boolean;
 BEGIN
     IF nesting > 8 THEN RAISE EXCEPTION 'unresolved nested dynamic SQL'; END IF;
     FOR token IN SELECT value FROM jsonb_array_elements(tokens) LOOP
         name := token->>'v';
         IF token->>'k'='string' THEN
+            literal_names := ARRAY[name];
+            IF position('{' in name)>0 THEN
+                BEGIN
+                    literal_names := ARRAY[name] || ARRAY(
+                        SELECT jsonb_array_elements_text(pg_temp.dead143_resolve(
+                            'SELECT pg_catalog.array_to_json(ARRAY(SELECT pg_catalog.unnest('||quote_literal(name)||
+                            '::pg_catalog.text[])))::pg_catalog.text',
+                            setting_names,setting_values)::jsonb));
+                EXCEPTION WHEN OTHERS THEN literal_names := ARRAY[name]; END;
+            END IF;
+            FOREACH literal_name IN ARRAY literal_names LOOP
             -- Each input parser may reject non-name data independently: a type
             -- name such as item_type[] need not be a valid relation name.
             BEGIN
-                relation_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regclass('||quote_literal(name)||')::pg_catalog.oid::pg_catalog.text',setting_names,setting_values)::oid;
+                relation_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regclass('||quote_literal(literal_name)||')::pg_catalog.oid::pg_catalog.text',setting_names,setting_values)::oid;
             EXCEPTION WHEN OTHERS THEN relation_oid := NULL; END;
             BEGIN
-                type_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regtype('||quote_literal(name)||')::pg_catalog.oid::pg_catalog.text',setting_names,setting_values)::oid;
+                type_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regtype('||quote_literal(literal_name)||')::pg_catalog.oid::pg_catalog.text',setting_names,setting_values)::oid;
             EXCEPTION WHEN OTHERS THEN type_oid := NULL; END;
             IF relation_oid=ANY(relation_targets) OR type_oid=ANY(targets) THEN
-                RAISE EXCEPTION 'literal names a drop target: %',name;
+                RAISE EXCEPTION 'literal names a drop target: %',literal_name;
             END IF;
+            END LOOP;
         END IF;
     END LOOP;
-    IF literal_only THEN RETURN; END IF;
     WHILE i < count_tokens LOOP
         name := tokens->i->>'v'; kind := tokens->i->>'k';
         statement_initial := i=0 OR (tokens->(i-1)->>'k'='punct' AND tokens->(i-1)->>'v'=';')
             OR (tokens->(i-1)->>'k'='id' AND tokens->(i-1)->>'v' IN ('begin','then','else','loop'))
             OR (tokens->(i-1)->>'k'='id' AND tokens->(i-1)->>'v'='atomic' AND tokens->(i-2)->>'v'='begin');
+        IF NOT literal_only THEN
         IF kind IN ('id','qid') AND name='set_config' THEN
             RAISE EXCEPTION 'unresolved runtime environment change: set_config';
         END IF;
@@ -323,18 +389,85 @@ BEGIN
         END IF;
         j := i+1;
         IF tokens->j->>'k'='id' AND tokens->j->>'v'='only' THEN j := j+1; END IF;
+        IF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN j := j+1; END IF;
         IF kind='id' AND name='update' AND (
             tokens->j->>'v'='pg_settings' OR
             (tokens->j->>'v'='pg_catalog' AND tokens->(j+1)->>'v'='.' AND tokens->(j+2)->>'v'='pg_settings')
         ) THEN RAISE EXCEPTION 'unresolved runtime pg_settings mutation'; END IF;
-        IF (kind='id' AND (name='execute' OR (name='do' AND statement_initial)))
+        END IF;
+        -- CREATE bodies are constant SQL too. Refuse inner environment/language
+        -- forms rather than guessing an environment different from the wrapper.
+        nested_definition := false; atomic_fold := false; fold_start := NULL;
+        IF kind='id' AND name='create' AND NOT (
+            i=0 AND nesting=0 AND EXISTS (SELECT 1 FROM pg_proc
+                WHERE oid=function_oid AND prosqlbody IS NOT NULL)
+        ) THEN
+            j := i+1;
+            IF tokens->j->>'v'='or' AND tokens->(j+1)->>'v'='replace' THEN j := j+2; END IF;
+            IF tokens->j->>'k'='id' AND tokens->j->>'v' IN ('function','procedure') THEN
+                nested_definition := true; j := j+1; depth := 0;
+                WHILE j<count_tokens LOOP
+                    IF tokens->j->>'k'='id' AND tokens->j->>'v'='set' THEN
+                        RAISE EXCEPTION 'unresolved nested routine SET environment';
+                    END IF;
+                    IF tokens->j->>'k'='id' AND tokens->j->>'v'='language'
+                        AND tokens->(j+1)->>'v' NOT IN ('sql','plpgsql') THEN
+                        RAISE EXCEPTION 'unresolved nested routine language';
+                    END IF;
+                    IF tokens->j->>'k'='id' AND tokens->j->>'v'='as'
+                        AND depth=0 THEN fold_start := j+1; EXIT; END IF;
+                    IF tokens->j->>'k'='id' AND tokens->j->>'v'='begin'
+                        AND tokens->(j+1)->>'v'='atomic' AND depth=0 THEN
+                        expression := ''; depth := 1; j := j+2;
+                        WHILE j<count_tokens AND depth>0 LOOP
+                            IF tokens->j->>'k'='id' AND tokens->j->>'v' IN ('begin','case') THEN depth := depth+1;
+                            ELSIF tokens->j->>'k'='id' AND tokens->j->>'v'='end' THEN depth := depth-1; END IF;
+                            IF depth>0 THEN expression := expression||' '||(tokens->j->>'raw'); END IF;
+                            j := j+1;
+                        END LOOP;
+                        IF depth<>0 THEN RAISE EXCEPTION 'unresolved nested BEGIN ATOMIC'; END IF;
+                        PERFORM pg_temp.dead143_body(expression,function_oid,targets,relation_targets,names,setting_names,setting_values,nesting+1);
+                        atomic_fold := true; EXIT;
+                    END IF;
+                    IF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN depth := depth+1;
+                    ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN depth := depth-1;
+                    ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=';' THEN EXIT; END IF;
+                    j := j+1;
+                END LOOP;
+                IF fold_start IS NULL THEN
+                    IF atomic_fold THEN i := i+1; CONTINUE; END IF;
+                    RAISE EXCEPTION 'unresolved nested routine body';
+                END IF;
+            END IF;
+        END IF;
+        -- Only the two-argument ts_rewrite consumes SQL, in argument two.
+        IF kind IN ('id','qid') AND name='ts_rewrite'
+            AND tokens->(i+1)->>'k'='punct' AND tokens->(i+1)->>'v'='(' THEN
+            j := i+2; depth := 0; argument_commas := 0;
+            WHILE j<count_tokens LOOP
+                IF tokens->j->>'k'='punct' THEN
+                    IF tokens->j->>'v'='(' THEN depth := depth+1;
+                    ELSIF tokens->j->>'v'=')' THEN
+                        IF depth=0 THEN EXIT; END IF;
+                        depth := depth-1;
+                    ELSIF tokens->j->>'v'=',' AND depth=0 THEN
+                        argument_commas := argument_commas+1; fold_start := j+1;
+                    END IF;
+                END IF;
+                j := j+1;
+            END LOOP;
+            IF argument_commas=2 THEN fold_start := NULL;
+            ELSIF argument_commas<>1 OR j=count_tokens THEN RAISE EXCEPTION 'unresolved ts_rewrite arguments'; END IF;
+        END IF;
+        IF fold_start IS NOT NULL OR (NOT literal_only AND kind='id' AND (name='execute' OR (name='do' AND statement_initial)))
             OR (kind IN ('id','qid') AND name IN ('query_to_xml','query_to_xmlschema',
-                'query_to_xml_and_xmlschema','ts_stat','cursor_to_xml')
+                'query_to_xml_and_xmlschema','ts_stat')
                 AND tokens->(i+1)->>'k'='punct' AND tokens->(i+1)->>'v'='(') THEN
             expression := ''; j := i+1; depth := 0;
-            fold_end := CASE WHEN name IN ('execute','do') THEN 'statement' ELSE 'argument' END;
+            fold_end := CASE WHEN name IN ('execute','do') OR nested_definition THEN 'statement' ELSE 'argument' END;
             IF name='do' AND tokens->j->>'k'='id' AND tokens->j->>'v'='language' THEN j := j+2; END IF;
             IF fold_end='argument' THEN j := j+1; END IF;
+            IF fold_start IS NOT NULL THEN j := fold_start; END IF;
             WHILE j<count_tokens LOOP
                 IF depth=0 AND ((tokens->j->>'k'='punct' AND tokens->j->>'v'=';')
                     OR (fold_end='statement' AND tokens->j->>'k'='id' AND tokens->j->>'v' IN ('into','using','loop','language'))
@@ -343,6 +476,10 @@ BEGIN
                 ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN depth := depth-1; END IF;
                 IF tokens->j->>'k' = 'string' OR (tokens->j->>'k'='punct' AND tokens->j->>'v' IN ('(',')',',','||')) THEN
                     expression := expression || ' ' || (tokens->j->>'raw');
+                ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'='::'
+                    AND tokens->(j+1)->>'k'='id' AND tokens->(j+1)->>'v'='text' THEN
+                    -- pg_get_* deparsers attach this builtin cast to text constants.
+                    expression := expression || '::pg_catalog.text'; j := j+1;
                 ELSIF tokens->j->>'k'='id' AND tokens->j->>'v' = 'pg_catalog' AND tokens->(j+1)->>'v' = '.' AND tokens->(j+2)->>'v' IN ('format','concat') THEN
                     expression := expression || ' pg_catalog.' || (tokens->(j+2)->>'v');
                     j := j + 2;
@@ -358,8 +495,9 @@ BEGIN
             folded := pg_temp.dead143_resolve('SELECT ('||expression||')::pg_catalog.text',array_append(setting_names,'search_path'),array_append(setting_values,'pg_catalog'));
             IF folded IS NULL THEN RAISE EXCEPTION 'unresolved NULL EXECUTE'; END IF;
             PERFORM pg_temp.dead143_body(folded,function_oid,targets,relation_targets,names,setting_names,setting_values,nesting+1);
-            i := j; CONTINUE;
+            i := CASE WHEN nested_definition THEN i+1 ELSE j END; CONTINUE;
         END IF;
+        IF literal_only THEN i := i+1; CONTINUE; END IF;
         -- Catalog casts are inspected from their operator, not from a literal:
         -- this catches CAST, parentheses, and computed expressions uniformly.
         catalog_kind := NULL; expression_left := NULL; expression_right := NULL;
@@ -523,7 +661,12 @@ BEGIN
                 FOREACH opener IN ARRAY group_openers LOOP
                     IF (tokens->(opener-1)->>'k'='id' AND tokens->(opener-1)->>'v'='columns')
                         OR (tokens->(opener-2)->>'k'='id' AND tokens->(opener-2)->>'v'='as'
-                            AND tokens->(opener-3)->>'k'='punct' AND tokens->(opener-3)->>'v'=')') THEN
+                            AND tokens->(opener-3)->>'k'='punct' AND tokens->(opener-3)->>'v'=')')
+                        OR (tokens->(opener-1)->>'k' IN ('id','qid')
+                            AND tokens->(opener-2)->>'k'='punct' AND tokens->(opener-2)->>'v'=')')
+                        OR (tokens->(opener-1)->>'k'='id' AND tokens->(opener-1)->>'v'='xmltable'
+                            AND EXISTS (SELECT 1 FROM generate_series(opener+1,i) k
+                                WHERE tokens->k->>'k'='id' AND tokens->k->>'v'='columns')) THEN
                         RAISE EXCEPTION 'unclassifiable column-definition list: %',name;
                     END IF;
                 END LOOP;
@@ -1228,12 +1371,13 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
             ELSE
                 IF f.prosqlbody IS NULL THEN
                     PERFORM pg_temp.dead143_body(f.prosrc,f.oid,targets,relation_targets,names,setting_names,setting_values);
-                    PERFORM pg_temp.dead143_body(pg_get_function_arguments(f.oid),f.oid,targets,relation_targets,names,
-                        array_append(setting_names,'standard_conforming_strings'),array_append(setting_values,'on'));
                 ELSE
                     PERFORM pg_temp.dead143_body(pg_get_functiondef(f.oid),f.oid,targets,relation_targets,names,
                         array_append(setting_names,'standard_conforming_strings'),array_append(setting_values,'on'));
                 END IF;
+                -- Defaults belong to the caller; parameter names are not body tokens.
+                PERFORM pg_temp.dead143_body(pg_get_function_arguments(f.oid),f.oid,targets,relation_targets,names,
+                    ARRAY['standard_conforming_strings'],ARRAY['on'],0,true);
             END IF;
         EXCEPTION WHEN OTHERS THEN
             RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: function/procedure % refuses: %',f.identity,SQLERRM;
@@ -1268,6 +1412,14 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
         SELECT pg_describe_object('pg_policy'::regclass,p.oid,0),
                coalesce(pg_get_expr(p.polqual,p.polrelid),'') || ';' || coalesce(pg_get_expr(p.polwithcheck,p.polrelid),'')
         FROM pg_policy p WHERE NOT p.polrelid=ANY(relation_targets)
+        UNION ALL
+        SELECT pg_describe_object('pg_type'::regclass,t.oid,0),pg_get_expr(t.typdefaultbin,0)
+        FROM pg_type t WHERE t.oid>=16384 AND t.typtype='d' AND t.typdefaultbin IS NOT NULL
+        AND NOT t.oid=ANY(targets)
+        UNION ALL
+        SELECT pg_describe_object('pg_rewrite'::regclass,r.oid,0),pg_get_ruledef(r.oid)
+        FROM pg_rewrite r WHERE r.oid>=16384 AND r.rulename<>'_RETURN'
+        AND NOT r.ev_class=ANY(relation_targets)
     LOOP
         BEGIN
             PERFORM pg_temp.dead143_body(offender.definition,0,targets,relation_targets,names,

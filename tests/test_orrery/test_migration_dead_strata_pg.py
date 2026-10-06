@@ -2162,12 +2162,6 @@ $probe$;
 # Round nine recipes from panel-1098-9ed33d54 and the coordinator's clarifications.
 # None requires a paid provider or a connection to an owner database.
 ROUND9_DEFINITIONS = {
-    "F7-cursor-to-xml": (
-        "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
-        "AS $$BEGIN PERFORM cursor_to_xml('SELECT count(*) FROM "
-        "public.items',1,true,false,''); END$$",
-        "hidden body identifier reference",
-    ),
     "F7-ts-stat": (
         "CREATE FUNCTION public.probe813_r9() RETURNS void LANGUAGE plpgsql "
         "AS $$BEGIN PERFORM ts_stat('SELECT count(*) FROM public.items'); END$$",
@@ -2571,9 +2565,7 @@ def test_migration_143_round9_startup_pin(
     caplog: pytest.LogCaptureFixture,
     startup_scs: str,
 ) -> None:
-    """Migration parsing is pinned while routine resolution keeps the
-
-    startup setting."""
+    """Migration parsing is pinned under either startup string setting."""
     with _clone(archives, tmp_path) as dbname:
         _load_fixture(dbname)
         _sql(
@@ -2610,3 +2602,319 @@ def test_migration_143_round9_toast_literal(
         assert (
             _snapshot(dbname, surviving=False) == before and _stamps(dbname) == stamps
         )
+
+
+# Third-panel reproductions. Calls use fresh backends, including after an old
+# acceptance, so an already compiled body cannot hide a destructive verdict.
+ROUND10_DEFINITIONS: dict[str, tuple[str, str | None, str]] = {
+    "array-default": (
+        "CREATE FUNCTION public.probe813_r10(v regclass[] DEFAULT "
+        "'{public.items,public.characters}') RETURNS bigint LANGUAGE plpgsql "
+        "AS $$BEGIN RETURN pg_relation_size(v[1]); END$$",
+        "literal names a drop target: public.items",
+        "SELECT public.probe813_r10()",
+    ),
+    "array-parameter": (
+        "CREATE FUNCTION public.probe813_r10() RETURNS bigint LANGUAGE plpgsql "
+        "AS $$DECLARE v regclass[] := '{public.items,public.characters}'; "
+        "BEGIN RETURN pg_relation_size(v[1]); END$$",
+        "literal names a drop target: public.items",
+        "SELECT public.probe813_r10()",
+    ),
+    "array-data": (
+        "CREATE FUNCTION public.probe813_r10() RETURNS text LANGUAGE sql "
+        "AS $$SELECT '{a,b}'::text$$",
+        None,
+        "SELECT public.probe813_r10()",
+    ),
+    "cursor-variable": (
+        "CREATE FUNCTION public.probe813_r10() RETURNS xml LANGUAGE plpgsql "
+        "AS $$DECLARE c refcursor; x xml; BEGIN OPEN c FOR SELECT 1 AS n; "
+        "x := cursor_to_xml(c,1,true,false,''); CLOSE c; RETURN x; END$$",
+        None,
+        "SELECT public.probe813_r10()::text",
+    ),
+    "ts-rewrite-two": (
+        "CREATE FUNCTION public.probe813_r10(q tsquery) RETURNS tsquery LANGUAGE sql "
+        "AS $$SELECT ts_rewrite(q,'SELECT to_tsquery(''simple'', name),"
+        "to_tsquery(''simple'', type) FROM public.items')$$",
+        "hidden body identifier reference",
+        "SELECT public.probe813_r10('sword')::text",
+    ),
+    "ts-rewrite-three": (
+        "CREATE FUNCTION public.probe813_r10(q tsquery) RETURNS tsquery LANGUAGE sql "
+        "AS $$SELECT ts_rewrite(q,'sword'::tsquery,'blade'::tsquery)$$",
+        None,
+        "SELECT public.probe813_r10('sword')::text",
+    ),
+    "update-only-parentheses": (
+        "CREATE FUNCTION public.probe813_r10() RETURNS void LANGUAGE plpgsql "
+        "AS $$BEGIN UPDATE ONLY (pg_catalog.pg_settings) SET setting='public' "
+        "WHERE name='search_path'; END$$",
+        "unresolved runtime pg_settings mutation",
+        "",
+    ),
+    "parameter-name": (
+        "CREATE FUNCTION public.probe813_r10(entity_type text DEFAULT 'x') "
+        "RETURNS text LANGUAGE sql AS $$SELECT $1$$",
+        None,
+        "SELECT public.probe813_r10()",
+    ),
+    "caller-default": (
+        "CREATE FUNCTION public.probe813_r10(v boolean DEFAULT "
+        "pg_input_is_valid('weapon','item_type')) RETURNS boolean "
+        "LANGUAGE sql SET search_path=pg_catalog AS $$SELECT $1$$",
+        "literal names a drop target: item_type",
+        "SELECT public.probe813_r10()",
+    ),
+    "domain-default": (
+        "CREATE DOMAIN public.probe813_domain AS boolean DEFAULT "
+        "pg_input_is_valid('weapon','public.item_type'); "
+        "CREATE TABLE public.probe813_table(v public.probe813_domain)",
+        "object type public.probe813_domain refuses: literal names a drop target",
+        "INSERT INTO public.probe813_table DEFAULT VALUES RETURNING v",
+    ),
+    "table-rule": (
+        "CREATE TABLE public.probe813_table(v text); CREATE RULE probe813_rule "
+        "AS ON INSERT TO public.probe813_table DO ALSO SELECT "
+        "pg_input_is_valid(NEW.v,'public.item_type')",
+        "object rule probe813_rule",
+        "INSERT INTO public.probe813_table VALUES ('weapon') RETURNING v",
+    ),
+    "view-column": (
+        "CREATE TABLE public.probe813_table(item_type text); "
+        "CREATE VIEW public.probe813_view AS SELECT item_type "
+        "FROM public.probe813_table",
+        None,
+        "SELECT count(*) FROM public.probe813_view",
+    ),
+    "quoted-keyword-columns": (
+        'CREATE TABLE public.probe813_table("set" text,"order" text); '
+        "CREATE FUNCTION public.probe813_r10() RETURNS text LANGUAGE plpgsql "
+        'AS $$DECLARE "set" text; "order" text; BEGIN SELECT t."set",t."order" '
+        'INTO "set","order" FROM public.probe813_table t LIMIT 1; '
+        '"set" := "order"; RETURN "set"; END$$',
+        None,
+        "SELECT public.probe813_r10()",
+    ),
+}
+ROUND10_DEFINITIONS["array-cast"] = (
+    "CREATE FUNCTION public.probe813_r10() RETURNS bigint LANGUAGE plpgsql "
+    "AS $$BEGIN RETURN pg_relation_size(('{public.items,public.characters}'"
+    "::regclass[])[1]); END$$",
+    "literal names a drop target: public.items",
+    "SELECT public.probe813_r10()",
+)
+_definition, _reason, _call = ROUND10_DEFINITIONS["array-parameter"]
+ROUND10_DEFINITIONS["array-dimensions"] = (
+    _definition.replace("'{public.items", "'[2:3]={public.items"),
+    _reason,
+    _call,
+)
+for _body_kind in ("plpgsql", "atomic"):
+    _definition, _reason, _call = ROUND10_DEFINITIONS["ts-rewrite-two"]
+    if _body_kind == "plpgsql":
+        _definition = _definition.replace(
+            "LANGUAGE sql AS $$SELECT ", "LANGUAGE plpgsql AS $$BEGIN RETURN "
+        )
+        _definition = _definition.replace("')$$", "'); END$$")
+    else:
+        _definition = _definition.replace("AS $$", "BEGIN ATOMIC ")
+        _definition = _definition.replace("$$", "; END")
+    ROUND10_DEFINITIONS[f"ts-rewrite-{_body_kind}"] = (_definition, _reason, _call)
+
+for _spelling, _source in {
+    "as-alias": 'jsonb_to_record(\'{"v":"0|neutral"}\') AS r(v emotional_valence)',
+    "bare-alias": 'jsonb_to_record(\'{"v":"0|neutral"}\') r(v emotional_valence)',
+    "as-only": 'jsonb_to_record(\'{"v":"0|neutral"}\') AS (v emotional_valence)',
+    "xml": "XMLTABLE('/r' PASSING xml '<r><v>friend</v></r>' "
+    "COLUMNS v relationship_type) r",
+    "xml-path": "XMLTABLE('/r' PASSING xml '<r><v>friend</v></r>' "
+    "COLUMNS v relationship_type PATH 'v') r",
+}.items():
+    _query = (
+        "SELECT r.v::text FROM public.characters c "
+        "JOIN public.character_relationships cr ON cr.character1_id=c.id, " + _source
+    )
+    if _spelling == "as-only":
+        _query = _query.replace("r.v", "jsonb_to_record.v")
+    for _language in ("plpgsql", "polymorphic"):
+        _definition = (
+            "CREATE FUNCTION public.probe813_r10("
+            + ("dummy anyelement" if _language == "polymorphic" else "")
+            + ") RETURNS text LANGUAGE "
+            + (
+                "sql AS $$" + _query
+                if _language == "polymorphic"
+                else "plpgsql AS $$DECLARE v text; BEGIN "
+                + _query.replace(
+                    "FROM public.characters", "INTO v FROM public.characters"
+                )
+                + "; RETURN v; END"
+            )
+            + "$$"
+        )
+        ROUND10_DEFINITIONS[f"coldef-{_spelling}-{_language}"] = (
+            _definition,
+            "unclassifiable column-definition list",
+            "SELECT public.probe813_r10("
+            + ("1" if _language == "polymorphic" else "")
+            + ")",
+        )
+for _form, _body in {
+    "string": "LANGUAGE sql AS 'SELECT count(*) FROM public.items'",
+    "atomic": "LANGUAGE sql BEGIN ATOMIC SELECT count(*) FROM public.items; END",
+    "survivor": "LANGUAGE sql AS 'SELECT count(*) FROM public.characters'",
+    "nonconstant": "LANGUAGE sql AS 'SELECT count(*) FROM public.' || suffix",
+}.items():
+    ROUND10_DEFINITIONS[f"nested-{_form}"] = (
+        "CREATE FUNCTION public.probe813_r10() RETURNS bigint LANGUAGE plpgsql "
+        "AS $outer$DECLARE n bigint; suffix text := 'characters'; BEGIN "
+        "CREATE OR REPLACE FUNCTION pg_temp.generated() RETURNS bigint "
+        + _body
+        + "; SELECT pg_temp.generated() INTO n; "
+        "DROP FUNCTION pg_temp.generated(); RETURN n; END$outer$",
+        (
+            None
+            if _form == "survivor"
+            else (
+                "unresolved"
+                if _form == "nonconstant"
+                else "hidden body identifier reference"
+            )
+        ),
+        "" if _form == "nonconstant" else "SELECT public.probe813_r10()",
+    )
+for _store, _definition in {
+    "view": "CREATE VIEW public.probe813_view AS SELECT "
+    "query_to_xml('SELECT 1 FROM public.items',true,false,'') AS x",
+    "materialized-view": "CREATE MATERIALIZED VIEW public.probe813_view AS SELECT "
+    "query_to_xml('SELECT 1 FROM public.items',true,false,'') AS x WITH NO DATA",
+    "default": "CREATE TABLE public.probe813_table(x xml DEFAULT "
+    "query_to_xml('SELECT 1 FROM public.items',true,false,''))",
+    "check": "CREATE TABLE public.probe813_table(x integer CHECK "
+    "(query_to_xml('SELECT 1 FROM public.items',true,false,'') IS NOT NULL))",
+    "policy": "CREATE TABLE public.probe813_table(x integer); "
+    "CREATE POLICY probe813_policy ON public.probe813_table USING "
+    "(query_to_xml('SELECT 1 FROM public.items',true,false,'') IS NOT NULL)",
+    "trigger-when": "CREATE TABLE public.probe813_table(x integer); "
+    "CREATE TRIGGER probe813_trigger BEFORE UPDATE ON public.probe813_table "
+    "FOR EACH ROW WHEN (query_to_xml('SELECT 1 FROM public.items',true,false,'') "
+    "IS NOT NULL) EXECUTE FUNCTION public.set_updated_at()",
+}.items():
+    ROUND10_DEFINITIONS[f"stored-fold-{_store}"] = (
+        _definition,
+        "object",
+        "",
+    )
+
+
+@pytest.mark.parametrize("case", ROUND10_DEFINITIONS)
+def test_migration_143_round10_definitions(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+) -> None:
+    """Real third-panel recipes preserve catalogs or prove an old destructive apply."""
+    definition, reason, call = ROUND10_DEFINITIONS[case]
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        if case == "nested-nonconstant":
+            definition = "SET check_function_bodies=off; " + definition
+        _sql(dbname, definition)
+        outcome = _routine_outcome(dbname, call) if call else None
+        if outcome:
+            assert outcome[0], outcome
+        before = _snapshot(dbname, surviving=reason is None)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        print(
+            "ROUND10",
+            case,
+            "applied:",
+            applied,
+            "expected:",
+            reason or "apply",
+            flush=True,
+        )
+        if applied and reason and outcome:
+            after = _routine_outcome(dbname, call)
+            print("OLD OUTCOME", case, "before:", outcome, "after:", after, flush=True)
+        assert applied is (reason is None), caplog.text
+        if reason:
+            assert reason in caplog.text, caplog.text
+            assert _stamps(dbname) == stamps
+        else:
+            if outcome:
+                assert _routine_outcome(dbname, call) == outcome
+        assert _snapshot(dbname, surviving=reason is None) == before
+        assert _function_catalog(dbname) == functions
+
+
+@pytest.mark.parametrize("setting", ("exit_on_error", "quote_all_identifiers"))
+def test_migration_143_round10_startup_pins(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    setting: str,
+) -> None:
+    """Guard error handling and manifest deparsing ignore these startup defaults."""
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        _sql(dbname, f'ALTER DATABASE "{dbname}" SET {setting}=on')
+        _sql(
+            dbname,
+            "CREATE FUNCTION public.probe813_r10() RETURNS text LANGUAGE sql "
+            "AS $$SELECT 'not.a.valid.name'::text$$",
+        )
+        before = _snapshot(dbname, surviving=True)
+        assert _apply(dbname), caplog.text
+        assert _snapshot(dbname, surviving=True) == before
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT current_setting(%s)", (setting,))
+            assert cur.fetchone() == ("on",)
+
+
+@pytest.mark.parametrize("dry_run", (False, True))
+def test_migration_143_round10_locked_runner(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    dry_run: bool,
+) -> None:
+    """Every real migration backend keeps the locked override; dry-run needs one."""
+    with _clone(archives, tmp_path) as dbname:
+        tree = tmp_path / "locked-proof"
+        tree.mkdir()
+        for version in ("901", "902"):
+            (tree / f"{version}_backend.sql").write_text(
+                "CREATE TABLE public.probe813_" + version + "(pid integer); "
+                "COMMENT ON TABLE public.probe813_" + version + " IS '813 backend'; "
+                "INSERT INTO public.probe813_" + version + " SELECT pg_backend_pid();"
+            )
+        stamps = _stamps(dbname)
+        _sql(dbname, f'ALTER DATABASE "{dbname}" SET default_transaction_read_only=on')
+        assert migrate.is_db_locked(dbname)
+        caplog.clear()
+        assert migrate.migrate_database(
+            dbname, dry_run=dry_run, write_locked_slot=True, migrations_dir=tree
+        ) == (2, 0), caplog.text
+        count = caplog.text.count("session write override")
+        print(
+            "LOCKED RUNNER dry_run:", dry_run, "override backends:", count, flush=True
+        )
+        assert count == (1 if dry_run else 3), caplog.text
+        if dry_run:
+            assert _stamps(dbname) == stamps
+        else:
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT a.pid<>b.pid FROM public.probe813_901 a, "
+                    "public.probe813_902 b"
+                )
+                assert cur.fetchone() == (True,)
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SHOW default_transaction_read_only")
+            assert cur.fetchone() == ("on",)
