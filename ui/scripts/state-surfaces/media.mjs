@@ -78,7 +78,7 @@ export function mediaConditions(css) {
       const high = boundaries[i + 1] === undefined ? Infinity : boundaries[i + 1] - 1;
       const preferred = conditions.viewport[axis];
       const value = preferred >= low && preferred <= high ? preferred :
-        high === Infinity ? low : Math.floor((low + high) / 2);
+        preferred < low ? low : high;
       return { name: `${axis[0]}${low}${low === high ? '' : high === Infinity ? '+' : `-${high}`}`, value };
     });
   }

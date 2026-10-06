@@ -33,9 +33,10 @@ order. No DOM/cascade/compositing model determines a color. The convention is
 file://, HTTP(S) aborted, device scale 4, 1200×900 default, dark scheme and
 reduced motion, plus every CSS-derived emulatable media condition. Range
 breakpoints partition width/height into distinct integer viewport bands,
-including singleton bands for coincident inclusive bounds. Finite bands use
-an integer midpoint; the default 1200×900 remains its band's representative,
-and an unbounded upper band uses its first integer. Discrete feature values
+including singleton bands for coincident inclusive bounds. Each band's
+representative is its edge nearest the default 1200×900 viewport; the
+default's own band uses the default exactly. The shipped representatives are
+639, 760, 767, 1023, 1100, 1200, 1280, 1535 and 1536px. Discrete feature values
 are crossed with those bands; compound/nested preludes are conjunctions and
 comma lists are alternatives. One vector per distinct satisfied-prelude set
 is retained, and every included prelude must be satisfied. Print and forced
