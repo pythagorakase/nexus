@@ -22,7 +22,8 @@ product of computed opacity from the surface through the fixture root. Opaque
 pairs compare regardless of backdrop at **≤1.0 deutan ΔE**; translucent pairs
 compare at **≤2.5** only when their control means over their respective cores
 agree within **1.0**. Skips name `part-distinct` or `backdrop-distinct`. Required
-pairs guard against vacuous calibration. A failure stops regeneration with
+pairs guard against vacuous calibration: required key rows and canvas/sidebar fills
+are opaque; optional key rows at rest are mandatory translucent pairs. A failure stops regeneration with
 the numbers and the two painted PNGs; the threshold and tolerances are fixed.
 Acceptance comparisons retain all reachable pairs over their real backdrops.
 

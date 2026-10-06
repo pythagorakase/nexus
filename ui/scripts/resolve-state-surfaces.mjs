@@ -370,15 +370,15 @@ async function renderInventory(condition, theme, calibrating = false) {
           throw new Error(`Calibration failure ${theme}/${failure.context}/${failure.states.join('/')}: ${failure.opacity} deutan delta=${failure.delta} > ${calibration.tolerances[failure.opacity]}; PNGs: ${failure.captures.map(c => resolve(scratch, c.painted)).join('; ')}`);
         }
         const required = [
-          ...['required', 'optional'].map(need => ({ context: `key/${need}/rest`, states: ['present', 'verified'] })),
-          ...['sea', 'land'].flatMap(terrain => ['current', 'selected', 'hovered'].map(state => ({ context: `map/canvas-${terrain}/fill`, states: ['rest', state] }))),
-          ...['current', 'selected', 'hovered'].map(state => ({ context: 'map/sidebar/rest/fill', states: ['rest', state] })),
+          ...['required', 'optional'].map(need => ({ context: `key/${need}/rest`, states: ['present', 'verified'], opacity: need === 'optional' ? 'translucent' : 'opaque' })),
+          ...['sea', 'land'].flatMap(terrain => ['current', 'selected', 'hovered'].map(state => ({ context: `map/canvas-${terrain}/fill`, states: ['rest', state], opacity: 'opaque' }))),
+          ...['current', 'selected', 'hovered'].map(state => ({ context: 'map/sidebar/rest/fill', states: ['rest', state], opacity: 'opaque' })),
         ];
         for (const wanted of required) {
           const pair = calibration.groups[wanted.context.split('/')[0]].pairs.find(p => p.context === wanted.context && p.states.join('/') === wanted.states.join('/'));
           calibration.requiredPairs.push({ ...wanted, opacity: pair?.opacity ?? null });
-          if (!pair || pair.opacity !== 'opaque')
-            throw new Error(`Calibration non-vacuity failure ${theme}/${wanted.context}/${wanted.states.join('/')}: required opaque pair, got ${pair?.opacity ?? 'skipped'}; effective opacities=${wanted.states.map(s => calibration.samples[wanted.context][s].effectiveOpacity).join('/')}`);
+          if (!pair || pair.opacity !== wanted.opacity)
+            throw new Error(`Calibration non-vacuity failure ${theme}/${wanted.context}/${wanted.states.join('/')}: required ${wanted.opacity} pair, got ${pair?.opacity ?? 'skipped'}; effective opacities=${wanted.states.map(s => calibration.samples[wanted.context][s].effectiveOpacity).join('/')}`);
         }
         calibration.passed = true;
         console.log(`Calibration ${theme}: ${JSON.stringify(Object.fromEntries(Object.entries(calibration.groups).map(([g, r]) => [g, { opaqueMaximum: r.opaqueMaximum, translucentMaximum: r.translucentMaximum, skippedPairs: r.skippedPairs.length }])))}; passed`);

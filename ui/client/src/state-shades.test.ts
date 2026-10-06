@@ -390,7 +390,7 @@ describe("777-S2 state shades", () => {
         expect(calibration.groups[group].pairs.some(p => p.opacity === 'opaque')).toBe(true);
       }
       const required = [
-        ...['required', 'optional'].map(need => ({ context: `key/${need}/rest`, states: ['present', 'verified'], opacity: 'opaque' })),
+        ...['required', 'optional'].map(need => ({ context: `key/${need}/rest`, states: ['present', 'verified'], opacity: need === 'optional' ? 'translucent' : 'opaque' })),
         ...['sea', 'land'].flatMap(terrain => ['current', 'selected', 'hovered'].map(state => ({ context: `map/canvas-${terrain}/fill`, states: ['rest', state], opacity: 'opaque' }))),
         ...['current', 'selected', 'hovered'].map(state => ({ context: 'map/sidebar/rest/fill', states: ['rest', state], opacity: 'opaque' })),
       ];
