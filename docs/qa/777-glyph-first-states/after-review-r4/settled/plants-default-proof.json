@@ -1,0 +1,235 @@
+[
+  {
+    "name": "default-control",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "plant-default",
+      "-t",
+      "browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled"
+    ],
+    "code": 0,
+    "wallSeconds": 3.3449645840000004,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run plant-default -t browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled\n\n\n RUN  v2.1.9 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ✓ plant-default.test.ts (10 tests | 7 skipped) 1603ms\n   ✓ 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled 303ms\n   ✓ 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean 1285ms\n\n Test Files  1 passed (1)\n      Tests  3 passed | 7 skipped (10)\n   Start at  09:49:27\n   Duration  2.56s (transform 37ms, setup 28ms, collect 584ms, tests 1.60s, environment 164ms, prepare 27ms)\n\n"
+  },
+  {
+    "name": "opaque-gradient-stop-stale",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 1,
+    "wallSeconds": 1.2544503749999998,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades\n\n\n RUN  v2.1.9 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ❯ src/state-shades.test.ts (0 test)\n\n⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n ❯ src/state-shades.test.ts:164:9\n    162|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m…\n    163| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    164|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr…\n       |         ^\n    165| if (receipt.proof.acceptanceComplete !== true)\n    166|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  09:49:39\n   Duration  955ms (transform 35ms, setup 28ms, collect 0ms, tests 0ms, environment 165ms, prepare 49ms)\n\n"
+  },
+  {
+    "name": "opaque-gradient-stop-regenerate-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "code": 0,
+    "wallSeconds": 235.726957958,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving default/Gilded…\nResolving default/Vector…\nResolving default/Veil…\nPainted capture progress: renders=489; wall=48.810s\nPainted capture progress: renders=920; wall=93.811s\nPainted capture progress: renders=1829; wall=138.811s\nPainted capture progress: renders=2789; wall=183.810s\nCompleted default/Vector; renders=2978; wall=192.646s\nPainted capture progress: renders=3501; wall=228.811s\nCompleted default/Veil; renders=3516; wall=229.793s\nCompleted default/Gilded; renders=3556; wall=235.225s\nResolved painted state surfaces: renders=3556; wall=235.228s; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 1 media conditions; file://; network aborted; requests=0; errors=0\nWrote /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/opaque-gradient-stop-capture/default.json; module graph=2095 inputs; SHA-256 2c7f55f40370369df0497b4ec7f00cd3754bd4d6da00e5ec6c785ec09a9b8134\n"
+  },
+  {
+    "name": "opaque-gradient-stop-fresh-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "plant-default",
+      "-t",
+      "browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled"
+    ],
+    "code": 1,
+    "wallSeconds": 3.583460333,
+    "tail": "+         0.6458712180118024,\n        ],\n        Array [\n-         0.0822827071298148,\n-         0.012983032342173012,\n-         0.04375203521551294,\n+         0.33053537564869656,\n+         0.13690722308065364,\n+         0.22394391219411838,\n        ],\n      ],\n      \"signatures\": Array [\n        \"filled circle + circular ring\",\n        \"filled square + square ring\",\n      ],\n      \"states\": Array [\n        \"current\",\n        \"selected\",\n      ],\n      \"surface\": \"map\",\n      \"theme\": \"Veil\",\n    },\n  ]\n\n ❯ plant-default.test.ts:421:49\n\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  1 failed | 2 passed | 7 skipped (10)\n   Start at  09:53:37\n   Duration  2.50s (transform 34ms, setup 42ms, collect 341ms, tests 1.61s, environment 334ms, prepare 35ms)\n\n"
+  },
+  {
+    "name": "opaque-gradient-stop-scope",
+    "condition": "default",
+    "acceptanceComplete": false,
+    "renderCount": 3556,
+    "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+    "mutation": [
+      "radial-gradient(1200px 600px at 50% -10%, hsl(320 55% 40% / .07), transparent 60%)",
+      "radial-gradient(1200px 600px at 50% -10%, hsl(320 55% 40% / .07), #ffffff 60%)"
+    ]
+  },
+  {
+    "name": "opaque-gradient-stop-restored",
+    "byteIdentical": true,
+    "receiptRestored": true
+  },
+  {
+    "name": "theme-provider-opacity-stale",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 1,
+    "wallSeconds": 1.22145875,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades\n\n\n RUN  v2.1.9 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ❯ src/state-shades.test.ts (0 test)\n\n⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n ❯ src/state-shades.test.ts:164:9\n    162|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m…\n    163| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    164|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr…\n       |         ^\n    165| if (receipt.proof.acceptanceComplete !== true)\n    166|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  09:53:50\n   Duration  953ms (transform 35ms, setup 27ms, collect 0ms, tests 0ms, environment 165ms, prepare 26ms)\n\n"
+  },
+  {
+    "name": "theme-provider-opacity-regenerate-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "code": 0,
+    "wallSeconds": 234.6889785,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving default/Gilded…\nResolving default/Vector…\nResolving default/Veil…\nPainted capture progress: renders=491; wall=49.031s\nPainted capture progress: renders=924; wall=94.032s\nPainted capture progress: renders=1841; wall=139.034s\nPainted capture progress: renders=2808; wall=184.035s\nCompleted default/Vector; renders=2987; wall=192.325s\nPainted capture progress: renders=3514; wall=229.034s\nCompleted default/Veil; renders=3520; wall=229.339s\nCompleted default/Gilded; renders=3556; wall=234.155s\nResolved painted state surfaces: renders=3556; wall=234.158s; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 1 media conditions; file://; network aborted; requests=0; errors=0\nWrote /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/theme-provider-opacity-capture/default.json; module graph=2095 inputs; SHA-256 785480f79efc529c86a3158cf15ae92afb30e29830ff2fa6860e195f96a85d49\n"
+  },
+  {
+    "name": "theme-provider-opacity-fresh-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "plant-default",
+      "-t",
+      "browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled"
+    ],
+    "code": 1,
+    "wallSeconds": 2.6731832079999998,
+    "tail": "+         0.03189732311764592,\n        ],\n        Array [\n-         0.0822827071298148,\n-         0.012983032342173012,\n-         0.04375203521551294,\n+         0.01599629336550963,\n+         0.006048833022857054,\n+         0.01599629336550963,\n        ],\n      ],\n      \"signatures\": Array [\n        \"filled circle + circular ring\",\n        \"filled square + square ring\",\n      ],\n      \"states\": Array [\n        \"current\",\n        \"selected\",\n      ],\n      \"surface\": \"map\",\n      \"theme\": \"Veil\",\n    },\n  ]\n\n ❯ plant-default.test.ts:421:49\n\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  1 failed | 2 passed | 7 skipped (10)\n   Start at  09:57:46\n   Duration  2.41s (transform 36ms, setup 29ms, collect 328ms, tests 1.70s, environment 170ms, prepare 45ms)\n\n"
+  },
+  {
+    "name": "theme-provider-opacity-scope",
+    "condition": "default",
+    "acceptanceComplete": false,
+    "renderCount": 3556,
+    "mutatedPath": "ui/client/src/contexts/ThemeContext.tsx",
+    "mutation": [
+      "{children}",
+      "<div style={{opacity: 0.35}}>{children}</div>"
+    ]
+  },
+  {
+    "name": "theme-provider-opacity-restored",
+    "byteIdentical": true,
+    "receiptRestored": true
+  },
+  {
+    "name": "media-root-override-stale",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 1,
+    "wallSeconds": 1.2982507079999999,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades\n\n\n RUN  v2.1.9 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ❯ src/state-shades.test.ts (0 test)\n\n⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n ❯ src/state-shades.test.ts:164:9\n    162|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m…\n    163| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    164|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr…\n       |         ^\n    165| if (receipt.proof.acceptanceComplete !== true)\n    166|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  09:57:55\n   Duration  1.02s (transform 35ms, setup 30ms, collect 0ms, tests 0ms, environment 171ms, prepare 45ms)\n\n"
+  },
+  {
+    "name": "media-root-override-regenerate-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "code": 0,
+    "wallSeconds": 234.607005458,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving default/Gilded…\nResolving default/Vector…\nResolving default/Veil…\nPainted capture progress: renders=491; wall=48.479s\nPainted capture progress: renders=922; wall=93.479s\nPainted capture progress: renders=1836; wall=138.480s\nPainted capture progress: renders=2799; wall=183.483s\nCompleted default/Vector; renders=2984; wall=192.109s\nPainted capture progress: renders=3510; wall=228.483s\nCompleted default/Veil; renders=3518; wall=229.054s\nCompleted default/Gilded; renders=3556; wall=234.104s\nResolved painted state surfaces: renders=3556; wall=234.107s; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 1 media conditions; file://; network aborted; requests=0; errors=0\nWrote /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/media-root-override-capture/default.json; module graph=2095 inputs; SHA-256 1992cd512dac3c28f7157c03245ea61d9aab3b941ba44974cc1ae45eeaee925d\n"
+  },
+  {
+    "name": "media-root-override-fresh-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "plant-default",
+      "-t",
+      "browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled"
+    ],
+    "code": 0,
+    "wallSeconds": 2.476959625,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run plant-default -t browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled\n\n\n RUN  v2.1.9 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ✓ plant-default.test.ts (10 tests | 7 skipped) 1569ms\n   ✓ 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled 305ms\n   ✓ 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean 1246ms\n\n Test Files  1 passed (1)\n      Tests  3 passed | 7 skipped (10)\n   Start at  10:01:51\n   Duration  2.23s (transform 35ms, setup 27ms, collect 320ms, tests 1.57s, environment 160ms, prepare 31ms)\n\n"
+  },
+  {
+    "name": "media-root-override-stale",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 1,
+    "wallSeconds": 1.226379292,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades\n\n\n RUN  v2.1.9 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ❯ src/state-shades.test.ts (0 test)\n\n⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n ❯ src/state-shades.test.ts:164:9\n    162|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m…\n    163| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    164|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr…\n       |         ^\n    165| if (receipt.proof.acceptanceComplete !== true)\n    166|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:02:23\n   Duration  966ms (transform 38ms, setup 28ms, collect 0ms, tests 0ms, environment 168ms, prepare 29ms)\n\n"
+  },
+  {
+    "name": "media-root-override-regenerate-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "code": 0,
+    "wallSeconds": 235.31631625,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving default/Vector…\nResolving default/Gilded…\nResolving default/Veil…\nPainted capture progress: renders=490; wall=48.453s\nPainted capture progress: renders=914; wall=93.455s\nPainted capture progress: renders=1819; wall=138.455s\nPainted capture progress: renders=2786; wall=183.455s\nCompleted default/Vector; renders=2985; wall=192.665s\nPainted capture progress: renders=3502; wall=228.457s\nCompleted default/Veil; renders=3516; wall=229.362s\nCompleted default/Gilded; renders=3556; wall=234.812s\nResolved painted state surfaces: renders=3556; wall=234.814s; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 1 media conditions; file://; network aborted; requests=0; errors=0\nWrote /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/media-root-override-capture/default.json; module graph=2095 inputs; SHA-256 46c7b83ef915e6ce6b5fd1a69c02ef2be0b93ea17773ff414710430ffc82e11c\n"
+  },
+  {
+    "name": "media-root-override-fresh-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui",
+      "test",
+      "--",
+      "plant-default",
+      "-t",
+      "browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled"
+    ],
+    "code": 1,
+    "wallSeconds": 2.525066959,
+    "tail": "        Array [\n          0.002486117602200216,\n          0.06834468904560749,\n          0.09274617039318808,\n        ],\n        Array [\n          0.048576475584514306,\n          0.3373952729706493,\n          0.38544957291933,\n        ],\n      ],\n      \"signatures\": Array [\n        \"filled circle + circular ring\",\n        \"filled square + square ring\",\n      ],\n      \"states\": Array [\n        \"current\",\n        \"selected\",\n      ],\n      \"surface\": \"map\",\n      \"theme\": \"Vector\",\n    },\n  ]\n\n ❯ plant-default.test.ts:421:49\n\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯\n\n Test Files  1 failed (1)\n      Tests  2 failed | 1 passed | 7 skipped (10)\n   Start at  10:06:19\n   Duration  2.20s (transform 34ms, setup 41ms, collect 351ms, tests 1.31s, environment 260ms, prepare 107ms)\n\n"
+  },
+  {
+    "name": "media-root-override-scope",
+    "condition": "default",
+    "acceptanceComplete": false,
+    "renderCount": 3556,
+    "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+    "mutation": "\n@media (prefers-color-scheme: dark) { html.dark.theme-vector { --state-key-verified: var(--state-key-present); } }\n"
+  },
+  {
+    "name": "media-root-override-restored",
+    "byteIdentical": true,
+    "receiptRestored": true
+  }
+]
