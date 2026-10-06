@@ -113,7 +113,7 @@ try {
         const capture = resolve(scratch, `${plant.name}-capture`); mkdirSync(capture, { recursive: true });
         const regenerated = await run(`${plant.name}-regenerate-default`, ['npm', '--prefix', copiedUi, 'run', 'resolve-state-surfaces'],
           { STATE_SURFACES_SCRATCH: capture, STATE_SURFACES_CONDITION: 'default', STATE_SURFACES_OUTPUT: resolve(capture, 'default.json') });
-        if (regenerated.code !== 0 && !/Measurement failure|Calibration failure|Unemulatable/.test(regenerated.tail)) throw new Error('Unrelated regeneration failure');
+        if (regenerated.code !== 0 && !/Measurement failure|Calibration (?:non-vacuity )?failure|Unemulatable/.test(regenerated.tail)) throw new Error('Unrelated regeneration failure');
         if (plant.name === 'gradient-state-surface' && regenerated.code !== 0) throw new Error('Gradient must be measured successfully');
       } else if (stage === 'fresh') {
         const capture = report.findLast(r => r.name === `${plant.name}-regenerate-default`);
