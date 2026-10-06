@@ -20,7 +20,7 @@ const plants = [
   { name: 'has-state-surface', path: layout, append: '\n.key-row:has(.key-status.verified) .key-status { color: var(--state-key-present); }\n' },
   { name: 'map-blend', path: layout, append: '\n.map-pin { mix-blend-mode: difference; }\n' },
   { name: 'key-overpainting-shadow', path: layout, append: '\n.key-status svg { background: var(--state-key-present); box-shadow: inset 0 0 0 12px var(--state-key-present); }\n' },  { name: 'gradient-state-surface', path: layout, append: '\n.topbar .mem-fill.over { background-color: transparent; background-image: linear-gradient(var(--state-mem-over), var(--state-mem-over)); }\n' },
-  { name: 'element-state-redeclaration', path: layout, append: '\n.dark:not(.theme-gilded):not(.theme-vector) .lm-trash.armed { --state-delete-armed: hsl(0 65% 50%); }\n' },
+  { name: 'element-state-redeclaration', path: layout, append: '\n.dark:not(.theme-gilded):not(.theme-vector) .lm-trash.armed { --state-delete-armed: inherit; }\n' },
 ];
 const arg = name => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1]; };
 const stage = arg('--stage'), plant = plants.find(p => p.name === arg('--plant'));
