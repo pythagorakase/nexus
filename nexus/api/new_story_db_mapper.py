@@ -578,7 +578,6 @@ class NewStoryDatabaseMapper:
                         DELETE FROM character_relationships;
                         DELETE FROM faction_relationships;
                         DELETE FROM faction_character_relationships;
-                        DELETE FROM items;
                         DELETE FROM factions;
                         DELETE FROM characters;
                         DELETE FROM places;
@@ -594,7 +593,6 @@ class NewStoryDatabaseMapper:
                         ALTER SEQUENCE places_id_seq RESTART WITH 1;
                         ALTER SEQUENCE zones_id_seq RESTART WITH 1;
                         ALTER SEQUENCE layers_id_seq RESTART WITH 1;
-                        ALTER SEQUENCE items_id_seq RESTART WITH 1;
                         ALTER SEQUENCE character_relationships_id_seq RESTART WITH 1;
                     """
                     )
