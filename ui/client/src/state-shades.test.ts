@@ -141,6 +141,8 @@ type Sample = {
   meanLinear: [number, number, number]; maskSize: number;
   histogram: { rgb: number[]; count: number }[]; width: number; height: number;
   action: string; animationsRunning: number;
+  settleCriteria: { tooltipExpected: string; tooltipState: string | null;
+    tooltipPresent: boolean; scope: string; animations: string; pseudoClasses: string };
   pseudos: { pinHover: boolean; hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean };
   target: { hover: boolean; focusVisible: boolean };
   stateAttributes: { mapState: string | null; keyNeed: string | null; armed: string | null };
@@ -359,6 +361,12 @@ describe("777-S2 state shades", () => {
       expect(sample.histogram.length).toBeGreaterThan(0);
       expect(sample.histogram.reduce((n, bucket) => n + bucket.count, 0)).toBeLessThanOrEqual(sample.maskSize);
       expect(sample.animationsRunning).toBe(0);
+      expect(sample.settleCriteria.scope).toContain('overlapping/portalled siblings');
+      expect(sample.settleCriteria.animations).toContain('all document animations finished');
+      expect(sample.settleCriteria.pseudoClasses).toContain('read back');
+      expect(sample.settleCriteria.tooltipPresent).toBe(sample.settleCriteria.tooltipExpected === 'open');
+      if (sample.settleCriteria.tooltipExpected === 'open')
+        expect(['delayed-open', 'instant-open']).toContain(sample.settleCriteria.tooltipState);
       if (context.endsWith("focus-visible")) {
         expect(sample.target.focusVisible, `${context}: Tab focus-visible`).toBe(true);
         expect(sample.pseudos.focusWithin).toBe(true);
@@ -386,6 +394,20 @@ describe("777-S2 state shades", () => {
           expect(Object.keys(samples)).toEqual(contextNames.filter(c => c.startsWith(`${group}/`) && statesIn(c).includes(Object.entries(MAPPINGS[group as Surface]).find(([, r]) => r === root)![0])));
           for (const [context, sample] of Object.entries(samples)) check(sample, context);
         }
+      }
+    }
+  });
+  it("same_value_has_exactly_the_same_settled_mask_mean", () => {
+    for (const { id } of receipt.media.variants) for (const theme of THEMES) {
+      const data = receipt.conditions[id][theme];
+      for (const [context, states] of Object.entries(data.shipped)) for (const [state, shipped] of Object.entries(states)) {
+        const root = MAPPINGS[context.split('/')[0] as Surface][state];
+        const value = candidates(theme, root).find(c => c.rgb.every((v, i) => Math.abs(v - rgb(tokens(shippedCss, theme)[root])[i]) < 1e-12))!.value;
+        const candidate = data.candidates[root][value][context];
+        expect(candidate.meanLinear, `${id}/${theme}/${context}/${state}: same value`).toEqual(shipped.meanLinear);
+        expect(candidate.maskSize).toBe(shipped.maskSize);
+        expect(candidate.settleCriteria.tooltipExpected).toBe(shipped.settleCriteria.tooltipExpected);
+        expect(candidate.settleCriteria.tooltipPresent).toBe(shipped.settleCriteria.tooltipPresent);
       }
     }
   });

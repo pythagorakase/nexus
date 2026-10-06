@@ -19,8 +19,10 @@ with seeded local data and the production Vite build's emitted CSS in shipped
 order. No DOM/cascade/compositing model determines a color. The convention is
 file://, HTTP(S) aborted, device scale 4, 1200×900 default, dark scheme and
 reduced motion, plus every CSS-derived emulatable media condition. Mouse hover
-and keyboard Tab produce the recorded contexts. Finite animations/transitions
-finish before capture; infinite animations pause at declared start/trough phases.
+and keyboard Tab produce the recorded contexts. Delayed tooltips triggered by hover/Tab are awaited in their final open state;
+click/leave contexts await closure. Every capture records these settle criteria
+and pseudo-class readbacks. All finite document animations/transitions finish,
+including overlapping siblings and portalled tooltips, before both captures; infinite animations pause at declared start/trough phases.
 
 The inventory holds reachable states only. Sidebar hovered glyphs, absent
 keys in required rows, missing keys in optional rows, and the absent/missing

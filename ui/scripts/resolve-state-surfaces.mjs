@@ -90,19 +90,20 @@ try {
     results.proof.matchedMedia ??= {}; results.proof.matchedMedia[condition.id] = matchedMedia;
     // Finite transitions/animations finish. Infinite animations have no finished
     // promise: pause the actual browser effect at its start and trough, separately.
-    const settled = async (selector = null) => page.evaluate(async ({ phase, selector }) => {
+    const settled = async () => page.evaluate(async ({ phase }) => {
       await new Promise(requestAnimationFrame);
       for (;;) {
         const all = document.getAnimations();
         for (const a of all) if (a.effect?.getTiming().iterations === Infinity) {
           a.pause(); a.currentTime = Number(a.effect.getTiming().duration) * (phase ?? 0);
         }
-        const node = selector ? document.querySelector(selector) : null;
-        const running = all.filter(a => a.playState === 'running' && (!node || a.effect?.target instanceof Element && (node.contains(a.effect.target) || a.effect.target.contains(node))));
+        // The whole document is a conservative superset of the surface, its
+        // ancestors and overlapping siblings (including portalled tooltips).
+        const running = all.filter(a => a.playState === 'running');
         if (!running.length) return;
         await Promise.all(running.map(a => a.finished.catch(() => {})));
       }
-    }, { phase: condition.animationPhase, selector });
+    }, { phase: condition.animationPhase });
     async function reset() {
       await page.mouse.move(0, 0);
       await page.locator('body').click({ position: { x: 1, y: 1 } });
@@ -117,9 +118,29 @@ try {
       }
       throw new Error(`Measurement failure ${selector}: Tab did not reach target`);
     }
-    async function sample(selector, action, label) {
+    async function sample(selector, action, label, tooltipExpected) {
       const el = page.locator(selector);
-      await el.scrollIntoViewIfNeeded(); await settled(selector);
+      await el.scrollIntoViewIfNeeded();
+      // Held unarmed hover schedules delayed opening; click/leave cancels it.
+      // Tab opens immediately, and the trigger's blur may close it again.
+      // captureValues resolves that immediate final state once for all values.
+      if (tooltipExpected === 'open') {
+        await page.locator('.lm-quant[data-state="delayed-open"],.lm-quant[data-state="instant-open"]').waitFor();
+        await page.getByRole('tooltip').waitFor();
+      } else {
+        await page.getByRole('tooltip').waitFor({ state: 'hidden' });
+      }
+      await settled();
+      const settleCriteria = {
+        tooltipExpected,
+        tooltipState: await page.locator('.lm-quant').count()
+          ? await page.locator('.lm-quant').getAttribute('data-state') : null,
+        tooltipPresent: await page.getByRole('tooltip').count() > 0,
+        animations: 'all document animations finished; infinite effects paused at the declared condition phase',
+        scope: 'entire document, including surface, ancestors and overlapping/portalled siblings',
+        animationPhase: condition.animationPhase ?? null,
+        pseudoClasses: 'matched hover/focus-visible read back after the driving action',
+      };
       const box = await el.boundingBox();
       if (!box || !box.width || !box.height) throw new Error(`Measurement failure ${label}: empty clip`);
       if (await page.evaluate(() => devicePixelRatio) !== 4) throw new Error('Measurement failure: device scale is not 4');
@@ -133,9 +154,11 @@ try {
       const captureId = `surface-${renderCount}`;
       await el.evaluate((n, id) => n.setAttribute('data-control-capture', id), captureId);
       const controlStyle = await page.addStyleTag({ content: `[data-control-capture="${captureId}"], [data-control-capture="${captureId}"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; }` });
+      await settled();
       const control = await screenshot(box);
       await controlStyle.evaluate(n => n.remove());
       await el.evaluate(n => n.removeAttribute('data-control-capture'));
+      await settled();
       renderCount++;
       let measured;
       try { measured = foreground(painted, control, label); }
@@ -148,8 +171,8 @@ try {
       if (Math.abs(measured.width - box.width * 4) > 4 || Math.abs(measured.height - box.height * 4) > 4) throw new Error(`Measurement failure ${label}: PNG is not at device scale 4`);
       const target = await el.evaluate(n => {const t=n.closest('.lm-trash') ?? n.closest('.key-row')?.querySelector('input') ?? n; return {hover:t.matches(':hover'), focusVisible:t.matches(':focus-visible')};});
       const stateAttributes = await el.evaluate(n => ({ mapState: n.closest('[data-map-state]')?.getAttribute('data-map-state') ?? null, keyNeed: n.closest('.key-row')?.classList.contains('optional') ? 'optional' : n.closest('.key-row') ? 'required' : null, armed: n.closest('.lm-trash')?.getAttribute('aria-pressed') ?? null }));
-      const animationsRunning = await el.evaluate(n => document.getAnimations().filter(a => a.playState === 'running' && a.effect?.target instanceof Element && (n.contains(a.effect.target) || a.effect.target.contains(n))).length);
-      return { ...measured, selector, box, action, pseudos, target, stateAttributes, animationsRunning };
+      const animationsRunning = await page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').length);
+      return { ...measured, selector, box, action, pseudos, target, stateAttributes, animationsRunning, settleCriteria };
     }
       const result = { shipped: {}, before: {}, candidates: {}, reachability: {} };
       results.conditions[condition.id][theme] = result;
@@ -195,6 +218,10 @@ try {
           }
         }
         result.candidates[prop] ??= {};
+        await settled();
+        const tooltipExpected = context.startsWith('delete/ready-exceeds/') &&
+          (state === 'unarmed' && context.endsWith('hover') || context.endsWith('focus-visible') &&
+            await page.locator('.lm-quant').getAttribute('data-state') !== 'closed') ? 'open' : 'closed';
         for (const [phase, value] of [['shipped', now[prop]], ['before', baseline[roots[group][state]]], ...(process.env.STATE_SURFACES_PROBE ? [] : values.map(v => ['candidate', v]))]) {
           if (phase === 'before') {
             // Historical global declarations, including the pre-anchor colors,
@@ -207,7 +234,7 @@ try {
           } else {
             await page.evaluate(({ prop, value }) => document.documentElement.style.setProperty(prop, value), { prop, value: roots[group][state] === '--destructive' && phase === 'before' ? `hsl(${value})` : value });
           }
-          const measured = await sample(selector, action, `${condition.id}/${theme}/${phase}/${context}/${state}/${value}`);
+          const measured = await sample(selector, action, `${condition.id}/${theme}/${phase}/${context}/${state}/${value}`, tooltipExpected);
           if (phase === 'candidate') { result.candidates[prop][value] ??= {}; result.candidates[prop][value][context] = measured; }
           else { result[phase][context] ??= {}; result[phase][context][state] = measured; }
           if (overlay) { await overlay.evaluate(n => n.remove()); overlay = null; }
