@@ -14,7 +14,7 @@ cpSync(resolve(root, 'docs/qa/777-glyph-first-states'), resolve(copy, 'docs/qa/7
 const layout = 'ui/client/src/components/nexus/nexus-layout.css';
 const theme = 'ui/client/src/contexts/ThemeContext.tsx';
 const plants = [
-  { name: 'opaque-gradient-stop', path: layout, replace: ['transparent 60%', '#ffffff 60%'] },
+  { name: 'opaque-gradient-stop', path: layout, replace: ['radial-gradient(1200px 600px at 50% -10%, hsl(320 55% 40% / .07), transparent 60%)', 'radial-gradient(1200px 600px at 50% -10%, hsl(320 55% 40% / .07), #ffffff 60%)'] },
   { name: 'theme-provider-opacity', path: theme, replace: ['{children}', '<div style={{opacity: 0.35}}>{children}</div>'] },
   { name: 'media-root-override', path: layout, append: '\n@media (prefers-color-scheme: light) { .dark.theme-vector { --state-key-verified: var(--state-key-present); } }\n' },
   { name: 'optional-row-opacity', path: layout, append: '\n.key-row.optional { opacity: .15; }\n' },
