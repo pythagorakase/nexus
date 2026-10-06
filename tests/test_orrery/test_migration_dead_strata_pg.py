@@ -3058,3 +3058,113 @@ def test_migration_143_round12_column_definitions(
             assert _routine_outcome(dbname, call) == outcome
         assert _snapshot(dbname, surviving=not target) == before
         assert _function_catalog(dbname) == functions
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "r13-set-after-body",
+        "r13-set-before-body",
+        "r13-language-after-body",
+        "r13-persisting-inner",
+        "r13-persisting-survivor",
+    ),
+)
+def test_migration_143_round13_nested_environments(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+) -> None:
+    """Nested options refuse at either position; persisting bodies meet startup SETs."""
+    persisting = case.startswith("r13-persisting-")
+    survivor = case == "r13-persisting-survivor"
+    routine = "probe813_r13_persist" if persisting else "probe813_r13"
+    reason = (
+        None
+        if survivor
+        else (
+            "literal names a drop target: item_type"
+            if persisting
+            else (
+                "unresolved nested routine language"
+                if case == "r13-language-after-body"
+                else "unresolved nested routine SET environment"
+            )
+        )
+    )
+    if persisting:
+        type_name = "character_role" if survivor else "item_type"
+        value = "x" if survivor else "weapon"
+        body = (
+            "BEGIN CREATE OR REPLACE FUNCTION public.probe813_generated() "
+            f"RETURNS boolean AS $$SELECT pg_input_is_valid('{value}',"
+            f"'{type_name}')$$ LANGUAGE sql; RETURN true; END"
+        )
+    else:
+        options = {
+            "r13-set-after-body": "AS $$SELECT pg_input_is_valid('weapon',"
+            "'item_type')$$ LANGUAGE sql SET search_path=public",
+            "r13-set-before-body": "LANGUAGE sql SET search_path=public "
+            "AS $$SELECT pg_input_is_valid('weapon','item_type')$$",
+            "r13-language-after-body": "AS $$return True$$ LANGUAGE plpython3u",
+        }[case]
+        body = (
+            "DECLARE ok boolean; BEGIN CREATE FUNCTION pg_temp.generated() "
+            f"RETURNS boolean {options}; SELECT pg_temp.generated() INTO ok; "
+            "DROP FUNCTION pg_temp.generated(); RETURN ok; END"
+        )
+    call = f"SELECT public.{routine}()"
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        if survivor:
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute("SELECT to_regtype('public.character_role')::oid")
+                assert cur.fetchone()[0] is not None
+            assert "character_role" not in TARGET_NAMES
+        _sql(
+            dbname,
+            f"CREATE FUNCTION public.{routine}() RETURNS boolean "
+            f"LANGUAGE plpgsql SET search_path=pg_catalog AS $outer${body}$outer$",
+        )
+        # Never materialize a persisting inner routine before the scanner decides
+        # its wrapper; otherwise the top-level routine scan would mask the gap.
+        outcome = None
+        if not persisting and case != "r13-language-after-body":
+            outcome = _routine_outcome(dbname, call)
+            assert outcome == (True, (True,)), outcome
+        before = _snapshot(dbname, surviving=survivor)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        print("ROUND13", case, "applied:", applied, flush=True)
+        if not applied:
+            print("ROUND13 REFUSAL", case, caplog.text, flush=True)
+        if applied and reason:
+            if persisting:
+                _sql(dbname, call)
+                after = _routine_outcome(dbname, "SELECT public.probe813_generated()")
+            elif outcome:
+                after = _routine_outcome(dbname, call)
+            else:
+                after = None
+            print("OLD OUTCOME", case, "before:", outcome, "after:", after, flush=True)
+            if case in ("r13-set-after-body", "r13-persisting-inner"):
+                assert after is not None and not after[0], after
+                assert after[1][0] == "42704", after
+        assert applied is survivor, caplog.text
+        if reason:
+            assert routine in caplog.text, caplog.text
+            assert reason in caplog.text, caplog.text
+            assert _stamps(dbname) == stamps
+        else:
+            assert [s for s in _stamps(dbname) if s[0] != "143"] == stamps
+        assert _snapshot(dbname, surviving=survivor) == before
+        assert _function_catalog(dbname) == functions
+        if survivor:
+            _sql(dbname, call)
+            assert _routine_outcome(dbname, call) == (True, (True,))
+            assert _routine_outcome(dbname, "SELECT public.probe813_generated()") == (
+                True,
+                (False,),
+            )
