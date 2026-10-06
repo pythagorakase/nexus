@@ -155,7 +155,10 @@ async function renderInventory(condition, theme, calibrating = false) {
       const pseudos = await el.evaluate(n => ({ hover: n.matches(':hover'), focusVisible: n.matches(':focus-visible'),
         pinHover: (n.closest('.map-pin') ?? document.querySelector(`[data-testid="map-pin-${n.closest('.map-place-row')?.getAttribute('data-testid')?.split('-').at(-1)}"]`))?.matches(':hover') ?? false,
         ancestorHover: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':hover') ?? false,
-        focusWithin: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':focus-within') ?? false }));
+        focusWithin: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':focus-within') ?? false,
+        rowFocusVisible: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':focus-visible') ?? false,
+        controls: [...(n.closest('.key-row,.lm-quant,.map-place-row')?.querySelectorAll('button,input,[tabindex]') ?? [])]
+          .map(c => ({ hover: c.matches(':hover'), focusVisible: c.matches(':focus-visible') })) }));
       const painted = await screenshot(box);
       // Suppress only this tagged subtree's paint. Visibility, geometry and
       // opacity compositing remain identical to the painted capture.

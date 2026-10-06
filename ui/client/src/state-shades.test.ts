@@ -144,7 +144,7 @@ type Sample = {
   action: string; animationsRunning: number;
   settleCriteria: { tooltipExpected: string; tooltipState: string | null;
     tooltipPresent: boolean; scope: string; animations: string; pseudoClasses: string };
-  pseudos: { pinHover: boolean; hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean };
+  pseudos: { pinHover: boolean; hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean; rowFocusVisible: boolean; controls: { hover: boolean; focusVisible: boolean }[] };
   target: { hover: boolean; focusVisible: boolean };
   stateAttributes: { mapState: string | null; keyNeed: string | null; armed: string | null };
 };
@@ -469,10 +469,16 @@ describe("777-S2 state shades", () => {
       const expected = declared === "pin-hover" && state !== "hovered" ? "none" : declared;
       expect(sample.target.focusVisible, `${context}: focus-visible`).toBe(expected === "focus-visible");
       expect(sample.pseudos.focusVisible).toBe(false); // sampled SVG/path/span is not the control
-      expect(sample.pseudos.focusWithin).toBe(expected === "focus-visible");
+      // Mouse clicks can leave :focus-within on an armed row without :focus-visible.
+      if (expected === "focus-visible") expect(sample.pseudos.focusWithin).toBe(true);
+      expect(sample.pseudos.rowFocusVisible).toBe(false);
+      expect(sample.pseudos.controls.filter(c => c.focusVisible)).toHaveLength(expected === "focus-visible" ? 1 : 0);
       expect(sample.pseudos.pinHover).toBe(expected === "pin-hover");
       expect(sample.pseudos.ancestorHover).toBe(expected === "row-hover" || expected === "button-hover");
-      if (expected !== "row-hover") expect(sample.target.hover).toBe(expected === "button-hover");
+      expect(sample.target.hover).toBe(expected === "button-hover" || (expected === "row-hover" && context.startsWith("key/")));
+      expect(sample.pseudos.hover).toBe(expected === "button-hover");
+      if (expected === "none" || expected === "pin-hover")
+        expect(sample.pseudos.controls.every(c => !c.hover && !c.focusVisible)).toBe(true);
       if (expected === "none") expect(sample.pseudos.hover).toBe(false);
       if (expected === "focus-visible") expect(sample.action).toContain("Tab");
 
