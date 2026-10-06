@@ -1,0 +1,15 @@
+{
+  "name": "offline-test_runtime",
+  "args": [
+    "/Users/pythagor/nexus/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_runtime"
+  ],
+  "exit": 0,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 57.655917417025194,
+  "tail": "........................................................................ [ 38%]\n.........sssss.......................................................... [ 76%]\n................................sssssssssssss                            [100%]\n=============================== warnings summary ===============================\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n171 passed, 18 skipped, 5 warnings in 57.27s"
+}
