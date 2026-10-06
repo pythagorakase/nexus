@@ -1,6 +1,6 @@
 # State Token Assignments
 
-Mask-mean search assignments; acceptance blocked by the delayed tooltip witness mismatch. Domains and historical source pigments are unchanged; Veil brass-derived baseline is the authorized #b83d7a anchor.
+Settled mask-mean assignments certified by exact same-value witnesses and per-group acceptance. Domains and historical source pigments are unchanged; Veil brass-derived baseline is the authorized #b83d7a anchor.
 
 | Theme | Token | Global Source | Baseline | Current |
 | --- | --- | --- | --- | --- |

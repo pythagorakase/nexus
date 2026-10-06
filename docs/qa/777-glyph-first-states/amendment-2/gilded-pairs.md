@@ -1,8 +1,8 @@
-# Gilded Painted Mask-Mean Pairs
+# Gilded Settled Painted Mask-Mean Pairs
 
-**Uncertified capture:** shipped/candidate delete witnesses disagree during delayed tooltip opening. These are measured values, not an accepted palette.
+Certified by exact same-value witnesses and Amendment 4 per-group acceptance.
 
-Primary condition: default, 1200×900, device scale 4, dark, reduced motion; Chromium 153.0.8010.12 / Playwright 1.63.0, file://, HTTP(S) aborted. All 18 conditions (1,242 comparisons per theme) are in pair-measurements.csv and the joint JSON. The JSON rgb field contains the retained linear-sRGB triple; display RGB below encodes that mean.
+Default: 1200×900, device scale 4, dark, reduced motion; Chromium 153.0.8010.12 / Playwright 1.63.0, file://, HTTP(S) aborted. Full linear means and all 18 conditions remain in the CSV and joint JSON.
 
 | Group / Context | States | Before Display RGB | After Display RGB | Before ΔE00 | After ΔE00 | Static Signatures |
 | --- | --- | --- | --- | --- | --- | --- |

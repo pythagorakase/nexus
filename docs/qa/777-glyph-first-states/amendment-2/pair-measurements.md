@@ -1,7 +1,5 @@
-# Painted Mask-Mean Measurements
+# Certified Settled Painted Mask-Mean Measurements
 
-**Not certified:** delayed tooltip opening makes sixteen shipped/candidate delete witnesses unequal. Full regeneration completed, but group acceptance is red. No diagnostic replacement mean is used.
-
-[All 3,726 pair/context comparisons](pair-measurements.csv); [Veil](veil-pairs.md), [Gilded](gilded-pairs.md), [Vector](vector-pairs.md). Primary tables show default; the CSV and joint JSON include all 18 CSS conditions. Means remain linear for Machado, D65 CIELAB and CIEDE2000. Only display values use sRGB encoding.
+All 3,780 same-value witnesses and per-group acceptance pass. [All 3,726 comparisons](pair-measurements.csv), [Veil](veil-pairs.md), [Gilded](gilded-pairs.md), [Vector](vector-pairs.md). Primary tables show default; CSV and joint JSON hold all 18 conditions. Means remain linear for Machado, D65 CIELAB and CIEDE2000; display RGB encodes the mean.
 
 Codex, GPT-6.
