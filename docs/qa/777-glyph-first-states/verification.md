@@ -798,3 +798,50 @@ gateway restart is owed. Rebuild the client after landing. Open coordinator
 questions: **none**.
 
 Codex, GPT-6.
+
+## After the Stopping-Rule Reviews
+
+2026-10-06, round-5 measurement checkpoint `3ffb7842` on `721ebe12`.
+The complete second stopping-rule panel was read before editing. The
+90%-difference core, identical-pigment calibration, 18-vector/27-render
+media inventory, independent phase-pair scoring, canvas-hovered sidebar
+contexts and extended control are checkpointed. `npm --prefix ui run check`
+passed. The named regeneration stopped after 74 Veil default calibration
+samples: `map/canvas-sea/ring` rest/hovered measured
+**22.92610822908579 deutan ΔE**, exceeding the required **1.0**. The full
+Veil calibration maximum is **23.707049774790395**. The threshold and
+tolerance remain fixed. The [stop report](after-review-r5/stop-report.md)
+contains the exact samples, diagnosis, two painted PNGs, controls and tails.
+There is no new accepted receipt, searched assignment or proof-gate claim.
+
+### Residuals
+
+- Identical pigment does not imply identical painted core color across the
+  inherited ring inventory: rest is sampled at its opaque fill, outlines
+  paint at opacity 0.6, and sidebar states have different row backdrops.
+  Calibration requires a coordinator ruling before regeneration can continue.
+- The per-group deutan max-min criterion has no glyph-against-backdrop floor.
+  The accepted `721ebe12` Vector current and Veil selected map tokens remain
+  at 30% lightness; no round-5 search was reached. A legibility floor is a
+  future owner criterion, not implemented by this order.
+- Every `client/src` source file remains a freshness input because Tailwind
+  scans the entire tree; any client edit requires regeneration. Font loading
+  and font hash coverage remain pending item 11.
+- All previously declared scope exclusions remain. Later protocol/record
+  corrections, the Amendment-5 evidence/PR sentence and remaining gates were
+  not reached after the required calibration stop.
+
+### Coordinator's Frozen Whole-Tree Gate at 721ebe12
+
+Provided by the coordinator, 2026-10-06, dedicated frozen worktree,
+`NEXUS_RUN_POSTGRES=1 -p tests.dbname_audit`; this is not a gate run on the
+round-5 checkpoint:
+
+```text
+6116 passed, 59 skipped, 35 warnings in 2431.35s (0:40:31)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+GATE-1099 EXIT=0
+```
+
+Codex, GPT-6.
