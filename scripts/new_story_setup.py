@@ -10,6 +10,7 @@ Actions:
 from __future__ import annotations
 
 from nexus.api.db_pool import dispose_database
+from nexus.api.save_slots import is_slot_locked
 from nexus.api.slot_utils import slot_dbname
 
 from nexus.database import subprocess_env
@@ -20,6 +21,7 @@ import argparse
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -89,15 +91,13 @@ def create_assets_tables(dbname: Optional[str] = None) -> None:
 
 
 def _get_default_slot_model() -> str:
-    """Get default model for new slots from config."""
-    try:
-        from nexus.config.loader import load_settings
+    """Get default model for new slots from config.
 
-        settings = load_settings()
-        return settings.global_.model.default_slot_model
-    except Exception:
-        # Fallback if config not available
-        return "TEST"
+    A configuration that fails to load or validate raises.
+    """
+    from nexus.config.loader import load_settings
+
+    return load_settings().global_.model.default_slot_model
 
 
 def ensure_global_variables(dbname: str) -> None:
@@ -163,6 +163,38 @@ def _postgres_tools(*names: str) -> dict[str, str]:
     return {name: str(executable) for name, executable in resolved.items()}
 
 
+def _locked_target_message(target_db: str) -> str:
+    """Return the refusal text for a locked ``target_db``.
+
+    A slot database gets the text ``reset_setup`` raises, with its
+    ``nexus unlock`` hint; any other database is named without that hint.
+    The fixed production pattern decides, never ``slot_utils.VALID_DBNAMES``:
+    the test routing contract narrows that set to its disposable clone names.
+    """
+    m = re.fullmatch(r"save_0([1-5])", target_db)
+    if m:
+        n = int(m.group(1))
+        return f"Slot {n} is locked. Unlock it first with: nexus unlock --slot {n}"
+    return (
+        f"Database {target_db} is locked (default_transaction_read_only=on); "
+        "refusing to replace it."
+    )
+
+
+def _refuse_locked_target(target_db: str) -> None:
+    """Raise ``ValueError`` before any change when ``target_db`` is locked.
+
+    The lock is ``default_transaction_read_only=on`` on the database. It does
+    not stop ``dropdb``, which connects to another database, so setup reads it
+    here. A database with no setting, or one that does not exist, is unlocked.
+    """
+    m = re.fullmatch(r"save_0([1-5])", target_db)
+    # is_slot_locked reads only dbname when it is given; the slot number is unused.
+    slot_number = int(m.group(1)) if m else 0
+    if is_slot_locked(slot_number, dbname=target_db):
+        raise ValueError(_locked_target_message(target_db))
+
+
 def initialize_slot_database(
     target_db: str,
     source_db: Optional[str] = None,
@@ -185,11 +217,16 @@ def initialize_slot_database(
     raises before the fresh-slot IDF corpora are seeded and before the
     database is logged ready, so a half-built database is never reported ready.
     ``migrations_dir`` overrides the runner's migration tree (tests only).
+
+    Raises:
+        ValueError: If ``target_db`` is locked (``default_transaction_read_only``
+            is on); nothing is terminated or dropped.
     """
     dispose_database(target_db)
     # NEXUS_template is the canonical fresh-slot image (schema + seed data)
     source_db = source_db or "NEXUS_template"
     tools = _postgres_tools("dropdb", "createdb", "pg_dump", "psql")
+    _refuse_locked_target(target_db)
 
     if force:
         # Terminate active connections before dropping
@@ -410,12 +447,17 @@ def clone_slot_with_data(
     source DB. Every PostgreSQL tool is resolved before any change, and any
     failing step (including one statement of the dump) raises.
     ``target_db`` defaults to the slot's database; tests pass a disposable name.
+
+    Raises:
+        ValueError: If ``slot`` is outside 1-5, or if ``target_db`` is locked
+            (``default_transaction_read_only`` is on); nothing is dropped.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
     if target_db is None:
         target_db = slot_dbname(slot)
     tools = _postgres_tools("dropdb", "createdb", "pg_dump", "psql")
+    _refuse_locked_target(target_db)
     dispose_database(target_db)
 
     if force:
@@ -520,7 +562,10 @@ def main():
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Drop and recreate the target slot database if it exists",
+        help=(
+            "Drop and recreate the target slot database if it exists; "
+            "a locked slot is refused"
+        ),
     )
     args = parser.parse_args()
 

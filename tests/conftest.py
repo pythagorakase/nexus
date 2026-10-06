@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
@@ -35,7 +36,11 @@ if "NEXUS_SLOT" in os.environ:
     del os.environ["NEXUS_SLOT"]
 
 from nexus.telemetry import usage as usage_telemetry
-from nexus.util.secret_manager import InMemorySecretBackend, use_secret_backend
+from nexus.util.secret_manager import (
+    InMemorySecretBackend,
+    keychain_read_error,
+    use_secret_backend,
+)
 from tests import dbname_audit, secret_store_guard
 
 # Guard the real secret-store backends before collection, so test-module
@@ -144,6 +149,42 @@ def in_memory_secret_store(
     """
     monkeypatch.delenv("NEXUS_KEYRING_DISABLE", raising=False)
     backend = InMemorySecretBackend()
+    with use_secret_backend(backend):
+        yield backend
+
+
+class UnreadableSecretBackend(InMemorySecretBackend):
+    """A store whose every read fails as a locked login Keychain does.
+
+    Writes still land, as they do when only the read path is refused. Each
+    read raises the error ``MacOSKeychainBackend.read`` raises for a
+    ``security`` exit 36 (``errSecAuthFailed``) whose stderr carries a
+    sentinel, so a test can prove that no message repeats the CLI's stderr.
+    """
+
+    def read(self, account: str) -> str | None:
+        """Raise the access error a locked Keychain gives for ``account``."""
+        raise keychain_read_error(
+            account,
+            subprocess.CalledProcessError(
+                36, ["security"], stderr="STDERR-SENTINEL-821"
+            ),
+        )
+
+
+@pytest.fixture
+def unreadable_secret_store(
+    in_memory_secret_store: InMemorySecretBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[UnreadableSecretBackend]:
+    """Route ``get_secret``/``set_secret`` to a store that refuses every read.
+
+    It requests ``in_memory_secret_store`` so its own override is entered last
+    and wins (``use_secret_backend`` nests). This is the store seam, the same
+    one the in-memory fixture uses, not a stand-in for the code under test.
+    """
+    monkeypatch.delenv("NEXUS_KEYRING_DISABLE", raising=False)
+    backend = UnreadableSecretBackend()
     with use_secret_backend(backend):
         yield backend
 

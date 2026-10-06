@@ -622,7 +622,6 @@ Model IDs and their component `uses` live in `[global.model.api_models]`. Runtim
 
 **Schema sources**
 - `nexus/agents/logon/apex_schema.py:631` — `StateUpdates` Pydantic models (source for `changed_fields` vocab)
-- `nexus/agents/logon/apex_enums.py:41` — existing `EntityType` enum (includes `'item'`); spine declares its own narrower `entity_kind`
 - `nexus/api/trait_compiler_schemas.py` — trait compiler audit/result schemas (`TraitCompileResult`, `UnresolvedTrait`, applied tag/relationship rows)
 
 **Orrery module**

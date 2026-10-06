@@ -9,7 +9,7 @@ import re
 import glob
 import time
 from typing import Dict, List, Optional, Any, Set, Tuple, Union
-from sqlalchemy import text
+from sqlalchemy import text as sql_text
 
 from .embedding_manager import EmbeddingManager
 from .embedding_tables import ensure_embedding_table, resolve_dimension_table
@@ -252,7 +252,7 @@ class ContentProcessor:
                     # Check if chunk already exists with this scene ID
                     if "scene_id" in metadata:
                         scene_id = metadata["scene_id"]
-                        existing_id_query = text(
+                        existing_id_query = sql_text(
                             """
                         SELECT nc.id 
                         FROM narrative_chunks nc
@@ -277,7 +277,7 @@ class ContentProcessor:
                             )
 
                             # Update the chunk
-                            chunk_update = text(
+                            chunk_update = sql_text(
                                 """
                             UPDATE narrative_chunks
                             SET raw_text = :text
@@ -290,7 +290,7 @@ class ContentProcessor:
                             )
 
                             # Update metadata
-                            metadata_update = text(
+                            metadata_update = sql_text(
                                 """
                             UPDATE chunk_metadata
                             SET perspective = :perspective,
@@ -324,7 +324,7 @@ class ContentProcessor:
                     # Create new chunk
                     # First, insert the chunk
                     result = session.execute(
-                        text(
+                        sql_text(
                             "INSERT INTO narrative_chunks (raw_text) VALUES (:text) RETURNING id"
                         ),
                         {"text": text},
@@ -332,7 +332,7 @@ class ContentProcessor:
                     chunk_id = result.scalar()
 
                     # Then insert metadata
-                    metadata_insert = text(
+                    metadata_insert = sql_text(
                         """
                     INSERT INTO chunk_metadata (
                         chunk_id, season, episode, scene, perspective, location, time_code, world_layer, keywords, characters
@@ -412,7 +412,7 @@ class ContentProcessor:
                     f"Using dimension-specific table {table_name} for {model_name}"
                 )
 
-                embedding_upsert = text(
+                embedding_upsert = sql_text(
                     f"""
                 INSERT INTO {table_name} (chunk_id, model, embedding, created_at)
                 VALUES (:chunk_id, :model, (:embedding)::vector({dim}), NOW())
@@ -440,6 +440,7 @@ class ContentProcessor:
                 import traceback
 
                 logger.error(traceback.format_exc())
+                raise
 
     def _extract_character_mentions(self, text: str) -> List[str]:
         """

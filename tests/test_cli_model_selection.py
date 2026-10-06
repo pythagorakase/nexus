@@ -13,6 +13,9 @@ class DummyResponse:
         self.payload = payload
         self.ok = True
         self.text = ""
+        self.status_code = 200
+        self.url = "http://127.0.0.1:8002/api"
+        self.headers: dict[str, str] = {}
 
     def json(self) -> dict[str, Any]:
         """Return response JSON."""

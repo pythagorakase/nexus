@@ -139,12 +139,11 @@ def test_connection_timezone_rejects_invalid_values(timezone):
 
 
 def test_connection_guard_rejects_foreign_target_before_connect(contract_config):
-    from nexus.agents.memnon.utils.db_access import setup_database_indexes
     from nexus.agents.memnon.utils.db_schema import DatabaseManager
 
     foreign = database_url("save_04", host="foreign.example", port=55442)
     with pytest.raises(ValueError, match="target mismatch"):
-        setup_database_indexes(foreign)
+        verify_database_url(foreign)
     with pytest.raises(ConnectionError, match="target mismatch"):
         DatabaseManager(foreign)
     with pytest.raises(ValueError, match="target mismatch"):
@@ -546,10 +545,9 @@ def test_connection_two_clusters_pool_url_async_timezone_and_guard(
         ):
             cur.execute("SELECT inet_server_port(), current_setting('TimeZone')")
             assert cur.fetchone() == (private["port"], "UTC")
-        from nexus.agents.memnon.utils.db_access import setup_database_indexes
 
         with pytest.raises(ValueError, match="target mismatch"):
-            setup_database_indexes(database_url(dbname, port=other["port"]))
+            verify_database_url(database_url(dbname, port=other["port"]))
         with observer.cursor() as cur:
             cur.execute("SELECT oid, relname FROM pg_class ORDER BY oid")
             assert cur.fetchall() == before

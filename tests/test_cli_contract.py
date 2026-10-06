@@ -45,6 +45,7 @@ from nexus.cli_contract import (
     partial_fields,
 )
 from nexus.config import load_settings
+from nexus.util.secret_manager import InMemorySecretBackend, keychain_read_error
 
 ROOT = Path(__file__).resolve().parents[1]
 SLOT_STATE = {
@@ -73,9 +74,22 @@ _ISOLATED_ENV = (
 )
 
 
+@dataclass(frozen=True)
+class Raw:
+    """A route answer sent as given: its own body, content type and headers."""
+
+    body: str
+    content_type: str = "text/html"
+    headers: dict[str, str] = field(default_factory=dict)
+
+
 @dataclass
 class Gateway:
-    """Routes a loopback gateway answers, and every request it received."""
+    """Routes a loopback gateway answers, and every request it received.
+
+    A route answers ``(status, payload)``: a payload is sent as JSON, a
+    :class:`Raw` payload as given.
+    """
 
     routes: dict[tuple[str, str], tuple[int, Any]] = field(default_factory=dict)
     requests: list[tuple[str, str, Any]] = field(default_factory=list)
@@ -108,9 +122,18 @@ def _serve(gateway: Gateway) -> Iterator[str]:
             status, payload = gateway.routes.get(
                 (method, path), (404, {"detail": "Not Found"})
             )
-            body = json.dumps(payload).encode()
+            if isinstance(payload, Raw):
+                body = payload.body.encode()
+                content_type = payload.content_type
+                headers = payload.headers
+            else:
+                body = json.dumps(payload).encode()
+                content_type = "application/json"
+                headers = {}
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", content_type)
+            for name, value in headers.items():
+                self.send_header(name, value)
             promised = len(body) + (4096 if gateway.truncate else 0)
             self.send_header("Content-Length", str(promised))
             self.end_headers()
@@ -126,6 +149,9 @@ def _serve(gateway: Gateway) -> Iterator[str]:
 
         def do_PATCH(self) -> None:  # noqa: N802 - stdlib handler contract
             self._answer("PATCH")
+
+        def do_PUT(self) -> None:  # noqa: N802 - stdlib handler contract
+            self._answer("PUT")
 
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -370,8 +396,9 @@ def test_inspect_slot_unreachable_api_exits_four() -> None:
             ("model", "--slot", "5", "--set", "slot-pinned-model"),
             ("PATCH", "/api/slot/5/settings"),
         ),
+        (("regenerate", "--slot", "5"), ("POST", "/api/narrative/regenerate")),
     ],
-    ids=["inspect-slot", "load", "lock", "model-set"],
+    ids=["inspect-slot", "load", "lock", "model-set", "regenerate"],
 )
 def test_http_command_unanswered_request_exits_four(
     tmp_path: Path, argv: tuple[str, ...], sent: tuple[str, str]
@@ -380,12 +407,19 @@ def test_http_command_unanswered_request_exits_four(
 
     The legacy handlers once caught the read timeout as a domain failure
     (exit 1); every HTTP command now reports it like an unreachable API.
+    ``regenerate``'s scheduling POST is bounded by
+    ``[runtime.cli].turn_request_timeout_seconds``, once a 120 s literal. Its
+    short-request budgets stay at 30 s, so only the turn budget can produce
+    ``read timeout=0.5``.
     """
-    config = _config(
-        tmp_path,
-        profile="local",
-        cli_settings={"request_timeout_seconds": 0.5, "inspect_timeout_seconds": 0.5},
-    )
+    cli_settings = {"request_timeout_seconds": 0.5, "inspect_timeout_seconds": 0.5}
+    if argv[0] == "regenerate":
+        cli_settings = {
+            "request_timeout_seconds": 30.0,
+            "inspect_timeout_seconds": 30.0,
+            "turn_request_timeout_seconds": 0.5,
+        }
+    config = _config(tmp_path, profile="local", cli_settings=cli_settings)
     gateway = Gateway(stall=True)
     with _serve(gateway) as base_url:
         completed = _run(
@@ -492,8 +526,8 @@ def test_http_command_with_a_missing_runtime_config_is_a_config_error(
     assert "NEXUS_RUNTIME_CONFIG" in envelope["error"]
 
 
-# The inspect family propagates request failures to main() by design; the
-# legacy HTTP handlers catch broadly and must re-raise them alike.
+# The inspect family and the legacy HTTP handlers both propagate request
+# failures to main(), which reports them alike.
 _HTTP_COMMANDS = pytest.mark.parametrize(
     "argv",
     [("inspect", "slot", "--slot", "5"), ("load", "--slot", "5")],
@@ -562,6 +596,413 @@ def test_http_command_refuses_plaintext_credentials_as_a_config_error(
     envelope = _failure(completed)
     assert envelope["code"] == "config_error"
     assert "Refusing to send NEXUS_AUTH over plaintext" in envelope["error"]
+
+
+def _run_in_process(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *argv: str,
+    env: dict[str, str],
+) -> tuple[int, str, str]:
+    """Run ``cli.main()`` in this process, so an injected store reaches it.
+
+    A child process cannot use the backend a fixture injects, so these tests
+    call the real entry point here, with the isolated environment ``_run``
+    gives a child.
+    """
+    for name in _ISOLATED_ENV:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(sys, "argv", ["nexus", *argv])
+    exit_code = cli.main()
+    captured = capsys.readouterr()
+    return exit_code, captured.out, captured.err
+
+
+def _locked_access_store_message() -> str:
+    """The message the unreadable store gives for the Access client id read."""
+    return str(
+        keychain_read_error(
+            "cloudflare_access_client_id",
+            subprocess.CalledProcessError(
+                36, ["security"], stderr="STDERR-SENTINEL-821"
+            ),
+        )
+    )
+
+
+def test_http_command_unreadable_access_store_is_a_config_error(
+    unreadable_secret_store: InMemorySecretBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A locked store under the remote profile is a config error, not a crash."""
+    config = _config(tmp_path, profile="remote")
+    exit_code, out, err = _run_in_process(
+        monkeypatch,
+        capsys,
+        "inspect",
+        "slot",
+        "--slot",
+        "5",
+        "--json",
+        env={"NEXUS_RUNTIME_CONFIG": str(config)},
+    )
+
+    assert exit_code == ExitCode.DOMAIN_FAILURE
+    assert out == ""
+    envelope = json.loads(err)
+    assert envelope["code"] == "config_error"
+    assert envelope["error"] == _locked_access_store_message()
+    assert "security unlock-keychain" in envelope["error"]
+    assert "STDERR-SENTINEL-821" not in err
+
+
+def test_runtime_status_names_an_unreadable_access_store(
+    unreadable_secret_store: InMemorySecretBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """nexus status reports the locked store's message; nothing escapes."""
+    config = _config(tmp_path, profile="remote")
+    exit_code, out, err = _run_in_process(
+        monkeypatch,
+        capsys,
+        "status",
+        "--config",
+        str(config),
+        "--json",
+        env={},
+    )
+
+    assert exit_code == ExitCode.DOMAIN_FAILURE
+    assert out == ""
+    envelope = json.loads(err)
+    assert envelope["error"] == _locked_access_store_message()
+    assert "STDERR-SENTINEL-821" not in err
+
+
+# ---------------------------------------------------------------------------
+# Answers the HTTP handlers cannot use
+# ---------------------------------------------------------------------------
+
+# Each legacy HTTP handler and the first request it sends.
+_HANDLER_FIRST_REQUESTS: dict[str, tuple[tuple[str, ...], tuple[str, str]]] = {
+    "load": (("load", "--slot", "5"), ("GET", "/api/slot/5/state")),
+    "continue": (
+        ("continue", "--slot", "5", "--choice", "1"),
+        ("GET", "/api/slot/5/state"),
+    ),
+    "retry": (("retry", "--slot", "5"), ("GET", "/api/slot/5/state")),
+    "undo": (("undo", "--slot", "5"), ("POST", "/api/slot/5/undo")),
+    "regenerate": (
+        ("regenerate", "--slot", "5"),
+        ("POST", "/api/narrative/regenerate"),
+    ),
+    "model-set": (
+        ("model", "--slot", "5", "--set", "slot-pinned-model"),
+        ("PATCH", "/api/slot/5/settings"),
+    ),
+    "clear": (("clear", "--slot", "5"), ("POST", "/api/story/new/setup/reset")),
+    "lock": (("lock", "--slot", "5"), ("POST", "/api/slot/5/lock")),
+    "unlock": (("unlock", "--slot", "5"), ("POST", "/api/slot/5/unlock")),
+}
+_BAD_GATEWAY_PAGE = "<html><body><h1>502 Bad Gateway</h1></body></html>"
+_SUCCESS_PAGE = "<html><body>Signed in.</body></html>"
+_ACCESS_LOGIN = (
+    "https://pythagora.cloudflareaccess.com/cdn-cgi/access/login/"
+    "nexus.pythagora.net?kid=815&redirect_url=%2Fapi%2Fslot%2F5%2Fstate"
+)
+
+
+@pytest.mark.parametrize(
+    ("handler", "status", "answer", "body"),
+    [
+        *(
+            (handler, 502, Raw(_BAD_GATEWAY_PAGE), _BAD_GATEWAY_PAGE)
+            for handler in _HANDLER_FIRST_REQUESTS
+        ),
+        ("load", 404, {"detail": "Not Found"}, '{"detail": "Not Found"}'),
+    ],
+    ids=[*(f"{handler}-502" for handler in _HANDLER_FIRST_REQUESTS), "load-404"],
+)
+def test_http_handler_error_answer_is_an_api_error(
+    handler: str, status: int, answer: Any, body: str
+) -> None:
+    """A non-2xx answer is api_error with its body and status, in every handler.
+
+    The handlers once caught it as a domain failure with an empty partial.
+    """
+    argv, first = _HANDLER_FIRST_REQUESTS[handler]
+    gateway = Gateway(routes={first: (status, answer)})
+    with _serve(gateway) as base_url:
+        completed = _run(*argv, "--json", env={"NEXUS_API_URL": base_url})
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "api_error"
+    assert envelope["error"] == f"API error: {body}"
+    assert envelope["partial"] == {"status_code": status}
+    assert [request[:2] for request in gateway.requests] == [first]
+
+
+@pytest.mark.parametrize(
+    ("handler", "answer", "message"),
+    [
+        *(
+            (handler, Raw(_SUCCESS_PAGE), "returned a body that is not JSON: ")
+            for handler in (
+                "load",
+                "continue",
+                "retry",
+                "undo",
+                "regenerate",
+                "model-set",
+            )
+        ),
+        *(
+            (
+                handler,
+                Raw("[]", content_type="application/json"),
+                "returned a body that is not a JSON object",
+            )
+            for handler in ("load", "continue")
+        ),
+    ],
+    ids=[
+        *(
+            f"{handler}-html"
+            for handler in (
+                "load",
+                "continue",
+                "retry",
+                "undo",
+                "regenerate",
+                "model-set",
+            )
+        ),
+        "load-array",
+        "continue-array",
+    ],
+)
+def test_http_handler_non_json_success_is_an_invalid_response(
+    handler: str, answer: Raw, message: str
+) -> None:
+    """A 2xx body that is not a JSON object is invalid_response, not a traceback.
+
+    The handlers once reported it as a domain failure, and ``retry`` raised.
+    """
+    argv, first = _HANDLER_FIRST_REQUESTS[handler]
+    gateway = Gateway(routes={first: (200, answer)})
+    with _serve(gateway) as base_url:
+        completed = _run(*argv, "--json", env={"NEXUS_API_URL": base_url})
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "invalid_response"
+    assert envelope["error"].startswith(f"{base_url}{first[1]} {message}")
+    assert envelope["partial"] == {}
+    assert [request[:2] for request in gateway.requests] == [first]
+
+
+@pytest.mark.parametrize(
+    ("argv", "partial"),
+    [
+        (("load", "--slot", "5"), {}),
+        (("inspect", "slot", "--slot", "5"), {"slot": 5}),
+    ],
+    ids=["load", "inspect-slot"],
+)
+@pytest.mark.parametrize(
+    ("status", "answer"),
+    [
+        (401, Raw("Unauthorized")),
+        (302, Raw("", headers={"Location": _ACCESS_LOGIN})),
+    ],
+    ids=["401", "302-access-login"],
+)
+def test_access_rejection_is_a_config_error(
+    argv: tuple[str, ...], partial: dict[str, Any], status: int, answer: Raw
+) -> None:
+    """A 401, 403 or unfollowed redirect is an edge's rejection: config_error.
+
+    The gateway itself answers none of them, so the error names the status,
+    any redirect target, and the Access settings to check. A credential is
+    set, so the redirect is not followed.
+    """
+    gateway = Gateway(routes={("GET", "/api/slot/5/state"): (status, answer)})
+    with _serve(gateway) as base_url:
+        completed = _run(
+            *argv,
+            "--json",
+            env={"NEXUS_API_URL": base_url, "NEXUS_AUTH": "815-token"},
+        )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert f"{base_url}/api/slot/5/state" in envelope["error"]
+    assert f"HTTP {status}" in envelope["error"]
+    assert "[runtime.remote.cloudflare_access]" in envelope["error"]
+    if status == 302:
+        assert _ACCESS_LOGIN in envelope["error"]
+    assert envelope["partial"] == {**partial, "status_code": status}
+    assert [request[:2] for request in gateway.requests] == [
+        ("GET", "/api/slot/5/state")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("state", "route", "prefix"),
+    [
+        (
+            {"is_empty": True},
+            ("POST", "/api/story/new/setup/start"),
+            "Failed to initialize wizard: ",
+        ),
+        (
+            {"is_wizard_mode": True, "phase": "ready"},
+            ("POST", "/api/story/new/transition"),
+            "Transition failed: ",
+        ),
+    ],
+    ids=["wizard-setup", "transition"],
+)
+def test_own_wording_step_keeps_its_text_for_a_redirect(
+    state: dict[str, Any], route: tuple[str, str], prefix: str
+) -> None:
+    """Wizard setup and the transition keep their own text for an Access redirect.
+
+    A 3xx is not 2xx, so the step reports the answer's body under its own
+    wording with the code ``config_error``, and names no Access setting.
+    """
+    gateway = Gateway(
+        routes={
+            ("GET", "/api/slot/5/state"): (200, state),
+            route: (302, Raw("redirected", headers={"Location": _ACCESS_LOGIN})),
+        }
+    )
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "continue",
+            "--slot",
+            "5",
+            "--json",
+            env={"NEXUS_API_URL": base_url, "NEXUS_AUTH": "815-token"},
+        )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert envelope["error"] == f"{prefix}redirected"
+    assert "[runtime.remote.cloudflare_access]" not in envelope["error"]
+    assert envelope["partial"] == {}
+    assert [request[:2] for request in gateway.requests] == [
+        ("GET", "/api/slot/5/state"),
+        route,
+    ]
+
+
+def test_followed_redirect_loop_is_a_domain_failure() -> None:
+    """A request that gets no usable answer is a domain failure, not a traceback.
+
+    Without a runtime credential the redirect is followed, so a route that
+    redirects to itself ends in too many redirects: no answer to classify,
+    which the generation waiter also reports as a domain failure.
+    """
+    route = ("GET", "/api/slot/5/state")
+    gateway = Gateway(routes={route: (302, Raw("", headers={"Location": route[1]}))})
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "load", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+        )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "domain_failure"
+    assert envelope["error"].startswith(f"Could not read {base_url}: ")
+    assert "redirects" in envelope["error"]
+    assert envelope["partial"] == {}
+    assert len(gateway.requests) > 1
+    assert {request[:2] for request in gateway.requests} == {route}
+
+
+def test_remote_up_against_a_closed_port_exits_four(tmp_path: Path) -> None:
+    """``up`` under the remote profile reports an unreachable runtime as exit 4."""
+    base_url = f"http://127.0.0.1:{_closed_port()}"
+    config = _config(tmp_path, profile="remote", base_url=base_url)
+    completed = _run("up", "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+
+    assert completed.returncode == ExitCode.UNREACHABLE
+    envelope = _failure(completed)
+    assert envelope["code"] == "api_unreachable"
+    assert envelope["error"].startswith(f"Cannot connect to API server at {base_url}")
+
+
+@pytest.mark.parametrize(
+    ("recovery", "retry_answer", "message", "sent"),
+    [
+        ("failed-8", None, "returned a recovery that is not a JSON object", 1),
+        ({"parent_chunk_id": 9}, None, "returned a recovery with no session ID", 1),
+        (
+            {"session_id": "failed-8"},
+            {"status": "initiated"},
+            "returned no session ID",
+            2,
+        ),
+    ],
+    ids=["recovery-string", "recovery-without-session", "answer-without-session"],
+)
+def test_retry_without_a_usable_session_is_an_invalid_response(
+    recovery: Any, retry_answer: Any, message: str, sent: int
+) -> None:
+    """``retry`` needs a recovery session and a new session, never a traceback."""
+    gateway = Gateway(
+        routes={
+            ("GET", "/api/slot/5/state"): (200, {**SLOT_STATE, "recovery": recovery}),
+            ("POST", "/api/narrative/retry"): (200, retry_answer),
+        }
+    )
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "retry", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+        )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "invalid_response"
+    assert message in envelope["error"]
+    assert envelope["partial"] == {}
+    assert len(gateway.requests) == sent
+
+
+def test_model_read_database_error_is_a_database_error(tmp_path: Path) -> None:
+    """``model --slot N`` reports a slot database it cannot open as database_error.
+
+    ``[api.database]`` leaves host and port to the PG environment, so a
+    closed loopback port stands in for a database that is down.
+    """
+    config = _config(tmp_path, profile="local")
+    completed = _run(
+        "model",
+        "--slot",
+        "5",
+        "--json",
+        env={
+            "NEXUS_RUNTIME_CONFIG": str(config),
+            "PGHOST": "127.0.0.1",
+            "PGPORT": str(_closed_port()),
+        },
+    )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "database_error"
+    assert "127.0.0.1" in envelope["error"]
+    assert envelope["partial"] == {}
 
 
 # ---------------------------------------------------------------------------
@@ -1355,7 +1796,8 @@ def test_json_failure_preserves_every_partial_field() -> None:
 
     assert completed.returncode == ExitCode.DOMAIN_FAILURE
     envelope = _failure(completed)
-    assert envelope["code"] == "domain_failure"
+    # The introduction's 503 is a non-2xx answer: api_error.
+    assert envelope["code"] == "api_error"
     assert envelope["error"].startswith(
         "Artifact confirmed, but the next phase could not be loaded: "
     )

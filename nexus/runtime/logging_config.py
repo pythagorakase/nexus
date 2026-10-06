@@ -1,8 +1,9 @@
 """One logging configuration for supervised services (issue #842).
 
-The supervisor is the single file and rotation owner: it captures each
-service's stdout+stderr in ``<state_dir>/<service>.log`` and rotates that file
-at spawn. Services therefore log to stdout only — no FileHandler anywhere in a
+Each captured stream has one log-writer process (nexus/runtime/log_capture.py)
+that owns its file and rotates it while the service runs. A supervised
+service's stdout+stderr is captured in ``<state_dir>/<service>.log``. Services
+therefore log to stdout only — no FileHandler anywhere in a
 service process — through one formatter shared by the application loggers
 (root) and uvicorn's ``uvicorn``, ``uvicorn.error`` and ``uvicorn.access``
 loggers.

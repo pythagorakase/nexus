@@ -111,6 +111,7 @@ function pollRetrogradeStages(
     signal: AbortSignal,
     onStage: (stage: RetrogradeStage) => void,
     onError: (error: Error) => void,
+    onSettled?: (status: RetrogradeStatus) => void,
 ): void {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const read = async () => {
@@ -125,7 +126,10 @@ function pollRetrogradeStages(
         if (status.run !== previousRun) {
             const stage = retrogradeStageOf(status);
             if (stage !== null) onStage(stage);
-            if (status.stage === "done" || status.stage === "failed") return;
+            if (status.run_status !== "running") {
+                onSettled?.(status);
+                return;
+            }
         }
         timer = setTimeout(read, intervalMs);
     };
@@ -286,6 +290,10 @@ export function InteractiveWizard({
     // Ref-based guard for synchronous double-click prevention
     // React state updates are async, so fast double-clicks can slip through state-based guards
     const processingRef = useRef(false);
+    // Parent artifact updates can replace callbacks during a transition;
+    // they must not restart the mount read or detach its controller.
+    const onCompleteRef = useRef(onComplete);
+    onCompleteRef.current = onComplete;
 
     // Wait screen state for long-running transition + bootstrap
     const [waitScreenActive, setWaitScreenActive] = useState(false);
@@ -297,7 +305,10 @@ export function InteractiveWizard({
     const transitionAbortRef = useRef<AbortController | null>(null);
     // Stage reads end when the transition settles, on cancel, or on unmount.
     const stagePollRef = useRef<AbortController | null>(null);
-    useEffect(() => () => stagePollRef.current?.abort(), []);
+    useEffect(() => () => {
+        stagePollRef.current?.abort();
+        transitionAbortRef.current?.abort();
+    }, []);
 
     const updatePhase = (newPhase: Phase) => {
         setCurrentPhase(newPhase);
@@ -514,7 +525,53 @@ export function InteractiveWizard({
             // Trait selection confirmation - route to existing handler
             handleTraitConfirm(selectedTraits);
         }
-    }, [pendingArtifact, showTraitSelector, selectedTraits, acceptedPhase]);
+    }, [pendingArtifact, showTraitSelector, selectedTraits, acceptedPhase, isLoading]);
+
+    const openStory = useCallback(async (signal: AbortSignal) => {
+        // Step 2: Trigger bootstrap (generate first narrative chunk)
+        setWaitScreenStage("bootstrap");
+        setWaitScreenStatusText("Starting narrative generation...");
+
+        // No model override: bootstrap uses the model stamped on the
+        // slot when the wizard session started.
+        const bootstrapRes = await fetch("/api/narrative/continue", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                chunk_id: 0,  // Bootstrap signal
+                slot,
+                user_text: "Begin the story.",
+            }),
+            signal: signal,
+        });
+
+        if (!bootstrapRes.ok) {
+            const error = await bootstrapRes.json();
+            throw new Error(error.detail || error.error || "Bootstrap failed");
+        }
+
+        const bootstrapData = await bootstrapRes.json();
+        console.log("[Wizard] Bootstrap triggered, session:", bootstrapData.session_id);
+
+        if (signal.aborted) return;
+
+        localStorage.setItem(
+            "pendingBootstrapSession",
+            JSON.stringify({ slot, sessionId: bootstrapData.session_id, createdAt: Date.now() }),
+        );
+
+        // Step 3: Navigate to NexusLayout immediately
+        // NexusLayout will:
+        // - Connect to WebSocket for real-time updates
+        // - Detect incubator data when generation completes
+        // - Show approval modal automatically
+        // No "generation started" toast: the reader the user lands on
+        // shows the live generation telemetry already (tenet 3).
+        setWaitScreenActive(false);
+        rememberActiveSlot(slot);
+        onCompleteRef.current();
+
+    }, [slot]);
 
     // Transition handler - performs transition + triggers bootstrap, then navigates
     // NexusLayout handles detecting incubator data and showing approval modal
@@ -598,46 +655,7 @@ export function InteractiveWizard({
             // A skipped Retrograde run leaves its stages dim, not done.
             if (!retrogradeRan) setWaitScreenSkipped(RETROGRADE_STAGES);
 
-            // Step 2: Trigger bootstrap (generate first narrative chunk)
-            setWaitScreenStage("bootstrap");
-            setWaitScreenStatusText("Starting narrative generation...");
-
-            // No model override: bootstrap uses the model stamped on the
-            // slot when the wizard session started.
-            const bootstrapRes = await fetch("/api/narrative/continue", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    chunk_id: 0,  // Bootstrap signal
-                    slot,
-                    user_text: "Begin the story.",
-                }),
-                signal: abortController.signal,
-            });
-
-            if (!bootstrapRes.ok) {
-                const error = await bootstrapRes.json();
-                throw new Error(error.detail || error.error || "Bootstrap failed");
-            }
-
-            const bootstrapData = await bootstrapRes.json();
-            console.log("[Wizard] Bootstrap triggered, session:", bootstrapData.session_id);
-
-            localStorage.setItem(
-                "pendingBootstrapSession",
-                JSON.stringify({ slot, sessionId: bootstrapData.session_id, createdAt: Date.now() }),
-            );
-
-            // Step 3: Navigate to NexusLayout immediately
-            // NexusLayout will:
-            // - Connect to WebSocket for real-time updates
-            // - Detect incubator data when generation completes
-            // - Show approval modal automatically
-            // No "generation started" toast: the reader the user lands on
-            // shows the live generation telemetry already (tenet 3).
-            setWaitScreenActive(false);
-            rememberActiveSlot(slot);
-            onComplete();
+            await openStory(abortController.signal);
 
         } catch (e: any) {
             stagePoll.abort();
@@ -657,7 +675,69 @@ export function InteractiveWizard({
             setWaitScreenError(e.message || "Failed to initialize story");
             // Keep wait screen active with error state for retry
         }
-    }, [slot, toast, onComplete]);
+    }, [slot, toast, openStory]);
+
+    // A ready wizard can detach while its server run continues. Read the
+    // durable record on mount and attach only to a run still in progress.
+    useEffect(() => {
+        if (resumeData?.current_phase !== "ready") return;
+        const controller = new AbortController();
+        transitionAbortRef.current = controller;
+        const { signal } = controller;
+        const release = () => {
+            processingRef.current = false;
+            setIsLoading(false);
+        };
+        const fail = (error: Error) => {
+            if (signal.aborted) return;
+            setWaitScreenError(error.message);
+            release();
+        };
+        const settled = async (status: RetrogradeStatus) => {
+            if (signal.aborted) return;
+            if (status.run_status === "failed") {
+                setWaitScreenError(status.error);
+                release();
+            } else if (status.run_status === "done") {
+                if (status.stage === "idle") setWaitScreenSkipped(RETROGRADE_STAGES);
+                try {
+                    await openStory(signal);
+                } catch (error) {
+                    fail(error instanceof Error ? error : new Error(String(error)));
+                }
+            } else {
+                release();
+            }
+        };
+        processingRef.current = true;
+        setIsLoading(true);
+        const reattach = async () => {
+            try {
+                const status = await getRetrogradeStatus(slot, signal);
+                if (signal.aborted) return;
+                if (status.run_status !== "running") {
+                    release();
+                    return;
+                }
+                setWaitScreenActive(true);
+                setWaitScreenStage(retrogradeStageOf(status));
+                pollRetrogradeStages(
+                    slot, null, status.status_poll_interval_seconds * 1000,
+                    signal, setWaitScreenStage, fail, settled,
+                );
+            } catch (error) {
+                if (signal.aborted) return;
+                toast({
+                    title: "Transmission Error",
+                    description: error instanceof Error ? error.message : String(error),
+                    variant: "destructive",
+                });
+                release();
+            }
+        };
+        reattach();
+        return () => controller.abort();
+    }, [slot, resumeData, openStory, toast]);
 
     // Save first, then show: the glyph reflects only a level the server holds.
     // Settles to whether the gateway saved the level.

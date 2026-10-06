@@ -632,9 +632,10 @@ def _failing_log_placeholders(fmt: str, record: logging.LogRecord) -> List[str]:
 class RuntimeLogsSettings(BaseModel):
     """Captured service logs: format, rotation, access noise, and nexus logs.
 
-    The supervisor is the single file and rotation owner: it captures each
-    service's stdout+stderr in ``<state_dir>/<service>.log`` and rotates that
-    file at spawn. Services configured with the ``{log_config}`` argv
+    Each captured stream has one log-writer process
+    (nexus/runtime/log_capture.py) that owns its file and rotates it while the
+    service runs. A supervised service's stdout+stderr is captured in
+    ``<state_dir>/<service>.log``. Services configured with the ``{log_config}`` argv
     placeholder log to stdout through one formatter (issue #842).
     """
 
@@ -673,14 +674,15 @@ class RuntimeLogsSettings(BaseModel):
         default=10_485_760,
         gt=0,
         description=(
-            "A captured <service>.log at least this large is rotated when the "
-            "supervisor next spawns that service"
+            "A captured log's writer starts a new segment before a line that "
+            "would take the file past this size, and at start when the file is "
+            "already this large; a longer line gets a segment of its own"
         ),
     )
     backup_count: int = Field(
         default=5,
         ge=1,
-        description="Rotated segments kept per service (<service>.log.1..N)",
+        description="Rotated segments kept per captured log (<name>.log.1..N)",
     )
     access_success_exclude_paths: List[str] = Field(
         default_factory=lambda: ["/health", "/runtime/status"],
@@ -898,8 +900,21 @@ class RuntimeCliSettings(BaseModel):
         description=(
             "Per-request HTTP timeout of the play and slot commands' short API "
             "requests (slot state reads, wizard setup and confirmation, undo, "
-            "clear, lock, unlock, model changes); generation, wizard chat, and "
-            "transition requests keep their own budgets"
+            "clear, lock, unlock, model changes); wizard chat, trait toggles, "
+            "phase introductions and the turn-scheduling POSTs take "
+            "turn_request_timeout_seconds, the transition takes the Retrograde "
+            "wizard's budget, and the generation wait apex's"
+        ),
+    )
+    turn_request_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Per-request HTTP timeout of the CLI's model-turn requests: wizard "
+            "chat, trait toggles, phase introductions, and the POSTs that "
+            "schedule continue, retry, regenerate and the seed's opening turn; "
+            "a finite number of seconds greater than 0"
         ),
     )
     poll_interval_seconds: float = Field(
@@ -1247,6 +1262,13 @@ class LORERetrievalSettings(BaseModel):
         ge=1,
         description="Maximum MEMNON queries to execute during LORE deep-query pass",
     )
+    deep_query_k: int = Field(
+        default=15,
+        ge=1,
+        description=(
+            "Results MEMNON returns for each LORE deep query before deduplication"
+        ),
+    )
 
 
 class PresenceAuditSettings(BaseModel):
@@ -1325,6 +1347,8 @@ class OrreryCompositionSettings(BaseModel):
     hostile_source_enabled: bool = False
     roster_source_enabled: bool = False
     acquaintance_source_enabled: bool = False
+    # Same-place introductions one character may join per tick.
+    acquaintance_introductions_per_entity_per_tick: int = Field(default=1, ge=1)
     roster_reach: int = Field(default=2, ge=1, le=4)
 
 
@@ -1718,6 +1742,31 @@ class OrreryRouteGraphSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_edges_per_query: int = Field(default=5000, ge=1)
+
+
+class OrreryTravelModeTable(BaseModel):
+    """One positive, finite value per ``orrery_travel_mode`` label."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    walking: float = Field(..., gt=0, allow_inf_nan=False)
+    vehicle: float = Field(..., gt=0, allow_inf_nan=False)
+    rail: float = Field(..., gt=0, allow_inf_nan=False)
+    water: float = Field(..., gt=0, allow_inf_nan=False)
+    air: float = Field(..., gt=0, allow_inf_nan=False)
+    covert: float = Field(..., gt=0, allow_inf_nan=False)
+    mixed: float = Field(..., gt=0, allow_inf_nan=False)
+
+
+class OrreryTravelSettings(BaseModel):
+    """The per-mode speed and detour factor that route estimates and graph routes
+    use.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    speed_kmh: OrreryTravelModeTable
+    detour_factor: OrreryTravelModeTable
 
 
 class OrreryNarrationSettings(BaseModel):
@@ -3116,6 +3165,7 @@ class OrrerySettings(BaseModel):
     route_graph: OrreryRouteGraphSettings = Field(
         default_factory=OrreryRouteGraphSettings
     )
+    travel: OrreryTravelSettings
     narration: OrreryNarrationSettings
     experiences: OrreryExperienceSettings
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
@@ -4152,6 +4202,22 @@ class UIRecapSettings(BaseModel):
     )
 
 
+class UIReaderSettings(BaseModel):
+    """Required chunk-count bounds for the playable reader feed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_page_size: int = Field(..., strict=True, ge=1)
+    max_page_size: int = Field(..., strict=True, ge=1)
+
+    @model_validator(mode="after")
+    def validate_page_bounds(self) -> "UIReaderSettings":
+        """Require the default page to fit inside the maximum."""
+        if self.default_page_size > self.max_page_size:
+            raise ValueError("default_page_size must be <= max_page_size")
+        return self
+
+
 class UISettings(BaseModel):
     """Settings consumed by the React client.
 
@@ -4180,6 +4246,9 @@ class UISettings(BaseModel):
     recap: UIRecapSettings = Field(
         ...,
         description="Hiatus and roster bounds for the reader's return recap",
+    )
+    reader: UIReaderSettings = Field(
+        ..., description="Chunk-count bounds for the playable reader feed"
     )
 
 
@@ -4516,6 +4585,15 @@ class Settings(BaseModel):
             f"[global.model.api_models.*].models"
         )
 
+    def is_test_model(self, model_id: str) -> bool:
+        """Return whether a concrete model ID belongs to the TEST provider.
+
+        TEST identity is the registry provider ``test``, never a model ID, so
+        a renamed TEST entry keeps its identity. An unregistered ID raises
+        ``ValueError`` (from ``provider_for_model``).
+        """
+        return self.provider_for_model(model_id) == "test"
+
     def resolve_model_ref(self, ref: str) -> str:
         """Validate a concrete model ID against the registry and return it."""
         return _validate_model_id(
@@ -4559,6 +4637,26 @@ def _validate_model_id(
             "Select an explicit model ID from the registry."
         )
     return value
+
+
+class BoundaryCatchupSettings(BaseModel):
+    """Read-only boundary catch-up QA windows, loaded from qa_shift.toml."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skip_minutes: List[int] = Field(min_length=1)
+
+    @field_validator("skip_minutes")
+    @classmethod
+    def validate_skip_minutes(cls, value: List[int]) -> List[int]:
+        """Reject negative, duplicate, or unsorted skip lengths."""
+        if any(minutes < 0 for minutes in value):
+            raise ValueError(f"skip_minutes must not be negative: {value}")
+        if len(set(value)) != len(value):
+            raise ValueError(f"skip_minutes must not repeat a value: {value}")
+        if value != sorted(value):
+            raise ValueError(f"skip_minutes must be sorted ascending: {value}")
+        return value
 
 
 class ProseMetricsSettings(BaseModel):

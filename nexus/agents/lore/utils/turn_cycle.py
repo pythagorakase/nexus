@@ -246,6 +246,11 @@ class TurnCycleManager:
 
         return self.settings.lore.retrieval.max_deep_queries
 
+    def _deep_query_k(self) -> int:
+        """Resolve the configured MEMNON result count for each deep query."""
+
+        return self.settings.lore.retrieval.deep_query_k
+
     def _presence_boost_enabled(self) -> bool:
         """Return the required MEMNON presence-boost feature flag."""
 
@@ -332,16 +337,12 @@ class TurnCycleManager:
 
         memory_update: Dict[str, Any] = {}
         if getattr(self.lore, "memory_manager", None):
-            try:
-                pass2_update = self.lore.memory_manager.handle_user_input(
-                    turn_context.user_input,
-                    turn_context.token_counts,
-                    turn_id=turn_context.turn_id,
-                )
-                memory_update = pass2_update.to_dict()
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error("Pass 2 memory handling failed: %s", exc)
-                memory_update = {"error": str(exc)}
+            pass2_update = self.lore.memory_manager.handle_user_input(
+                turn_context.user_input,
+                turn_context.token_counts,
+                turn_id=turn_context.turn_id,
+            )
+            memory_update = pass2_update.to_dict()
 
         if memory_update:
             turn_context.memory_state["pass2"] = memory_update
@@ -683,48 +684,42 @@ class TurnCycleManager:
         all_results: List[Dict[str, Any]] = []
         query_type_counts: Dict[str, int] = {}
         max_deep_queries = self._max_deep_queries()
+        deep_query_k = self._deep_query_k()
         orrery = self._enabled_orrery()
         collect_query_embeddings = orrery is not None and orrery.knowledge.enabled
 
         for query_obj in queries[:max_deep_queries]:
             if getattr(self.lore, "memory_manager", None):
                 self.lore.memory_manager.record_pass1_query(query_obj["text"])
-            try:
-                # MEMNON's SearchManager uses the query type internally
-                # to adjust vector/text weights for optimal results
-                search_kwargs: Dict[str, Any] = {
-                    "query": query_obj["text"],
-                    "k": 15,  # Get more results since we'll deduplicate
-                    "use_hybrid": True,
-                }
-                query_embeddings: Dict[str, List[float]] | None = None
-                if collect_query_embeddings:
-                    query_embeddings = {}
-                    search_kwargs["query_embeddings"] = query_embeddings
-                if (
-                    self._presence_boost_enabled()
-                    and turn_context.present_character_ids
-                ):
-                    search_kwargs["present_character_ids"] = (
-                        turn_context.present_character_ids
-                    )
-                results = self.lore.memnon.query_memory(**search_kwargs)
-                if query_embeddings:
-                    turn_context.recall_query_embeddings = query_embeddings
+            # MEMNON's SearchManager uses the query type internally
+            # to adjust vector/text weights for optimal results
+            search_kwargs: Dict[str, Any] = {
+                "query": query_obj["text"],
+                "k": deep_query_k,
+                "use_hybrid": True,
+            }
+            query_embeddings: Dict[str, List[float]] | None = None
+            if collect_query_embeddings:
+                query_embeddings = {}
+                search_kwargs["query_embeddings"] = query_embeddings
+            if self._presence_boost_enabled() and turn_context.present_character_ids:
+                search_kwargs["present_character_ids"] = (
+                    turn_context.present_character_ids
+                )
+            results = self.lore.memnon.query_memory(**search_kwargs)
+            if query_embeddings:
+                turn_context.recall_query_embeddings = query_embeddings
 
-                # Track query types for logging
-                query_type = query_obj["type"]
-                query_type_counts[query_type] = query_type_counts.get(query_type, 0) + 1
+            # Track query types for logging
+            query_type = query_obj["type"]
+            query_type_counts[query_type] = query_type_counts.get(query_type, 0) + 1
 
-                # Tag results with query metadata
-                for result in results.get("results", []):
-                    result["query_type"] = query_type
-                    result["query_source"] = query_obj["source"]
+            # Tag results with query metadata
+            for result in results.get("results", []):
+                result["query_type"] = query_type
+                result["query_source"] = query_obj["source"]
 
-                all_results.extend(results.get("results", []))
-
-            except Exception as e:
-                logger.error(f"Query failed for '{query_obj['text'][:50]}...': {e}")
+            all_results.extend(results.get("results", []))
 
         # Sort by score and take top results
         unique_results = _deduplicate_retrieval_results(all_results)
@@ -1167,6 +1162,9 @@ class TurnCycleManager:
         window = turn_context.token_counts["apex_window"]
         self._select_scene_payload(payload)
         requests = logon.measure_turn_requests(payload, window)
+        seat_tokens_before = {
+            request.budget.seat: request.tokens for request in requests
+        }
         writer = requests[0]
         tokens_before = writer.tokens
         prompt_overhead_tokens = writer.budget.policy_headroom
@@ -1258,10 +1256,20 @@ class TurnCycleManager:
                 retrieved_passages_dropped,
             )
 
+        for request in requests:
+            recovered = seat_tokens_before[request.budget.seat] - request.tokens
+            if sum(request.removed_block_tokens.values()) != recovered:
+                raise ValueError(
+                    f"Removal accounting mismatch for {request.budget.seat}"
+                )
+        if sum(writer.removed_block_tokens.values()) != tokens_before - tokens_after:
+            raise ValueError("Writer removal accounting differs from window recovery")
+
         payload["window_trimming"] = {
             "tokens_before": tokens_before,
             "tokens_after": tokens_after,
             "tokens_recovered": tokens_before - tokens_after,
+            "removed_block_tokens": writer.removed_block_tokens,
             "dropped_chunk_ids": [memory_identity(chunk) for chunk in dropped_chunks],
             "dropped_blocks": {
                 recent: sum(
@@ -1277,6 +1285,10 @@ class TurnCycleManager:
             "seats": {
                 request.budget.seat: {
                     "input_tokens": request.tokens,
+                    "tokens_before": seat_tokens_before[request.budget.seat],
+                    "tokens_recovered": seat_tokens_before[request.budget.seat]
+                    - request.tokens,
+                    "removed_block_tokens": request.removed_block_tokens,
                     "input_ceiling": request.budget.input_ceiling,
                     "trim_target": request.target,
                     "reserved_writer_output": request.reserved_output,

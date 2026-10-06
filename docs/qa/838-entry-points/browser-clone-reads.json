@@ -1,0 +1,47 @@
+{
+  "database": "qa640_838_browser_af5a4a78787e",
+  "reads": [
+    {
+      "label": "at the introduction",
+      "weird_level": null,
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after clicking low",
+      "weird_level": "low",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after clicking medium",
+      "weird_level": "medium",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after clicking high",
+      "weird_level": "high",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "while the low save is held",
+      "weird_level": "high",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after the held save lands",
+      "weird_level": "low",
+      "new_story_creator_rows": 1,
+      "genesis_weird": null
+    },
+    {
+      "label": "after transition",
+      "weird_level": "no row",
+      "new_story_creator_rows": 0,
+      "genesis_weird": null
+    }
+  ]
+}

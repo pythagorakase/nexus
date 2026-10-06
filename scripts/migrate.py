@@ -441,18 +441,29 @@ def migrate_database(
             LOG.info("  No pending migrations")
             return (0, 0)
 
-        applied_count = 0
-        for version, name, path in pending:
-            if apply_migration(conn, version, name, path, dry_run):
-                applied_count += 1
-            else:
-                # Stop on first failure
-                break
-
-        return (applied_count, len(pending) - applied_count)
-
     finally:
         conn.close()
+
+    if dry_run:
+        for version, name, _ in pending:
+            LOG.info("  [DRY-RUN] Would apply: %s_%s", version, name)
+        return (len(pending), 0)
+
+    # Validators must not reuse a routine compiled by an earlier migration.
+    # Bootstrap owns its connection; every pending migration gets a new backend.
+    applied_count = 0
+    for version, name, path in pending:
+        conn = maintenance_connection(
+            dbname, write_locked_slot=write_locked_slot, operation="migrate"
+        )
+        try:
+            succeeded = apply_migration(conn, version, name, path, dry_run)
+        finally:
+            conn.close()
+        if not succeeded:
+            break
+        applied_count += 1
+    return (applied_count, len(pending) - applied_count)
 
 
 def migrate_targets(

@@ -50,6 +50,8 @@ any migration or restore error and never log success, but the partial target
 database remains: initialization can leave committed migrations, seed rows, and
 the `global_variables` row without IDF initialization, and a failed clone can
 keep the source's `new_story = false`, which lists the slot as active.
+Both paths refuse a locked slot before any drop, with the message
+`reset_setup` uses (`Slot N is locked. Unlock it first with: nexus unlock --slot N`).
 `start_setup` reuses an existing database without checking its migrations, so
 recreate the target with `--force` after fixing the cause; durable quarantine
 and staged replacement belong to #823. The runner itself propagates connection
@@ -71,12 +73,20 @@ earlier migration created: `narrative_chunks_text_idx`,
 `idx_chunk_metadata_scene`, and `idx_chunk_metadata_season_episode_scene`. It
 refuses, by name, a same-named index with another definition and a `scene`
 column of another type. Constructing the MEMNON `DatabaseManager` creates no
-table: it no longer calls `Base.metadata.create_all`, and an offline test
-fails on any `create_all` call under `nexus/`. Its index setup
-(`setup_database_indexes`) still runs `CREATE INDEX IF NOT EXISTS`
-statements, and the legacy scripts `scripts/extract_scene_numbers.py`,
-`scripts/update_scene_numbers.py`, and `scripts/import_narratives.py` still
-carry their own DDL; moving those into migrations is later work on #810.
+schema object and refuses a missing vector extension, owned by migration 022.
+Migration 138 owns the fixed indexes and scene column. Migration 022 documents
+lazy dimension-table ownership by `ensure_embedding_table`,
+`ensure_retrograde_summary_embedding_table`, and
+`ensure_character_experience_embedding_table` for narrative chunks, Retrograde
+summaries, and actor-owned character experiences. These helpers validate the
+catalog contract before modifying existing objects, write full table, column,
+primary-key index and model-index comments, and fail loudly on incompatibility
+or database errors. Transactions belong to their callers. ANN creation remains
+behind the explicit 2560d candidate gate; #812 owns legacy 1024d/1536d tables
+and L2 HNSW indexes on `save_01`/`save_02`. The legacy scripts
+`scripts/extract_scene_numbers.py`, `scripts/update_scene_numbers.py`, and
+`scripts/import_narratives.py` still carry their own DDL; moving those into
+migrations is later work on #810.
 
 ## IDF Rebuild After a PostgreSQL Update
 
@@ -131,6 +141,10 @@ python scripts/rebuild_memory_idf.py --all
 python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 ```
 
+## Two Clocks
+
+PostgreSQL comments define both clocks; read them with `\d+ chunk_metadata`, `\df+ refresh_world_time_from_chunk*` and `\dd trg_chunk_metadata_refresh_world_time`. The story clock is `chunk_metadata.world_time`, recomputed by `refresh_world_time_from_chunk()` from `global_variables.base_timestamp` and primary-layer `time_delta` after every insert and every `time_delta` or `world_layer` update; event occurrence time is `world_events.world_time`. Diegetic state belongs on the story clock. The tick clock is the accepted chunk in each `tick_chunk_id` column; it serves ordering, replay, exposure fairness, habituation, and narration cadence.
+
 ## Schema Documentation
 
 PostgreSQL comments are the schema reference (`\d+` in psql or
@@ -159,8 +173,9 @@ column, enum, function, and view comments.
 
 New migrations are also checked offline, before any database exists.
 `scripts/check_migration_comments.py` (pre-commit hook `check-migration-comments`
-and the `migration-comment-check.yml` CI workflow) requires every table, column,
-enum, function, procedure, view, and materialized view that a migration numbered
+and the `migration-comment-check.yml` CI workflow) requires every table, foreign
+table (documented with `COMMENT ON FOREIGN TABLE`), column, enum, function,
+procedure, view, and materialized view that a migration numbered
 above its watermark (129) creates or replaces, including DDL in DO blocks, `EXECUTE`
 commands, and Python migration strings, to have a non-blank `COMMENT ON` in the
 same file. `CREATE OR REPLACE` counts as a change, so the migration restates the
@@ -177,13 +192,37 @@ documents none. What cannot be read statically fails rather
 than passes: verbs, object kinds, names, and `ALTER TABLE` actions built at
 run time (f-strings, `+` or `||` with a non-literal operand, `{}` and `%I`
 placeholders), an `EXECUTE` of a variable or of anything not starting with literal
-text, and columns a statement does not list (`AS` without a column list,
+text, columns a statement does not list (`AS` without a column list,
 `PARTITION OF`, `INHERITS`, or `LIKE` unless its options, applied left to right,
-include `COMMENTS`). Not covered: domains, composite types, triggers, indexes,
-sequences, DDL inside a function body, even when the migration calls
+include `COMMENTS`), `IMPORT FOREIGN SCHEMA`, and `SELECT ... INTO` outside a DO
+body (an `into` after `.` or `AS` is a column or alias name, and `TEMP`,
+`TEMPORARY`, `UNLOGGED`, `GLOBAL`, or `LOCAL` after `INTO` is the target's name
+unless a name follows it, so `SELECT 1 INTO temp FROM ...` is reported; more
+than 64 nested `WITH` lists are reported as SQL the lint cannot parse; as a
+PL/pgSQL statement in a DO body it assigns a variable; an `EXECUTE`
+command is still checked; `EXPLAIN` of it, with or without `ANALYZE`, is
+reported although a plain `EXPLAIN` creates nothing, because the lint does not
+model which `EXPLAIN` forms execute and no migration should `EXPLAIN`, except
+that `EXPLAIN (` is always read as an option list, so an `EXPLAIN` whose
+statement opens with a parenthesis passes, since without `ANALYZE` it cannot
+execute; and
+`PREPARE` of it is reported because a later `EXECUTE` runs it). Not covered: domains, composite types,
+triggers, indexes, sequences, `ALTER FOREIGN TABLE ... ADD COLUMN`, DDL inside a
+function body, even when the migration calls
 that function, and SQL a Python migration does not spell as a string literal in
 its own file (an imported constant such as `from nexus.x import DDL;
 cur.execute(DDL)`, names joined only at run time such as `cur.execute(A + B)`, a
 file it reads, or a bytes literal). Legacy enums, functions, and views are
 enforced by the PostgreSQL ratchet above through their entries in
 `config/schema_docs_baseline.json`.
+
+## Genesis Run Ledger
+
+`genesis_runs` retains each wizard transition's status, stage, and failure, and
+`genesis_run_stages` retains its stage details and outputs. The ledger writers in
+`retrograde_orchestrator.py` commit progress and generation outputs on their own
+slot connections; `finish_genesis_persistence` and `finish_skipped_genesis_run`
+share the world transaction's cursor so their records commit or roll back with
+that world. The Retrograde status route reads the latest run from these tables,
+so every gateway worker reports the same durable record. Rows are kept after
+completion.

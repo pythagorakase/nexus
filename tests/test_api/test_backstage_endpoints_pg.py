@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import closing
+from datetime import datetime
 import json
 import uuid
 from pathlib import Path
@@ -25,7 +27,12 @@ from nexus.memory.correspondence import (
 from nexus.config import load_settings
 from nexus.database import database_url
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import assert_one_target, connect, disposable_slot_database
+from tests.pg_fixtures import (
+    assert_one_target,
+    connect,
+    disposable_slot_database,
+    seed_protagonist,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -98,7 +105,7 @@ def _stage_incubator(
 def disposable_db() -> Iterator[str]:
     """Yield a template clone that seeding and the endpoint both resolve."""
 
-    with disposable_slot_database("qa_wt625") as dbname:
+    with disposable_slot_database("qa640_778s6a_backstage") as dbname:
         assert_one_target(dbname)
         yield dbname
 
@@ -107,7 +114,7 @@ def disposable_db() -> Iterator[str]:
 def empty_disposable_db() -> Iterator[str]:
     """Yield a second template clone with no committed chunks."""
 
-    with disposable_slot_database("qa_wt625_empty") as dbname:
+    with disposable_slot_database("qa640_778s6a_empty") as dbname:
         assert_one_target(dbname)
         yield dbname
 
@@ -116,6 +123,7 @@ def empty_disposable_db() -> Iterator[str]:
 def backstage_case(disposable_db: str) -> dict[str, Any]:
     """Persist every Backstage stream through real writer/query paths."""
 
+    seed_protagonist(disposable_db, base_timestamp="2189-10-17T18:00:00+00:00")
     conn = connect(disposable_db)
     try:
         with conn:
@@ -196,11 +204,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                     )
                 cur.execute(
                     """
-                    INSERT INTO global_variables (id, user_character, base_timestamp)
-                    VALUES (TRUE, %s, '2189-10-17T18:00:00+00:00')
-                    ON CONFLICT (id) DO UPDATE SET
-                        user_character = EXCLUDED.user_character,
-                        base_timestamp = EXCLUDED.base_timestamp
+                    UPDATE global_variables SET user_character = %s WHERE id = TRUE
                     """,
                     (first_character,),
                 )
@@ -416,20 +420,27 @@ def client(
 def test_payload_assembles_every_committed_stream(
     client: TestClient,
     backstage_case: dict[str, Any],
+    disposable_db: str,
 ) -> None:
     response = client.get("/api/dev/backstage/4/turn")
     assert response.status_code == 200
     payload = response.json()
 
+    with closing(connect(disposable_db)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+            (backstage_case["latest"],),
+        )
+        expected_clock = cur.fetchone()[0]
+    assert datetime.fromisoformat(payload["header"]["world_time"]) == expected_clock
     assert payload["header"] == {
         "slot": 4,
         "chunk_id": backstage_case["latest"],
         "chunk_label": "S01E01_004",
         "turn_label": "t.4",
-        "world_time": payload["header"]["world_time"],
+        "world_time": expected_clock.isoformat().replace("+00:00", "Z"),
         "skald_status": "idle",
     }
-    assert payload["header"]["world_time"] is not None
     correspondence = payload["correspondence"]
     assert correspondence["digest"] == "Victor is cultivating Celia as an informant."
     assert correspondence["digest_fresh"] is True
@@ -729,3 +740,28 @@ def test_incubator_view_never_exposes_staged_correspondence(
     payload = response.json()
     assert "correspondence_writer_letter" not in payload
     assert "correspondence_gaia_letter" not in payload
+
+
+def test_backstage_clock_equals_selected_chunk(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """Latest and explicitly selected earlier turns expose their own SQL clocks."""
+    clocks = []
+    for chunk_id, params in (
+        (backstage_case["latest"], {}),
+        (backstage_case["chunks"][1], {"chunk_id": backstage_case["chunks"][1]}),
+    ):
+        response = client.get("/api/dev/backstage/4/turn", params=params)
+        assert response.status_code == 200
+        with closing(connect(disposable_db)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s", (chunk_id,)
+            )
+            expected = cur.fetchone()[0]
+        header = response.json()["header"]
+        assert header["chunk_id"] == chunk_id
+        assert datetime.fromisoformat(header["world_time"]) == expected
+        clocks.append(expected)
+    assert clocks[0] > clocks[1]

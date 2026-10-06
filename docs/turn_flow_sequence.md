@@ -31,7 +31,7 @@ sources:
   - nexus/agents/orrery/worker.py
   - nexus/agents/orrery/experience_embedding.py
   - nexus.toml
-verified_commit: "be1c299cb70b3e3a75b514ad7ad34ca45031b8a8"
+verified_commit: "41783c1dfcb16ff94e31e26bf2723b597b97803b"
 ---
 
 # The Turn Cycle
@@ -117,7 +117,8 @@ reports every known character, place, and faction named in the input as a
 divergence gap. Unless the input is a bare choice number or letter
 (`[memory] skip_simple_choices`) or no budget remains, a raw vector search over
 the input keeps the results that fit the Pass-2 budget (`[memory]
-phase2_fraction` of the context window).
+phase2_fraction` of the context window). An embedder, reranker or search error
+in that query fails the turn; it is never logged and skipped.
 
 ### Warm Slice
 
@@ -139,7 +140,10 @@ LLM rewrite (`docs/retrieval_query_bakeoff_2026_05_18.md`). MEMNON's
 `query_memory` (`nexus/agents/memnon/memnon.py`) classifies the query type,
 runs hybrid vector and full-text search (`[memnon.retrieval.hybrid_search]`),
 and reranks with the cross-encoder
-(`[memnon.retrieval.cross_encoder_reranking]`).
+(`[memnon.retrieval.cross_encoder_reranking]`). MEMNON loads the reranker when
+LORE builds it, so a missing or broken reranker folder fails the turn at that
+point, before any query runs. An embedder, reranker or search error in any
+query fails the turn; no layer returns the unreranked or empty results instead.
 
 ### Orrery Preview and Intertitle
 

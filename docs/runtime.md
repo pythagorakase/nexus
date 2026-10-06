@@ -217,14 +217,62 @@ in `docs/cli.md`).
 - State lives under `[runtime].state_dir` (default `.nexus/runtime`):
   `<service>.pid.json` records pid/port/slot/start time; `<service>.log`
   captures stdout+stderr. Logs survive `nexus down` for postmortems.
-- The supervisor is the single log-file and rotation owner. At spawn, a
-  `<service>.log` of at least `[runtime.logs].max_bytes` becomes
-  `<service>.log.1` (older segments shift up to `backup_count`, the oldest
-  is dropped) and the service starts on a fresh file; a long-running
-  service's capture grows until its next spawn. `nexus logs -n N` continues
-  into the rotated segments when the current file is shorter than `N`,
-  reading at most `max_tail_bytes` of log text in all, and `-f` follows
-  across a restart's rotation.
+- Each captured stream has one log-writer process
+  (`nexus/runtime/log_capture.py`) that owns its file and its rotation. The
+  supervisor starts the writer first, in a session of its own, and gives
+  the service the writer's pipe as stdout and stderr, so a group signal to
+  the service never reaches the writer. The writer ignores SIGINT and
+  SIGTERM and ends only at end of input, when every process holding the
+  pipe has exited, so it never drops a buffered line.
+- The writer rotates while the service runs. Before a line that would take
+  `<service>.log` past `[runtime.logs].max_bytes`, and at start when the file
+  is already that large, it renames the file to `<service>.log.1` (older
+  segments shift up to `backup_count`, the oldest is dropped) and opens a
+  fresh file. It never splits a line across segments: a line longer than
+  `max_bytes` gets a segment of its own. The writer's own errors go to
+  `<service>.log.writer-error` beside the capture, which stays empty unless
+  the writer fails.
+- `nexus down`, `nexus up` over a stale pidfile, a restart, a failed start
+  (before it prints the last log lines) and the foreground autorestart wait
+  for the writer recorded in the pidfile (`log_writer_pid`), so two writers
+  never hold one file. A writer still alive `[runtime.health].stop_grace_seconds`
+  after its service stopped means another process still holds the output:
+  the writer is killed and the command fails, naming its pid. A recycled pid
+  that is no longer the file's writer is never waited on or signalled.
+- A service's pidfile is written as soon as it is spawned, before the health
+  wait. A failed start removes it only once its writer is gone, so a start
+  whose writer cannot be waited out leaves the record, and the next start
+  waits for that writer instead of starting a second one. If the pidfile
+  write itself fails, the start stops its spawned service and waits out its
+  writer before raising. The rollback of a failed `nexus up` stops only the
+  service and writer pids successfully started by that invocation, and
+  removes a record only if it still names that service pid; a rollback
+  failure is attached to the original error as a note. When a
+  service cannot be started at all, its writer is waited for (and killed
+  after the grace) before the error is reported.
+- The foreground supervisor reaps an exited service before it decides
+  whether the service is live, so an ordinary exit reaches `autorestart`
+  rather than reading as a live service that lost its writer. A dead writer
+  triggers another service-liveness check before classification: a service
+  that exited during the writer check also reaches the ordinary exit path.
+- A writer counts as gone only when it has exited or when a `ps` probe ran
+  and its command line does not name the file. A probe that cannot run (no
+  `ps` on `PATH`, a non-zero exit while the pid is alive, or no answer within
+  `stop_grace_seconds`) fails the command, names the pid and the file, and
+  leaves the pidfile and the writer untouched.
+- A live service whose writer has died writes into a broken pipe. The
+  foreground supervisor stops such a service and fails, naming both pids.
+  `nexus status` shows each service's writer (`WRITER`: `alive`, `dead`, or
+  `-` for a pidfile written before writers existed), and `nexus doctor`'s
+  `runtime.log_writers` check fails on a dead writer under a live service:
+  restart that service by name (`nexus restart <service>`).
+- `nexus logs -n N` continues into the rotated segments when the current
+  file is shorter than `N`, reading at most `max_tail_bytes` of log text in
+  all, and `-f` follows across every rotation. `--since MARK` reads a
+  snapshot of the segment chain and waits out a rotation in progress for at
+  most `stop_grace_seconds`, whether a segment is missing or the segments
+  keep changing identity; the empty mark `0:0:0` is refused when that
+  snapshot holds `<service>.log.<backup_count>`.
 - `{log_config}` expands to `<state_dir>/logging.json`, a
   `logging.config.dictConfig` document the supervisor writes from
   `[runtime.logs]` before spawning. The gateway and the mock OpenAI server
@@ -256,6 +304,30 @@ in `docs/cli.md`).
   a configured sibling port are rejected at startup. `nexus down` under
   the override stops only the override instance. The desktop shell never
   sets this — its `runtimeOrigin` is pinned to the configured port.
+- The gateway keeps the launch lifecycle of the app-managed local model
+  and its download worker, and captures both through the same log writer
+  under the same `[runtime.logs]` policy: `local-model.log` (llama-server)
+  and `local-model.download.log` (the download worker) are writer-owned
+  captures, each with its `local-model.log.writer-error` or
+  `local-model.download.log.writer-error` file. The llama-server port and
+  `local-model.pid.json` are one machine-wide endpoint and record, like the
+  fixed-port siblings that belong to the default instance, so both captures
+  stay beside that record in the default instance's logs directory whatever
+  `NEXUS_GATEWAY_PORT` says; read them with `nexus logs local-model` (or
+  `local-model.download`) in a shell without that variable. Deactivation,
+  a cancelled or failed download, and the next activation or download wait
+  for the previous writer the same way the supervisor does. When the record
+  of a just-spawned server or download cannot be written, its process group
+  gets SIGTERM, then SIGKILL after `stop_grace_seconds`, and its writer is
+  waited for (killed after the same grace) before the write error is
+  reported. Every removal of
+  `local-model.pid.json` or `local-model.download.json`, on failure paths
+  too, waits for the writer the record names first. A record is released as
+  "no longer ours" only when a `ps` probe of its pid ran and its command line
+  lacks the server's or the worker's markers; a probe that cannot run (no
+  `ps`, a non-zero exit while the pid is alive, or no answer within
+  `[runtime.health].timeout_seconds`) fails the status read or the command
+  and leaves the record and its writer untouched.
 
 ## CLI Surface
 
@@ -264,7 +336,7 @@ nexus up [--slot N] [--foreground] [--config PATH]
 nexus down [service] [--config PATH]
 nexus restart [service] [--slot N] [--config PATH]
 nexus status [--config PATH]
-nexus logs [service] [-n LINES] [-f] [--config PATH]
+nexus logs [service] [-n LINES] [-f] [--mark | --since MARK] [--config PATH]
 nexus doctor [--target owner-host|owner-client|ci-runner] [--config PATH]
 ```
 
@@ -280,16 +352,23 @@ origin as `remote.base_url`. A remote profile, or an override naming a
 non-loopback host, refuses the CLI's direct-database and local-operator
 commands; `docs/cli.md` lists each command's transport.
 
+`nexus logs SERVICE --mark` prints a mark of the capture's current end
+(`<inode>:<size>:<crc32 of the first 256 bytes>`, or `0:0:0` before the
+capture exists), and `--since MARK` prints every line written after it, in
+order, across every rotation since; it fails loudly when the marked text has
+left retention. The QA kit (`scripts/qa_shift/mission_prompt.md`) slices its
+gateway-log evidence with them.
+
 ## Readiness Checks
 
 `nexus doctor` answers "is this machine ready for its role?" with one
 registry of read-only checks in `nexus/runtime/readiness.py` (issue #803).
 It never creates, migrates, locks, or writes anything: database sessions are
-read-only, and secrets are reported present or missing, never printed. It
-exits 1 when any check fails and 0 otherwise. Text output is one line per
-check; `--json` prints the machine-readable report. Liveness (`/health`),
-readiness, and slot playability are three separate answers; this is the
-second.
+read-only, and secrets are reported present, missing, or unreadable, never
+printed. It exits 1 when any check fails and 0 otherwise. Text output is one
+line per check; `--json` prints the machine-readable report. Liveness
+(`/health`), readiness, and slot playability are three separate answers; this
+is the second.
 
 | Check | Roles | Depends on | Passes when |
 | --- | --- | --- | --- |
@@ -303,7 +382,8 @@ second.
 | `slots.idf_analyzer_current` | owner-host | `template.present` | the same for every probed slot that exists, naming `python scripts/rebuild_memory_idf.py --slot N` (plus `--write-locked-slot` for a locked slot); an absent slot is reported, not failed |
 | `tools.pg_dump` | owner-host | `config.valid` | `pg_dump` resolves on `PATH` or `[api.database].tool_search_paths` |
 | `ui.bundle` | owner-host | — | `ui/dist/public/index.html` exists |
-| `secrets.seat_providers` | owner-host | `config.valid` | every key the model seats in use read is present (Required Keys and Headless Hosts) |
+| `secrets.seat_providers` | owner-host | `config.valid` | every key the model seats in use read is present (Required Keys and Headless Hosts); each account is listed as present, missing, or unreadable, and an unreadable store (a locked or unresponsive Keychain, or no `security` on `PATH`) fails the check with that store's remediation |
+| `runtime.log_writers` | owner-host | `config.valid` | no live supervised service runs without the log writer its pidfile records; a dead writer names `nexus restart <service>` (restart the service by name) |
 | `gateway.reachable` | owner-client | `config.valid` | the profile's gateway answers `/runtime/status` with the runtime's auth headers |
 | `gateway.version` | owner-client | `gateway.reachable` | client and runtime report the same `nexus` version |
 | `reachability.gate` | ci-runner | `config.valid` | `python -S scripts/check_reachability.py` passes |
@@ -509,9 +589,14 @@ seat while `[orrery.retrograde.maturation] enabled = false`, and keyless
 providers never require a key. The API KEYS card lists required keys first,
 marks a missing one with the warning state, dims the rest, shows a status
 failure inside the card (so the Model card stays usable to repair a retired
-pin), and re-reads the rows after the Model card changes a story pin.
-Verification remains an explicit click that is never stored and is cleared
-when the key is replaced.
+pin), and re-reads the rows after the Model card changes a story pin. Status
+and verification re-read the store on every request, past the gateway's
+per-process key cache, so a key rotated outside the app shows at once; the
+card asks for status again each time the pane opens. A store that is locked or
+cannot be reached fails the card with its remediation (status and `PUT` answer
+503) instead of reporting the key absent. Verification remains an explicit
+click that is never stored; any status refresh, including a key replacement,
+clears the Verified mark.
 
 A host without a browser uses the same card through an SSH tunnel to its
 loopback gateway (port 8002 by default), not another entry path:

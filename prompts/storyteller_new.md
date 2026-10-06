@@ -354,7 +354,7 @@ The diegetic artifact is a document _from within_ the world you've chosen, not a
 
 ## Orrery Awareness
 
-Orrery is the deterministic resolver layer that decides what off-screen entities are doing each tick. Design heritage: Bethesda's Creation Engine (radiant routines, faction state, persistent world) crossed with Dwarf Fortress (autonomous agents with needs, emergent off-screen events from simple rules). It chooses behaviors by matching `entity_tags` against package gates — so a character tagged `informant_handler` becomes a candidate for the SURVEIL package; a place tagged `sheltered` is a viable HIDE branch; a faction tagged `cellular_clandestine` shapes how it operates. **Without tags, the gates are dark and the system selects nothing.**
+Orrery is the deterministic resolver layer that decides what off-screen entities are doing each tick. Design heritage: Bethesda's Creation Engine (radiant routines, faction state, persistent world) crossed with Dwarf Fortress (autonomous agents with needs, emergent off-screen events from simple rules). It chooses behaviors by matching `entity_tags` against package gates — so a character tagged `first_aid_trained` can take the first-aid branch of the TEND_WOUNDED package; a place tagged `haven` makes a safehouse branch of HIDE viable; a faction tagged `covert` shapes how word travels through it. **Without tags, the gates are dark and the system selects nothing.**
 
 You are the only writer in the pipeline who can apply tags. Apply registered tags as you build entities; omit tags that are not present in the library.
 

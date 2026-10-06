@@ -371,6 +371,21 @@ def test_gateway_port_override_isolates_state_and_logs_inside_the_home(
     assert supervisor.log_path("gateway") == instance / "gateway.log"
 
 
+def test_local_model_captures_stay_in_the_default_instance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The machine-wide local model's captures ignore NEXUS_GATEWAY_PORT."""
+    home_root = tmp_path / "home"
+    _write_config(home_root / "nexus.toml", state_dir="state")
+    monkeypatch.setenv(HOME_ENV, str(home_root))
+    monkeypatch.setenv(GATEWAY_PORT_ENV, "8931")
+    settings = load_settings()
+    home = resolve_runtime_home(settings)
+
+    assert local_inference._logs_dir(settings) == home.logs_dir
+    assert local_inference._state_dir(settings) == home.state_dir
+
+
 def test_every_config_reader_uses_the_home_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

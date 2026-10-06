@@ -212,8 +212,9 @@ def test_player_projection_keeps_reading_and_play_routes(
         assert "UI build not found" in shell.text
 
 
+@pytest.mark.requires_postgres
 def test_player_projection_paces_the_genesis_stage_waiter(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, offline_gate_db: str
 ) -> None:
     """The new-story wait screen needs nothing from the operator plane.
 
@@ -231,7 +232,7 @@ def test_player_projection_paces_the_genesis_stage_waiter(
     player = TestClient(build_player_app(_gateway(tmp_path, monkeypatch, built=False)))
 
     assert player.get("/api/settings").status_code in (404, 405)
-    status = player.get("/api/story/new/retrograde/status", params={"slot": 5})
+    status = player.get("/api/story/new/retrograde/status", params={"slot": 4})
     assert status.status_code == 200, status.text
     body = status.json()
     assert body["status_poll_interval_seconds"] == 2.5
@@ -497,3 +498,38 @@ def test_unclassified_route_fails_the_gateway_import() -> None:
     assert result.returncode != 0
     assert "UnclassifiedRouteError" in result.stderr
     assert "POST /api/slot/{slot}/lock" in result.stderr
+
+
+def test_feed_is_player_read_without_provider_effect() -> None:
+    """The real feed is classified, projected, and precedes the SPA tail."""
+    key = ("GET", "/api/narrative/feed")
+    capability = ROUTE_CAPABILITIES[key]
+    assert (
+        capability.plane,
+        capability.capability,
+        capability.slot_mode,
+        capability.provider_effect,
+        capability.destructive,
+    ) == (
+        "player",
+        "narrative.read",
+        "read",
+        False,
+        False,
+    )
+    assert classify_app(narrative.app) == []
+    player = build_player_app(narrative.app)
+    assert key in _keys(player)
+    for app in (narrative.app, player):
+        feed = next(i for i, route in enumerate(app.routes) if key in route_keys(route))
+        shell = next(
+            i
+            for i, route in enumerate(app.routes)
+            if any(
+                ROUTE_CAPABILITIES[k].capability == "ui.shell"
+                for k in route_keys(route)
+            )
+        )
+        assert feed < shell
+    response = TestClient(player).get("/api/narrative/feed", params={"slot": 9})
+    assert response.status_code == 400

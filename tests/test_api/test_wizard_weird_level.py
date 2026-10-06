@@ -450,7 +450,19 @@ def transition_boundaries(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     from nexus.agents.orrery import retrograde_orchestrator
     from nexus.api import new_story_db_mapper, save_slots, trait_input_derivation
 
-    seen = SimpleNamespace(generation=[], persisted=[], slot_model=None)
+    seen = SimpleNamespace(generation=[], persisted=[], ledger=[], slot_model=None)
+
+    def start(slot: int) -> str:
+        seen.ledger.append(("start", slot))
+        return "test-run"
+
+    def record(*args: Any) -> None:
+        seen.ledger.append(args)
+
+    monkeypatch.setattr(new_story_flow, "start_genesis_run", start)
+    monkeypatch.setattr(new_story_flow, "record_genesis_failure", record)
+    monkeypatch.setattr(retrograde_orchestrator, "record_retrograde_progress", record)
+    monkeypatch.setattr(retrograde_orchestrator, "record_genesis_stage_output", record)
     monkeypatch.setattr(
         save_slots, "get_slot_model", lambda slot, dbname=None: seen.slot_model
     )
@@ -536,8 +548,11 @@ def test_transition_forwards_the_level_and_records_genesis_provenance(
     # Provenance follows the history it describes on the same cursor.
     assert transition_boundaries.persisted == [0]
     assert statements[0][0] == "INSERT INTO world_events DEFAULT VALUES"
-    assert statements[-1][0] == GENESIS_SQL
-    provenance = json.loads(statements[-1][1][0])
+    assert statements[-2][0] == GENESIS_SQL
+    assert "UPDATE genesis_run_stages" in statements[-1][0]
+    assert transition_boundaries.ledger[0] == ("start", 4)
+    assert (4, "test-run", "persistence", {}) in transition_boundaries.ledger
+    provenance = json.loads(statements[-2][1][0])
     assert provenance == {**result["retrograde"]["weird"], "selected_level": level}
     assert provenance["selected_level"] == level
     assert provenance["level"] == expected_level
@@ -562,7 +577,7 @@ def test_provenance_tells_the_default_apart_from_choosing_it(
             new_story_flow.build_transition_data_from_cache(ready_cache()),
             weird_level=selected,
         )
-        stored.append(json.loads(TransactionMapper.cursor.statements[-1][1][0]))
+        stored.append(json.loads(TransactionMapper.cursor.statements[-2][1][0]))
 
     chosen, defaulted = stored
     assert chosen["level"] == defaulted["level"] == default_level
@@ -577,7 +592,11 @@ def test_a_story_without_retrograde_history_records_no_provenance(
     transition_boundaries: SimpleNamespace,
 ) -> None:
     """An overwritten slot cannot keep the previous story's provenance."""
-    transition_boundaries.slot_model = new_story_flow.MOCK_WIZARD_MODEL
+    from nexus.config import load_settings
+
+    transition_boundaries.slot_model = (
+        load_settings().global_.model.api_models["test"].models[0].id
+    )
 
     result = new_story_flow.perform_transition_with_retrograde(
         4,
@@ -590,7 +609,8 @@ def test_a_story_without_retrograde_history_records_no_provenance(
         "skip_reason": "mock_wizard_model",
     }
     assert transition_boundaries.generation == []
-    assert TransactionMapper.cursor.statements == [(GENESIS_SQL, (None,))]
+    assert TransactionMapper.cursor.statements[-2] == (GENESIS_SQL, (None,))
+    assert "UPDATE genesis_runs" in TransactionMapper.cursor.statements[-1][0]
 
 
 def test_genesis_provenance_requires_the_global_variables_row() -> None:

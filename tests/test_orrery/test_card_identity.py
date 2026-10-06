@@ -38,6 +38,7 @@ from tests.pg_fixtures import (
     asyncpg_kwargs,
     connect,
     disposable_slot_database,
+    seed_committed_chunk,
     seed_played_story,
     sqlalchemy_url,
 )
@@ -553,12 +554,11 @@ async def test_ren_rank_commit_replay(
                 session.execute(text("SELECT current_database()")).scalar_one()
                 == card_database
             )
-            chunk = session.execute(
-                text(
-                    "INSERT INTO narrative_chunks (raw_text, storyteller_text) VALUES ('Ren replay', 'Ren replay') RETURNING id"
-                )
-            ).scalar_one()
-            session.commit()
+            # The tick chunk is a committed chunk with a world clock: every
+            # world event the commit emits is stamped from its chunk_metadata
+            # world_time, and a chunk without one is refused, not defaulted.
+            # Scene 2 follows the played story's one accepted turn (S01E01_001).
+            chunk = seed_committed_chunk(card_database, raw_text="Ren replay", scene=2)
             kwargs = {"tick_chunk_id": chunk, "adjudications": decisions}
             if asynchronous:
                 conn = await asyncpg.connect(**asyncpg_kwargs(card_database))

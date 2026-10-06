@@ -71,6 +71,8 @@ the test suite.
 | `memory.warm_slice_default` | semantic | Warm-slice expansion behavior. |
 | `memory.max_sql_iterations` | semantic | Query iteration cap that shapes retrieval. |
 
+The LORE retrieval breadth settings `lore.retrieval.max_deep_queries` and `lore.retrieval.deep_query_k`, and the historical-passage cap `lore.render_limits.historical_passages`, sit outside the fingerprinted tables. `deep_query_k` bounds the results MEMNON returns for each deep query before deduplication. Changing these settings does not change the Pass-2 configuration fingerprint or require a stored-baseline refresh.
+
 On continuation:
 
 - An equal full fingerprint proceeds.
@@ -144,6 +146,15 @@ is how to replay the new spend. `--model` replaces every attempt's model,
 keeping the counts measured with the recorded model's tokenizer. Unregistered
 models and allowances above a model's maximum fail exactly as they would at
 runtime.
+
+The recorded `removed_block_tokens` map attributes cached assembly estimates to
+recent narrative, historical context, and recalled scenes, including removed
+headings. `removed_tokens_total` sums that map; absent or empty legacy accounting
+is unknown (`null` in replay JSON), while a complete three-key zero map records
+zero. Candidate changes preserve these per-attempt snapshots. Retries repeat
+assembly accounting rather than adding removals; do not sum them as new removals
+or provider usage. `freed_tokens` remains candidate headroom, a separate quantity.
+Kept block sums still reconcile to actual dispatch input.
 
 Per attempt, the report gives the ceiling delta, whether the recorded spend
 was capped by the model's maximum input (a zero delta on a capped attempt can

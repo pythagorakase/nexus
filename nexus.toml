@@ -154,6 +154,11 @@ delete_arm_ms = 2800    # armed-delete window before disarming
 hiatus_hours = 12.0
 roster_limit = 6
 
+[ui.reader]
+# Feed page bounds, measured in committed playable chunk counts.
+default_page_size = 50
+max_page_size = 200
+
 # Per-theme font slot choices (NEXUS IRIS keeper matrix). The display slot is
 # the marquee font — reserved for the NEXUS wordmark and locked in the UI.
 [ui.fonts.veil]
@@ -188,7 +193,7 @@ enable_streaming = true
 # sheet reaches the wizard -> narrative transition without TraitCompileInputs,
 # one structured Skald call derives them so the M5 compilers can write
 # mechanical state (relationship rows, pair-tags, stub entities) instead of
-# leaving every trait a prose-only remainder. Skipped for the mock TEST model.
+# leaving every trait a prose-only remainder. Skipped for models of the TEST provider.
 derive_at_transition = true
 max_tokens = 4096
 
@@ -263,6 +268,7 @@ character_tags = 8
 
 [lore.retrieval]
 max_deep_queries = 5
+deep_query_k = 15  # Results MEMNON returns per deep query, before deduplication
 
 [lore.token_budget]
 # Context window limits for APEX generation
@@ -340,6 +346,9 @@ window_chunks = 30
 hostile_source_enabled = true
 roster_source_enabled = true
 acquaintance_source_enabled = true
+# Same-place introductions one character may join per tick.
+# At 1, each character joins at most one introduction per off-screen beat.
+acquaintance_introductions_per_entity_per_tick = 1
 roster_reach = 2
 
 [orrery.resolver]
@@ -614,6 +623,25 @@ backstage_poll_idle_ms = 8000
 [orrery.route_graph]
 max_edges_per_query = 5000
 
+# Per-mode route estimates: km/h, and the detour factor over the geodesic distance.
+[orrery.travel.speed_kmh]
+walking = 5.0
+vehicle = 45.0
+rail = 75.0
+water = 25.0
+air = 450.0
+covert = 3.5
+mixed = 25.0
+
+[orrery.travel.detour_factor]
+walking = 1.35
+vehicle = 1.25
+rail = 1.15
+water = 1.40
+air = 1.05
+covert = 1.80
+mixed = 1.40
+
 [orrery.narration]
 # Historical queue name; records now contain deterministic perceptual descriptors.
 # No provider call is made. Existing prose rows remain available for audit.
@@ -727,9 +755,6 @@ transition_timeout_seconds = 900
 # CLI/UI stage poll of GET /api/story/new/retrograde/status while the
 # transition request is in flight (the UI reads it from that route's answer).
 status_poll_interval_seconds = 1
-# NOTE: transition progress (GET /api/story/new/retrograde/status) lives in a
-# process-local registry. Run the API single-worker, or accept that status
-# polls answered by a non-writing worker report stage "idle" mid-transition.
 
 [orrery.retrograde.projects]
 # Wizard-time long-arc generation is opt-in in the model and enabled in the
@@ -1393,9 +1418,10 @@ port_release_timeout_seconds = 5.0 # swap waits this long for the old llama-serv
 inspect_timeout_seconds = 30.0  # per request of `nexus inspect`; no answer in time exits 4
 # Per short request of load, continue, retry, undo, regenerate, clear, lock,
 # unlock and model --set/--clear (state reads, wizard setup and confirmation,
-# slot administration). Generation, wizard chat and transition requests keep
-# their own budgets.
+# slot administration). Model-turn requests take turn_request_timeout_seconds,
+# the transition the Retrograde wizard's budget, the generation wait apex's.
 request_timeout_seconds = 30.0
+turn_request_timeout_seconds = 120.0 # per wizard chat, trait toggle, phase intro, and continue/retry/regenerate/opening-turn scheduling POST
 # Delay between status reads while continue, retry, regenerate and the seed's
 # opening turn wait on a generation session: a finite number of seconds greater
 # than 0 (inf and nan are rejected); apex.generation_timeout_seconds bounds the
@@ -1403,8 +1429,7 @@ request_timeout_seconds = 30.0
 poll_interval_seconds = 1.0
 
 [runtime.logs]
-# The supervisor is the single log-file and rotation owner: it captures each
-# service's stdout+stderr in <state_dir>/<service>.log and rotates at spawn.
+# One log-writer process per captured stream owns its file and rotation (nexus/runtime/log_capture.py).
 tail_lines = 100          # default for `nexus logs`
 follow_poll_seconds = 0.5 # poll interval for `nexus logs -f`
 max_tail_bytes = 262144   # most log text one `nexus logs` tail reads, across segments
@@ -1412,7 +1437,7 @@ max_tail_bytes = 262144   # most log text one `nexus logs` tail reads, across se
 # uvicorn.access stays at INFO, where uvicorn logs every response.
 level = "INFO"            # DEBUG | INFO | WARNING | ERROR | CRITICAL
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-max_bytes = 10485760      # rotate <service>.log at the next spawn once this large
+max_bytes = 10485760      # a new segment starts before a line would pass this size
 backup_count = 5          # keep <service>.log.1 .. .5; `nexus logs -n` reads across them
 # Successful (<400) access records for these exact paths are dropped; every
 # 4xx/5xx is kept. Query strings are ignored when matching.

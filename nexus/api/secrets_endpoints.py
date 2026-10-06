@@ -22,7 +22,12 @@ from nexus.config.story_model import (
     read_story_settings,
     resolve_seat,
 )
-from nexus.util.secret_manager import MissingSecretError, get_secret, set_secret
+from nexus.util.secret_manager import (
+    MissingSecretError,
+    SecretStoreAccessError,
+    get_secret_uncached,
+    set_secret,
+)
 
 router = APIRouter(prefix="/api/secrets", tags=["secrets"])
 
@@ -200,14 +205,21 @@ def _requirements_for(slot: int | None) -> dict[str, list[SeatResolution]]:
 def _status_for(
     provider: SecretProvider, requirements: list[SeatResolution]
 ) -> SecretStatus:
-    """Read the masked status for one provider and attach its seat needs."""
+    """Read the masked status for one provider and attach its seat needs.
+
+    The read bypasses the process cache, so a key rotated outside this
+    process shows at once. A store that cannot be read fails the request with
+    503 and the error's remediation; it is never reported as an absent key.
+    """
     try:
-        value: str | None = get_secret(provider.account)
+        value: str | None = get_secret_uncached(provider.account)
     except MissingSecretError:
         # MissingSecretError is the reader's public absence contract. This is
         # the one endpoint where missing credentials are expected first-run
         # state rather than an exceptional response.
         value = None
+    except SecretStoreAccessError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return SecretStatus(
         provider=provider.provider,
         account=provider.account,
@@ -301,11 +313,22 @@ def put_secret(
 
 @router.post("/{provider}/verify", response_model=SecretVerification)
 def verify_secret(provider: str) -> SecretVerification:
-    """Verify one stored key against the provider's real models endpoint."""
+    """Verify the key the store holds now against the provider's models endpoint.
+
+    The read bypasses the process cache. A store that cannot be read reports
+    its own sanitized message; every other failure reports only its class and
+    status code.
+    """
     selected = _provider_or_404(provider)
     try:
-        key = get_secret(selected.account)
+        key = get_secret_uncached(selected.account)
         _verify_provider(selected, key)
+    except SecretStoreAccessError as exc:
+        return SecretVerification(
+            provider=selected.provider,
+            verified=False,
+            detail=str(exc),
+        )
     except Exception as exc:  # noqa: BLE001 - verification failures are results
         return SecretVerification(
             provider=selected.provider,
