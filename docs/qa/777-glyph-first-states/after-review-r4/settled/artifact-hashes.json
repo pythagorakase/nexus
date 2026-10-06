@@ -11,8 +11,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/changed-files.md",
-    "sha256": "6eee599fab898191069b14f27ce540564b86cd8284ef3f90239d6a00c2ef8fc2",
-    "bytes": 54967
+    "sha256": "c533ce6bfc2277f4ecd5e3e26747a9bb09ff47363669cde59d0f964c2e15a35f",
+    "bytes": 54944
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/commands.json",
@@ -26,8 +26,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/completion.md",
-    "sha256": "8a1b60a6c27c7550bfef7e2411826934738c3baad0cf62ffc71bc24ff8c05f77",
-    "bytes": 9029
+    "sha256": "4a3c0723b72693445a71cacecfce07628fb22a81cae31cb7b95f1df77806ba3f",
+    "bytes": 9135
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/gate-summary.json",
@@ -81,8 +81,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/plants.md",
-    "sha256": "6b51c2f32ade915b42ce89e9ad97cdf39fad8f48bd9ce46d02455f6a24ef4d5c",
-    "bytes": 48726
+    "sha256": "c0c6d98c9e6663ca68129c539784381bb5c412a38f731cb7dee4f8df3b4f91ab",
+    "bytes": 49138
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-current-label-after.png",
@@ -241,8 +241,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/unreachable-contexts.md",
-    "sha256": "4cd7009691e8356ffe9ddb9d0c36d18025c48e49dbecb1e4a63ab68d87e6f93d",
-    "bytes": 1063
+    "sha256": "6ddb2430379d3ec856801004a313c3b54fe04edcf3f1745ba2dbb14e5907e052",
+    "bytes": 1141
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/backdrop-correction.json",
@@ -261,18 +261,18 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/exceptions.md",
-    "sha256": "e9078140a5a945abedad955b4079d0f69058c483ffab5037810f4f9da8bffc29",
-    "bytes": 1819
+    "sha256": "bf61128252078c57d8aba5e9c7544ddc86525fae1ae713e3a8b70f6f85acb49c",
+    "bytes": 1911
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-joint.json",
-    "sha256": "07e5af829eecefa18741602853384e3bf9fa8e700946b3d3163c5077eaad90ca",
-    "bytes": 1737406
+    "sha256": "3596edbe57376998e3bd54232b244622a2726c5263c24d05815683f040c06edd",
+    "bytes": 3126732
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-pairs.md",
-    "sha256": "f6ee76a1c1efdc6db3d14936ec6f174cc1f0f78fb853404ece79278a7d34aebb",
-    "bytes": 13135
+    "sha256": "9b1672635d74b6f0c62c686b0c9cc0cbe28a2e2fe13496f482bc9b3257e8b1ad",
+    "bytes": 15651
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/global-proof.json",
@@ -316,13 +316,13 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.csv",
-    "sha256": "8d26ba7a98f7200e411f06d667c67b6c81d52bc90ce6ecc8121adc4e8d6a3ae8",
-    "bytes": 1768670
+    "sha256": "f02f38d4b1c5dbe3ab1ce402e62bb404cbb8cb4c47d96d5056be72bc18d78be1",
+    "bytes": 3159210
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.md",
-    "sha256": "e96f527a0e3ad639a8c9af14e5332d0435af056004f3bc2cc2e90d65ca32613b",
-    "bytes": 415
+    "sha256": "b44d26f6c89c6ab90b0e483f33fb27c880042d04dce49fef8ec4505f0fe36d53",
+    "bytes": 403
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/production-panes-reduced-motion.png",
@@ -336,42 +336,42 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.md",
-    "sha256": "9d327c4d0f272b8a9c74b3deca3a874ee783074c1c75da6e6e3358833f5b2c4b",
-    "bytes": 3404
+    "sha256": "b1973b33869dd34f2cc147cdf601f105d5d6098b258ec97d08900f2b18660617",
+    "bytes": 3297
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.png",
-    "sha256": "174f15b3962565114be554d8563f5a8175484928130ac975e6afbf8ca2769275",
-    "bytes": 80010
+    "sha256": "d0e96bb373cfd9b2deabb9f5c22b64aeb2889d2e0b8a22d2e87b6e141b597a28",
+    "bytes": 80042
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.svg",
-    "sha256": "fb778491071464f713c4d2029dd4c483717c4aa7e9c993e93ee149b77891aefe",
-    "bytes": 13233
+    "sha256": "e99ac1faaa549bf7a8c70ce8ba1b27f802c4b345fad72b11b8bb82c7f49846b7",
+    "bytes": 13285
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json",
-    "sha256": "9fc188760ccdcd32d731a3ea9164d47410fe3624b41e2ad64e0a20b675b219eb",
-    "bytes": 63045
+    "sha256": "850a167e6bc6903b9fe91d9a75855705bbb81ed3107848aabea13960b582fb50",
+    "bytes": 146809
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/vector-joint.json",
-    "sha256": "831d853a9004274b308c4190e0ab0c0edaff0a496ea48fbda5e98056d364fcba",
-    "bytes": 1738368
+    "sha256": "d72c7f695e518f172f8ec4bafafab15dc0391d632a5fa5f68f120478a49b112d",
+    "bytes": 3103664
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/vector-pairs.md",
-    "sha256": "ffa76faf58473d3a7f0048e6511e8b9bc150c987d2ff71eb913054b8f5629284",
-    "bytes": 13108
+    "sha256": "9e15ebece7f09a1c43937359257ea1471fbbee269c8cbc1f91bf558291e4bf9f",
+    "bytes": 15644
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/veil-joint.json",
-    "sha256": "b21fc1e33045d83f5e7208d55485319543c2e80c7ddd8566ed5331754863f2d0",
-    "bytes": 1760471
+    "sha256": "7ce5392495c0348a6e9a541cfdc4d1862ec3bb02ce2999efa37915b513f2d8ac",
+    "bytes": 3172824
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/veil-pairs.md",
-    "sha256": "a0f18b1abfbd4f34da1c108cca330592380211da46d4c366d62a242fddde5247",
-    "bytes": 13157
+    "sha256": "65c3eeac2567ae00406a4aa0e74e654fef38fabe3a3019db50d4107039d98ee3",
+    "bytes": 15683
   }
 ]
