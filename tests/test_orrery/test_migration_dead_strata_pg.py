@@ -2995,3 +2995,65 @@ $column_probe$;
             assert _routine_outcome(dbname, call) == outcome
         assert _snapshot(dbname, surviving=not target) == before
         assert _function_catalog(dbname) == functions
+
+
+@pytest.mark.parametrize("language", ("sql", "plpgsql"))
+@pytest.mark.parametrize("form", ("rows-alias", "interval-type", "column-alias"))
+def test_migration_143_round12_column_definitions(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    language: str,
+    form: str,
+) -> None:
+    """FROM position distinguishes keyword aliases/types from healthy aliases."""
+    target = form != "column-alias"
+    source = {
+        "rows-alias": 'jsonb_to_record(\'{"v":"0|neutral"}\') rows(v emotional_valence)',
+        "interval-type": 'jsonb_to_record(\'{"elapsed":"1 second","v":"0|neutral"}\') '
+        "r(elapsed interval, v emotional_valence)",
+        "column-alias": "generate_series(1,3) g(n)",
+    }[form]
+    value = {"rows-alias": "rows.v", "interval-type": "r.v", "column-alias": "g.n"}[
+        form
+    ]
+    query = (
+        f"SELECT {value}::text FROM public.characters c "
+        "JOIN public.character_relationships cr ON cr.character1_id=c.id, " + source
+    )
+    body = query if language == "sql" else f"BEGIN RETURN ({query}); END"
+    argument = "dummy anyelement" if language == "sql" else ""
+    call = "SELECT public.probe813_r12(" + ("1" if language == "sql" else "") + ")"
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        _sql(
+            dbname,
+            f"CREATE FUNCTION public.probe813_r12({argument}) RETURNS text "
+            f"LANGUAGE {language} AS $body${body}$body$",
+        )
+        outcome = _routine_outcome(dbname, call)
+        assert outcome[0], outcome
+        before = _snapshot(dbname, surviving=not target)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        print("ROUND12", form, language, "applied:", applied, flush=True)
+        if applied and target:
+            print(
+                "OLD OUTCOME",
+                form,
+                language,
+                "before:",
+                outcome,
+                "after:",
+                _routine_outcome(dbname, call),
+                flush=True,
+            )
+        assert applied is (not target), caplog.text
+        if target:
+            assert "unclassifiable column-definition list" in caplog.text, caplog.text
+            assert _stamps(dbname) == stamps
+        else:
+            assert _routine_outcome(dbname, call) == outcome
+        assert _snapshot(dbname, surviving=not target) == before
+        assert _function_catalog(dbname) == functions
