@@ -3168,3 +3168,78 @@ def test_migration_143_round13_nested_environments(
                 True,
                 (False,),
             )
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "r14-nested-default",
+        "r14-nested-default-equals",
+        "r14-nested-default-atomic",
+        "r14-nested-default-survivor",
+    ),
+)
+def test_migration_143_round14_nested_defaults(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+) -> None:
+    """Uncalled nested definitions scan defaults in the caller's startup settings."""
+    survivor = case == "r14-nested-default-survivor"
+    type_name = "boolean" if survivor else "item_type"
+    value = "t" if survivor else "weapon"
+    operator = "=" if case == "r14-nested-default-equals" else "DEFAULT"
+    options = (
+        "LANGUAGE sql BEGIN ATOMIC SELECT v; END"
+        if case == "r14-nested-default-atomic"
+        else "AS $$SELECT v$$ LANGUAGE sql"
+    )
+    body = (
+        "BEGIN CREATE OR REPLACE FUNCTION public.probe813_generated("
+        f"v boolean {operator} pg_input_is_valid('{value}','{type_name}')) "
+        f"RETURNS boolean {options}; RETURN true; END"
+    )
+    call = "SELECT public.probe813_r14()"
+    generated_call = "SELECT public.probe813_generated()"
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        if survivor:
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute("SELECT to_regtype('boolean')::oid")
+                assert cur.fetchone()[0] is not None
+            assert "boolean" not in TARGET_NAMES
+        _sql(
+            dbname,
+            "CREATE FUNCTION public.probe813_r14() RETURNS boolean "
+            f"LANGUAGE plpgsql SET search_path=pg_catalog AS $outer${body}$outer$",
+        )
+        # Do not create the inner routine before migration: its top-level default
+        # scan would mask the nested-definition gap. Calls use fresh connections.
+        before = _snapshot(dbname, surviving=survivor)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        print("ROUND14", case, "applied:", applied, flush=True)
+        if not applied:
+            print("ROUND14 REFUSAL", case, caplog.text, flush=True)
+        if applied and not survivor:
+            _sql(dbname, call)
+            wrapper = _routine_outcome(dbname, call)
+            assert wrapper == (True, (True,)), wrapper
+            after = _routine_outcome(dbname, generated_call)
+            print("OLD OUTCOME", case, "wrapper:", wrapper, "after:", after, flush=True)
+            assert not after[0] and after[1][0] == "42704", after
+        assert applied is survivor, caplog.text
+        if not survivor:
+            assert "probe813_r14" in caplog.text, caplog.text
+            assert "literal names a drop target: item_type" in caplog.text, caplog.text
+            assert _stamps(dbname) == stamps
+        else:
+            assert [s for s in _stamps(dbname) if s[0] != "143"] == stamps
+        assert _snapshot(dbname, surviving=survivor) == before
+        assert _function_catalog(dbname) == functions
+        if survivor:
+            _sql(dbname, call)
+            assert _routine_outcome(dbname, call) == (True, (True,))
+            assert _routine_outcome(dbname, generated_call) == (True, (True,))
