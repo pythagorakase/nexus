@@ -66,8 +66,9 @@ export function foreground(paintedBytes, controlBytes, label, minimumMaskPixels 
     if (a.pixels.subarray(i, i + a.channels).equals(b.pixels.subarray(i, i + b.channels))) continue;
     maskSize++;
     const painted = [0, 1, 2].map(c => linear(a.pixels[i + c]));
-    const difference = Math.hypot(...painted.map((v, c) => v - linear(b.pixels[i + c])));
-    mask.push({ painted, difference });
+    const control = [0, 1, 2].map(c => linear(b.pixels[i + c]));
+    const difference = Math.hypot(...painted.map((v, c) => v - control[c]));
+    mask.push({ painted, control, difference });
     const key = Array.from(a.pixels.subarray(i, i + 3)).join(',');
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -81,6 +82,8 @@ export function foreground(paintedBytes, controlBytes, label, minimumMaskPixels 
   // The maximum pixel always belongs to the core; retain the whole mask for audit.
   const meanLinear = [0, 1, 2].map(channel =>
     core.reduce((sum, p) => sum + p.painted[channel], 0) / core.length);
-  return { meanLinear, maskSize, coreSize: core.length, histogram: histogram.slice(0, 8),
+  const controlMeanLinear = [0, 1, 2].map(channel =>
+    core.reduce((sum, p) => sum + p.control[channel], 0) / core.length);
+  return { meanLinear, controlMeanLinear, maskSize, coreSize: core.length, histogram: histogram.slice(0, 8),
     width: a.width, height: a.height };
 }

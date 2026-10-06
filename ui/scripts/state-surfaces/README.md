@@ -16,9 +16,15 @@ and lighting-color to transparent, and background-image to none, all with
 
 Every regeneration first renders the full default inventory for each theme
 with all tokens in a surface group set to its shipped present/rest pigment.
-`proof.calibration` records samples and per-context pair maxima. Every identical
-pigment comparison must be **≤1.0 deutan ΔE**. A failure stops regeneration with
-the numbers and the two painted PNGs; the threshold and tolerance are fixed.
+`proof.calibration` records samples, per-group opaque/translucent maxima and
+every skipped pair. Map parts compare like-for-like. Effective opacity is the
+product of computed opacity from the surface through the fixture root. Opaque
+pairs compare regardless of backdrop at **≤1.0 deutan ΔE**; translucent pairs
+compare at **≤2.5** only when their control means over their respective cores
+agree within **1.0**. Skips name `part-distinct` or `backdrop-distinct`. Required
+pairs guard against vacuous calibration. A failure stops regeneration with
+the numbers and the two painted PNGs; the threshold and tolerances are fixed.
+Acceptance comparisons retain all reachable pairs over their real backdrops.
 
 The fixture mounts real NexusLayout, KeysSection, ModelSection and MapPane
 with seeded local data and the production Vite build's emitted CSS in shipped

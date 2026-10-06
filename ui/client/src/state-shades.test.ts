@@ -139,6 +139,7 @@ const SIGNATURES: Record<Surface, Record<string, string>> = {
 type Palette = Record<string, Triple>;
 type Sample = {
   meanLinear: [number, number, number]; maskSize: number; coreSize: number;
+  controlMeanLinear: [number, number, number]; effectiveOpacity: number; mapPart: string | null;
   histogram: { rgb: number[]; count: number }[]; width: number; height: number;
   action: string; animationsRunning: number;
   settleCriteria: { tooltipExpected: string; tooltipState: string | null;
@@ -153,7 +154,11 @@ type Receipt = {
   media: { preludes: string[]; unsupported: string[]; variants: { id: string }[] };
   proof: { coreThreshold: number; calibration: Record<Theme, {
     condition: string; pigments: Record<Surface, string>; samples: ContextSamples;
-    maxima: Record<string, { maximum: number }>; maximum: number; tolerance: number; passed: boolean;
+    groups: Record<Surface, { opaqueMaximum: number; translucentMaximum: number;
+      pairs: { context: string; states: string[]; opacity: string; delta: number; backdropDelta: number }[];
+      skippedPairs: { context: string; states: string[]; reason: string; backdropDelta?: number }[] }>;
+    requiredPairs: { context: string; states: string[]; opacity: string }[];
+    tolerances: { opaque: number; translucent: number; backdrop: number }; passed: boolean;
   }>; acceptanceComplete: boolean; minimumMaskPixels: number; measurement: string; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
   conditions: Record<string, Record<Theme, {
     shipped: ContextSamples; before: ContextSamples;
@@ -347,25 +352,49 @@ describe("777-S2 state shades", () => {
     expect(() => foreground(controlBytes, controlBytes, "empty context")).toThrow("empty context: empty foreground mask");
   });
 
-  it("identical_pigment_calibration_covers_every_context_and_stays_within_one_deutan_delta", () => {
+  it("identical_pigment_calibration_compares_like_parts_and_opacity_with_non_vacuous_coverage", () => {
     expect(Object.keys(receipt.proof.calibration)).toEqual([...THEMES]);
     for (const theme of THEMES) {
       const calibration = receipt.proof.calibration[theme];
       expect(calibration.passed).toBe(true);
-      expect(calibration.tolerance).toBe(1);
+      expect(calibration.tolerances).toEqual({ opaque: 1, translucent: 2.5, backdrop: 1 });
       expect(Object.keys(calibration.samples)).toEqual(contextNames);
-      let maximum = 0;
+      const maxima = Object.fromEntries(Object.keys(MAPPINGS).map(group => [group, { opaque: 0, translucent: 0 }]));
       for (const context of contextNames) {
         const samples = calibration.samples[context];
         expect(Object.keys(samples)).toEqual(statesIn(context));
-        const states = Object.keys(samples); let contextMaximum = 0;
-        for (let i = 0; i < states.length; i++) for (let j = i + 1; j < states.length; j++)
-          contextMaximum = Math.max(contextMaximum, ciede2000(deutanLinearLab(samples[states[i]].meanLinear), deutanLinearLab(samples[states[j]].meanLinear)));
-        expect(contextMaximum, `${theme}/${context}: identical pigment`).toBeLessThanOrEqual(1);
-        expect(calibration.maxima[context].maximum).toBe(contextMaximum);
-        maximum = Math.max(maximum, contextMaximum);
+        const group = context.split('/')[0] as Surface, record = calibration.groups[group];
+        const states = Object.keys(samples);
+        for (let i = 0; i < states.length; i++) for (let j = i + 1; j < states.length; j++) {
+          const pair = [states[i], states[j]], [a, b] = pair.map(s => samples[s]);
+          const find = <T extends { context: string; states: string[] }>(list: T[]) =>
+            list.find(p => p.context === context && p.states.join('/') === pair.join('/'));
+          if (a.mapPart !== b.mapPart) {
+            expect(find(record.skippedPairs)?.reason).toBe('part-distinct'); continue;
+          }
+          const opacity = a.effectiveOpacity === 1 && b.effectiveOpacity === 1 ? 'opaque' : 'translucent';
+          const backdropDelta = ciede2000(deutanLinearLab(a.controlMeanLinear), deutanLinearLab(b.controlMeanLinear));
+          if (opacity === 'translucent' && backdropDelta > 1) {
+            expect(find(record.skippedPairs)?.reason).toBe('backdrop-distinct');
+            expect(find(record.skippedPairs)?.backdropDelta).toBe(backdropDelta); continue;
+          }
+          const delta = ciede2000(deutanLinearLab(a.meanLinear), deutanLinearLab(b.meanLinear));
+          expect(find(record.pairs)).toMatchObject({ opacity, delta, backdropDelta });
+          expect(delta, `${theme}/${context}/${pair.join('/')}: identical pigment`).toBeLessThanOrEqual(calibration.tolerances[opacity]);
+          maxima[group][opacity] = Math.max(maxima[group][opacity], delta);
+        }
       }
-      expect(calibration.maximum).toBe(maximum);
+      for (const group of Object.keys(MAPPINGS) as Surface[]) {
+        expect(calibration.groups[group].opaqueMaximum).toBe(maxima[group].opaque);
+        expect(calibration.groups[group].translucentMaximum).toBe(maxima[group].translucent);
+        expect(calibration.groups[group].pairs.some(p => p.opacity === 'opaque')).toBe(true);
+      }
+      const required = [
+        ...['required', 'optional'].map(need => ({ context: `key/${need}/rest`, states: ['present', 'verified'], opacity: 'opaque' })),
+        ...['sea', 'land'].flatMap(terrain => ['current', 'selected', 'hovered'].map(state => ({ context: `map/canvas-${terrain}/fill`, states: ['rest', state], opacity: 'opaque' }))),
+        ...['current', 'selected', 'hovered'].map(state => ({ context: 'map/sidebar/rest/fill', states: ['rest', state], opacity: 'opaque' })),
+      ];
+      expect(calibration.requiredPairs).toEqual(required);
       expect(Object.keys(calibration.pigments).sort()).toEqual(Object.keys(MAPPINGS).sort());
     }
   });

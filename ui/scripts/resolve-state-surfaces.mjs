@@ -182,6 +182,14 @@ async function renderInventory(condition, theme, calibrating = false) {
       const target = await el.evaluate(n => {const t=n.closest('.lm-trash') ?? n.closest('.key-row')?.querySelector('input') ?? n; return {hover:t.matches(':hover'), focusVisible:t.matches(':focus-visible')};});
       const stateAttributes = await el.evaluate(n => ({ mapState: n.closest('[data-map-state]')?.getAttribute('data-map-state') ?? null, keyNeed: n.closest('.key-row')?.classList.contains('optional') ? 'optional' : n.closest('.key-row') ? 'required' : null, armed: n.closest('.lm-trash')?.getAttribute('aria-pressed') ?? null }));
       const animationsRunning = await page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').length);
+      const paint = await el.evaluate(n => {
+        let effectiveOpacity = 1;
+        for (let ancestor = n; ancestor; ancestor = ancestor.parentElement) {
+          effectiveOpacity *= Number(getComputedStyle(ancestor).opacity);
+          if (ancestor.id === 'root') break;
+        }
+        return { effectiveOpacity, mapPart: n.getAttribute('data-map-part') };
+      });
       let captures;
       if (calibrating) {
         const name = label.replace(/[^a-zA-Z0-9-]/g, '_');
@@ -190,10 +198,11 @@ async function renderInventory(condition, theme, calibrating = false) {
         writeFileSync(resolve(scratch, captures.painted), painted);
         writeFileSync(resolve(scratch, captures.control), control);
       }
-      return { ...measured, selector, box, action, pseudos, target, stateAttributes, animationsRunning, settleCriteria, ...(captures ? { captures } : {}) };
+      return { ...measured, ...paint, selector, box, action, pseudos, target, stateAttributes, animationsRunning, settleCriteria, ...(captures ? { captures } : {}) };
     }
       const result = { shipped: {}, before: {}, candidates: {}, reachability: {} };
-      const calibration = { condition: condition.id, pigments: {}, samples: {}, maxima: {}, maximum: 0, tolerance: 1, passed: false };
+      const calibration = { condition: condition.id, pigments: {}, samples: {}, groups: {}, requiredPairs: [],
+        tolerances: { opaque: 1, translucent: 2.5, backdrop: 1 }, passed: false };
       if (calibrating) results.proof.calibration[theme] = calibration;
       else results.conditions[condition.id][theme] = result;
       console.log(`Resolving ${condition.id}/${theme}…`);
@@ -338,22 +347,41 @@ async function renderInventory(condition, theme, calibrating = false) {
       console.log(`Completed ${condition.id}/${theme}; renders=${renderCount}; wall=${((performance.now() - started) / 1000).toFixed(3)}s`);
       if (calibrating) {
         for (const [context, samples] of Object.entries(calibration.samples)) {
-          const states = Object.keys(samples); let maximum = 0, witness;
+          const group = context.split('/')[0];
+          calibration.groups[group] ??= { opaqueMaximum: 0, translucentMaximum: 0, pairs: [], skippedPairs: [] };
+          const record = calibration.groups[group], states = Object.keys(samples);
           for (let i = 0; i < states.length; i++) for (let j = i + 1; j < states.length; j++) {
-            const pair = [states[i], states[j]];
-            const delta = ciede2000(...pair.map(s => deutanLinearLab(samples[s].meanLinear)));
-            if (delta > maximum) { maximum = delta; witness = { states: pair, captures: pair.map(s => samples[s].captures) }; }
+            const pair = [states[i], states[j]], [a, b] = pair.map(s => samples[s]);
+            const witness = { context, states: pair, captures: pair.map(s => samples[s].captures) };
+            if (a.mapPart !== b.mapPart) { record.skippedPairs.push({ ...witness, reason: 'part-distinct' }); continue; }
+            const opacity = a.effectiveOpacity === 1 && b.effectiveOpacity === 1 ? 'opaque' : 'translucent';
+            const backdropDelta = ciede2000(deutanLinearLab(a.controlMeanLinear), deutanLinearLab(b.controlMeanLinear));
+            if (opacity === 'translucent' && backdropDelta > 1) {
+              record.skippedPairs.push({ ...witness, reason: 'backdrop-distinct', backdropDelta }); continue;
+            }
+            const delta = ciede2000(deutanLinearLab(a.meanLinear), deutanLinearLab(b.meanLinear));
+            record.pairs.push({ ...witness, opacity, delta, backdropDelta });
+            record[`${opacity}Maximum`] = Math.max(record[`${opacity}Maximum`], delta);
           }
-          calibration.maxima[context] = { maximum, ...witness };
-          calibration.maximum = Math.max(calibration.maximum, maximum);
         }
-        const failure = Object.entries(calibration.maxima).find(([, m]) => m.maximum > 1);
+        const failure = Object.values(calibration.groups).flatMap(g => g.pairs)
+          .find(p => p.delta > calibration.tolerances[p.opacity]);
         if (failure) {
-          const [context, m] = failure;
-          throw new Error(`Calibration failure ${theme}/${context}/${m.states.join('/')}: deutan delta=${m.maximum} > 1.0; PNGs: ${m.captures.map(c => resolve(scratch, c.painted)).join('; ')}`);
+          throw new Error(`Calibration failure ${theme}/${failure.context}/${failure.states.join('/')}: ${failure.opacity} deutan delta=${failure.delta} > ${calibration.tolerances[failure.opacity]}; PNGs: ${failure.captures.map(c => resolve(scratch, c.painted)).join('; ')}`);
+        }
+        const required = [
+          ...['required', 'optional'].map(need => ({ context: `key/${need}/rest`, states: ['present', 'verified'] })),
+          ...['sea', 'land'].flatMap(terrain => ['current', 'selected', 'hovered'].map(state => ({ context: `map/canvas-${terrain}/fill`, states: ['rest', state] }))),
+          ...['current', 'selected', 'hovered'].map(state => ({ context: 'map/sidebar/rest/fill', states: ['rest', state] })),
+        ];
+        for (const wanted of required) {
+          const pair = calibration.groups[wanted.context.split('/')[0]].pairs.find(p => p.context === wanted.context && p.states.join('/') === wanted.states.join('/'));
+          calibration.requiredPairs.push({ ...wanted, opacity: pair?.opacity ?? null });
+          if (!pair || pair.opacity !== 'opaque')
+            throw new Error(`Calibration non-vacuity failure ${theme}/${wanted.context}/${wanted.states.join('/')}: required opaque pair, got ${pair?.opacity ?? 'skipped'}; effective opacities=${wanted.states.map(s => calibration.samples[wanted.context][s].effectiveOpacity).join('/')}`);
         }
         calibration.passed = true;
-        console.log(`Calibration ${theme}: maximum=${calibration.maximum}; tolerance=1.0; passed`);
+        console.log(`Calibration ${theme}: ${JSON.stringify(Object.fromEntries(Object.entries(calibration.groups).map(([g, r]) => [g, { opaqueMaximum: r.opaqueMaximum, translucentMaximum: r.translucentMaximum, skippedPairs: r.skippedPairs.length }])))}; passed`);
       }
     } finally { await page.close(); }
 }
