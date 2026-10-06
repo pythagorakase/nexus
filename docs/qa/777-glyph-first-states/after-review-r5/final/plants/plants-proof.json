@@ -123,5 +123,91 @@
       }
     ],
     "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+  },
+  {
+    "name": "theme-provider-opacity-stale",
+    "args": [
+      "npm",
+      "--prefix",
+      "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 1,
+    "wallSeconds": 1.2842976659999998,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades\n\n\n RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ❯ src/state-shades.test.ts (0 test)\n\n⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n ❯ src/state-shades.test.ts:178:9\n    176|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m…\n    177| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    178|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr…\n       |         ^\n    179| if (receipt.proof.acceptanceComplete !== true)\n    180|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  16:03:10\n   Duration  1.02s (transform 36ms, setup 25ms, collect 0ms, tests 0ms, environment 150ms, prepare 25ms)\n\n"
+  },
+  {
+    "name": "theme-provider-opacity-regenerate-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "code": 1,
+    "wallSeconds": 39.767751167,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving w1101-1279/reduce/Veil…\nCompleted w1101-1279/reduce/Veil; renders=74; wall=39.298s\nIncomplete painted probe: renders=74; wall=39.301s; acceptanceComplete=false\nfile:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390\n            throw new Error(`Calibration non-vacuity failure ${theme}/${wanted.context}/${wanted.states.join('/')}: required ${wanted.opacity} pair, got ${pair?.opacity ?? 'skipped'}; effective opacities=${wanted.states.map(s => calibration.samples[wanted.context][s].effectiveOpacity).join('/')}`);\n                  ^\n\nError: Calibration non-vacuity failure Veil/key/required/rest/present/verified: required opaque pair, got translucent; effective opacities=0.35/0.35\n    at renderInventory (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390:19)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:400:53\n\nNode.js v24.3.0\n"
+  },
+  {
+    "name": "theme-provider-opacity-stale",
+    "args": [
+      "npm",
+      "--prefix",
+      "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 1,
+    "wallSeconds": 1.407883292,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades\n\n\n RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ❯ src/state-shades.test.ts (0 test)\n\n⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n ❯ src/state-shades.test.ts:178:9\n    176|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m…\n    177| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    178|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr…\n       |         ^\n    179| if (receipt.proof.acceptanceComplete !== true)\n    180|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  17:24:46\n   Duration  1.11s (transform 35ms, setup 27ms, collect 0ms, tests 0ms, environment 172ms, prepare 32ms)\n\n"
+  },
+  {
+    "name": "theme-provider-opacity-regenerate-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "code": 1,
+    "wallSeconds": 39.988165083,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving w1101-1279/reduce/Veil…\nCompleted w1101-1279/reduce/Veil; renders=74; wall=39.492s\nIncomplete painted probe: renders=74; wall=39.495s; acceptanceComplete=false\nfile:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390\n            throw new Error(`Calibration non-vacuity failure ${theme}/${wanted.context}/${wanted.states.join('/')}: required ${wanted.opacity} pair, got ${pair?.opacity ?? 'skipped'}; effective opacities=${wanted.states.map(s => calibration.samples[wanted.context][s].effectiveOpacity).join('/')}`);\n                  ^\n\nError: Calibration non-vacuity failure Veil/key/required/rest/present/verified: required opaque pair, got translucent; effective opacities=0.35/0.35\n    at renderInventory (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390:19)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:400:53\n\nNode.js v24.3.0\n"
+  },
+  {
+    "name": "theme-provider-opacity-measurement-rejected",
+    "reason": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving w1101-1279/reduce/Veil…\nCompleted w1101-1279/reduce/Veil; renders=74; wall=39.492s\nIncomplete painted probe: renders=74; wall=39.495s; acceptanceComplete=false\nfile:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390\n            throw new Error(`Calibration non-vacuity failure ${theme}/${wanted.context}/${wanted.states.join('/')}: required ${wanted.opacity} pair, got ${pair?.opacity ?? 'skipped'}; effective opacities=${wanted.states.map(s => calibration.samples[wanted.context][s].effectiveOpacity).join('/')}`);\n                  ^\n\nError: Calibration non-vacuity failure Veil/key/required/rest/present/verified: required opaque pair, got translucent; effective opacities=0.35/0.35\n    at renderInventory (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390:19)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:400:53\n\nNode.js v24.3.0\n"
+  },
+  {
+    "name": "theme-provider-opacity-restored",
+    "passed": true,
+    "files": [
+      {
+        "path": "ui/client/src/components/nexus/nexus-layout.css",
+        "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+        "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+        "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+        "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+      },
+      {
+        "path": "ui/client/src/contexts/ThemeContext.tsx",
+        "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+        "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+        "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+        "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+      },
+      {
+        "path": "ui/client/src/state-surfaces.resolved.json",
+        "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+        "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+        "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+        "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+      }
+    ],
+    "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
   }
 ]
