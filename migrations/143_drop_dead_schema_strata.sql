@@ -29,7 +29,11 @@
 -- unsupported application languages or different SECURITY DEFINER owners; raw U&' or U&"
 -- or UESCAPE, even in comments/data; target-bearing unmodeled column-definition lists; recognized nonliteral or unresolved
 -- catalog-input operands (reg* casts, to_reg*, nextval/currval/setval); and nonconstant or unresolved SQL in recognized EXECUTE, DO, nested CREATE
--- FUNCTION/PROCEDURE and SQL-text consumer forms. Migration parsing/deparsing pins
+-- FUNCTION/PROCEDURE and SQL-text consumer forms.
+-- Nested CREATE [OR REPLACE] FUNCTION|PROCEDURE definitions refuse any SET clause
+-- and any language other than sql/plpgsql wherever the option is placed; their
+-- constant bodies are scanned under the wrapper's environment and under the session
+-- startup settings. Migration parsing/deparsing pins
 -- search_path=pg_catalog, standard_conforming_strings=on, backslash_quote=safe_encoding,
 -- exit_on_error=off, quote_all_identifiers=off and lock_timeout=5s; validators reassert
 -- check_function_bodies=on. Role and session_authorization apply to scanner lookups and
@@ -414,8 +418,8 @@ BEGIN
             (tokens->j->>'v'='pg_catalog' AND tokens->(j+1)->>'v'='.' AND tokens->(j+2)->>'v'='pg_settings')
         ) THEN RAISE EXCEPTION 'unresolved runtime pg_settings mutation'; END IF;
         END IF;
-        -- CREATE bodies are constant SQL too. Refuse inner environment/language
-        -- forms rather than guessing an environment different from the wrapper.
+        -- CREATE bodies are constant SQL too. Inspect options on either side
+        -- of the body, then scan under both wrapper and startup environments.
         nested_definition := false; atomic_fold := false; fold_start := NULL;
         IF kind='id' AND name='create' AND NOT (
             i=0 AND nesting=0 AND EXISTS (SELECT 1 FROM pg_proc
@@ -430,11 +434,17 @@ BEGIN
                         RAISE EXCEPTION 'unresolved nested routine SET environment';
                     END IF;
                     IF tokens->j->>'k'='id' AND tokens->j->>'v'='language'
-                        AND tokens->(j+1)->>'v' NOT IN ('sql','plpgsql') THEN
+                        AND coalesce(tokens->(j+1)->>'v','') NOT IN ('sql','plpgsql') THEN
                         RAISE EXCEPTION 'unresolved nested routine language';
                     END IF;
                     IF tokens->j->>'k'='id' AND tokens->j->>'v'='as'
-                        AND depth=0 THEN fold_start := j+1; EXIT; END IF;
+                        AND depth=0 THEN
+                        fold_start := j+1; j := j+1;
+                        WHILE j<count_tokens AND tokens->j->>'k'='string' LOOP
+                            j := j+1;
+                        END LOOP;
+                        CONTINUE;
+                    END IF;
                     IF tokens->j->>'k'='id' AND tokens->j->>'v'='begin'
                         AND tokens->(j+1)->>'v'='atomic' AND depth=0 THEN
                         expression := ''; depth := 1; j := j+2;
@@ -446,11 +456,12 @@ BEGIN
                         END LOOP;
                         IF depth<>0 THEN RAISE EXCEPTION 'unresolved nested BEGIN ATOMIC'; END IF;
                         PERFORM pg_temp.dead143_body(expression,function_oid,targets,relation_targets,names,setting_names,setting_values,nesting+1);
-                        atomic_fold := true; EXIT;
+                        PERFORM pg_temp.dead143_body(expression,function_oid,targets,relation_targets,names,ARRAY[]::text[],ARRAY[]::text[],nesting+1);
+                        atomic_fold := true; CONTINUE;
                     END IF;
                     IF tokens->j->>'k'='punct' AND tokens->j->>'v'='(' THEN depth := depth+1;
                     ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=')' THEN depth := depth-1;
-                    ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=';' THEN EXIT; END IF;
+                    ELSIF tokens->j->>'k'='punct' AND tokens->j->>'v'=';' AND depth=0 THEN EXIT; END IF;
                     j := j+1;
                 END LOOP;
                 IF fold_start IS NULL THEN
@@ -514,6 +525,9 @@ BEGIN
             folded := pg_temp.dead143_resolve('SELECT ('||expression||')::pg_catalog.text',array_append(setting_names,'search_path'),array_append(setting_values,'pg_catalog'));
             IF folded IS NULL THEN RAISE EXCEPTION 'unresolved NULL EXECUTE'; END IF;
             PERFORM pg_temp.dead143_body(folded,function_oid,targets,relation_targets,names,setting_names,setting_values,nesting+1);
+            IF nested_definition THEN
+                PERFORM pg_temp.dead143_body(folded,function_oid,targets,relation_targets,names,ARRAY[]::text[],ARRAY[]::text[],nesting+1);
+            END IF;
             i := CASE WHEN nested_definition THEN i+1 ELSE j END; CONTINUE;
         END IF;
         IF literal_only THEN i := i+1; CONTINUE; END IF;
