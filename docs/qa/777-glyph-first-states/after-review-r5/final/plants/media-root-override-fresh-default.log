@@ -1,0 +1,2354 @@
+
+> nexus-ui@1.0.0 test
+> vitest run plant-default-r5 -t browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled|global_tokens_are_unchanged|state_surfaces_read_only_state_tokens
+
+
+ RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ❯ plant-default-r5.test.ts (11 tests | 4 failed | 6 skipped) 1521ms
+   ✓ 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled 472ms
+   × 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean 980ms
+     → w1101-1279/reduce/Vector/key/required/rest/verified: same value: expected [ 0.13253250090804355, …(2) ] to deeply equal [ 0.07401905536096122, …(2) ]
+   × 777-S2 state shades > browser_measurements_match_recorded_tables 39ms
+     → expected [ { theme: 'Vector', …(7) }, …(80) ] to deeply equal [ { theme: 'Vector', …(7) }, …(80) ]
+   × 777-S2 state shades > global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values 16ms
+     → /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client/src/components/nexus/nexus-layout.css: --state-key-verified must be declared in an index.css theme root: expected false to be true // Object.is equality
+   × 777-S2 state shades > state_surfaces_read_only_state_tokens 13ms
+     → /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client/src/components/nexus/nexus-layout.css: --state-key-verified must be declared in an index.css theme root: expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  plant-default-r5.test.ts > 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean
+AssertionError: w1101-1279/reduce/Vector/key/required/rest/verified: same value: expected [ 0.13253250090804355, …(2) ] to deeply equal [ 0.07401905536096122, …(2) ]
+
+- Expected
++ Received
+
+  Array [
+-   0.07401905536096122,
+-   0.40104993012806434,
+-   0.449685312323625,
++   0.13253250090804355,
++   0.8859155089741407,
++   0.9978462230351464,
+  ]
+
+ ❯ plant-default-r5.test.ts:516:88
+    514|         const value = candidates(theme, root).find(c => c.rgb.every((v…
+    515|         const candidate = data.candidates[root][value][context];
+    516|         expect(candidate.meanLinear, `${id}/${theme}/${context}/${stat…
+       |                                                                                        ^
+    517|         expect(candidate.maskSize).toBe(shipped.maskSize);
+    518|         expect(candidate.coreSize).toBe(shipped.coreSize);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  plant-default-r5.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables
+AssertionError: expected [ { theme: 'Vector', …(7) }, …(80) ] to deeply equal [ { theme: 'Vector', …(7) }, …(80) ]
+
+- Expected
++ Received
+
+  Array [
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "fill",
+      "delta": 39.07275879212985,
+      "rgb": Array [
+        Array [
+          0,
+          0.8227637420783689,
+          0.9999753075452884,
+        ],
+        Array [
+          0.0024280573686603427,
+          0.12476775233031542,
+          0.2831389188015381,
+        ],
+      ],
+      "signatures": Array [
+        "meter; warning absent",
+        "meter + AlertTriangle",
+      ],
+      "states": Array [
+        "normal",
+        "over",
+      ],
+      "surface": "memory",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "ready/rest",
+      "delta": 34.05863141777965,
+      "rgb": Array [
+        Array [
+          0.11183280214905815,
+          0.45065067183043395,
+          0.4909261577544233,
+        ],
+        Array [
+          0.8055740321272898,
+          0.029516547180174012,
+          0.07804638890232869,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "ready/row-hover",
+      "delta": 34.05863141777965,
+      "rgb": Array [
+        Array [
+          0.11183280214905815,
+          0.45065067183043395,
+          0.4909261577544233,
+        ],
+        Array [
+          0.8055740321272898,
+          0.029516547180174012,
+          0.07804638890232869,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "ready/button-hover",
+      "delta": 34.05863141777965,
+      "rgb": Array [
+        Array [
+          0.11183280214905815,
+          0.45065067183043395,
+          0.4909261577544233,
+        ],
+        Array [
+          0.8055740321272898,
+          0.029516547180174012,
+          0.07804638890232869,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "ready/focus-visible",
+      "delta": 34.04621954966744,
+      "rgb": Array [
+        Array [
+          0.11182593570779448,
+          0.45038485764072017,
+          0.49057163754066535,
+        ],
+        Array [
+          0.8066122953689013,
+          0.029546896914258994,
+          0.07815263368914797,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "ready-exceeds/rest",
+      "delta": 16.02854280168688,
+      "rgb": Array [
+        Array [
+          0.01760830212001728,
+          0.05951123816298134,
+          0.06301001765316794,
+        ],
+        Array [
+          0.08296870205406028,
+          0.00819997172634512,
+          0.014947465693909373,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "ready-exceeds/row-hover",
+      "delta": 16.02854280168688,
+      "rgb": Array [
+        Array [
+          0.01760830212001728,
+          0.05951123816298134,
+          0.06301001765316794,
+        ],
+        Array [
+          0.08296870205406028,
+          0.00819997172634512,
+          0.014947465693909373,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "ready-exceeds/button-hover",
+      "delta": 16.02854280168688,
+      "rgb": Array [
+        Array [
+          0.01760830212001728,
+          0.05951123816298134,
+          0.06301001765316794,
+        ],
+        Array [
+          0.08296870205406028,
+          0.00819997172634512,
+          0.014947465693909373,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "ready-exceeds/focus-visible",
+      "delta": 16.01005178716139,
+      "rgb": Array [
+        Array [
+          0.017617871642683514,
+          0.059437614332924646,
+          0.06295049498759488,
+        ],
+        Array [
+          0.08584980383943067,
+          0.008386481407174504,
+          0.015478810109037318,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/rest",
+      "delta": 12.896523631480973,
+      "rgb": Array [
+        Array [
+          0.018463428304759347,
+          0.42786570916386496,
+          0.9028831613601154,
+        ],
+        Array [
+          0.07402902038154219,
+          0.4010132332195186,
+          0.44967426299222696,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "required-missing",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/rest",
+-     "delta": 18.221945128511777,
++     "delta": 12.897164039856635,
+      "rgb": Array [
+        Array [
+          0.018463428304759347,
+          0.42786570916386496,
+          0.9028831613601154,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "required-missing",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/rest",
+-     "delta": 17.453489177672203,
++     "delta": 0.0018616119329798108,
+      "rgb": Array [
+        Array [
+          0.07402902038154219,
+          0.4010132332195186,
+          0.44967426299222696,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/hover",
+      "delta": 12.896523631480973,
+      "rgb": Array [
+        Array [
+          0.018463428304759347,
+          0.42786570916386496,
+          0.9028831613601154,
+        ],
+        Array [
+          0.07402902038154219,
+          0.4010132332195186,
+          0.44967426299222696,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "required-missing",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/hover",
+-     "delta": 18.221945128511777,
++     "delta": 12.897164039856635,
+      "rgb": Array [
+        Array [
+          0.018463428304759347,
+          0.42786570916386496,
+          0.9028831613601154,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "required-missing",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/hover",
+-     "delta": 17.453489177672203,
++     "delta": 0.0018616119329798108,
+      "rgb": Array [
+        Array [
+          0.07402902038154219,
+          0.4010132332195186,
+          0.44967426299222696,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/focus-visible",
+      "delta": 12.896523631480973,
+      "rgb": Array [
+        Array [
+          0.018463428304759347,
+          0.42786570916386496,
+          0.9028831613601154,
+        ],
+        Array [
+          0.07402902038154219,
+          0.4010132332195186,
+          0.44967426299222696,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "required-missing",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/focus-visible",
+-     "delta": 18.221945128511777,
++     "delta": 12.897164039856635,
+      "rgb": Array [
+        Array [
+          0.018463428304759347,
+          0.42786570916386496,
+          0.9028831613601154,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "required-missing",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "required/focus-visible",
+-     "delta": 17.453489177672203,
++     "delta": 0.0018616119329798108,
+      "rgb": Array [
+        Array [
+          0.07402902038154219,
+          0.4010132332195186,
+          0.44967426299222696,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/rest",
+      "delta": 11.47453370622658,
+      "rgb": Array [
+        Array [
+          0.01368710282426642,
+          0.03943497460509939,
+          0.04216039978993761,
+        ],
+        Array [
+          0.024098198280883543,
+          0.11168459000931329,
+          0.12189578670249945,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "optional-absent",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/rest",
+-     "delta": 23.264509700589734,
++     "delta": 11.476216401181434,
+      "rgb": Array [
+        Array [
+          0.01368710282426642,
+          0.03943497460509939,
+          0.04216039978993761,
+        ],
+        Array [
+-         0.03812712097625235,
+-         0.22273682965014954,
+-         0.24576923679483154,
++         0.024098689322851027,
++         0.11169213853336928,
++         0.12191902382729813,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "optional-absent",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/rest",
+-     "delta": 12.017005107770094,
++     "delta": 0.002778121257147401,
+      "rgb": Array [
+        Array [
+          0.024098198280883543,
+          0.11168459000931329,
+          0.12189578670249945,
+        ],
+        Array [
+-         0.03812712097625235,
+-         0.22273682965014954,
+-         0.24576923679483154,
++         0.024098689322851027,
++         0.11169213853336928,
++         0.12191902382729813,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/hover",
+      "delta": 26.361254267581618,
+      "rgb": Array [
+        Array [
+          0.03682778433868126,
+          0.11674278896433861,
+          0.12453511457205642,
+        ],
+        Array [
+          0.07404513089220843,
+          0.40111085956483095,
+          0.4498002030554795,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "optional-absent",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/hover",
+-     "delta": 43.166502885653166,
++     "delta": 26.356211640838215,
+      "rgb": Array [
+        Array [
+          0.03682778433868126,
+          0.11674278896433861,
+          0.12453511457205642,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "optional-absent",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/hover",
+-     "delta": 17.447942773906675,
++     "delta": 0.00468312273685948,
+      "rgb": Array [
+        Array [
+          0.07404513089220843,
+          0.40111085956483095,
+          0.4498002030554795,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/focus-visible",
+      "delta": 26.361254267581618,
+      "rgb": Array [
+        Array [
+          0.03682778433868126,
+          0.11674278896433861,
+          0.12453511457205642,
+        ],
+        Array [
+          0.07404513089220843,
+          0.40111085956483095,
+          0.4498002030554795,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "optional-absent",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/focus-visible",
+-     "delta": 43.166502885653166,
++     "delta": 26.356211640838215,
+      "rgb": Array [
+        Array [
+          0.03682778433868126,
+          0.11674278896433861,
+          0.12453511457205642,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "optional-absent",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "optional/focus-visible",
+-     "delta": 17.447942773906675,
++     "delta": 0.00468312273685948,
+      "rgb": Array [
+        Array [
+          0.07404513089220843,
+          0.40111085956483095,
+          0.4498002030554795,
+        ],
+        Array [
+-         0.13253250090804355,
+-         0.8859155089741407,
+-         0.9978462230351464,
++         0.07401905536096122,
++         0.40104993012806434,
++         0.449685312323625,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/fill",
+      "delta": 8.84731526672903,
+      "rgb": Array [
+        Array [
+          0.018428013496249597,
+          0.42715657780966404,
+          0.9015483193152449,
+        ],
+        Array [
+          0,
+          0.6564393446958225,
+          0.9972012662973799,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/fill",
+      "delta": 18.299978867994326,
+      "rgb": Array [
+        Array [
+          0.018428013496249597,
+          0.42715657780966404,
+          0.9015483193152449,
+        ],
+        Array [
+          0.1328683215538177,
+          0.8879231178819678,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/fill",
+      "delta": 7.9816628907089235,
+      "rgb": Array [
+        Array [
+          0.018428013496249597,
+          0.42715657780966404,
+          0.9015483193152449,
+        ],
+        Array [
+          0.0030352698354883714,
+          0.3662525955988393,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/fill",
+      "delta": 9.884240566454976,
+      "rgb": Array [
+        Array [
+          0,
+          0.6564393446958225,
+          0.9972012662973799,
+        ],
+        Array [
+          0.1328683215538177,
+          0.8879231178819678,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/fill",
+      "delta": 13.308571615235733,
+      "rgb": Array [
+        Array [
+          0,
+          0.6564393446958225,
+          0.9972012662973799,
+        ],
+        Array [
+          0.0030352698354883714,
+          0.3662525955988393,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/fill",
+      "delta": 20.370094380000175,
+      "rgb": Array [
+        Array [
+          0.1328683215538177,
+          0.8879231178819678,
+          1,
+        ],
+        Array [
+          0.0030352698354883714,
+          0.3662525955988393,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/ring",
+      "delta": 16.141876168374477,
+      "rgb": Array [
+        Array [
+          0.018428013496249597,
+          0.42715657780966404,
+          0.9015483193152449,
+        ],
+        Array [
+          0.0006139785370645693,
+          0.2408261169231002,
+          0.3589765383830161,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/ring",
+      "delta": 14.824102723962094,
+      "rgb": Array [
+        Array [
+          0.018428013496249597,
+          0.42715657780966404,
+          0.9015483193152449,
+        ],
+        Array [
+          0.05327188105541503,
+          0.32284774208298617,
+          0.36299493066033056,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/ring",
+      "delta": 28.045858043471327,
+      "rgb": Array [
+        Array [
+          0.018428013496249597,
+          0.42715657780966404,
+          0.9015483193152449,
+        ],
+        Array [
+          0.002428215868390703,
+          0.14043315582012822,
+          0.1986350144297081,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/ring",
+      "delta": 9.253290973339167,
+      "rgb": Array [
+        Array [
+          0.0006139785370645693,
+          0.2408261169231002,
+          0.3589765383830161,
+        ],
+        Array [
+          0.05327188105541503,
+          0.32284774208298617,
+          0.36299493066033056,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/ring",
+      "delta": 10.531176070190835,
+      "rgb": Array [
+        Array [
+          0.0006139785370645693,
+          0.2408261169231002,
+          0.3589765383830161,
+        ],
+        Array [
+          0.002428215868390703,
+          0.14043315582012822,
+          0.1986350144297081,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-sea/ring",
+      "delta": 18.28942442022806,
+      "rgb": Array [
+        Array [
+          0.05327188105541503,
+          0.32284774208298617,
+          0.36299493066033056,
+        ],
+        Array [
+          0.002428215868390703,
+          0.14043315582012822,
+          0.1986350144297081,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/fill",
+      "delta": 8.837248606305291,
+      "rgb": Array [
+        Array [
+          0.018416543118274408,
+          0.42728303065464773,
+          0.901632555146683,
+        ],
+        Array [
+          0,
+          0.6562820267319476,
+          0.9969312186371208,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/fill",
+      "delta": 18.294608110745678,
+      "rgb": Array [
+        Array [
+          0.018416543118274408,
+          0.42728303065464773,
+          0.901632555146683,
+        ],
+        Array [
+          0.1328683215538177,
+          0.8879231178819678,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/fill",
+      "delta": 7.983862738154531,
+      "rgb": Array [
+        Array [
+          0.018416543118274408,
+          0.42728303065464773,
+          0.901632555146683,
+        ],
+        Array [
+          0.0030352698354883714,
+          0.3662525955988393,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/fill",
+      "delta": 9.887065208442367,
+      "rgb": Array [
+        Array [
+          0,
+          0.6562820267319476,
+          0.9969312186371208,
+        ],
+        Array [
+          0.1328683215538177,
+          0.8879231178819678,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/fill",
+      "delta": 13.302988505997158,
+      "rgb": Array [
+        Array [
+          0,
+          0.6562820267319476,
+          0.9969312186371208,
+        ],
+        Array [
+          0.0030352698354883714,
+          0.3662525955988393,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/fill",
+      "delta": 20.370094380000175,
+      "rgb": Array [
+        Array [
+          0.1328683215538177,
+          0.8879231178819678,
+          1,
+        ],
+        Array [
+          0.0030352698354883714,
+          0.3662525955988393,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/ring",
+      "delta": 11.86301078294362,
+      "rgb": Array [
+        Array [
+          0.018416543118274408,
+          0.42728303065464773,
+          0.901632555146683,
+        ],
+        Array [
+          0.0006070539670976758,
+          0.2990535666282433,
+          0.4373087362641161,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/ring",
+      "delta": 12.60628544931986,
+      "rgb": Array [
+        Array [
+          0.018416543118274408,
+          0.42728303065464773,
+          0.901632555146683,
+        ],
+        Array [
+          0.05284200028119845,
+          0.39008705751092343,
+          0.4406563696543452,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/ring",
+      "delta": 22.727820800370804,
+      "rgb": Array [
+        Array [
+          0.018416543118274408,
+          0.42728303065464773,
+          0.901632555146683,
+        ],
+        Array [
+          0.002428215868390703,
+          0.18235546382677642,
+          0.25334223368985176,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/ring",
+      "delta": 8.339311540494528,
+      "rgb": Array [
+        Array [
+          0.0006070539670976758,
+          0.2990535666282433,
+          0.4373087362641161,
+        ],
+        Array [
+          0.05284200028119845,
+          0.39008705751092343,
+          0.4406563696543452,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/ring",
+      "delta": 11.08047060152014,
+      "rgb": Array [
+        Array [
+          0.0006070539670976758,
+          0.2990535666282433,
+          0.4373087362641161,
+        ],
+        Array [
+          0.002428215868390703,
+          0.18235546382677642,
+          0.25334223368985176,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "canvas-land/ring",
+      "delta": 17.702472907367678,
+      "rgb": Array [
+        Array [
+          0.05284200028119845,
+          0.39008705751092343,
+          0.4406563696543452,
+        ],
+        Array [
+          0.002428215868390703,
+          0.18235546382677642,
+          0.25334223368985176,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 8.859219895976237,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0,
+          0.6578653738481712,
+          0.9992831667247455,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 18.27466284035889,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.13286832155381817,
+          0.8879231178819676,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 8.006079152830122,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.003035269835488372,
+          0.3662525955988394,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 9.854825771842957,
+      "rgb": Array [
+        Array [
+          0,
+          0.6578653738481712,
+          0.9992831667247455,
+        ],
+        Array [
+          0.13286832155381817,
+          0.8879231178819676,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 13.356559825301499,
+      "rgb": Array [
+        Array [
+          0,
+          0.6578653738481712,
+          0.9992831667247455,
+        ],
+        Array [
+          0.003035269835488372,
+          0.3662525955988394,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 20.370094380000186,
+      "rgb": Array [
+        Array [
+          0.13286832155381817,
+          0.8879231178819676,
+          1,
+        ],
+        Array [
+          0.003035269835488372,
+          0.3662525955988394,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/ring",
+      "delta": 17.477554708852658,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.0006070539670976757,
+          0.22696587351009884,
+          0.3371636150483305,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/ring",
+      "delta": 13.553054384647364,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.0497065659841275,
+          0.3467040563550267,
+          0.39675523072562896,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/ring",
+      "delta": 29.196885153120718,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.0024262948115327987,
+          0.1328004130137915,
+          0.18773739654975982,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/ring",
+      "delta": 11.080985670231756,
+      "rgb": Array [
+        Array [
+          0.0006070539670976757,
+          0.22696587351009884,
+          0.3371636150483305,
+        ],
+        Array [
+          0.0497065659841275,
+          0.3467040563550267,
+          0.39675523072562896,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/ring",
+      "delta": 10.090282704653454,
+      "rgb": Array [
+        Array [
+          0.0006070539670976757,
+          0.22696587351009884,
+          0.3371636150483305,
+        ],
+        Array [
+          0.0024262948115327987,
+          0.1328004130137915,
+          0.18773739654975982,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/rest/ring",
+      "delta": 20.79155566484626,
+      "rgb": Array [
+        Array [
+          0.0497065659841275,
+          0.3467040563550267,
+          0.39675523072562896,
+        ],
+        Array [
+          0.0024262948115327987,
+          0.1328004130137915,
+          0.18773739654975982,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/hover/fill",
+      "delta": 8.842615794630948,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42793148342210025,
+          0.9029954692567823,
+        ],
+        Array [
+          0,
+          0.6574617869971265,
+          0.9986399987028698,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/hover/fill",
+      "delta": 18.270065069135796,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42793148342210025,
+          0.9029954692567823,
+        ],
+        Array [
+          0.13286832155381817,
+          0.8879231178819676,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/hover/fill",
+      "delta": 9.862547552282345,
+      "rgb": Array [
+        Array [
+          0,
+          0.6574617869971265,
+          0.9986399987028698,
+        ],
+        Array [
+          0.13286832155381817,
+          0.8879231178819676,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/hover/ring",
+      "delta": 14.936358566111114,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42793148342210025,
+          0.9029954692567823,
+        ],
+        Array [
+          0.0012141079341953514,
+          0.2581828529215961,
+          0.3762621229909067,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/hover/ring",
+      "delta": 13.55557538749496,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42793148342210025,
+          0.9029954692567823,
+        ],
+        Array [
+          0.0497065659841275,
+          0.3467040563550267,
+          0.39675523072562896,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/hover/ring",
+      "delta": 8.647993300403702,
+      "rgb": Array [
+        Array [
+          0.0012141079341953514,
+          0.2581828529215961,
+          0.3762621229909067,
+        ],
+        Array [
+          0.0497065659841275,
+          0.3467040563550267,
+          0.39675523072562896,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 8.833364735820345,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0,
+          0.656966654063217,
+          0.9979438592635238,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 18.27466284035889,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.13286832155381817,
+          0.8879231178819676,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 8.006079152830122,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.003035269835488372,
+          0.3662525955988394,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 9.873045626096163,
+      "rgb": Array [
+        Array [
+          0,
+          0.656966654063217,
+          0.9979438592635238,
+        ],
+        Array [
+          0.13286832155381817,
+          0.8879231178819676,
+          1,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 13.326138263188684,
+      "rgb": Array [
+        Array [
+          0,
+          0.656966654063217,
+          0.9979438592635238,
+        ],
+        Array [
+          0.003035269835488372,
+          0.3662525955988394,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 20.370094380000186,
+      "rgb": Array [
+        Array [
+          0.13286832155381817,
+          0.8879231178819676,
+          1,
+        ],
+        Array [
+          0.003035269835488372,
+          0.3662525955988394,
+          0.5394794890121076,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/ring",
+      "delta": 14.197935472300896,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.00030352698354883784,
+          0.26635560480286186,
+          0.39157247774972376,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/ring",
+      "delta": 13.553054384647364,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.0497065659841275,
+          0.3467040563550267,
+          0.39675523072562896,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/ring",
+      "delta": 29.196885153120718,
+      "rgb": Array [
+        Array [
+          0.018462035668782094,
+          0.42781487712862715,
+          0.9028153746392674,
+        ],
+        Array [
+          0.0024262948115327987,
+          0.1328004130137915,
+          0.18773739654975982,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/ring",
+      "delta": 8.254433827898632,
+      "rgb": Array [
+        Array [
+          0.00030352698354883784,
+          0.26635560480286186,
+          0.39157247774972376,
+        ],
+        Array [
+          0.0497065659841275,
+          0.3467040563550267,
+          0.39675523072562896,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/ring",
+      "delta": 13.63263865623824,
+      "rgb": Array [
+        Array [
+          0.00030352698354883784,
+          0.26635560480286186,
+          0.39157247774972376,
+        ],
+        Array [
+          0.0024262948115327987,
+          0.1328004130137915,
+          0.18773739654975982,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+    Object {
+      "condition": "w1101-1279/reduce",
+      "context": "sidebar/selected-current/ring",
+      "delta": 20.79155566484626,
+      "rgb": Array [
+        Array [
+          0.0497065659841275,
+          0.3467040563550267,
+          0.39675523072562896,
+        ],
+        Array [
+          0.0024262948115327987,
+          0.1328004130137915,
+          0.18773739654975982,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Vector",
+    },
+  ]
+
+ ❯ plant-default-r5.test.ts:530:49
+    528|       const evidence = JSON.parse(readFileSync(resolve("/Users/pythago…
+    529|         `../../../docs/qa/777-glyph-first-states/amendment-2/${theme.t…
+    530|       expect(measures(theme, undefined, false)).toEqual(evidence.measu…
+       |                                                 ^
+    531|       expect(measures(theme, undefined, true)).toEqual(evidence.before…
+    532|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  plant-default-r5.test.ts > 777-S2 state shades > global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values
+AssertionError: /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client/src/components/nexus/nexus-layout.css: --state-key-verified must be declared in an index.css theme root: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ../<input css 5gov9B>:2411:64
+ ❯ assertStateDeclaration plant-default-r5.test.ts:342:74
+
+ ❯ plant-default-r5.test.ts:571:9
+ ❯ ../node_modules/postcss/lib/container.js:353:18
+ ❯ ../node_modules/postcss/lib/container.js:305:18
+ ❯ Rule.each ../node_modules/postcss/lib/container.js:53:16
+ ❯ Rule.walk ../node_modules/postcss/lib/container.js:302:17
+ ❯ ../node_modules/postcss/lib/container.js:310:24
+ ❯ AtRule.each ../node_modules/postcss/lib/container.js:53:16
+ ❯ AtRule.walk ../node_modules/postcss/lib/container.js:302:17
+ ❯ ../node_modules/postcss/lib/container.js:310:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  plant-default-r5.test.ts > 777-S2 state shades > state_surfaces_read_only_state_tokens
+AssertionError: /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client/src/components/nexus/nexus-layout.css: --state-key-verified must be declared in an index.css theme root: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ../<input css JQIU4O>:2411:39
+ ❯ ../<input css JQIU4O>:2411:64
+ ❯ assertStateDeclaration plant-default-r5.test.ts:342:74
+
+ ❯ plant-default-r5.test.ts:640:9
+ ❯ ../node_modules/postcss/lib/container.js:353:18
+ ❯ ../node_modules/postcss/lib/container.js:305:18
+ ❯ Rule.each ../node_modules/postcss/lib/container.js:53:16
+ ❯ Rule.walk ../node_modules/postcss/lib/container.js:302:17
+ ❯ Rule.walkDecls ../node_modules/postcss/lib/container.js:351:19
+ ❯ plant-default-r5.test.ts:639:12
+ ❯ ../node_modules/postcss/lib/container.js:377:18
+ ❯ ../node_modules/postcss/lib/container.js:305:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed | 6 skipped (11)
+   Start at  17:31:46
+   Duration  2.46s (transform 37ms, setup 39ms, collect 384ms, tests 1.52s, environment 257ms, prepare 116ms)
+
