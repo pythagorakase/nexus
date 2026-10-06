@@ -369,5 +369,85 @@
       }
     ],
     "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+  },
+  {
+    "name": "theme-backdrop-stale",
+    "args": [
+      "npm",
+      "--prefix",
+      "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 1,
+    "wallSeconds": 1.3816928750000002,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades\n\n\n RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n ❯ src/state-shades.test.ts (0 test)\n\n⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n ❯ src/state-shades.test.ts:178:9\n    176|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m…\n    177| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    178|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr…\n       |         ^\n    179| if (receipt.proof.acceptanceComplete !== true)\n    180|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  17:38:11\n   Duration  1.11s (transform 37ms, setup 30ms, collect 0ms, tests 0ms, environment 165ms, prepare 40ms)\n\n"
+  },
+  {
+    "name": "theme-backdrop-regenerate-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "code": 0,
+    "wallSeconds": 371.170949458,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving w1101-1279/reduce/Veil…\nCompleted w1101-1279/reduce/Veil; renders=74; wall=39.763s\nCalibration Veil: {\"memory\":{\"opaqueMaximum\":0.00026414815709771805,\"translucentMaximum\":0,\"skippedPairs\":0},\"delete\":{\"opaqueMaximum\":0.006002891112468775,\"translucentMaximum\":0.012334576619474699,\"skippedPairs\":0},\"key\":{\"opaqueMaximum\":0.030457571214044847,\"translucentMaximum\":0.013459005795140349,\"skippedPairs\":0},\"map\":{\"opaqueMaximum\":0.07468917510215183,\"translucentMaximum\":0.4165404892186375,\"skippedPairs\":20}}; passed\nResolving w1101-1279/reduce/Gilded…\nPainted capture progress: renders=84; wall=49.039s\nCompleted w1101-1279/reduce/Gilded; renders=148; wall=74.969s\nCalibration Gilded: {\"memory\":{\"opaqueMaximum\":0.0002619007277823465,\"translucentMaximum\":0,\"skippedPairs\":0},\"delete\":{\"opaqueMaximum\":0.008785869899490675,\"translucentMaximum\":0.0079023496576129,\"skippedPairs\":0},\"key\":{\"opaqueMaximum\":0.04713082389726427,\"translucentMaximum\":0.02240636952243324,\"skippedPairs\":0},\"map\":{\"opaqueMaximum\":0.07196338979953294,\"translucentMaximum\":0.4249545915725878,\"skippedPairs\":19}}; passed\nResolving w1101-1279/reduce/Vector…\nPainted capture progress: renders=166; wall=94.041s\nCompleted w1101-1279/reduce/Vector; renders=222; wall=110.226s\nCalibration Vector: {\"memory\":{\"opaqueMaximum\":0.0003181767847390889,\"translucentMaximum\":0,\"skippedPairs\":0},\"delete\":{\"opaqueMaximum\":0.029118582412838427,\"translucentMaximum\":0.02152663851962112,\"skippedPairs\":0},\"key\":{\"opaqueMaximum\":0.06623039205908073,\"translucentMaximum\":0.027632673828034325,\"skippedPairs\":0},\"map\":{\"opaqueMaximum\":0.08088889823513667,\"translucentMaximum\":0.500656347153232,\"skippedPairs\":19}}; passed\nResolving w1101-1279/reduce/Veil…\nResolving w1101-1279/reduce/Gilded…\nResolving w1101-1279/reduce/Vector…\nPainted capture progress: renders=531; wall=139.040s\nPainted capture progress: renders=909; wall=184.042s\nPainted capture progress: renders=1483; wall=229.041s\nPainted capture progress: renders=2344; wall=274.041s\nPainted capture progress: renders=3261; wall=319.041s\nCompleted w1101-1279/reduce/Vector; renders=3327; wall=322.370s\nPainted capture progress: renders=3892; wall=364.043s\nCompleted w1101-1279/reduce/Veil; renders=3981; wall=370.453s\nCompleted w1101-1279/reduce/Gilded; renders=3982; wall=370.595s\nResolved painted state surfaces: renders=3982; wall=370.598s; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 1 media conditions; file://; network aborted; requests=0; errors=0\nWrote /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/theme-backdrop-capture/default.json; module graph=2095 inputs; SHA-256 2e998a0d5e6b5ee78ffaa177d8b0abd948a424eb9f8f6329b9c9c2b5131318f2\n"
+  },
+  {
+    "name": "theme-backdrop-fresh-default",
+    "args": [
+      "npm",
+      "--prefix",
+      "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui",
+      "test",
+      "--",
+      "plant-default-r5",
+      "-t",
+      "browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled|global_tokens_are_unchanged|state_surfaces_read_only_state_tokens"
+    ],
+    "code": 1,
+    "wallSeconds": 4.8104576660000005,
+    "tail": "        Array [\n          0.0497065659841275,\n          0.3467040563550267,\n          0.39675523072562896,\n        ],\n        Array [\n          0.0024262948115327987,\n          0.1328004130137915,\n          0.18773739654975982,\n        ],\n      ],\n      \"signatures\": Array [\n        \"filled square + square ring\",\n        \"filled diamond + diamond ring\",\n      ],\n      \"states\": Array [\n        \"selected\",\n        \"hovered\",\n      ],\n      \"surface\": \"map\",\n      \"theme\": \"Vector\",\n    },\n  ]\n\n ❯ plant-default-r5.test.ts:530:49\n    528|       const evidence = JSON.parse(readFileSync(resolve(\"/Users/pythago…\n    529|         `../../../docs/qa/777-glyph-first-states/amendment-2/${theme.t…\n    530|       expect(measures(theme, undefined, false)).toEqual(evidence.measu…\n       |                                                 ^\n    531|       expect(measures(theme, undefined, true)).toEqual(evidence.before…\n    532|     }\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  1 failed | 4 passed | 6 skipped (11)\n   Start at  17:44:26\n   Duration  4.33s (transform 56ms, setup 57ms, collect 820ms, tests 2.57s, environment 431ms, prepare 173ms)\n\n"
+  },
+  {
+    "name": "theme-backdrop-scope",
+    "sourceId": "w1101-1279/reduce",
+    "comparisonId": "w1101-1279/reduce",
+    "acceptanceComplete": false,
+    "renderCount": 3982,
+    "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+    "mutation": "\n.dark.theme-vector .key-row { background: #ffffff; }\n"
+  },
+  {
+    "name": "theme-backdrop-restored",
+    "passed": true,
+    "files": [
+      {
+        "path": "ui/client/src/components/nexus/nexus-layout.css",
+        "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+        "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+        "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+        "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+      },
+      {
+        "path": "ui/client/src/contexts/ThemeContext.tsx",
+        "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+        "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+        "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+        "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+      },
+      {
+        "path": "ui/client/src/state-surfaces.resolved.json",
+        "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+        "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+        "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+        "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+      }
+    ],
+    "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
   }
 ]
