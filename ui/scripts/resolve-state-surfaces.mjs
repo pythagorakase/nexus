@@ -9,10 +9,7 @@ import { mediaConditions } from './state-surfaces/media.mjs';
 import { START, roots, token, domain, themeTokens } from './state-surfaces/domain.mjs';
 
 const ui = resolve(import.meta.dirname, '..'), root = resolve(ui, '..');
-const scratch = process.env.STATE_SURFACES_SCRATCH;
-if (!scratch) throw new Error('Set STATE_SURFACES_SCRATCH to the order-specific directory');
-const deadline = setTimeout(() => { console.error('Capture command exceeded its 589-second bound'); process.exit(1); }, 589000);
-deadline.unref();
+const scratch = process.env.STATE_SURFACES_SCRATCH ?? resolve(root, 'scratchpad/777-S2/after-review-r5/capture');
 const partial = ['STATE_SURFACES_CONDITION', 'STATE_SURFACES_THEME',
   'STATE_SURFACES_GROUP', 'STATE_SURFACES_PROBE'].some(key => process.env[key]);
 if (partial && !process.env.STATE_SURFACES_OUTPUT)
@@ -58,6 +55,15 @@ const css = built.output.filter(o => o.type === 'asset' && o.fileName.endsWith('
 if (!css) throw new Error('Production Vite build emitted no CSS');
 writeFileSync(resolve(scratch, 'production.css'), css);
 const media = mediaConditions(css);
+const defaultCondition = media.variants.find(c => c.viewport.width === 1200 && c.viewport.height === 900 && c.reducedMotion === 'reduce' && c.colorScheme === 'dark');
+if (!defaultCondition) throw new Error('Media inventory lost the documented default');
+const boundSeconds = 589 * (partial ? 1 : Math.ceil(media.variants.length / 4));
+const deadline = setTimeout(() => { console.error(`Capture command exceeded its ${boundSeconds}-second bound`); process.exit(1); }, boundSeconds * 1000);
+deadline.unref();
+// Reuse the test math exactly for the resolver calibration.
+const { transformSync } = createRequire(require.resolve('vite'))('esbuild');
+const math = transformSync(readFileSync(resolve(ui, 'client/src/state-shades-measurement.ts'), 'utf8'), { loader: 'ts', format: 'esm' }).code;
+const { ciede2000, deutanLinearLab } = await import('data:text/javascript;base64,' + Buffer.from(math).toString('base64'));
 if (media.unsupported.length) throw new Error(`Unemulatable media/container preludes: ${media.unsupported.join('; ')}`);
 const html = resolve(scratch, 'fixture.html');
 writeFileSync(html, `<!doctype html><meta charset="utf-8"><style>${css}</style><div id="root"></div><script src="fixture.js"></script>`);
@@ -68,25 +74,25 @@ let renderCount = 0;
 const progress = setInterval(() => console.log(`Painted capture progress: renders=${renderCount}; wall=${((performance.now()-started)/1000).toFixed(3)}s`), 45000);
 const errors = [], requests = [];
 const results = { inputs: fingerprint, media, conditions: {}, proof: { minimumMaskPixels: 16,
-  measurement: 'painted/paint-suppressed control foreground mask; mean in linear sRGB over changed device pixels; visibility and layout retained',
+  measurement: 'painted/paint-suppressed control foreground mask; mean in linear sRGB over the core at >=90% maximum linear-sRGB difference; visibility and layout retained',
+  coreThreshold: .9, calibration: {},
   stylesheet: 'production Vite build emitted CSS, production order', pageErrors: errors, networkRequests: requests } };
 let activeConditions = 0; const queue = [];
 async function acquire() { if (activeConditions >= 4) await new Promise(r => queue.push(r)); activeConditions++; }
 function release() { activeConditions--; queue.shift()?.(); }
-try {
-  await Promise.all(media.variants.filter(c => !process.env.STATE_SURFACES_CONDITION || process.env.STATE_SURFACES_CONDITION.split(',').includes(c.id)).map(async condition => {
-    await acquire();
-    try {
-    results.conditions[condition.id] = {};
-    await Promise.all(['Veil', 'Gilded', 'Vector'].filter(t => !process.env.STATE_SURFACES_THEME || t === process.env.STATE_SURFACES_THEME).map(async theme => {
+async function renderInventory(condition, theme, calibrating = false) {
     const page = await browser.newPage(condition);
+    try {
     if (condition.media) await page.emulateMedia({ media: condition.media });
     const screenshot = box => page.screenshot({ clip: box });
     page.on('pageerror', e => errors.push(e.message));
     page.on('request', r => { if (/^https?:/.test(r.url())) requests.push(r.url()); });
     await page.route(/^https?:/, route => route.abort());
     await page.goto(pathToFileURL(html).href);
-    const matchedMedia = await page.evaluate(preludes => Object.fromEntries(preludes.map(p => [p, matchMedia(p.slice(6)).matches])), media.preludes);
+    const matchedMedia = await page.evaluate(preludes => Object.fromEntries(preludes.map(p => [p, matchMedia(p.slice(6)).matches])), media.preludes.filter(p => p.startsWith('media ') && !media.excluded.some(e => e.prelude === p)));
+    for (const [feature, value] of Object.entries(condition.features))
+      if (!await page.evaluate(([f, v]) => matchMedia(`(${f}: ${v})`).matches, [feature, value]))
+        throw new Error(`Unemulatable media feature (${feature}: ${value}) in ${media.preludes.filter(p => p.includes(feature)).join('; ')}`);
     results.proof.matchedMedia ??= {}; results.proof.matchedMedia[condition.id] = matchedMedia;
     // Finite transitions/animations finish. Infinite animations have no finished
     // promise: pause the actual browser effect at its start and trough, separately.
@@ -145,7 +151,7 @@ try {
       if (!box || !box.width || !box.height) throw new Error(`Measurement failure ${label}: empty clip`);
       if (await page.evaluate(() => devicePixelRatio) !== 4) throw new Error('Measurement failure: device scale is not 4');
       const pseudos = await el.evaluate(n => ({ hover: n.matches(':hover'), focusVisible: n.matches(':focus-visible'),
-        pinHover: n.closest('.map-pin')?.matches(':hover') ?? false,
+        pinHover: (n.closest('.map-pin') ?? document.querySelector(`[data-testid="map-pin-${n.closest('.map-place-row')?.getAttribute('data-testid')?.split('-').at(-1)}"]`))?.matches(':hover') ?? false,
         ancestorHover: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':hover') ?? false,
         focusWithin: n.closest('.key-row,.lm-quant,.map-place-row')?.matches(':focus-within') ?? false }));
       const painted = await screenshot(box);
@@ -153,7 +159,11 @@ try {
       // opacity compositing remain identical to the painted capture.
       const captureId = `surface-${renderCount}`;
       await el.evaluate((n, id) => n.setAttribute('data-control-capture', id), captureId);
-      const controlStyle = await page.addStyleTag({ content: `[data-control-capture="${captureId}"], [data-control-capture="${captureId}"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; }` });
+      const subtree = [`[data-control-capture="${captureId}"]`, `[data-control-capture="${captureId}"] *`];
+      const selectors = subtree.flatMap(s => [s, `${s}::before`, `${s}::after`]);
+      const transparent = ['fill', 'stroke', 'background-color', 'color', 'border-color', 'outline-color',
+        'text-decoration-color', 'column-rule-color', 'caret-color', 'stop-color', 'flood-color', 'lighting-color'];
+      const controlStyle = await page.addStyleTag({ content: `${selectors.join(',')} { ${transparent.map(p => `${p}: transparent !important;`).join('')} background-image: none !important; }` });
       await settled();
       const control = await screenshot(box);
       await controlStyle.evaluate(n => n.remove());
@@ -172,10 +182,20 @@ try {
       const target = await el.evaluate(n => {const t=n.closest('.lm-trash') ?? n.closest('.key-row')?.querySelector('input') ?? n; return {hover:t.matches(':hover'), focusVisible:t.matches(':focus-visible')};});
       const stateAttributes = await el.evaluate(n => ({ mapState: n.closest('[data-map-state]')?.getAttribute('data-map-state') ?? null, keyNeed: n.closest('.key-row')?.classList.contains('optional') ? 'optional' : n.closest('.key-row') ? 'required' : null, armed: n.closest('.lm-trash')?.getAttribute('aria-pressed') ?? null }));
       const animationsRunning = await page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').length);
-      return { ...measured, selector, box, action, pseudos, target, stateAttributes, animationsRunning, settleCriteria };
+      let captures;
+      if (calibrating) {
+        const name = label.replace(/[^a-zA-Z0-9-]/g, '_');
+        captures = { painted: `calibration/${name}-painted.png`, control: `calibration/${name}-control.png` };
+        mkdirSync(resolve(scratch, 'calibration'), { recursive: true });
+        writeFileSync(resolve(scratch, captures.painted), painted);
+        writeFileSync(resolve(scratch, captures.control), control);
+      }
+      return { ...measured, selector, box, action, pseudos, target, stateAttributes, animationsRunning, settleCriteria, ...(captures ? { captures } : {}) };
     }
       const result = { shipped: {}, before: {}, candidates: {}, reachability: {} };
-      results.conditions[condition.id][theme] = result;
+      const calibration = { condition: condition.id, pigments: {}, samples: {}, maxima: {}, maximum: 0, tolerance: 1, passed: false };
+      if (calibrating) results.proof.calibration[theme] = calibration;
+      else results.conditions[condition.id][theme] = result;
       console.log(`Resolving ${condition.id}/${theme}…`);
       const baseline = themeTokens(base, theme), now = themeTokens(shipped, theme);
       let overlay;
@@ -196,7 +216,7 @@ try {
         if (mode === 'key') {
           const capture = `${condition.id}-${theme}-key-${need}.png`;
           result.reachability[need] = { capture, rows: await page.locator('.key-row').evaluateAll(rows => rows.map(n => ({id:n.getAttribute('data-testid'), need:n.classList.contains('optional') ? 'optional':'required'}))) };
-          if (condition.id === 'default' && theme === 'Veil') await page.screenshot({path:resolve(scratch,capture)});
+          if (condition.id === defaultCondition.id && theme === 'Veil') await page.screenshot({path:resolve(scratch,capture)});
         }
       }
       async function select(id) {
@@ -222,7 +242,14 @@ try {
         const tooltipExpected = context.startsWith('delete/ready-exceeds/') &&
           (state === 'unarmed' && context.endsWith('hover') || context.endsWith('focus-visible') &&
             await page.locator('.lm-quant').getAttribute('data-state') !== 'closed') ? 'open' : 'closed';
-        for (const [phase, value] of [['shipped', now[prop]], ['before', baseline[roots[group][state]]], ...(process.env.STATE_SURFACES_PROBE ? [] : values.map(v => ['candidate', v]))]) {
+        const restState = { memory: 'normal', delete: 'unarmed', map: 'rest', key: 'present' }[group];
+        const pigment = now[token(group, restState)];
+        if (calibrating) {
+          calibration.pigments[group] = pigment;
+          await page.evaluate(({ props, pigment }) => props.forEach(p => document.documentElement.style.setProperty(p, pigment)),
+            { props: Object.keys(roots[group]).map(s => token(group, s)), pigment });
+        }
+        for (const [phase, value] of calibrating ? [['calibration', pigment]] : [['shipped', now[prop]], ['before', baseline[roots[group][state]]], ...(process.env.STATE_SURFACES_PROBE ? [] : values.map(v => ['candidate', v]))]) {
           if (phase === 'before') {
             // Historical global declarations, including the pre-anchor colors,
             // are rendered on the same accepted geometry and production CSS.
@@ -231,21 +258,23 @@ try {
           if (phase === 'shipped') {
             // Measure the production cascade, including media root overrides.
             await page.evaluate(p => document.documentElement.style.removeProperty(p), prop);
-          } else {
+          } else if (!calibrating) {
             await page.evaluate(({ prop, value }) => document.documentElement.style.setProperty(prop, value), { prop, value: roots[group][state] === '--destructive' && phase === 'before' ? `hsl(${value})` : value });
           }
           const measured = await sample(selector, action, `${condition.id}/${theme}/${phase}/${context}/${state}/${value}`, tooltipExpected);
-          if (phase === 'candidate') { result.candidates[prop][value] ??= {}; result.candidates[prop][value][context] = measured; }
+          if (calibrating) { calibration.samples[context] ??= {}; calibration.samples[context][state] = measured; }
+          else if (phase === 'candidate') { result.candidates[prop][value] ??= {}; result.candidates[prop][value][context] = measured; }
           else { result[phase][context] ??= {}; result[phase][context][state] = measured; }
           if (overlay) { await overlay.evaluate(n => n.remove()); overlay = null; }
         }
-        await page.evaluate(p => document.documentElement.style.removeProperty(p), prop);
+        await page.evaluate(props => props.forEach(p => document.documentElement.style.removeProperty(p)),
+          calibrating ? Object.keys(roots[group]).map(s => token(group, s)) : [prop]);
       }
-      if (!process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'memory') for (const state of Object.keys(roots.memory)) {
+      if (calibrating || !process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'memory') for (const state of Object.keys(roots.memory)) {
         await mount('memory', 'sea', state === 'over');
         await captureValues('memory', state, 'memory/fill', '.mem-fill', `seed local-model usage ${state}`);
       }
-      if (!process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'delete') for (const row of ['ready', 'ready-exceeds']) {
+      if (calibrating || !process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'delete') for (const row of ['ready', 'ready-exceeds']) {
         await mount('delete', 'sea', row === 'ready-exceeds');
         for (const action of ['rest', 'row-hover', 'button-hover', 'focus-visible']) {
           await reset();
@@ -271,7 +300,7 @@ try {
           await mount('delete', 'sea', row === 'ready-exceeds');
         }
       }
-      if (!process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'key') for (const need of ['required', 'optional']) {
+      if (calibrating || !process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'key') for (const need of ['required', 'optional']) {
         await mount('key', 'sea', false, need);
         for (const action of ['rest', 'hover', 'focus-visible']) for (const state of Object.keys(roots.key).filter(s => need === 'required' ? s !== 'optional-absent' : s !== 'required-missing')) {
           const row = `[data-testid="key-row-${state}"]`;
@@ -281,7 +310,7 @@ try {
           await captureValues('key', state, `key/${need}/${action}`, `${row} .key-status svg`, steps);
         }
       }
-      if (!process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'map') for (const terrain of ['sea', 'land']) {
+      if (calibrating || !process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'map') for (const terrain of ['sea', 'land']) {
         await mount('map', terrain);
         await select(1);
         const ids = { rest: 2, current: 4, selected: 1, hovered: 3 };
@@ -294,9 +323,9 @@ try {
           }
         }
       }
-      if (!process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'map') {
+      if (calibrating || !process.env.STATE_SURFACES_GROUP || process.env.STATE_SURFACES_GROUP === 'map') {
       await mount('map');
-      for (const action of ['rest', 'hover', 'selected-current']) for (const [state, id] of Object.entries({ rest: 2, current: 4, selected: 1 })) {
+      for (const action of ['rest', 'hover', 'selected-current']) for (const [state, id] of Object.entries({ rest: 2, current: 4, selected: 1, ...(action === 'hover' ? {} : { hovered: 3 }) })) {
         await select(action === 'selected-current' && state === 'current' ? 4 : 1);
         if (state === 'hovered') await page.locator('[data-testid="map-pin-3"] .map-state-glyph > path[fill="transparent"]').hover();
         if (action === 'hover') await page.locator(`[data-testid="map-place-row-${id}"]`).hover();
@@ -307,8 +336,36 @@ try {
       }
       }
       console.log(`Completed ${condition.id}/${theme}; renders=${renderCount}; wall=${((performance.now() - started) / 1000).toFixed(3)}s`);
-    await page.close();
-    }));
+      if (calibrating) {
+        for (const [context, samples] of Object.entries(calibration.samples)) {
+          const states = Object.keys(samples); let maximum = 0, witness;
+          for (let i = 0; i < states.length; i++) for (let j = i + 1; j < states.length; j++) {
+            const pair = [states[i], states[j]];
+            const delta = ciede2000(...pair.map(s => deutanLinearLab(samples[s].meanLinear)));
+            if (delta > maximum) { maximum = delta; witness = { states: pair, captures: pair.map(s => samples[s].captures) }; }
+          }
+          calibration.maxima[context] = { maximum, ...witness };
+          calibration.maximum = Math.max(calibration.maximum, maximum);
+        }
+        const failure = Object.entries(calibration.maxima).find(([, m]) => m.maximum > 1);
+        if (failure) {
+          const [context, m] = failure;
+          throw new Error(`Calibration failure ${theme}/${context}/${m.states.join('/')}: deutan delta=${m.maximum} > 1.0; PNGs: ${m.captures.map(c => resolve(scratch, c.painted)).join('; ')}`);
+        }
+        calibration.passed = true;
+        console.log(`Calibration ${theme}: maximum=${calibration.maximum}; tolerance=1.0; passed`);
+      }
+    } finally { await page.close(); }
+}
+try {
+  // Every regeneration calibrates the full inventory at the documented default
+  // before any expensive candidate capture, even for filtered/probe runs.
+  for (const theme of ['Veil', 'Gilded', 'Vector']) await renderInventory(defaultCondition, theme, true);
+  await Promise.all(media.variants.filter(c => !process.env.STATE_SURFACES_CONDITION || process.env.STATE_SURFACES_CONDITION.split(',').includes(c.id)).map(async condition => {
+    await acquire();
+    try {
+      results.conditions[condition.id] = {};
+      await Promise.all(['Veil', 'Gilded', 'Vector'].filter(t => !process.env.STATE_SURFACES_THEME || t === process.env.STATE_SURFACES_THEME).map(theme => renderInventory(condition, theme)));
     } finally { release(); }
   }));
   if (errors.length || requests.length) throw new Error(JSON.stringify({ errors, requests }));
@@ -330,4 +387,4 @@ try {
   writeFileSync(resolve(scratch, 'incomplete-probe.json'), JSON.stringify(results, null, 2) + '\n');
   console.error(`Incomplete painted probe: renders=${renderCount}; wall=${results.proof.wallSeconds.toFixed(3)}s; acceptanceComplete=false`);
   throw error;
-} finally { clearInterval(progress); await browser.close(); }
+} finally { clearTimeout(deadline); clearInterval(progress); await browser.close(); }

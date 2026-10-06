@@ -138,7 +138,7 @@ const SIGNATURES: Record<Surface, Record<string, string>> = {
 };
 type Palette = Record<string, Triple>;
 type Sample = {
-  meanLinear: [number, number, number]; maskSize: number;
+  meanLinear: [number, number, number]; maskSize: number; coreSize: number;
   histogram: { rgb: number[]; count: number }[]; width: number; height: number;
   action: string; animationsRunning: number;
   settleCriteria: { tooltipExpected: string; tooltipState: string | null;
@@ -151,7 +151,10 @@ type ContextSamples = Record<string, Record<string, Sample>>;
 type Receipt = {
   inputs: Awaited<ReturnType<typeof inputs>>;
   media: { preludes: string[]; unsupported: string[]; variants: { id: string }[] };
-  proof: { acceptanceComplete: boolean; minimumMaskPixels: number; measurement: string; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
+  proof: { coreThreshold: number; calibration: Record<Theme, {
+    condition: string; pigments: Record<Surface, string>; samples: ContextSamples;
+    maxima: Record<string, { maximum: number }>; maximum: number; tolerance: number; passed: boolean;
+  }>; acceptanceComplete: boolean; minimumMaskPixels: number; measurement: string; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
   conditions: Record<string, Record<Theme, {
     shipped: ContextSamples; before: ContextSamples;
     candidates: Record<string, Record<string, Record<string, Sample>>>;
@@ -176,7 +179,7 @@ const contextNames = [
 function statesIn(context: string): string[] {
   const surface = context.split("/")[0] as Surface;
   return Object.keys(MAPPINGS[surface]).filter(state =>
-    !(context.startsWith("map/sidebar/") && state === "hovered") &&
+    !(context.startsWith("map/sidebar/hover/") && state === "hovered") &&
     !(context.startsWith("key/required/") && state === "optional-absent") &&
     !(context.startsWith("key/optional/") && state === "required-missing"));
 }
@@ -194,6 +197,23 @@ const CONTEXTS = receipt.media.variants.flatMap(({ id: condition }) => contextNa
       return painted(data.candidates[root][candidate.value][context]);
     } };
 }));
+// Rings enter their pulsing states independently. Every motion pair uses
+// the Cartesian product of both recorded phases, within the same media band.
+function phaseColors(ctx: typeof CONTEXTS[number], state: string, p: Palette | undefined, before: boolean, theme: Theme): Triple[] {
+  const phases = ctx.condition.match(/\/motion\/(start|trough)$/)
+    ? CONTEXTS.filter(c => c.surface === ctx.surface && c.name === ctx.name &&
+      c.condition.replace(/\/(start|trough)$/, "") === ctx.condition.replace(/\/(start|trough)$/, "")) : [ctx];
+  return phases.map(c => c.render(state, p, before, theme));
+}
+function pairColors(ctx: typeof CONTEXTS[number], states: readonly string[], p: Palette | undefined, before: boolean, theme: Theme): Triple[] {
+  const first = phaseColors(ctx, states[0], p, before, theme), second = phaseColors(ctx, states[1], p, before, theme);
+  let minimum = Infinity, colors: Triple[] = [];
+  for (const a of first) for (const b of second) {
+    const delta = ciede2000(deutanLinearLab(a), deutanLinearLab(b));
+    if (delta < minimum) { minimum = delta; colors = [a, b]; }
+  }
+  return colors;
+}
 function palette(css: string, theme: Theme): Palette {
   return Object.fromEntries(Object.entries(tokens(css, theme))
     .filter(([, value]) => value === "#b83d7a" || /^(?:hsl\()?([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/.test(value))
@@ -224,7 +244,7 @@ function candidates(theme: Theme, root: string): { value: string; rgb: Triple; c
 }
 function measures(theme: Theme, p: Palette | undefined, before: boolean) {
   return CONTEXTS.flatMap(ctx => pairsIn(`${ctx.surface}/${ctx.name}`).map(states => {
-    const colors = states.map(s => ctx.render(s, p, before, theme));
+    const colors = pairColors(ctx, states, p, before, theme);
     return { theme, surface: ctx.surface, context: ctx.name, condition: ctx.condition, states, rgb: colors, delta: ciede2000(deutanLinearLab(colors[0]), deutanLinearLab(colors[1])), signatures: states.map(s => SIGNATURES[ctx.surface][s]) };
   }));
 }
@@ -248,14 +268,14 @@ function jointSearch(theme: Theme) {
       for (const ctx of ctxs.filter(c => [a, b].every(s => statesIn(`${surface}/${c.name}`).includes(s)))) {
         const labs = [a, b].map(state => {
           const root = MAPPINGS[surface][state];
-          return domains[root].map(c => { p[root] = c.rgb; return deutanLinearLab(ctx.render(state, p, false, theme)); });
+          return domains[root].map(c => { p[root] = c.rgb; return phaseColors(ctx, state, p, false, theme).map(deutanLinearLab); });
         });
         let maximum = -Infinity, witness: Record<string, string> = {};
         let count = 0;
         for (let i = 0; i < domains[ra].length; i++)
           for (let j = 0; j < domains[rb].length; j++) {
             count++;
-            const delta = ciede2000(labs[0][i], labs[1][j]);
+            const delta = Math.min(...labs[0][i].flatMap(a => labs[1][j].map(b => ciede2000(a, b))));
             scores[i][j] = Math.min(scores[i][j], delta);
             if (delta > maximum) { maximum = delta; witness = { [ra]: domains[ra][i].value, [rb]: domains[rb][j].value }; }
           }
@@ -301,28 +321,54 @@ const searchAll = () => searches ??= THEMES.map(jointSearch);
 // while shortfall IDs are committed and checked below.
 const exceptions = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json"), "utf8")) as Record<Theme, string[]>;
 describe("777-S2 state shades", () => {
-  it("tooltip_gradient_uses_every_mask_pixel_in_linear_light_without_a_mode_floor", () => {
+  it("tooltip_gradient_uses_the_90_percent_core_in_linear_light_without_a_mode_floor", () => {
     const dir = resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/after-review-r4/absolute-floor");
     const paintedBytes = readFileSync(resolve(dir, "tooltip-repeat-1-painted.png"));
     const controlBytes = readFileSync(resolve(dir, "tooltip-repeat-1-control.png"));
     const sample = foreground(paintedBytes, controlBytes, "tooltip regression");
     const a = decodePng(paintedBytes), b = decodePng(controlBytes);
     const sums = [0, 0, 0]; let count = 0;
+    const mask: { color: number[]; difference: number }[] = [];
+    const linear = (v: number) => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
     for (let i = 0; i < a.pixels.length; i += a.channels) {
       if (a.pixels.subarray(i, i + a.channels).equals(b.pixels.subarray(i, i + b.channels))) continue;
       count++;
-      for (let channel = 0; channel < 3; channel++) {
-        const v = a.pixels[i + channel] / 255;
-        sums[channel] += v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
-      }
+      const color = [0, 1, 2].map(c => linear(a.pixels[i + c]));
+      mask.push({ color, difference: Math.hypot(...color.map((v, c) => v - linear(b.pixels[i + c]))) });
     }
+    const maximum = Math.max(...mask.map(p => p.difference));
+    const core = mask.filter(p => p.difference >= .9 * maximum);
+    for (const p of core) p.color.forEach((v, c) => sums[c] += v);
+    expect(sample.coreSize).toBe(core.length);
     expect(sample.maskSize).toBe(727);
     expect(sample.histogram[0].count).toBe(44);
     expect(sample.histogram.reduce((n, bucket) => n + bucket.count, 0)).toBeLessThan(count);
-    sums.forEach((sum, channel) => expect(sample.meanLinear[channel]).toBeCloseTo(sum / count, 14));
+    sums.forEach((sum, channel) => expect(sample.meanLinear[channel]).toBeCloseTo(sum / core.length, 14));
     expect(() => foreground(controlBytes, controlBytes, "empty context")).toThrow("empty context: empty foreground mask");
   });
 
+  it("identical_pigment_calibration_covers_every_context_and_stays_within_one_deutan_delta", () => {
+    expect(Object.keys(receipt.proof.calibration)).toEqual([...THEMES]);
+    for (const theme of THEMES) {
+      const calibration = receipt.proof.calibration[theme];
+      expect(calibration.passed).toBe(true);
+      expect(calibration.tolerance).toBe(1);
+      expect(Object.keys(calibration.samples)).toEqual(contextNames);
+      let maximum = 0;
+      for (const context of contextNames) {
+        const samples = calibration.samples[context];
+        expect(Object.keys(samples)).toEqual(statesIn(context));
+        const states = Object.keys(samples); let contextMaximum = 0;
+        for (let i = 0; i < states.length; i++) for (let j = i + 1; j < states.length; j++)
+          contextMaximum = Math.max(contextMaximum, ciede2000(deutanLinearLab(samples[states[i]].meanLinear), deutanLinearLab(samples[states[j]].meanLinear)));
+        expect(contextMaximum, `${theme}/${context}: identical pigment`).toBeLessThanOrEqual(1);
+        expect(calibration.maxima[context].maximum).toBe(contextMaximum);
+        maximum = Math.max(maximum, contextMaximum);
+      }
+      expect(calibration.maximum).toBe(maximum);
+      expect(Object.keys(calibration.pigments).sort()).toEqual(Object.keys(MAPPINGS).sort());
+    }
+  });
   it("ciede2000_matches_published_reference_vectors", () => {
     expect(SHARMA).toHaveLength(34);
     for (const [l1, a1, b1, l2, a2, b2, expected] of SHARMA)
@@ -349,9 +395,12 @@ describe("777-S2 state shades", () => {
   });
   it("painted_mask_means_are_linear_and_interactions_are_real_and_settled", () => {
     expect(receipt.proof.minimumMaskPixels).toBe(16);
+    expect(receipt.proof.coreThreshold).toBe(.9);
     expect(receipt.proof.measurement).toContain("mean in linear sRGB");
     const check = (sample: Sample, context: string) => {
       expect(sample.maskSize, `${context}: surface did not paint`).toBeGreaterThanOrEqual(receipt.proof.minimumMaskPixels);
+      expect(sample.coreSize).toBeGreaterThan(0);
+      expect(sample.coreSize).toBeLessThanOrEqual(sample.maskSize);
       expect(sample.meanLinear).toHaveLength(3);
       for (const channel of sample.meanLinear) {
         expect(Number.isFinite(channel)).toBe(true);
@@ -406,6 +455,7 @@ describe("777-S2 state shades", () => {
         const candidate = data.candidates[root][value][context];
         expect(candidate.meanLinear, `${id}/${theme}/${context}/${state}: same value`).toEqual(shipped.meanLinear);
         expect(candidate.maskSize).toBe(shipped.maskSize);
+        expect(candidate.coreSize).toBe(shipped.coreSize);
         expect(candidate.settleCriteria.tooltipExpected).toBe(shipped.settleCriteria.tooltipExpected);
         expect(candidate.settleCriteria.tooltipPresent).toBe(shipped.settleCriteria.tooltipPresent);
       }

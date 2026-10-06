@@ -60,10 +60,14 @@ export function foreground(paintedBytes, controlBytes, label, minimumMaskPixels 
   const a = decodePng(paintedBytes), b = decodePng(controlBytes);
   if (a.width !== b.width || a.height !== b.height || a.channels !== b.channels)
     throw new Error(`Measurement failure ${label}: control dimensions differ`);
-  const counts = new Map(); let maskSize = 0;
+  const counts = new Map(), mask = []; let maskSize = 0;
+  const linear = v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
   for (let i = 0; i < a.pixels.length; i += a.channels) {
     if (a.pixels.subarray(i, i + a.channels).equals(b.pixels.subarray(i, i + b.channels))) continue;
     maskSize++;
+    const painted = [0, 1, 2].map(c => linear(a.pixels[i + c]));
+    const difference = Math.hypot(...painted.map((v, c) => v - linear(b.pixels[i + c])));
+    mask.push({ painted, difference });
     const key = Array.from(a.pixels.subarray(i, i + 3)).join(',');
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -72,10 +76,11 @@ export function foreground(paintedBytes, controlBytes, label, minimumMaskPixels 
   if (!maskSize) throw new Error(`Measurement failure ${label}: empty foreground mask`);
   if (maskSize < minimumMaskPixels)
     throw new Error(`Measurement failure ${label}: foreground mask=${maskSize} device pixels < ${minimumMaskPixels}`);
-  const linear = v => { v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
-  // Use the full mask histogram, never just the audit's top eight buckets.
+  const maximumDifference = mask.reduce((maximum, p) => Math.max(maximum, p.difference), 0);
+  const core = mask.filter(p => p.difference >= .9 * maximumDifference);
+  // The maximum pixel always belongs to the core; retain the whole mask for audit.
   const meanLinear = [0, 1, 2].map(channel =>
-    histogram.reduce((sum, { rgb, count }) => sum + linear(rgb[channel]) * count, 0) / maskSize);
-  return { meanLinear, maskSize, histogram: histogram.slice(0, 8),
+    core.reduce((sum, p) => sum + p.painted[channel], 0) / core.length);
+  return { meanLinear, maskSize, coreSize: core.length, histogram: histogram.slice(0, 8),
     width: a.width, height: a.height };
 }
