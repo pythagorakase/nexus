@@ -36,7 +36,11 @@ breakpoints partition width/height into distinct integer viewport bands,
 including singleton bands for coincident inclusive bounds. Each band's
 representative is its edge nearest the default 1200×900 viewport; the
 default's own band uses the default exactly. The shipped representatives are
-639, 760, 767, 1023, 1100, 1200, 1280, 1535 and 1536px. Discrete feature values
+639, 760, 767, 1023, 1100, 1200, 1280, 1281 and 1536px. Clarification 3 instead
+names 1535px for the 1281–1535 band; regeneration is stopped pending a ruling
+between that named value and the nearest-edge rule. See the
+[stop report](../../../docs/qa/777-glyph-first-states/after-review-r5/clarification-3/stop-report.md).
+Discrete feature values
 are crossed with those bands; compound/nested preludes are conjunctions and
 comma lists are alternatives. One vector per distinct satisfied-prelude set
 is retained, and every included prelude must be satisfied. Print and forced

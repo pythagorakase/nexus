@@ -1,0 +1,119 @@
+{
+  "minimumMaskPixels": 16,
+  "measurement": "painted/paint-suppressed control foreground mask; mean in linear sRGB over the core at >=90% maximum linear-sRGB difference; visibility and layout retained",
+  "coreThreshold": 0.9,
+  "stylesheet": "production Vite build emitted CSS, production order",
+  "pageErrors": [],
+  "networkRequests": [],
+  "matchedMedia": {
+    "w1101-1279/reduce": {
+      "media (max-width: 1280px)": true,
+      "media (max-width: 1100px)": false,
+      "media (max-width: 760px)": false,
+      "media (prefers-reduced-motion: reduce)": true,
+      "media (min-width: 640px)": true,
+      "media (min-width: 768px)": true,
+      "media (min-width: 1024px)": true,
+      "media (min-width: 1280px)": false,
+      "media (min-width: 1536px)": false
+    },
+    "w1-639/reduce": {
+      "media (max-width: 1280px)": true,
+      "media (max-width: 1100px)": true,
+      "media (max-width: 760px)": true,
+      "media (prefers-reduced-motion: reduce)": true,
+      "media (min-width: 640px)": false,
+      "media (min-width: 768px)": false,
+      "media (min-width: 1024px)": false,
+      "media (min-width: 1280px)": false,
+      "media (min-width: 1536px)": false
+    },
+    "w1-639/motion/start": {
+      "media (max-width: 1280px)": true,
+      "media (max-width: 1100px)": true,
+      "media (max-width: 760px)": true,
+      "media (prefers-reduced-motion: reduce)": false,
+      "media (min-width: 640px)": false,
+      "media (min-width: 768px)": false,
+      "media (min-width: 1024px)": false,
+      "media (min-width: 1280px)": false,
+      "media (min-width: 1536px)": false
+    },
+    "w1-639/motion/trough": {
+      "media (max-width: 1280px)": true,
+      "media (max-width: 1100px)": true,
+      "media (max-width: 760px)": true,
+      "media (prefers-reduced-motion: reduce)": false,
+      "media (min-width: 640px)": false,
+      "media (min-width: 768px)": false,
+      "media (min-width: 1024px)": false,
+      "media (min-width: 1280px)": false,
+      "media (min-width: 1536px)": false
+    },
+    "w640-760/reduce": {
+      "media (max-width: 1280px)": true,
+      "media (max-width: 1100px)": true,
+      "media (max-width: 760px)": true,
+      "media (prefers-reduced-motion: reduce)": true,
+      "media (min-width: 640px)": true,
+      "media (min-width: 768px)": false,
+      "media (min-width: 1024px)": false,
+      "media (min-width: 1280px)": false,
+      "media (min-width: 1536px)": false
+    },
+    "w640-760/motion/start": {
+      "media (max-width: 1280px)": true,
+      "media (max-width: 1100px)": true,
+      "media (max-width: 760px)": true,
+      "media (prefers-reduced-motion: reduce)": false,
+      "media (min-width: 640px)": true,
+      "media (min-width: 768px)": false,
+      "media (min-width: 1024px)": false,
+      "media (min-width: 1280px)": false,
+      "media (min-width: 1536px)": false
+    },
+    "w640-760/motion/trough": {
+      "media (max-width: 1280px)": true,
+      "media (max-width: 1100px)": true,
+      "media (max-width: 760px)": true,
+      "media (prefers-reduced-motion: reduce)": false,
+      "media (min-width: 640px)": true,
+      "media (min-width: 768px)": false,
+      "media (min-width: 1024px)": false,
+      "media (min-width: 1280px)": false,
+      "media (min-width: 1536px)": false
+    },
+    "w761-767/reduce": {
+      "media (max-width: 1280px)": true,
+      "media (max-width: 1100px)": true,
+      "media (max-width: 760px)": false,
+      "media (prefers-reduced-motion: reduce)": true,
+      "media (min-width: 640px)": true,
+      "media (min-width: 768px)": false,
+      "media (min-width: 1024px)": false,
+      "media (min-width: 1280px)": false,
+      "media (min-width: 1536px)": false
+    }
+  },
+  "renderCount": 26896,
+  "wallSeconds": 530.130596875,
+  "acceptanceComplete": false,
+  "failure": "page.screenshot: Target page, context or browser has been closed\nCall log:\n\u001b[2m  - taking page screenshot\u001b[22m\n\u001b[2m  - waiting for fonts to load...\u001b[22m\n\u001b[2m  - fonts loaded\u001b[22m\n",
+  "interruption": "Codex deliberately terminated its own capture browser after finding the representative-rule contradiction; browser-closed is not a spontaneous measurement failure.",
+  "inputFingerprint": "30c0def2055fed5facd01e4c3c15eae585af0e38bd32b679f9b8e227f351172b",
+  "conditionsInitialized": [
+    "w1101-1279/reduce",
+    "w1-639/reduce",
+    "w1-639/motion/start",
+    "w1-639/motion/trough",
+    "w640-760/reduce",
+    "w640-760/motion/start",
+    "w640-760/motion/trough",
+    "w761-767/reduce",
+    "w761-767/motion/start"
+  ],
+  "shippingFilesUnchanged": {
+    "ui/client/src/index.css": "a9a1c1bc6a2c87f86663caa6d80aaeb17d52f7c7c44b3ad062d675e86f959ef3",
+    "ui/client/src/state-surfaces.resolved.json": "cf61bff653ccbd9c4340dd96addc7a311288f05e7d6090331d14a1cae6db3534"
+  }
+}

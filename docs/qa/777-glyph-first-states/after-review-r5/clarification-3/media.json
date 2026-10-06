@@ -1,0 +1,1167 @@
+{
+  "preludes": [
+    "media (max-width: 1280px)",
+    "media (max-width: 1100px)",
+    "media (max-width: 760px)",
+    "media (prefers-reduced-motion: reduce)",
+    "media (min-width: 640px)",
+    "media (min-width: 768px)",
+    "media (min-width: 1024px)",
+    "media (min-width: 1280px)",
+    "media (min-width: 1536px)"
+  ],
+  "excluded": [],
+  "unsupported": [],
+  "representatives": [
+    {
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1101-1279",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 639,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1-639",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (prefers-reduced-motion: reduce)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 639,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1-639",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 760,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w640-760",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 760,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w640-760",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (min-width: 640px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 767,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w761-767",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 767,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w761-767",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1023,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w768-1023",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1023,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w768-1023",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1024-1100",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1024-1100",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1101-1279",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1280",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1280",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1281,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1281-1535",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1281,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1281-1535",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1536,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1536+",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)",
+        "media (min-width: 1536px)"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1536,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1536+",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)",
+        "media (min-width: 1536px)"
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1101-1279",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ],
+      "id": "w1101-1279/reduce"
+    },
+    {
+      "viewport": {
+        "width": 639,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1-639",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (prefers-reduced-motion: reduce)"
+      ],
+      "id": "w1-639/reduce"
+    },
+    {
+      "viewport": {
+        "width": 639,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1-639",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)"
+      ],
+      "animationPhase": 0,
+      "id": "w1-639/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 639,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1-639",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w1-639/motion/trough"
+    },
+    {
+      "viewport": {
+        "width": 760,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w640-760",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)"
+      ],
+      "id": "w640-760/reduce"
+    },
+    {
+      "viewport": {
+        "width": 760,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w640-760",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (min-width: 640px)"
+      ],
+      "animationPhase": 0,
+      "id": "w640-760/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 760,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w640-760",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (min-width: 640px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w640-760/motion/trough"
+    },
+    {
+      "viewport": {
+        "width": 767,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w761-767",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)"
+      ],
+      "id": "w761-767/reduce"
+    },
+    {
+      "viewport": {
+        "width": 767,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w761-767",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)"
+      ],
+      "animationPhase": 0,
+      "id": "w761-767/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 767,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w761-767",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w761-767/motion/trough"
+    },
+    {
+      "viewport": {
+        "width": 1023,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w768-1023",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)"
+      ],
+      "id": "w768-1023/reduce"
+    },
+    {
+      "viewport": {
+        "width": 1023,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w768-1023",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)"
+      ],
+      "animationPhase": 0,
+      "id": "w768-1023/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 1023,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w768-1023",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w768-1023/motion/trough"
+    },
+    {
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1024-1100",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ],
+      "id": "w1024-1100/reduce"
+    },
+    {
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1024-1100",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ],
+      "animationPhase": 0,
+      "id": "w1024-1100/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1024-1100",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w1024-1100/motion/trough"
+    },
+    {
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1101-1279",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ],
+      "animationPhase": 0,
+      "id": "w1101-1279/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1101-1279",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w1101-1279/motion/trough"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1280",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ],
+      "id": "w1280/reduce"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1280",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ],
+      "animationPhase": 0,
+      "id": "w1280/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1280",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w1280/motion/trough"
+    },
+    {
+      "viewport": {
+        "width": 1281,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1281-1535",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ],
+      "id": "w1281-1535/reduce"
+    },
+    {
+      "viewport": {
+        "width": 1281,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1281-1535",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ],
+      "animationPhase": 0,
+      "id": "w1281-1535/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 1281,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1281-1535",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w1281-1535/motion/trough"
+    },
+    {
+      "viewport": {
+        "width": 1536,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1536+",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)",
+        "media (min-width: 1536px)"
+      ],
+      "id": "w1536+/reduce"
+    },
+    {
+      "viewport": {
+        "width": 1536,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1536+",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)",
+        "media (min-width: 1536px)"
+      ],
+      "animationPhase": 0,
+      "id": "w1536+/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 1536,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w1536+",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)",
+        "media (min-width: 1536px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w1536+/motion/trough"
+    }
+  ]
+}

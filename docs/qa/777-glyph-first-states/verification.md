@@ -871,3 +871,39 @@ change, product layout edit, comparison removal, PR update, push or merge has
 been performed.
 
 Codex, GPT-6.
+
+
+## After the Stopping-Rule Reviews
+
+2026-10-06. Round 5 resumes from `8a528239` under Clarifications 1–3.
+The [Clarification 3 stop report](after-review-r5/clarification-3/stop-report.md)
+records the remaining specification contradiction: nearest-edge selection
+requires 1281px for the 1281–1535 band, while the coordinator's explicit list
+requires 1535px. The 18 feature vectors and 27 condition renders are confirmed
+by the emitted CSS and native Chromium prelude readbacks. All 222 calibration
+samples passed before the deliberate stop; the interrupted command records
+26,896 renders, 530.131s and `acceptanceComplete=false`. Shipping shades and
+the acceptance receipt remain byte-identical to `721ebe12`.
+
+### Residuals
+
+The objective still has no glyph-against-backdrop floor. The search has not
+been rerun after the new measurement, so no new 30%-lightness outcome is
+claimed. The full `client/src` freshness scan remains required by Tailwind's
+content scan. The later fixture/font, protocol, record corrections and proof
+stages remain pending. All previously excluded contract scope remains excluded.
+
+### Coordinator's Frozen Whole-Tree Gate at 721ebe12
+
+The coordinator supplied this pre-change result, dated 2026-10-06, from a
+dedicated frozen worktree under `NEXUS_RUN_POSTGRES=1 -p tests.dbname_audit`.
+It is not a gate result for this resumed checkpoint:
+
+```text
+6116 passed, 59 skipped, 35 warnings in 2431.35s (0:40:31)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+GATE-1099 EXIT=0
+```
+
+Codex, GPT-6.
