@@ -1,0 +1,292 @@
+# R4 Changed Files, One Line Each
+
+Scope: f648a18a through the completed R4 evidence checkpoint, including preserved intermediate diagnostics and the resumed final evidence. Every earlier commit remains in ancestry.
+
+- `docs/maptab_rebuild_spec.md` — Correct the sidebar 9px geometry and stable path contract.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor-stop-report.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/artifact-hashes.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/attempt-proof.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/before-tooltip-proof.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/before-tooltip-repeat-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/before-tooltip-repeat-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/before-tooltip-repeat-2-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/before-tooltip-repeat-2-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/before-tooltip-repeat-3-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/before-tooltip-repeat-3-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/capture-batch-1-measurement-failure-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/capture-batch-1-measurement-failure-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/capture-batch-1-measurement-failure.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/capture-inputs.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/commands.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/commands.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/frames-measurement-failure-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/frames-measurement-failure-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/frames-measurement-failure.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/independent-png-check.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/isolated-measurement-failure-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/isolated-measurement-failure-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/isolated-measurement-failure.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/no-shadow-repeat-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/no-shadow-repeat-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/no-shadow-repeat-2-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/no-shadow-repeat-2-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/no-shadow-repeat-3-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/no-shadow-repeat-3-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/sequence-measurement-failure-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/sequence-measurement-failure-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/sequence-measurement-failure.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/shadow-causality.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-diagnostic.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-full-shell.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-proof.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-repeat-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-repeat-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-repeat-2-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-repeat-2-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-repeat-3-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-repeat-3-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop-stop-report.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/artifact-hashes.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/capture-inputs.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/capture-manifest.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/commands.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/commands.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/control-causality.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/control-causality.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/control-diagnostic.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/control-diagnostic.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/default-Veil-key-optional.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/default-Veil-key-required.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/gilded-optional-absent-hidden-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/gilded-optional-absent-hidden-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/gilded-optional-absent-transparent-stroke-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/gilded-present-hidden-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/gilded-present-hidden-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/gilded-present-transparent-stroke-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/gilded-provisional-joint.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/independent-png-check.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/key-reachability.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/run_gate.py` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/vector-optional-absent-hidden-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/vector-optional-absent-hidden-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/vector-optional-absent-transparent-stroke-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/vector-present-hidden-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/vector-present-hidden-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/vector-present-transparent-stroke-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/vector-provisional-joint.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/veil-optional-absent-hidden-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/veil-optional-absent-hidden-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/veil-optional-absent-transparent-stroke-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/veil-present-hidden-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/veil-present-hidden-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/veil-present-transparent-stroke-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/control-backdrop/veil-provisional-joint.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/gilded-selected-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/gilded-selected-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/histogram-fixture.tsx` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/histogram-probe.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/histogram-proof.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/histogram-stop-report.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/interaction-commands.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/interaction-incomplete.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/interaction-stop-report.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean-stop-report.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/artifact-hashes.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/capture-manifest.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/commands.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/commands.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/gilded-witness-differences.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/group-results.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/independent-png-check.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/offline-jobs.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/plants-proof.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/gilded-current-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/gilded-current-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/gilded-hovered-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/gilded-hovered-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/gilded-map-monochrome.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/gilded-map.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/gilded-selected-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/gilded-selected-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/product-proof.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/vector-current-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/vector-current-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/vector-hovered-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/vector-hovered-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/vector-map-monochrome.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/vector-map.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/vector-selected-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/vector-selected-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/veil-current-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/veil-current-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/veil-hovered-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/veil-hovered-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/veil-map-monochrome.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/veil-map.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/veil-selected-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-final/veil-selected-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/product-proof.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/run_gate.py` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/swatch-inputs.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/candidate-repeat-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/candidate-repeat-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/candidate-tooltip-visible-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/candidate-tooltip-visible-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/full-shell.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/shipping-immediate-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/shipping-immediate-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/shipping-tooltip-visible-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/shipping-tooltip-visible-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/tooltip-witness/witness.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/unreachable-contexts.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/vector-witness-differences.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/mask-mean/veil-witness-differences.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/normal-memory-fill.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/over-memory-fill.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control-stop-report.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/capture-inputs.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/capture-manifest.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/commands.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/commands.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/diagnostic.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/diagnostic.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/full-attempt-measurement-failure-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/full-attempt-measurement-failure-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/full-attempt-measurement-failure.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-diagnostic-ancestor-filter-none-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-diagnostic-ancestor-filter-none-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-neutral-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-neutral-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-prescribed-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-prescribed-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-prescribed-2-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-prescribed-2-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-prescribed-3-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-prescribed-3-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-tag-status-same-clip-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/gilded-tag-status-same-clip-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/independent-png-check.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/probe-measurement-failure-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/probe-measurement-failure-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/probe-measurement-failure.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-diagnostic-ancestor-filter-none-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-diagnostic-ancestor-filter-none-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-neutral-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-neutral-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-prescribed-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-prescribed-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-prescribed-2-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-prescribed-2-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-prescribed-3-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-prescribed-3-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-tag-status-same-clip-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/vector-tag-status-same-clip-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-diagnostic-ancestor-filter-none-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-diagnostic-ancestor-filter-none-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-neutral-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-neutral-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-prescribed-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-prescribed-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-prescribed-2-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-prescribed-2-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-prescribed-3-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-prescribed-3-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-tag-status-same-clip-1-control.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/paint-control/veil-tag-status-same-clip-1-painted.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/png.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/product-probe.mjs` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/product-proof.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/real-shell.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/rest-map-fill.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/acceptance.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/artifact-hashes.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/capture-manifest.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/changed-files.md` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/commands.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/commands.md` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/completion.md` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/gate-summary.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/gradient-proof.mjs` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/group-results.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/offline-coverage.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/offline-jobs.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/palette-delta.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/plants-default-proof.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/plants-default.mjs` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/plants-ineffective-media.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/plants-summary.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/plants.md` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-current-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-current-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-hovered-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-hovered-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-map-monochrome.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-map.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-selected-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-selected-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/product-proof.json` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-current-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-current-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-hovered-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-hovered-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-map-monochrome.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-map.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-selected-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-selected-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-current-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-current-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-hovered-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-hovered-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-map-monochrome.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-map.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-selected-label-after.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-selected-label-before.png` — Record the fresh native-pointer, label/anchor or monochrome map proof.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/regenerate-evidence.py` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/regeneration.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/shadow-measurement-failure-control.png` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/shadow-measurement-failure-painted.png` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/shadow-measurement-failure.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/swatch-inputs.json` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/settled/unreachable-contexts.md` — Record the certified settling/acceptance, default plants or final proof evidence.
+- `docs/qa/777-glyph-first-states/after-review-r4/sidebar-hover-context-failure.json` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/sidebar-hover-context-failure.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/stop-report.md` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/vector-selected-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/vector-selected-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/veil-selected-label-after.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/after-review-r4/veil-selected-label-before.png` — Retain the historical R4 diagnostic, capture, stop report or replay script with its clarification context.
+- `docs/qa/777-glyph-first-states/amendment-2/exceptions.md` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/gilded-joint.json` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/gilded-pairs.md` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/pair-measurements.csv` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/pair-measurements.md` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/state-tokens.json` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/state-tokens.md` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/swatches.png` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/swatches.svg` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/vector-joint.json` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/vector-pairs.md` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/veil-joint.json` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/amendment-2/veil-pairs.md` — Regenerate the certified painted-mean assignments, pair tables, exceptions or swatches.
+- `docs/qa/777-glyph-first-states/verification.md` — Append the final certified R4 completion and exact evidence links.
+- `ui/client/src/components/nexus/MapPane.test.tsx` — Exercise the map path contract.
+- `ui/client/src/components/nexus/MapPane.tsx` — Keep pin layers and hit target stable; restore global label mapping; enlarge sidebar glyphs.
+- `ui/client/src/components/nexus/StateGlyphs.test.tsx` — Prove DOM identity and real delete-arm timer bounds.
+- `ui/client/src/components/nexus/nexus-layout.css` — Restore the memory halo global paint.
+- `ui/client/src/index.css` — Ship the independently accepted state-token assignments.
+- `ui/client/src/state-shades-measurement.ts` — Consume linear painted means for deutan, Lab and CIEDE2000.
+- `ui/client/src/state-shades.test.ts` — Gate freshness, complete settled evidence, per-group choices, global freeze and consumer closure.
+- `ui/client/src/state-surfaces.resolved.json` — Store the certified 64008-render painted/control receipt.
+- `ui/scripts/resolve-state-surfaces.mjs` — Capture settled production states and real candidate paints; assemble bounded shards.
+- `ui/scripts/state-surfaces/README.md` — Document the painted-mask convention, settling, hash and bounded regeneration.
+- `ui/scripts/state-surfaces/domain.mjs` — Keep the finite owner-authorized candidate domain.
+- `ui/scripts/state-surfaces/fixture.tsx` — Mount production shell, settings sections and map with deterministic local seed data.
+- `ui/scripts/state-surfaces/inputs.mjs` — Hash the entire esbuild module graph and Tailwind/CSS/tooling inputs.
+- `ui/scripts/state-surfaces/media.mjs` — Enumerate CSS-derived media and declared motion phases.
+- `ui/scripts/state-surfaces/plants.mjs` — Retain the canonical reproducible scratch mutation protocol.
+- `ui/scripts/state-surfaces/png.mjs` — Decode Chromium PNGs and calculate the linear foreground-mask mean.
+- `ui/scripts/state-surfaces/styles.css` — Define the paint-only transparent control.
+
+Codex, GPT-6.

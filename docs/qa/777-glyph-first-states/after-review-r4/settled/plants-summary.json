@@ -1,0 +1,209 @@
+[
+  {
+    "plant": "opaque-gradient-stop",
+    "staleExit": 1,
+    "captureExit": 0,
+    "freshExit": 1,
+    "namedFreshFailures": [
+      " FAIL  plant-default.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "restored": {
+      "name": "opaque-gradient-stop-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": {
+      "name": "opaque-gradient-stop-scope",
+      "condition": "default",
+      "acceptanceComplete": false,
+      "renderCount": 3556,
+      "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+      "mutation": [
+        "radial-gradient(1200px 600px at 50% -10%, hsl(320 55% 40% / .07), transparent 60%)",
+        "radial-gradient(1200px 600px at 50% -10%, hsl(320 55% 40% / .07), #ffffff 60%)"
+      ]
+    },
+    "measurementFailure": null
+  },
+  {
+    "plant": "theme-provider-opacity",
+    "staleExit": 1,
+    "captureExit": 0,
+    "freshExit": 1,
+    "namedFreshFailures": [
+      " FAIL  plant-default.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "restored": {
+      "name": "theme-provider-opacity-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": {
+      "name": "theme-provider-opacity-scope",
+      "condition": "default",
+      "acceptanceComplete": false,
+      "renderCount": 3556,
+      "mutatedPath": "ui/client/src/contexts/ThemeContext.tsx",
+      "mutation": [
+        "{children}",
+        "<div style={{opacity: 0.35}}>{children}</div>"
+      ]
+    },
+    "measurementFailure": null
+  },
+  {
+    "plant": "media-root-override",
+    "staleExit": 1,
+    "captureExit": 0,
+    "freshExit": 1,
+    "namedFreshFailures": [
+      " FAIL  plant-default.test.ts > 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean",
+      " FAIL  plant-default.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "restored": {
+      "name": "media-root-override-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": {
+      "name": "media-root-override-scope",
+      "condition": "default",
+      "acceptanceComplete": false,
+      "renderCount": 3556,
+      "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+      "mutation": "\n@media (prefers-color-scheme: dark) { html.dark.theme-vector { --state-key-verified: var(--state-key-present); } }\n"
+    },
+    "measurementFailure": null
+  },
+  {
+    "plant": "optional-row-opacity",
+    "staleExit": 1,
+    "captureExit": 0,
+    "freshExit": 1,
+    "namedFreshFailures": [
+      " FAIL  plant-default.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "restored": {
+      "name": "optional-row-opacity-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": {
+      "name": "optional-row-opacity-scope",
+      "condition": "default",
+      "acceptanceComplete": false,
+      "renderCount": 3556,
+      "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+      "mutation": "\n.key-row.optional { opacity: .15; }\n"
+    },
+    "measurementFailure": null
+  },
+  {
+    "plant": "theme-backdrop",
+    "staleExit": 1,
+    "captureExit": 0,
+    "freshExit": 1,
+    "namedFreshFailures": [
+      " FAIL  plant-default.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "restored": {
+      "name": "theme-backdrop-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": {
+      "name": "theme-backdrop-scope",
+      "condition": "default",
+      "acceptanceComplete": false,
+      "renderCount": 3556,
+      "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+      "mutation": "\n.dark.theme-vector .key-row { background: #ffffff; }\n"
+    },
+    "measurementFailure": null
+  },
+  {
+    "plant": "important-state-surface",
+    "staleExit": 1,
+    "captureExit": 0,
+    "freshExit": 1,
+    "namedFreshFailures": [
+      " FAIL  plant-default.test.ts > 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled",
+      " FAIL  plant-default.test.ts > 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean",
+      " FAIL  plant-default.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "restored": {
+      "name": "important-state-surface-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": {
+      "name": "important-state-surface-scope",
+      "condition": "default",
+      "acceptanceComplete": false,
+      "renderCount": 3556,
+      "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+      "mutation": "\n.lm-trash.armed { color: var(--state-delete-unarmed) !important; }\n"
+    },
+    "measurementFailure": null
+  },
+  {
+    "plant": "has-state-surface",
+    "staleExit": 1,
+    "captureExit": 0,
+    "freshExit": 1,
+    "namedFreshFailures": [
+      " FAIL  plant-default.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "restored": {
+      "name": "has-state-surface-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": {
+      "name": "has-state-surface-scope",
+      "condition": "default",
+      "acceptanceComplete": false,
+      "renderCount": 3556,
+      "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+      "mutation": "\n.key-row:has(.key-status.verified) .key-status { color: var(--state-key-present); }\n"
+    },
+    "measurementFailure": null
+  },
+  {
+    "plant": "map-blend",
+    "staleExit": 1,
+    "captureExit": 0,
+    "freshExit": 1,
+    "namedFreshFailures": [
+      " FAIL  plant-default.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "restored": {
+      "name": "map-blend-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": {
+      "name": "map-blend-scope",
+      "condition": "default",
+      "acceptanceComplete": false,
+      "renderCount": 3556,
+      "mutatedPath": "ui/client/src/components/nexus/nexus-layout.css",
+      "mutation": "\n.map-pin { mix-blend-mode: difference; }\n"
+    },
+    "measurementFailure": null
+  },
+  {
+    "plant": "key-overpainting-shadow",
+    "staleExit": 1,
+    "captureExit": 1,
+    "freshExit": null,
+    "namedFreshFailures": [],
+    "restored": {
+      "name": "key-overpainting-shadow-restored",
+      "byteIdentical": true,
+      "receiptRestored": true
+    },
+    "scope": null,
+    "measurementFailure": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving default/Gilded\u2026\nResolving default/Vector\u2026\nResolving default/Veil\u2026\nPainted capture progress: renders=493; wall=48.433s\nPainted capture progress: renders=928; wall=93.434s\nIncomplete painted probe: renders=1318; wall=112.410s; acceptanceComplete=false\nfile:///private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/scripts/state-surfaces/png.mjs:72\n  if (!maskSize) throw new Error(`Measurement failure ${label}: empty foreground mask`);\n                       ^\n\nError: Measurement failure default/Vector/candidate/key/optional/rest/present/hsl(185 50% 50%): empty foreground mask\n    at foreground (file:///private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/scripts/state-surfaces/png.mjs:72:24)\n    at sample (file:///private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/scripts/resolve-state-surfaces.mjs:164:24)\n    at async captureValues (file:///private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/scripts/resolve-state-surfaces.mjs:237:28)\n    at async file:///private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/scripts/resolve-state-surfaces.mjs:281:11\n    at async Promise.all (index 2)\n    at async file:///private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/scripts/resolve-state-surfaces.mjs:81:5\n    at async Promise.all (index 0)\n    at async file:///private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/default-plants/plant-copy/ui/scripts/resolve-state-surfaces.mjs:77:3\n\nNode.js v24.3.0\n"
+  }
+]
