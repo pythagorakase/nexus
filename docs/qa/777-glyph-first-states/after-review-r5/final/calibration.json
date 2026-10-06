@@ -12980,9 +12980,9 @@
           },
           "animationsRunning": 0,
           "settleCriteria": {
-            "tooltipExpected": "open",
-            "tooltipState": "instant-open",
-            "tooltipPresent": true,
+            "tooltipExpected": "closed",
+            "tooltipState": "closed",
+            "tooltipPresent": false,
             "animations": "all document animations finished; infinite effects paused at the declared condition phase",
             "scope": "entire document, including surface, ancestors and overlapping/portalled siblings",
             "animationPhase": null,
