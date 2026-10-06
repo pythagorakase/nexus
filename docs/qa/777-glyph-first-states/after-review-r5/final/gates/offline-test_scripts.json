@@ -1,0 +1,15 @@
+{
+  "name": "offline-test_scripts",
+  "args": [
+    "/Users/pythagor/nexus/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_scripts"
+  ],
+  "exit": 0,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 31.91811854200205,
+  "tail": "........................................................................ [ 76%]\n......................                                                   [100%]\n=============================== warnings summary ===============================\ntests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]\ntests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]\n  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\ntests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]\ntests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]\n  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\ntests/test_scripts/test_check_exception_dispositions.py::test_new_unmarked_handler_fails[except ValueError:]\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n94 passed, 5 warnings in 26.01s"
+}
