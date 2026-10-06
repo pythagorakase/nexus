@@ -1017,3 +1017,9 @@ Node.js v24.3.0
 ```
 
 Codex, GPT-6.
+
+## Round-5 Record Correction
+
+The key-overpainting-shadow plant's robust detection is the recorded-table check (and freshness), not the 16-pixel floor. Required-row masks clear that floor; the recorded empty optional-row mask was a rounding coincidence. The verified-key drop-shadow and canvas-pin glow read state tokens by design under A2; only the memory meter box-shadow keeps a global token.
+
+Codex, GPT-6.

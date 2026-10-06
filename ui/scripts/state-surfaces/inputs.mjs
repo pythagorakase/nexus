@@ -15,12 +15,7 @@ export async function fixtureBuild(uiRoot) {
   return build({ absWorkingDir: uiRoot, entryPoints: ['scripts/state-surfaces/fixture.tsx'],
     bundle: true, write: false, metafile: true, platform: 'browser', format: 'iife', jsx: 'automatic',
     alias: { '@': resolve(uiRoot, 'client/src'), '@shared': resolve(uiRoot, 'shared') },
-    loader: { '.css': 'empty' }, plugins: [{ name: 'private-production-sections', setup(b) {
-      b.onLoad({ filter: /\/SettingsPane\.tsx$/ }, args => ({
-        contents: readFileSync(args.path, 'utf8') + '\nexport { ModelSection, KeysSection, SectionRail };\n',
-        loader: 'tsx', resolveDir: dirname(args.path),
-      }));
-    } }],
+    loader: { '.css': 'empty' },
   });
 }
 /** Path-delimited hashes of all transitive modules, styles/imports and tooling. */
@@ -47,6 +42,11 @@ export async function inputs(uiRoot, bundle = undefined) {
     else if (/\.(?:[jt]sx?|css)$/.test(path)) paths.add(path);
   } };
   content('client/src');
+  const assets = dir => { for (const entry of readdirSync(resolve(uiRoot, dir), { withFileTypes: true })) {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) assets(path); else paths.add(path);
+  } };
+  assets('client/public/fonts');
   const hash = createHash('sha256'), files = {};
   for (const path of [...paths].sort()) {
     const bytes = readFileSync(resolve(uiRoot, path));

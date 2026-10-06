@@ -27,10 +27,12 @@ are opaque; optional key rows at rest are mandatory translucent pairs. A failure
 the numbers and the two painted PNGs; the threshold and tolerances are fixed.
 Acceptance comparisons retain all reachable pairs over their real backdrops.
 
-The fixture mounts real NexusLayout, KeysSection, ModelSection and MapPane
-with seeded local data and the production Vite build's emitted CSS in shipped
+The fixture mounts real NexusLayout with its MapPane or SettingsPane,
+including the real settings wrapper, FontProvider and TooltipProvider,
+with seeded local query data and the matching active tab and the production Vite build's emitted CSS in shipped
 order. No DOM/cascade/compositing model determines a color. The convention is
-file://, HTTP(S) aborted, device scale 4, 1200×900 default, dark scheme and
+file://, HTTP(S) aborted, production public fonts fulfilled from disk through
+Playwright routes, device scale 4, 1200×900 default, dark scheme and
 reduced motion, plus every CSS-derived emulatable media condition. Range
 breakpoints partition width/height into distinct integer viewport bands,
 including singleton bands for coincident inclusive bounds. Each band's
@@ -61,7 +63,9 @@ keys in required rows, missing keys in optional rows, and the absent/missing
 pair without a shared context are excluded and documented in the evidence.
 
 Freshness hashes every esbuild metafile input, recursive CSS imports, tooling,
-configs, lockfile, browser versions and the full Tailwind client-source scan.
+configs, lockfile, browser versions, production font files and the full
+Tailwind client-source scan. Any client source edit therefore requires
+regeneration; that conservative scope remains a process residual.
 Vitest recomputes it in a clean Node process without launching a browser.
 
 Run from the worktree root, using bounded condition batches:
@@ -85,12 +89,37 @@ scratch output and cannot replace the acceptance receipt. Assembly requires
 complete unique conditions, all themes and identical current fingerprints.
 Failed captures retain named diagnostic PNGs and acceptanceComplete=false.
 The per-group exhaustive search accepts 15 when reachable, otherwise the
-group's maximum; ties prefer the fewest changed tokens. Tables, swatches and
+group's maximum; ties prefer the fewest changed tokens, then the largest
+group minimum, then enumeration order. Tables, swatches and
 exception manifests must be refreshed alongside a changed accepted palette.
 
-The checked-in plants protocol runs in bounded stages; see `plants.mjs`.
-It first requires a passing unplanted control, then records stale rejection,
-full regeneration (or a named measurement failure), fresh rejection and
-restoration for each named plant. Scratch copies alone are mutated.
+The checked-in `plants.mjs` runs one bounded stage per command. It first
+requires the complete unplanted state-shades suite to pass and records content
+hashes before planting, checking those hashes against `git show HEAD:<path>`
+(the content OID for the LFS receipt). It records stale rejection, regeneration
+at the default 1200×900/dark/reduce condition only, fresh rejection, and
+restoration against the saved hashes and current HEAD. Restoration checks read
+the live worktree and scratch copy before any restoration write. Scratch copies
+alone are mutated; node_modules `dist` directories are retained.
+
+```sh
+STATE_SURFACES_SCRATCH="$PWD/scratchpad/777-S2/after-review-r5/plants" \
+node ui/scripts/state-surfaces/plants.mjs --stage control
+# For each plant name in plants.mjs, repeat with --plant NAME:
+# --stage stale, --stage capture, --stage fresh, --stage restore
+```
+
+Fresh diagnostics keep partial receipts `acceptanceComplete=false` and test
+core means, same-value witnesses, interaction semantics, recorded tables,
+root declarations and consumer closure at default only. They omit full-media
+certification and do not run a reduced-domain joint search. A media plant may
+add feature names to the default ID; the diagnostic records and normalizes that
+ID solely for comparisons with the same physical shipping default. The protocol
+uses the html-qualified dark media override that wins the production cascade.
+Gradient paint must regenerate successfully; element-scoped state declarations
+must fail. The gradient and redeclaration regressions are included.
+
+The complete JSON receipt exceeds GitHub's ordinary blob limit; it is tracked
+through the repository's existing LFS workflow without dropping samples.
 
 Codex, GPT-6.

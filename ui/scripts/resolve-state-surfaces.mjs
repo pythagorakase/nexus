@@ -88,6 +88,8 @@ async function renderInventory(condition, theme, calibrating = false) {
     page.on('pageerror', e => errors.push(e.message));
     page.on('request', r => { if (/^https?:/.test(r.url())) requests.push(r.url()); });
     await page.route(/^https?:/, route => route.abort());
+    await page.routeWebSocket(/.*/, () => {}); // in-page idle narrative transport; never connects to a server
+    await page.route('**/fonts/**', route => route.fulfill({ path: resolve(ui, 'client/public', new URL(route.request().url()).pathname.slice(1)) }));
     await page.goto(pathToFileURL(html).href);
     const matchedMedia = await page.evaluate(preludes => Object.fromEntries(preludes.map(p => [p, matchMedia(p.slice(6)).matches])), media.preludes.filter(p => p.startsWith('media ') && !media.excluded.some(e => e.prelude === p)));
     for (const [feature, value] of Object.entries(condition.features))
@@ -200,7 +202,7 @@ async function renderInventory(condition, theme, calibrating = false) {
       }
       return { ...measured, ...paint, selector, box, action, pseudos, target, stateAttributes, animationsRunning, settleCriteria, ...(captures ? { captures } : {}) };
     }
-      const result = { shipped: {}, before: {}, candidates: {}, reachability: {} };
+      const result = { shipped: {}, before: {}, candidates: {}, reachability: {}, fonts: {} };
       const calibration = { condition: condition.id, pigments: {}, samples: {}, groups: {}, requiredPairs: [],
         tolerances: { opaque: 1, translucent: 2.5, backdrop: 1 }, passed: false };
       if (calibrating) results.proof.calibration[theme] = calibration;
@@ -211,8 +213,12 @@ async function renderInventory(condition, theme, calibrating = false) {
       async function mount(mode, terrain = 'sea', over = false, need = 'required') {
         await page.evaluate(args => window.renderSurfaces(...args), [theme.toLowerCase(), mode, terrain, over, need]);
         await page.locator('[data-testid="nexus-layout"]').waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        result.fonts[mode] = await page.evaluate(() => [...document.fonts].map(f => ({ family: f.family, status: f.status })));
+        if (result.fonts[mode].some(f => f.status === 'error') || !result.fonts[mode].some(f => f.status === 'loaded'))
+          throw new Error(`Font input failure ${condition.id}/${theme}/${mode}: ${JSON.stringify(result.fonts[mode])}`);
         if (mode === 'memory') await page.locator('.mem-fill').waitFor();
-        if (mode === 'delete') { await page.locator('[data-testid="lm-toggle-fixture"]').click(); await page.locator('.lm-trash').waitFor(); }
+        if (mode === 'delete') { await page.getByRole('button', { name: 'Model', exact: true }).click(); await page.locator('[data-testid="lm-toggle-fixture"]').click(); await page.locator('.lm-trash').waitFor(); }
         if (mode === 'key') {
           await page.locator('[data-testid="key-verify-verified"]').click();
           await page.locator('.key-glyph-verified').waitFor();
@@ -389,7 +395,7 @@ try {
   // Every regeneration calibrates the full inventory at the documented default
   // before any expensive candidate capture, even for filtered/probe runs.
   for (const theme of ['Veil', 'Gilded', 'Vector']) await renderInventory(defaultCondition, theme, true);
-  await Promise.all(media.variants.filter(c => !process.env.STATE_SURFACES_CONDITION || process.env.STATE_SURFACES_CONDITION.split(',').includes(c.id)).map(async condition => {
+  await Promise.all(media.variants.filter(c => !process.env.STATE_SURFACES_CONDITION || process.env.STATE_SURFACES_CONDITION.split(',').some(id => id === c.id || id === 'default' && c.id === defaultCondition.id)).map(async condition => {
     await acquire();
     try {
       results.conditions[condition.id] = {};

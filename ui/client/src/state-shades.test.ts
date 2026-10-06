@@ -161,11 +161,17 @@ type Receipt = {
     tolerances: { opaque: number; translucent: number; backdrop: number }; passed: boolean;
   }>; acceptanceComplete: boolean; minimumMaskPixels: number; measurement: string; renderCount: number; wallSeconds: number; pageErrors: string[]; networkRequests: string[] };
   conditions: Record<string, Record<Theme, {
-    shipped: ContextSamples; before: ContextSamples;
+    shipped: ContextSamples; before: ContextSamples; fonts: Record<string, { family: string; status: string }[]>;
     candidates: Record<string, Record<string, Record<string, Sample>>>;
   }>>;
 };
-const receipt = JSON.parse(readFileSync(resolve(import.meta.dirname, "state-surfaces.resolved.json"), "utf8")) as Receipt;
+const receiptPath = resolve(import.meta.dirname, "state-surfaces.resolved.json");
+let receipt: Receipt;
+try { receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as Receipt; }
+catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  throw new Error("Missing browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).");
+}
 const currentInputs = JSON.parse(execFileSync(process.execPath,
   [resolve(import.meta.dirname, "../../scripts/state-surfaces/inputs.mjs"), resolve(import.meta.dirname, "../..")], { encoding: "utf8" }));
 if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))
@@ -174,13 +180,15 @@ if (receipt.proof.acceptanceComplete !== true)
   throw new Error("Incomplete painted state surfaces: filtered/probe captures are not acceptance receipts.");
 const painted = (sample: Sample): Triple => sample.meanLinear;
 // No DOM/cascade/compositing model: only browser-painted candidate captures.
-const contextNames = [
-  "memory/fill",
-  ...["ready", "ready-exceeds"].flatMap(row => ["rest", "row-hover", "button-hover", "focus-visible"].map(action => `delete/${row}/${action}`)),
-  ...["required", "optional"].flatMap(need => ["rest", "hover", "focus-visible"].map(action => `key/${need}/${action}`)),
-  ...["sea", "land"].flatMap(terrain => ["fill", "ring"].map(part => `map/canvas-${terrain}/${part}`)),
-  ...["rest", "hover", "selected-current"].flatMap(action => ["fill", "ring"].map(part => `map/sidebar/${action}/${part}`)),
+const contextInventory = [
+  { name: "memory/fill", pseudoState: "none" },
+  ...["ready", "ready-exceeds"].flatMap(row => ["rest", "row-hover", "button-hover", "focus-visible"].map(action => ({ name: `delete/${row}/${action}`, pseudoState: action === "rest" ? "none" : action }))),
+  ...["required", "optional"].flatMap(need => ["rest", "hover", "focus-visible"].map(action => ({ name: `key/${need}/${action}`, pseudoState: action === "rest" ? "none" : action === "hover" ? "row-hover" : action }))),
+  ...["sea", "land"].flatMap(terrain => ["fill", "ring"].map(part => ({ name: `map/canvas-${terrain}/${part}`, pseudoState: "pin-hover" }))),
+  ...["rest", "hover", "selected-current"].flatMap(action => ["fill", "ring"].map(part => ({ name: `map/sidebar/${action}/${part}`, pseudoState: action === "hover" ? "row-hover" : "pin-hover" }))),
 ];
+const contextNames = contextInventory.map(c => c.name);
+
 function statesIn(context: string): string[] {
   const surface = context.split("/")[0] as Surface;
   return Object.keys(MAPPINGS[surface]).filter(state =>
@@ -308,7 +316,7 @@ function jointSearch(theme: Theme) {
     return { roots, entries, best: entries.reduce((n, e) => Math.max(n, e.minimum), -Infinity), coverage: { surface, roots, visited, unique: unique.size, expected } };
   });
   const best = Math.min(...factors.map(f => f.best));
-  const chosen = factors.map(f => f.entries.filter(e => e.minimum >= Math.min(15, f.best)).sort((a, b) => a.changed - b.changed)[0]);
+  const chosen = factors.map(f => f.entries.filter(e => e.minimum >= Math.min(15, f.best)).sort((a, b) => a.changed - b.changed || b.minimum - a.minimum)[0]);
   const assignment = Object.assign({}, ...chosen.map(e => Object.fromEntries(Object.entries(e.ix).map(([r, i]) => [r, domains[r][i].value])))) as Record<string, string>;
   const shipped = { ...palette(shippedCss, theme), ...Object.fromEntries(ROOTS.map(r => [r, rgb(assignment[r])])) };
   return {
@@ -325,6 +333,14 @@ const searchAll = () => searches ??= THEMES.map(jointSearch);
 // Explicit one-theme exception manifests; the context inventory is fixed above,
 // while shortfall IDs are committed and checked below.
 const exceptions = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json"), "utf8")) as Record<Theme, string[]>;
+function assertStateDeclaration(decl: postcss.Declaration, path: string): void {
+  if (!decl.prop.startsWith("--state-")) return;
+  const rule = decl.parent;
+  const themeRoots = [".dark", ".dark.theme-gilded", ".theme-gilded .dark", ".dark.theme-vector", ".theme-vector .dark"];
+  expect(path === resolve(import.meta.dirname, "index.css") && rule?.type === "rule" &&
+    rule.parent?.type === "root" && rule.selectors.every(s => themeRoots.includes(s)),
+    `${path}: ${decl.prop} must be declared in an index.css theme root`).toBe(true);
+}
 describe("777-S2 state shades", () => {
   it("tooltip_gradient_uses_the_90_percent_core_in_linear_light_without_a_mode_floor", () => {
     const dir = resolve(import.meta.dirname, "../../../docs/qa/777-glyph-first-states/after-review-r4/absolute-floor");
@@ -412,6 +428,10 @@ describe("777-S2 state shades", () => {
     expect(receipt.proof.pageErrors).toEqual([]);
     expect(receipt.proof.networkRequests).toEqual([]);
     for (const theme of THEMES) for (const { id } of receipt.media.variants) {
+      for (const faces of Object.values(receipt.conditions[id][theme].fonts)) {
+        expect(faces.some(f => f.status === "loaded")).toBe(true);
+        expect(faces.some(f => f.status === "error")).toBe(false);
+      }
       for (const phase of ["before", "shipped"] as const) {
         const contexts = receipt.conditions[id][theme][phase];
         expect(Object.keys(contexts)).toEqual(contextNames);
@@ -426,7 +446,7 @@ describe("777-S2 state shades", () => {
     expect(receipt.proof.minimumMaskPixels).toBe(16);
     expect(receipt.proof.coreThreshold).toBe(.9);
     expect(receipt.proof.measurement).toContain("mean in linear sRGB");
-    const check = (sample: Sample, context: string) => {
+    const check = (sample: Sample, context: string, state: string) => {
       expect(sample.maskSize, `${context}: surface did not paint`).toBeGreaterThanOrEqual(receipt.proof.minimumMaskPixels);
       expect(sample.coreSize).toBeGreaterThan(0);
       expect(sample.coreSize).toBeLessThanOrEqual(sample.maskSize);
@@ -445,19 +465,23 @@ describe("777-S2 state shades", () => {
       expect(sample.settleCriteria.tooltipPresent).toBe(sample.settleCriteria.tooltipExpected === 'open');
       if (sample.settleCriteria.tooltipExpected === 'open')
         expect(['delayed-open', 'instant-open']).toContain(sample.settleCriteria.tooltipState);
-      if (context.endsWith("focus-visible")) {
-        expect(sample.target.focusVisible, `${context}: Tab focus-visible`).toBe(true);
-        expect(sample.pseudos.focusWithin).toBe(true);
-        expect(sample.action).toContain("Tab");
-      }
-      if (context.endsWith("hover") && !context.endsWith("button-hover")) expect(sample.pseudos.ancestorHover, `${context}: row hover`).toBe(true);
-      if (context.endsWith("button-hover")) expect(sample.target.hover).toBe(true);
+      const declared = contextInventory.find(c => c.name === context)!.pseudoState;
+      const expected = declared === "pin-hover" && state !== "hovered" ? "none" : declared;
+      expect(sample.target.focusVisible, `${context}: focus-visible`).toBe(expected === "focus-visible");
+      expect(sample.pseudos.focusVisible).toBe(false); // sampled SVG/path/span is not the control
+      expect(sample.pseudos.focusWithin).toBe(expected === "focus-visible");
+      expect(sample.pseudos.pinHover).toBe(expected === "pin-hover");
+      expect(sample.pseudos.ancestorHover).toBe(expected === "row-hover" || expected === "button-hover");
+      if (expected !== "row-hover") expect(sample.target.hover).toBe(expected === "button-hover");
+      if (expected === "none") expect(sample.pseudos.hover).toBe(false);
+      if (expected === "focus-visible") expect(sample.action).toContain("Tab");
+
     };
     for (const { id } of receipt.media.variants) for (const theme of THEMES) {
       const data = receipt.conditions[id][theme];
       for (const phase of ["before", "shipped"] as const)
         for (const [context, samples] of Object.entries(data[phase])) Object.entries(samples).forEach(([state, s]) => {
-          check(s, context);
+          check(s, context, state);
           if (context.startsWith("map/")) {
             expect(s.stateAttributes.mapState).toBe(state);
             if (state === "hovered") expect(s.pseudos.pinHover).toBe(true);
@@ -470,7 +494,7 @@ describe("777-S2 state shades", () => {
         const group = Object.entries(MAPPINGS).find(([, states]) => Object.values(states).includes(root))![0];
         for (const samples of Object.values(data.candidates[root])) {
           expect(Object.keys(samples)).toEqual(contextNames.filter(c => c.startsWith(`${group}/`) && statesIn(c).includes(Object.entries(MAPPINGS[group as Surface]).find(([, r]) => r === root)![0])));
-          for (const [context, sample] of Object.entries(samples)) check(sample, context);
+          for (const [context, sample] of Object.entries(samples)) check(sample, context, Object.entries(MAPPINGS[group as Surface]).find(([, r]) => r === root)![0]);
         }
       }
     }
@@ -534,9 +558,10 @@ describe("777-S2 state shades", () => {
   }, 120000);
   it("global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values", () => {
     const normalize = (v: string) => v.replace(/\s+/g, "");
-    function otherGlobals(css: string, skipThemes: boolean): string[] {
+    function otherGlobals(css: string, skipThemes: boolean, path: string): string[] {
       const result: string[] = [];
       postcss.parse(css).walkDecls(decl => {
+        assertStateDeclaration(decl, path);
         if (!decl.prop.startsWith("--") || ROOTS.includes(decl.prop)) return;
         const rule = decl.parent;
         if (skipThemes && rule?.type === "rule" && rule.parent?.type === "root" &&
@@ -545,9 +570,9 @@ describe("777-S2 state shades", () => {
       });
       return result;
     }
-    expect(otherGlobals(shippedCss, true)).toEqual(otherGlobals(baseCss, true));
+    expect(otherGlobals(shippedCss, true, resolve(import.meta.dirname, "index.css"))).toEqual(otherGlobals(baseCss, true, resolve(import.meta.dirname, "index.css")));
     const baseLayout = execFileSync("git", ["show", `${START}:ui/client/src/components/nexus/nexus-layout.css`], { encoding: "utf8" });
-    expect(otherGlobals(layoutCss, false)).toEqual(otherGlobals(baseLayout, false));
+    expect(otherGlobals(layoutCss, false, resolve(import.meta.dirname, "components/nexus/nexus-layout.css"))).toEqual(otherGlobals(baseLayout, false, resolve(import.meta.dirname, "components/nexus/nexus-layout.css")));
     for (const theme of THEMES) {
       const before = tokens(baseCss, theme), after = tokens(shippedCss, theme);
       expect(Object.keys(after).filter(r => r.startsWith("--state-")).sort()).toEqual([...ROOTS].sort());
@@ -605,6 +630,7 @@ describe("777-S2 state shades", () => {
     for (const f of css) f.ast.walkRules(rule => {
       const members = rule.selectors.map(mentionsSurface);
       rule.walkDecls(decl => {
+        assertStateDeclaration(decl, f.path);
         if (rule.selector === ".topbar .mem-fill" && decl.prop === "box-shadow") {
           expect(decl.value).toBe("var(--glow-soft)"); return;
         }

@@ -1,0 +1,543 @@
+[
+  {
+    "theme": "veil",
+    "fontRoutes": [
+      "file:///fonts/SourceCodePro-VariableFont_wght.ttf",
+      "file:///fonts/Megrim-Regular.ttf",
+      "file:///fonts/Cinzel-VariableFont_wght.ttf",
+      "file:///fonts/Spectral-Regular.ttf",
+      "file:///fonts/Monoton-Regular.ttf",
+      "file:///fonts/SpaceMono-Regular.ttf",
+      "file:///fonts/CormorantGaramond-VariableFont_wght.ttf",
+      "file:///fonts/Sixtyfour-Variable.ttf",
+      "file:///fonts/Rajdhani-Regular.ttf"
+    ],
+    "fonts": [
+      {
+        "family": "KaTeX_AMS",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Caligraphic",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Caligraphic",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Fraktur",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Fraktur",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Math",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Math",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Script",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size1",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size2",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size3",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size4",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Typewriter",
+        "status": "unloaded"
+      },
+      {
+        "family": "Megrim",
+        "status": "loaded"
+      },
+      {
+        "family": "Monoton",
+        "status": "loaded"
+      },
+      {
+        "family": "Sixtyfour",
+        "status": "loaded"
+      },
+      {
+        "family": "Cinzel",
+        "status": "loaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "loaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "unloaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "unloaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "unloaded"
+      },
+      {
+        "family": "Source Code Pro",
+        "status": "loaded"
+      },
+      {
+        "family": "Source Code Pro",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "loaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Cormorant Garamond",
+        "status": "loaded"
+      },
+      {
+        "family": "Cormorant Garamond",
+        "status": "unloaded"
+      },
+      {
+        "family": "Rajdhani",
+        "status": "loaded"
+      }
+    ],
+    "tab": "settings",
+    "panes": 1,
+    "scrollers": 1,
+    "inlineFonts": "--font-narrative: Spectral; --font-display: Megrim; --font-sans: Spectral; --font-serif: Spectral; --font-mono: Cinzel;"
+  },
+  {
+    "theme": "gilded",
+    "fontRoutes": [
+      "file:///fonts/SourceCodePro-VariableFont_wght.ttf",
+      "file:///fonts/Megrim-Regular.ttf",
+      "file:///fonts/Cinzel-VariableFont_wght.ttf",
+      "file:///fonts/Spectral-Regular.ttf",
+      "file:///fonts/Monoton-Regular.ttf",
+      "file:///fonts/SpaceMono-Regular.ttf",
+      "file:///fonts/CormorantGaramond-VariableFont_wght.ttf",
+      "file:///fonts/Sixtyfour-Variable.ttf",
+      "file:///fonts/Rajdhani-Regular.ttf",
+      "file:///fonts/SpaceMono-Bold.ttf"
+    ],
+    "fonts": [
+      {
+        "family": "KaTeX_AMS",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Caligraphic",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Caligraphic",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Fraktur",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Fraktur",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Math",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Math",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Script",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size1",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size2",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size3",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size4",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Typewriter",
+        "status": "unloaded"
+      },
+      {
+        "family": "Megrim",
+        "status": "loaded"
+      },
+      {
+        "family": "Monoton",
+        "status": "loaded"
+      },
+      {
+        "family": "Sixtyfour",
+        "status": "loaded"
+      },
+      {
+        "family": "Cinzel",
+        "status": "loaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "loaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "unloaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "loaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "unloaded"
+      },
+      {
+        "family": "Source Code Pro",
+        "status": "loaded"
+      },
+      {
+        "family": "Source Code Pro",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "loaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Cormorant Garamond",
+        "status": "loaded"
+      },
+      {
+        "family": "Cormorant Garamond",
+        "status": "unloaded"
+      },
+      {
+        "family": "Rajdhani",
+        "status": "loaded"
+      }
+    ],
+    "tab": "settings",
+    "panes": 1,
+    "scrollers": 1,
+    "inlineFonts": "--font-narrative: Cormorant Garamond; --font-display: Monoton; --font-sans: Cormorant Garamond; --font-serif: Cormorant Garamond; --font-mono: Space Mono;"
+  },
+  {
+    "theme": "vector",
+    "fontRoutes": [
+      "file:///fonts/SourceCodePro-VariableFont_wght.ttf",
+      "file:///fonts/Megrim-Regular.ttf",
+      "file:///fonts/Cinzel-VariableFont_wght.ttf",
+      "file:///fonts/Spectral-Regular.ttf",
+      "file:///fonts/Monoton-Regular.ttf",
+      "file:///fonts/SpaceMono-Regular.ttf",
+      "file:///fonts/CormorantGaramond-VariableFont_wght.ttf",
+      "file:///fonts/Sixtyfour-Variable.ttf",
+      "file:///fonts/Rajdhani-Regular.ttf"
+    ],
+    "fonts": [
+      {
+        "family": "KaTeX_AMS",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Caligraphic",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Caligraphic",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Fraktur",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Fraktur",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Main",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Math",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Math",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_SansSerif",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Script",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size1",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size2",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size3",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Size4",
+        "status": "unloaded"
+      },
+      {
+        "family": "KaTeX_Typewriter",
+        "status": "unloaded"
+      },
+      {
+        "family": "Megrim",
+        "status": "loaded"
+      },
+      {
+        "family": "Monoton",
+        "status": "loaded"
+      },
+      {
+        "family": "Sixtyfour",
+        "status": "loaded"
+      },
+      {
+        "family": "Cinzel",
+        "status": "loaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "loaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "unloaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "unloaded"
+      },
+      {
+        "family": "Space Mono",
+        "status": "unloaded"
+      },
+      {
+        "family": "Source Code Pro",
+        "status": "loaded"
+      },
+      {
+        "family": "Source Code Pro",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "loaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Spectral",
+        "status": "unloaded"
+      },
+      {
+        "family": "Cormorant Garamond",
+        "status": "loaded"
+      },
+      {
+        "family": "Cormorant Garamond",
+        "status": "unloaded"
+      },
+      {
+        "family": "Rajdhani",
+        "status": "loaded"
+      }
+    ],
+    "tab": "settings",
+    "panes": 1,
+    "scrollers": 1,
+    "inlineFonts": "--font-narrative: Rajdhani; --font-display: Sixtyfour; --font-sans: Source Code Pro; --font-serif: Source Code Pro; --font-mono: Source Code Pro;"
+  }
+]

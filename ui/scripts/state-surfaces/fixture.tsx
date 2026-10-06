@@ -1,14 +1,13 @@
 /** Production shell and sections with immutable, in-page synthetic data. */
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { createPortal, flushSync } from 'react-dom';
+import { flushSync } from 'react-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { FontProvider, KEEPERS } from '@/contexts/FontContext';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { DeveloperModeProvider } from '@/contexts/DeveloperModeContext';
 import { NexusLayout } from '@/components/nexus/NexusLayout';
-import { MapPane } from '@/components/nexus/MapPane';
-// Exported at bundle time, without editing the production module.
-import { ModelSection, KeysSection, SectionRail } from '@/components/nexus/SettingsPane';
 import { LOCAL_PROVIDER } from '@/components/nexus/LocalModelRows';
 import { secretsQueryKey } from '@/hooks/useSecrets';
 
@@ -24,6 +23,8 @@ let keyRows: any[] = [];
 window.fetch = async (input, init) => {
   const url = String(input), method = init?.method ?? 'GET';
   (window as any).fixtureTransport.push({ method, url });
+  if (method === 'HEAD' && url === '/api/settings') return new Response(null);
+  if (method === 'GET' && url === '/api/narrative/active?slot=4') return Response.json(null);
   if (method === 'GET' && url === '/api/secrets/status?slot=4') return Response.json(keyRows);
   if (method === 'POST' && /^\/api\/secrets\/verified\/verify$/.test(url))
     return Response.json({ provider: 'verified', verified: true, detail: 'synthetic fixture revision' });
@@ -35,9 +36,14 @@ const status = (active = false, over = false) => ({ models_dir: '/models', syste
   active: active ? { gguf_path: '/models/fixture/model.gguf', ready: true, failed: false } : null });
 function cache(theme: string, mode: string, terrain: string, over: boolean, need: string) {
   const c = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, gcTime: Infinity, retry: false, refetchOnWindowFocus: false } } });
-  const settings = { ui: { theme, local_models: knobs }, local_models: { model: 'fixture-local' }, apex: { model: 'fixture-other' },
+  const settings = { ui: { theme, local_models: knobs, fonts: KEEPERS }, local_models: { model: 'fixture-local' }, apex: { model: 'fixture-other' },
     settings_meta: { models: [{ id: 'fixture-local', provider: LOCAL_PROVIDER, label: 'Fixture' }], apex_allowed_providers: [LOCAL_PROVIDER] } };
   c.setQueryData(['/api/settings'], settings);
+  c.setQueryData(['/api/slot/4/settings'], { skald_model: 'fixture-other', gaia_model: null, apex_context_window: 8192 });
+  c.setQueryData(['/api/user-character', 4], null);
+  const generation = { poll_interval_seconds: 1e8, request_timeout_seconds: 10 };
+  c.setQueryData(['/api/slot/state', 4], { narrative_generation: generation, frontier_clock: null });
+  c.setQueryData(['/api/preferences', 'narrative-recovery'], { narrative_generation: generation });
   c.setQueryData(['/api/preferences'], { theme });
   c.setQueryData(['/api/dev/backstage/health'], false);
   c.setQueryData(['/api/local-models/status'], status(mode === 'memory', over));
@@ -55,23 +61,16 @@ function cache(theme: string, mode: string, terrain: string, over: boolean, need
   c.setQueryData(secretsQueryKey(4), keyRows);
   return { c, settings };
 }
-function Fixture({ mode, settings }: { mode: string; settings: any }) {
-  const [host, setHost] = useState<Element | null>(null);
-  useEffect(() => { const main = document.querySelector('.nexus-content')!;
-    main.querySelector('.pane-notice')?.remove(); setHost(main); }, []);
-  return <><NexusLayout />{host && mode !== 'memory' && createPortal(mode === 'map' ? <MapPane slot={4} /> :
-    <div className="settings-pane-v2"><SectionRail active={mode === 'delete' ? 'model' : 'keys'} onPick={() => {}}
-      sections={[{ id: 'model', label: 'Model' }, { id: 'keys', label: 'API Keys' }]} />
-      <div className="set-scroller">{mode === 'delete' ? <ModelSection settings={settings} onPickSkald={() => {}} onPickGaia={() => {}} /> : <KeysSection slot={4} />}</div>
-    </div>, host)}</>;
-}
 let revision = 0;
 const root = createRoot(document.getElementById('root')!);
 (window as any).renderSurfaces = (theme: string, mode: string, terrain = 'sea', over = false, need = 'required') => {
   const { c, settings } = cache(theme, mode, terrain, over, need); currentClient?.clear(); currentClient = c;
   localStorage.setItem('nexus-theme', theme);
+  if (mode === 'memory') localStorage.removeItem('activeSlot');
+  else localStorage.setItem('activeSlot', '4');
+  history.replaceState(null, '', `?tab=${mode === 'map' ? 'map' : mode === 'memory' ? 'narrative' : 'settings'}`);
   flushSync(() => root.render(<QueryClientProvider key={`${++revision}/${theme}/${mode}/${terrain}/${over}/${need}`} client={c}><ThemeProvider><DeveloperModeProvider>
-    <Fixture mode={mode} settings={settings} />
+    <FontProvider><TooltipProvider><NexusLayout /></TooltipProvider></FontProvider>
   </DeveloperModeProvider></ThemeProvider></QueryClientProvider>));
 };
 (window as any).setOver = (over: boolean) => currentClient.setQueryData(['/api/local-models/status'], status(true, over));

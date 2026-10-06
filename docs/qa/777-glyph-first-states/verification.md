@@ -702,7 +702,7 @@ recursive CSS imports, the full Tailwind client-source scan, scripts/helpers,
 configs, package/lockfiles, emulation and browser versions. Vitest recomputes
 the module graph/hash without a browser. Global freeze compares entire
 normalized declarations against 8ccd3008, with only seven exact #b83d7a Veil
-anchors exempt. Consumer closure excludes labels and decorative halos.
+anchors exempt. Consumer closure excludes canvas labels and the memory meter box-shadow; the verified-key and canvas-pin drop-shadow halos read state tokens by design under A2.
 
 Amendment 4 searches each group independently. Groups with a ≥15 assignment
 ship one with the fewest changed tokens; other groups ship their own maximum.
@@ -898,6 +898,32 @@ stages remain pending. All previously excluded contract scope remains excluded.
 The coordinator supplied this pre-change result, dated 2026-10-06, from a
 dedicated frozen worktree under `NEXUS_RUN_POSTGRES=1 -p tests.dbname_audit`.
 It is not a gate result for this resumed checkpoint:
+
+```text
+6116 passed, 59 skipped, 35 warnings in 2431.35s (0:40:31)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+GATE-1099 EXIT=0
+```
+
+Codex, GPT-6.
+
+
+## After the Stopping-Rule Reviews
+
+Round 5 replaces the halo-biased whole-mask mean with the mean of the 90%-difference core, retaining the foreground mask and its size floors. Identical-pigment calibration compares like parts: opaque pairs regardless of backdrop (≤1.0), translucent pairs only over matching control-core backdrops (≤2.5; backdrop agreement ≤1.0). Skipped pairs and mandatory coverage are recorded. Optional key rows are mandatory translucent pairs.
+
+Conditions are the distinct media-prelude truth sets from the Cartesian product of width bands and motion values. The nearest-edge rule chooses widths 639, 760, 767, 1023, 1100, 1200, 1280, 1281 and 1536: 18 vectors and 27 renders including both motion phases. Clarification 3's example of 1535 contradicted its nearest-edge rule; Clarification 4 resolved it to 1281 before regeneration resumed. Motion comparisons take the minimum across independent phase pairs. Hovered sidebar glyphs are captured with the pointer on their canvas pin in rest/selected-current rows; only the row-hover combination is excluded.
+
+Amendment 5 intentionally deviates from base hit handling: outline rings retain `pointerEvents: "none"` so they cannot steal a neighbouring pin's disc click; the disc, label and sidebar row remain targets.
+
+The fixture mounts the real FontProvider and TooltipProvider, SettingsPane wrappers, and the tab corresponding to the content. Production fonts are fulfilled from `client/public` on disk, with no network; the fonts join the freshness hash. The injected control rule suppresses every required paint channel on the tagged subtree and its pseudo-elements. The declaration-root assertion applies to both closure and global freeze; the palette tie-break prefers fewest changed tokens, then largest group minimum, then enumeration order.
+
+### Residuals
+
+The objective has no glyph-against-backdrop floor. Any final 30%-lightness marker is an owner decision under this order; a legibility floor remains a future criterion. The entire `client/src` tree remains a freshness input because Tailwind scans all client sources; any client edit requires regeneration. Existing Round-4 contract exclusions continue to apply.
+
+The coordinator's whole-tree gate at `721ebe12` was run on 2026-10-06 in a dedicated frozen worktree with `NEXUS_RUN_POSTGRES=1 -p tests.dbname_audit`. This is historical baseline evidence, not a claim that the amended tree passed that whole-tree gate:
 
 ```text
 6116 passed, 59 skipped, 35 warnings in 2431.35s (0:40:31)

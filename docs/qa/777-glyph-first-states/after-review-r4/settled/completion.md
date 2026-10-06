@@ -42,7 +42,7 @@ recursive CSS imports, the full Tailwind client-source scan, scripts/helpers,
 configs, package/lockfiles, emulation and browser versions. Vitest recomputes
 the module graph/hash without a browser. Global freeze compares entire
 normalized declarations against 8ccd3008, with only seven exact #b83d7a Veil
-anchors exempt. Consumer closure excludes labels and decorative halos.
+anchors exempt. Consumer closure excludes canvas labels and the memory meter box-shadow; the verified-key and canvas-pin drop-shadow halos read state tokens by design under A2.
 
 Amendment 4 searches each group independently. Groups with a ≥15 assignment
 ship one with the fewest changed tokens; other groups ship their own maximum.

@@ -279,7 +279,7 @@ Scope: f648a18a through the completed R4 evidence checkpoint, including preserve
 - `ui/client/src/state-shades-measurement.ts` — Consume linear painted means for deutan, Lab and CIEDE2000.
 - `ui/client/src/state-shades.test.ts` — Gate freshness, complete settled evidence, per-group choices, global freeze and consumer closure.
 - `ui/client/src/state-surfaces.resolved.json` — Store the certified 64008-render painted/control receipt.
-- `ui/scripts/resolve-state-surfaces.mjs` — Capture settled production states and real candidate paints; assemble bounded shards.
+- `ui/scripts/resolve-state-surfaces.mjs` — Inject the unique tagged-subtree paint-suppression control rule; Capture settled production states and real candidate paints; assemble bounded shards.
 - `ui/scripts/state-surfaces/README.md` — Document the painted-mask convention, settling, hash and bounded regeneration.
 - `ui/scripts/state-surfaces/domain.mjs` — Keep the finite owner-authorized candidate domain.
 - `ui/scripts/state-surfaces/fixture.tsx` — Mount production shell, settings sections and map with deterministic local seed data.
@@ -287,6 +287,5 @@ Scope: f648a18a through the completed R4 evidence checkpoint, including preserve
 - `ui/scripts/state-surfaces/media.mjs` — Enumerate CSS-derived media and declared motion phases.
 - `ui/scripts/state-surfaces/plants.mjs` — Retain the canonical reproducible scratch mutation protocol.
 - `ui/scripts/state-surfaces/png.mjs` — Decode Chromium PNGs and calculate the linear foreground-mask mean.
-- `ui/scripts/state-surfaces/styles.css` — Define the paint-only transparent control.
 
 Codex, GPT-6.
