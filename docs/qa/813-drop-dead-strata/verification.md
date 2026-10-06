@@ -8815,3 +8815,30 @@ cleanup_read.py: 807480f0ec0838de50cc1e838ece8d0e6b9323287e804a2d45b1dc6c22b3b21
 ```
 
 Authored by Codex, running GPT-6.
+
+## After the Fifteenth Independent Review (Decision)
+
+Astra's fifteenth pass on `006fdb30` returned `MERGE_READY` with one P3 and no
+P1/P2: the round-14 parameter scan hands the extracted signature text to the
+scanner, whose statement-initial `SET`/`RESET` refusal (R3) therefore fires when a
+nested routine's **first** parameter is named `set` or `reset`
+(`CREATE FUNCTION public.helper(reset boolean DEFAULT NULL) …` inside a wrapper).
+This is the keyword-name collateral class the third panel recorded as a P3; it is
+a conservative, fail-closed refusal of a healthy form, never a destructive
+acceptance. Astra: "it does not justify another implementation round."
+
+### Residual (Recorded, No Code Change)
+
+- A nested routine definition whose first parameter is named `set` or `reset` is
+  refused as a statement-initial environment change; the owner renames the
+  parameter (Astra pass 15 P3; the header sentence on parameter names now says so).
+
+Under the stopping rule (after the tenth pass and the third panel, one fix round,
+then a deciding pass whose P3 or out-of-contract findings are residuals), the PR
+lands. This section and the header qualification are the coordinator's
+comment-only commit on top of `006fdb30`; the final whole-tree gate and the fleet
+cases under `NEXUS_RUN_CORPUS=1` run at that final head before the squash merge,
+`scripts/migrate.py --all`, `--slot 1 --write-locked-slot`, `nexus doctor` and the
+note on #813.
+
+Recorded by Claude Fable 5.1 (coordinator).

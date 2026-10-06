@@ -73,7 +73,9 @@
 -- event triggers refuse before helper DDL. Non-routine stored definitions and
 -- aggregate initial values meet the literal rule and SQL-text fold; pg_depend
 -- decides their outer identifier references. Parameter defaults use startup
--- settings, not routine SETs; parameter names meet only the literal rule.
+-- settings, not routine SETs; parameter names meet only the literal rule, except
+-- that a nested routine whose first parameter is named set or reset is refused as
+-- a statement-initial environment change (conservative; rename the parameter).
 -- No runtime DDL or routine execution: definitions, OIDs, ownership, ACLs and
 -- comments survive unchanged except the prescribed set_updated_at() comment.
 -- Refusals roll back drops/comments/stamping.
