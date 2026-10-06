@@ -528,7 +528,7 @@ html {
   --state-map-hovered: hsl(330.2439024390244 80% 50%);
   --state-key-absent: hsl(42 20% 70%);
   --state-key-missing: hsl(15 75% 60%);
-  --state-key-present: hsl(42 50% 30%);
+  --state-key-present: hsl(42 40% 30%);
   --state-key-verified: hsl(330.2439024390244 50.20408163265306% 48.03921568627451%);
   --state-mem-normal: hsl(330.2439024390244 50.20408163265306% 48.03921568627451%);
   --state-mem-over: hsl(15 75% 60%);
@@ -681,14 +681,14 @@ html {
   --magenta: hsl(320 55% 48%);
 
   /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
-  --state-map-rest: hsl(30 70% 60%);
-  --state-map-current: hsl(45 55% 70%);
-  --state-map-selected: hsl(43 94% 47%);
-  --state-map-hovered: hsl(45 55% 30%);
+  --state-map-rest: hsl(30 50% 70%);
+  --state-map-current: hsl(45 75% 70%);
+  --state-map-selected: hsl(43 74% 30%);
+  --state-map-hovered: hsl(45 75% 50%);
   --state-key-absent: hsl(43 30% 70%);
-  --state-key-missing: hsl(30 50% 70%);
-  --state-key-present: hsl(43 60% 40%);
-  --state-key-verified: hsl(43 74% 30%);
+  --state-key-missing: hsl(30 50% 45%);
+  --state-key-present: hsl(43 40% 30%);
+  --state-key-verified: hsl(43 84% 50%);
   --state-mem-normal: hsl(43 74% 47%);
   --state-mem-over: hsl(30 50% 30%);
   --state-delete-unarmed: hsl(43 40% 70%);
@@ -825,18 +825,18 @@ html {
   --magenta: hsl(320 55% 48%);
 
   /* Dedicated glyph pigments; global surfaces retain the baseline palette. */
-  --state-map-rest: hsl(200 100% 40%);
-  --state-map-current: hsl(190 80% 30%);
+  --state-map-rest: hsl(200 90% 55%);
+  --state-map-current: hsl(190 100% 50%);
   --state-map-selected: hsl(185 100% 70%);
-  --state-map-hovered: hsl(190 100% 50%);
-  --state-key-absent: hsl(185 50% 70%);
+  --state-map-hovered: hsl(190 100% 40%);
+  --state-key-absent: hsl(185 30% 30%);
   --state-key-missing: hsl(200 90% 55%);
-  --state-key-present: hsl(185 60% 40%);
-  --state-key-verified: hsl(185 100% 30%);
+  --state-key-present: hsl(185 40% 50%);
+  --state-key-verified: hsl(185 100% 70%);
   --state-mem-normal: hsl(185 100% 50%);
   --state-mem-over: hsl(200 90% 30%);
   --state-delete-unarmed: hsl(185 40% 55%);
-  --state-delete-armed: hsl(350 80% 50%);
+  --state-delete-armed: hsl(350 80% 55%);
 }
 
 /* Veil theme font variants: small-caps for mono, uppercase for display.
