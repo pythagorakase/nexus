@@ -1,0 +1,134 @@
+[
+  {
+    "theme": "Veil",
+    "surface": "memory",
+    "best": 48.282053187753654,
+    "threshold": 15,
+    "feasible": 270,
+    "shippedMinimum": 28.723129322326244,
+    "changes": 0,
+    "actualShippedMinimum": 28.723129322326244,
+    "shortfalls": 0
+  },
+  {
+    "theme": "Veil",
+    "surface": "delete",
+    "best": 14.631357904466427,
+    "threshold": 14.631357904466427,
+    "feasible": 0,
+    "shippedMinimum": 14.631357904466427,
+    "changes": 2,
+    "actualShippedMinimum": 14.631357904466427,
+    "shortfalls": 13
+  },
+  {
+    "theme": "Veil",
+    "surface": "map",
+    "best": 5.9942603943504995,
+    "threshold": 5.9942603943504995,
+    "feasible": 0,
+    "shippedMinimum": 5.9942603943504995,
+    "changes": 3,
+    "actualShippedMinimum": 5.9942603943504995,
+    "shortfalls": 217
+  },
+  {
+    "theme": "Veil",
+    "surface": "key",
+    "best": 18.445796640599227,
+    "threshold": 15,
+    "feasible": 1930,
+    "shippedMinimum": 17.266563526815094,
+    "changes": 2,
+    "actualShippedMinimum": 17.266563526815094,
+    "shortfalls": 0
+  },
+  {
+    "theme": "Gilded",
+    "surface": "memory",
+    "best": 43.175673440597784,
+    "threshold": 15,
+    "feasible": 150,
+    "shippedMinimum": 33.21169132170665,
+    "changes": 1,
+    "actualShippedMinimum": 33.21169132170665,
+    "shortfalls": 0
+  },
+  {
+    "theme": "Gilded",
+    "surface": "delete",
+    "best": 12.156103621093418,
+    "threshold": 12.156103621093418,
+    "feasible": 0,
+    "shippedMinimum": 12.156103621093418,
+    "changes": 2,
+    "actualShippedMinimum": 12.156103621093418,
+    "shortfalls": 108
+  },
+  {
+    "theme": "Gilded",
+    "surface": "map",
+    "best": 7.4977986569476665,
+    "threshold": 7.4977986569476665,
+    "feasible": 0,
+    "shippedMinimum": 7.4977986569476665,
+    "changes": 4,
+    "actualShippedMinimum": 7.4977986569476665,
+    "shortfalls": 658
+  },
+  {
+    "theme": "Gilded",
+    "surface": "key",
+    "best": 16.25619391235776,
+    "threshold": 15,
+    "feasible": 22,
+    "shippedMinimum": 16.15062592576154,
+    "changes": 3,
+    "actualShippedMinimum": 16.15062592576154,
+    "shortfalls": 0
+  },
+  {
+    "theme": "Vector",
+    "surface": "memory",
+    "best": 41.81562267183395,
+    "threshold": 15,
+    "feasible": 36,
+    "shippedMinimum": 39.07275879212985,
+    "changes": 1,
+    "actualShippedMinimum": 39.07275879212985,
+    "shortfalls": 0
+  },
+  {
+    "theme": "Vector",
+    "surface": "delete",
+    "best": 23.28801782847145,
+    "threshold": 15,
+    "feasible": 152,
+    "shippedMinimum": 15.764553113030438,
+    "changes": 0,
+    "actualShippedMinimum": 15.764553113030438,
+    "shortfalls": 0
+  },
+  {
+    "theme": "Vector",
+    "surface": "map",
+    "best": 5.900185376139648,
+    "threshold": 5.900185376139648,
+    "feasible": 0,
+    "shippedMinimum": 5.900185376139648,
+    "changes": 3,
+    "actualShippedMinimum": 5.900185376139648,
+    "shortfalls": 1052
+  },
+  {
+    "theme": "Vector",
+    "surface": "key",
+    "best": 11.468145729494452,
+    "threshold": 11.468145729494452,
+    "feasible": 0,
+    "shippedMinimum": 11.468145729494452,
+    "changes": 3,
+    "actualShippedMinimum": 11.468145729494452,
+    "shortfalls": 135
+  }
+]

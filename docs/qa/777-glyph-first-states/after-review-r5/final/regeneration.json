@@ -3,7 +3,7 @@
     "chromium": "153.0.8010.12",
     "chromiumRevision": "1243",
     "playwright": "1.63.0",
-    "sha256": "52e41a8d16e98b6eb7a3c0f26ca86944f68a4c272a68f7146912a038f89731a1",
+    "sha256": "bd3940eb4f7961162c5a4a26e298e8e966d858bd05b26f6141bc63178f7b314c",
     "files": {
       "client/index.html": "8db2571e54ae91c00b8167b264754490ae7ef2a56cbd0f387c18e152ee734c54",
       "client/public/fonts/Cinzel-VariableFont_wght.ttf": "3192c4e40421bf2824f40f5b0eba1047eacfa7b08d6e8ba6941b803e701a29bf",
@@ -166,7 +166,7 @@
       "client/src/hooks/useSettings.ts": "01713c5bdef68d9f29ac4d8b6c3867052487431d5dd9cce58275b989f8c964cf",
       "client/src/hooks/useWizardDraft.test.tsx": "c560c4cca689865faaad17af9ac65b3ced61ddecb3b20af7a9f3c9adf3cbb07c",
       "client/src/hooks/useWizardDraft.ts": "7900b44432331a02f2c9db4498d675c16e6cbf82226cfd0ba0376f010c8e0d58",
-      "client/src/index.css": "f2490566b93d79d3c32ca3c51992875854b5e07fb2ce463662f642c07159c262",
+      "client/src/index.css": "c722c2f03498c351c21e9201c328566a63d03af52472a93691f4d2a2a75c3cb8",
       "client/src/lib/active-slot.ts": "80960747f028688600e35aa6db96147efb234b3aa5fdf29e8331c31f58116a59",
       "client/src/lib/backstage-api.ts": "eecbe1b1a8b827218e93282c8c0c572094d646d30d53feed8b792d6a2e4181fc",
       "client/src/lib/fading-scrollbars.test.ts": "43cd6f08beefa34af369bdf06a8c57f0ccb8125ada8df2c3e73df91825a05c65",
@@ -214,7 +214,7 @@
       "client/src/pages/splash/veil-splash-locked-values.test.ts": "40408e0e48a6331e5448a755204ccc73ccad20527cd1052691cf0c954c803449",
       "client/src/shell-accessibility.test.ts": "3b5cb571f240016ce25f3a2f1ce44af68c14cc12c3e49cce9c61a6015630e9d4",
       "client/src/state-shades-measurement.ts": "e0424ded5d9b8b34748470bffe685bd5cd198344ed89929579e460a3f0ffd401",
-      "client/src/state-shades.test.ts": "54fd4e7a43e19c45b3e9cc7792393d26ec25060a30b4c44af3d30fcab56a23da",
+      "client/src/state-shades.test.ts": "770c5dc1b72c1c34b3fb12988469ac3b20c418e54faa6fe2477e4ee2bd37e99e",
       "client/src/tests/setup.ts": "97a0b301bd3076753c9f4772bff110ce2d49f3d4c1f742403ec496c571e7e1eb",
       "client/src/types/backstage.ts": "1834c7195df3602c018d78e6215b702079acfa1f95f4a638a2111efb5cd21fc9",
       "client/src/types/localModels.ts": "75186ba77466a9ca61addeb79d64d125999ca4cbb09288de0698c323f1846778",
@@ -5578,17 +5578,6 @@
         "media (min-width: 1280px)": false,
         "media (min-width: 1536px)": false
       },
-      "w1-639/motion/start": {
-        "media (max-width: 1280px)": true,
-        "media (max-width: 1100px)": true,
-        "media (max-width: 760px)": true,
-        "media (prefers-reduced-motion: reduce)": false,
-        "media (min-width: 640px)": false,
-        "media (min-width: 768px)": false,
-        "media (min-width: 1024px)": false,
-        "media (min-width: 1280px)": false,
-        "media (min-width: 1536px)": false
-      },
       "w1-639/reduce": {
         "media (max-width: 1280px)": true,
         "media (max-width: 1100px)": true,
@@ -5601,6 +5590,17 @@
         "media (min-width: 1536px)": false
       },
       "w1-639/motion/trough": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": true,
+        "media (prefers-reduced-motion: reduce)": false,
+        "media (min-width: 640px)": false,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "w1-639/motion/start": {
         "media (max-width: 1280px)": true,
         "media (max-width: 1100px)": true,
         "media (max-width: 760px)": true,
@@ -5866,7 +5866,7 @@
       }
     },
     "renderCount": 101742,
-    "wallSeconds": 1999.349082042,
+    "wallSeconds": 2000.603912542,
     "acceptanceComplete": true
   }
 }
