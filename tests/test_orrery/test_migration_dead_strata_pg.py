@@ -3094,7 +3094,7 @@ def test_migration_143_round13_nested_environments(
         )
     )
     if persisting:
-        type_name = "character_role" if survivor else "item_type"
+        type_name = "boolean" if survivor else "item_type"
         value = "x" if survivor else "weapon"
         body = (
             "BEGIN CREATE OR REPLACE FUNCTION public.probe813_generated() "
@@ -3119,9 +3119,9 @@ def test_migration_143_round13_nested_environments(
         _load_fixture(dbname)
         if survivor:
             with closing(connect(dbname)) as conn, conn.cursor() as cur:
-                cur.execute("SELECT to_regtype('public.character_role')::oid")
+                cur.execute("SELECT to_regtype('boolean')::oid")
                 assert cur.fetchone()[0] is not None
-            assert "character_role" not in TARGET_NAMES
+            assert "boolean" not in TARGET_NAMES
         _sql(
             dbname,
             f"CREATE FUNCTION public.{routine}() RETURNS boolean "
