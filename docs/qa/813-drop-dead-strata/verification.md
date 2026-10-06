@@ -6861,3 +6861,454 @@ EXIT STATUS: 0
 ```
 
 Authored by Codex, running GPT-6.
+
+
+## After the Stopping-Rule Reviews
+
+Round ten implements only 1098-fix-r10.md: Astra's tenth pass and the third panel's ordered P2/P3 fixes. Checkpoint `dc3c30c1` preserves the resumed SQL, runner and regression work before proof. The executable SQL/Python proved below is unchanged by the subsequent header/evidence corrections. No prior commit is rewritten. The branch keeps `98b03e2d` and both accepted stop reports in its ancestry.
+
+The complete ordered four-file PostgreSQL proof is **717 passed / zero failed / zero skipped**: 102 round-nine/ten + 91 round-eight + 199 direct + 129 post-143 + 196 fleet/support. All six fleet sources apply with `NEXUS_RUN_CORPUS=1`; no fleet routine or object requires an exemption. Three disjoint offline shards cover the entire offline suite: **4795 passed / zero failed / 1907 skipped**. These are offline exclusions, not PostgreSQL proof. All commands finished within their explicit 540-second duration/120-second silence bounds. The TEST-provider and secret-store fences stayed active; each pytest tail reports owner targets: none.
+
+### Shipped Contract
+
+> PostgreSQL decides catalog dependencies: every drop is RESTRICT, and SQL-standard bodies (prosqlbody) carry real dependencies. String-bodied routines are decided lexically under allowlisted declared SET clauses on top of session startup settings: a token naming a drop target refuses, every decoded string literal or decoded name-array element resolving to a drop target refuses, and an unclassifiable form refuses. After the drops, PostgreSQL's validators check every surviving application routine under that environment, with identity settings reserved for scanner lookups and validators run as the migration user. The guard refuses non-extension format/concat/concat_ws functions and || operators outside pg_catalog; proconfig names other than search_path, role, session_authorization, standard_conforming_strings, backslash_quote, DateStyle, IntervalStyle, TimeZone, extra_float_digits, default_text_search_config, client_min_messages and application_name; statement-initial bare SET/RESET, any set_config identifier and recognized pg_settings UPDATE targets; enabled event triggers before helper DDL; unsupported application languages or different SECURITY DEFINER owners; raw U&' or U&" or UESCAPE, even in comments/data; target-bearing unmodeled column-definition lists; recognized nonliteral or unresolved catalog-input operands (reg* casts, to_reg*, nextval/currval/setval); and nonconstant or unresolved SQL in recognized EXECUTE, DO, nested CREATE FUNCTION/PROCEDURE and SQL-text consumer forms. Migration parsing/deparsing pins search_path=pg_catalog, standard_conforming_strings=on, backslash_quote=safe_encoding, exit_on_error=off, quote_all_identifiers=off and lock_timeout=5s; validators reassert check_function_bodies=on. Role and session_authorization apply to scanner lookups and are skipped by validators. Non-routine stored definitions meet the literal rule and constant SQL-text fold; pg_depend decides their outer identifier references. Constant SQL through an unrecognized consumer remains an in-contract residual, not a nonconstant-data exclusion. Outside the static guarantee are names arriving as runtime data (nonliteral catalog-input arguments or reg* parameters), nonconstant SQL through unrecognized forms, and unrecognized path/role mutations. Late-bound PL/pgSQL expressions and polymorphic SQL remain limited by their native validators: fmgr_sql_validator only syntax-checks polymorphic SQL; plpgsql_validator checks syntax and declared types.
+
+### Ordered Changes and Record Corrections
+
+- Array literals are decoded as text[] inside the existing qualified environment helper, with each element subject to the literal rule. Dimensions and ordinary brace data have controls. Some old scalar-array casts already refused with the wrong diagnostic; those are diagnostic regressions, not newly destructive acceptances.
+- Constant nested CREATE [OR REPLACE] FUNCTION/PROCEDURE string bodies and BEGIN ATOMIC bodies recurse through the same scanner. Unresolved bodies, inner SET environments and unsupported inner languages refuse. The outer deparsed SQL-standard routine is not mistaken for nested DDL. No runtime DDL or routine execution is added to the migration.
+- Two-argument ts_rewrite folds its second SQL argument; three-argument tsquery rewrite applies. cursor_to_xml is removed from the SQL consumer list: it consumes a portal name. The invalid old R9 cursor-to-xml refusal recipe is replaced by a canonical opened-refcursor acceptance, with real before/after calls. This is the order's correction, not a narrowed gate.
+- F5 covers AS alias(list), alias(list), AS(list), and unparenthesized XMLTABLE COLUMNS, including PATH. Every spelling is proved in PL/pgSQL and polymorphic SQL; the existing AS-alias control remains.
+- F12 keeps outer identifier handling with pg_depend/RESTRICT and also folds constant SQL consumers. View, materialized view, DEFAULT, CHECK, policy and trigger WHEN cases refuse, and a target-named view column applies. Domain defaults and table rules join the literal pass.
+- R5 adds exit_on_error=off and quote_all_identifiers=off. R3 covers parenthesized UPDATE ONLY targets. Argument declarations meet only the literal rule, with defaults resolved under startup/caller settings, not routine SETs.
+- The quoted set/order case fails under the single qid→id lexer mutant and passes shipped. R9 startup_pin's docstring now claims migration parsing only. The R5 startup-scs replay code uses reset_val, but no discriminating shipped mutant proof of that replay is claimed. The lock record names ACCESS EXCLUSIVE on public.characters from removal of items RI triggers, held through validators/comment/stamp/commit. The validator comment says migration-user identity, not exactly as CREATE FUNCTION would.
+- Locked disposable runner proof has two pending migrations on distinct real backends, each retaining the override. Dry-run opens only the bootstrap backend. Module count changes from 487 to 527: 41 new cases minus the invalid cursor recipe. KNOWN_GAPS, frozen closure, schema/debt baselines and nexus.toml are unchanged in this round.
+
+### Residuals
+
+- R3 conservatively refuses statement-start set/reset variables and declaration-entry collateral, SET CONSTRAINTS and SET TRANSACTION; the owner renames or restructures (Astra pass 10 P3; third panel #9).
+- Query-column proof conservatively refuses INSERT column lists, EXCLUDED columns, and FROM in extract/substring/IS DISTINCT FROM; flat clause/alias ambiguity remains fail-closed (third panel #9; second panel column-position reproductions).
+- R6 validators bind names as the superuser migration user: role-specific $user and missing USAGE on an earlier schema can falsely refuse healthy routines; scanner lookups still use the declared identity (third panel #19; R9 granted $user probe).
+- Runtime/computed catalog names, including implicit reg* parameters such as pg_relation_size(v), and SQL or path/role changes through unrecognized forms remain outside the guarantee. Unrecognized setting mutations via an updatable pg_settings view or set_config in a caller default remain in-contract residuals (third panel #10, #16, #23; second panel runtime-data reproductions).
+- Extension SQL-text consumers such as tablefunc.crosstab are an in-contract residual: the guard does not recognize their constant SQL arguments; non-SQL/plpgsql DO languages are unproved when the language is unavailable (third panel #3 variant; second panel F7 language reproduction).
+- Trigger arguments without WHEN are not read by F12; a late-binding trigger argument remains an in-contract residual (third panel #18(c)).
+- Healthy scalar reg*[] brace casts may conservatively refuse through the scalar catalog-cast classifier; ordinary brace data passes. Startup scs replay has code coverage but no discriminating shipped mutant proof; startup_pin proves migration parsing only (third panel #1 controls, #21).
+- Late-bound PL/pgSQL expressions, polymorphic SQL validation and runtime data remain outside the second-line guarantee. Unmodeled constant folds refuse when recognized; arbitrary unrecognized SQL consumers remain the residual above (third panel :23 implicit-reg* parameter reproductions; Astra pass 10 contract audit).
+
+References use the item numbers in the round-ten order. The complete third-panel reproductions are in `temp/orders_2026_09_30/panel-1098-98b03e2d.md`: R6 USAGE filtering at :1332, variable/column collateral at :321/:1231, crosstab at :331, runtime input and setting mutations at :23/:1231, WHEN-less trigger arguments at :1259, and startup-proof limitation in the startup_pin finding. Astra's tenth pass :321 records the variable-assignment residual. These are reviewer reproductions, not newly run or silently fixed here.
+
+### Red/Green Ledger
+
+All 41 new cases ran against exactly `98b03e2d` SQL and runner through the swap plugin: **32 expected failures / 9 retained controls**. The plugin substitutes migration 143 both directly and in discovery; old runner substitution is separately required for the dry-run red. Array-default/array-cast and nested-nonconstant are diagnostic/refusal-stage regressions. Nested-atomic was already refused by the old scanner and remains a control. Locked-runner False was already green; True proves the unnecessary per-pending connections. The qid mutant is generated from the shipped lexer by replacing only `kind := 'qid'` with `kind := 'id'`; it fails on runtime environment change: set. Do not describe all old cases as destructive acceptances.
+
+| Regression/control ID (test file prefix omitted) | 98b03e2d SQL/runner | Current proof |
+| --- | --- | --- |
+| `test_migration_143_round10_definitions[array-default]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[array-parameter]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[array-data]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[cursor-variable]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[ts-rewrite-two]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[ts-rewrite-three]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[update-only-parentheses]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[parameter-name]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[caller-default]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[domain-default]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[table-rule]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[view-column]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[quoted-keyword-columns]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[array-cast]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[array-dimensions]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[ts-rewrite-plpgsql]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[ts-rewrite-atomic]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-as-alias-plpgsql]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-as-alias-polymorphic]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-bare-alias-plpgsql]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-bare-alias-polymorphic]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-as-only-plpgsql]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-as-only-polymorphic]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-xml-plpgsql]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-xml-polymorphic]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-xml-path-plpgsql]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[coldef-xml-path-polymorphic]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[nested-string]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[nested-atomic]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[nested-survivor]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[nested-nonconstant]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[stored-fold-view]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[stored-fold-materialized-view]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[stored-fold-default]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[stored-fold-check]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[stored-fold-policy]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[stored-fold-trigger-when]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_startup_pins[exit_on_error]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_startup_pins[quote_all_identifiers]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_locked_runner[False]` | PASSED (retained control) | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_locked_runner[True]` | FAILED | PASSED (resume-pg-r9-r10) |
+| `test_migration_143_round10_definitions[quoted-keyword-columns]` | FAILED (shipped qid→id mutant) | PASSED (resume-pg-r9-r10) |
+
+
+Actual fresh-backend destructive outcomes, verbatim (only cases which execute successfully before the old acceptance are credited):
+
+```text
+OLD OUTCOME array-parameter before: (True, (0,)) after: (False, ('42P01', 'relation "public.items" does not exist'))
+OLD OUTCOME ts-rewrite-two before: (True, ("'sword'",)) after: (False, ('42P01', 'relation "public.items" does not exist'))
+OLD OUTCOME caller-default before: (True, (True,)) after: (False, ('42704', 'type "item_type" does not exist'))
+OLD OUTCOME domain-default before: (True, (True,)) after: (False, ('42704', 'type "public.item_type" does not exist'))
+OLD OUTCOME table-rule before: (True, ('weapon',)) after: (False, ('42704', 'type "public.item_type" does not exist'))
+OLD OUTCOME array-dimensions before: (True, (None,)) after: (False, ('42P01', 'relation "public.items" does not exist'))
+OLD OUTCOME ts-rewrite-plpgsql before: (True, ("'sword'",)) after: (False, ('42P01', 'relation "public.items" does not exist'))
+OLD OUTCOME ts-rewrite-atomic before: (True, ("'sword'",)) after: (False, ('42P01', 'relation "public.items" does not exist'))
+OLD OUTCOME coldef-bare-alias-plpgsql before: (True, (None,)) after: (False, ('42704', 'type "emotional_valence" does not exist'))
+OLD OUTCOME coldef-bare-alias-polymorphic before: (True, (None,)) after: (False, ('42704', 'type "emotional_valence" does not exist'))
+OLD OUTCOME coldef-as-only-plpgsql before: (True, (None,)) after: (False, ('42704', 'type "emotional_valence" does not exist'))
+OLD OUTCOME coldef-as-only-polymorphic before: (True, (None,)) after: (False, ('42704', 'type "emotional_valence" does not exist'))
+OLD OUTCOME coldef-xml-plpgsql before: (True, (None,)) after: (False, ('42704', 'type "relationship_type" does not exist'))
+OLD OUTCOME coldef-xml-polymorphic before: (True, (None,)) after: (False, ('42704', 'type "relationship_type" does not exist'))
+OLD OUTCOME coldef-xml-path-plpgsql before: (True, (None,)) after: (False, ('42704', 'type "relationship_type" does not exist'))
+OLD OUTCOME coldef-xml-path-polymorphic before: (True, (None,)) after: (False, ('42704', 'type "relationship_type" does not exist'))
+OLD OUTCOME nested-string before: (True, (0,)) after: (False, ('42P01', 'relation "public.items" does not exist'))
+```
+
+All cases retain schema/data/routine-catalog preservation and stamp assertions. The inherited diagnostic label OLD VERDICT also prints for healthy controls in a current-SQL run; it is not old-migration evidence unless the swap plugin was active.
+
+### Exact Commands and Verbatim Tails
+
+Every command runs from this worktree with the shared interpreter. `run.py` sets worktree-first PYTHONPATH plus this scratch directory, TMPDIR here, NEXUS_DBNAME_AUDIT=1, removes service/slot/live-provider variables and enforces the bounds. The import probe printed `/Users/pythagor/nexus/.claude/worktrees/813-drop-dead-strata/nexus/__init__.py`.
+
+**resume-red-r10**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/98b03e2d.sql OLD_RUNNER=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/old_runner.py /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-red-r10 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k round10 -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[array-default]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[array-parameter]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[cursor-variable]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[ts-rewrite-two]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[update-only-parentheses]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[parameter-name]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[caller-default]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[domain-default]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[table-rule]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[array-cast]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[array-dimensions]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[ts-rewrite-plpgsql]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[ts-rewrite-atomic]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[coldef-bare-alias-plpgsql]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[coldef-bare-alias-polymorphic]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[coldef-as-only-plpgsql]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[coldef-as-only-polymorphic]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[coldef-xml-plpgsql]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[coldef-xml-polymorphic]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[coldef-xml-path-plpgsql]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[coldef-xml-path-polymorphic]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[nested-string]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[nested-nonconstant]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[stored-fold-view]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[stored-fold-materialized-view]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[stored-fold-default]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[stored-fold-check]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[stored-fold-policy]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[stored-fold-trigger-when]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_startup_pins[exit_on_error]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_startup_pins[quote_all_identifiers]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_locked_runner[True]
+=========== 32 failed, 9 passed, 486 deselected in 96.33s (0:01:36) ============
+EXIT STATUS: 1
+```
+
+**resume-red-qid**
+
+```sh
+NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/resume-qid-mutant.sql /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-red-qid /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider -p old_scanner 'tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[quoted-keyword-columns]' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round10_definitions[quoted-keyword-columns]
+============================== 1 failed in 2.13s ===============================
+EXIT STATUS: 1
+```
+
+**resume-atomic**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-atomic /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider 'tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round9_definitions[F6-atomic-scs-data]' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+============================== 1 passed in 3.26s ===============================
+EXIT STATUS: 0
+```
+
+**resume-pg-r9-r10**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-pg-r9-r10 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'round9 or round10' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 102 passed, 425 deselected in 240.64s (0:04:00) ================
+EXIT STATUS: 0
+```
+
+**resume-pg-r8**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-pg-r8 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k round8 -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+================ 91 passed, 436 deselected in 276.50s (0:04:36) ================
+EXIT STATUS: 0
+```
+
+**resume-pg-direct**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-pg-direct /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k 'not regressions_work_from_post143_clone and not round8 and not round9 and not round10 and not each_fleet' -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 199 passed, 328 deselected in 472.22s (0:07:52) ================
+EXIT STATUS: 0
+```
+
+**resume-pg-post143**
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-pg-post143 /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k regressions_work_from_post143_clone -vs --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 129 passed, 398 deselected in 476.68s (0:07:56) ================
+EXIT STATUS: 0
+```
+
+**resume-pg-fleet-support**
+
+```sh
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-pg-fleet-support /Users/pythagor/nexus/.venv/bin/python -m pytest -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py tests/test_owner_target_guard.py -v --tb=short
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+======================= 196 passed in 119.53s (0:01:59) ========================
+EXIT STATUS: 0
+```
+
+**resume-offline-root**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-offline-root /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p no:cacheprovider tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util --ignore=tests/proofs
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+========== 1972 passed, 478 skipped, 8 warnings in 392.68s (0:06:32) ===========
+EXIT STATUS: 0
+```
+
+**resume-offline-directories**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-offline-directories /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p no:cacheprovider tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util tests/config tests/proofs
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========== 958 passed, 81 skipped, 7 warnings in 138.59s (0:02:18) ============
+EXIT STATUS: 0
+```
+
+**resume-offline-api-orrery**
+
+```sh
+env -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_CORPUS /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-offline-api-orrery /Users/pythagor/nexus/.venv/bin/python -m pytest -v -p no:cacheprovider tests/test_api tests/test_orrery
+```
+
+```text
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=============== 1865 passed, 1348 skipped, 7 warnings in 48.14s ================
+EXIT STATUS: 0
+```
+
+**resume-black**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-black /Users/pythagor/nexus/.venv/bin/python -m black --check scripts/migrate.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+EXIT STATUS: 0
+```
+
+**resume-flake8**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-flake8 /Users/pythagor/nexus/.venv/bin/python -m flake8 scripts/migrate.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+scripts/migrate.py:181:89: E501 line too long (94 > 88 characters)
+scripts/migrate.py:202:89: E501 line too long (99 > 88 characters)
+scripts/migrate.py:206:89: E501 line too long (92 > 88 characters)
+EXIT STATUS: 1
+```
+
+**resume-flake8-main**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-flake8-main /Users/pythagor/nexus/.venv/bin/python -m flake8 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/main-files/scripts/migrate.py
+```
+
+```text
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/main-files/scripts/migrate.py:181:89: E501 line too long (94 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/main-files/scripts/migrate.py:202:89: E501 line too long (99 > 88 characters)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/main-files/scripts/migrate.py:206:89: E501 line too long (92 > 88 characters)
+EXIT STATUS: 1
+```
+
+**resume-mypy**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-mypy /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases scripts/migrate.py tests/test_orrery/test_migration_dead_strata_pg.py
+```
+
+```text
+Success: no issues found in 2 source files
+EXIT STATUS: 0
+```
+
+**resume-mypy-main**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-mypy-main /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/main-files/scripts/migrate.py
+```
+
+```text
+Success: no issues found in 1 source file
+EXIT STATUS: 0
+```
+
+**resume-comments**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-comments /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+**resume-exceptions**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-exceptions /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+**resume-cleanup-final**
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py resume-cleanup-final /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/cleanup_read.py
+```
+
+```text
+admin read-only identity: ('postgres', 'on')
+qa640_813_case_* databases remaining: []
+qa640_813_case_* roles remaining: []
+EXIT STATUS: 0
+```
+
+
+
+Fleet cases under NEXUS_RUN_CORPUS=1, verbatim:
+
+```text
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[NEXUS_template] PASSED [  0%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_01] PASSED [  1%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_02] PASSED [  1%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_03] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_04] PASSED [  2%]
+tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_drops_only_manifest_on_each_fleet_clone[save_05] PASSED [  3%]
+```
+
+### Pre-existing Diagnostics
+
+Flake8 reports only scripts/migrate.py lines 181, 202 and 206, E501 lengths 94, 99 and 92: the exact same untouched lines on origin/main `160134540517f6b74aacd1d1e1f3f584454eef86`. The branch's new migration-test module has no main-side file and no flake8 diagnostics. Sanctioned mypy --explicit-package-bases passes both branch files and main's runner. Black passes both files. No new or changed-line diagnostic is accepted; no baseline is changed to hide one. Both mandatory lints pass.
+
+### Iteration and Provenance
+
+Preserved draft logs are historical, not the proof above. final-pg-rounds had one F6-atomic-scs-data refusal before the outer SQL-standard exemption; resume-atomic and the complete current 102-case shard pass it. The corrected full cohort includes the additional dimensioned-array regression. The two first cleanup-script attempts fail on imports before connecting; the final read-only postgres check reports zero implementer databases/roles. No draft failure is credited as green.
+
+Scratch: `/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/`.
+
+```text
+98b03e2d.sql: 6932765e4efbe54934f3d00f36b90e349589d98a49a5c5a23ae487415476ba7d
+old_runner.py: e326965bbfb9797f9684e35e27e13a48f3bf44db98d9f6351994e27265b74458
+old_scanner.py: d539d120b83aa3199872bc7cacbfb44145c47df258b08e2be9024f5632c642c2
+resume-qid-mutant.sql: 0cafcd90ea517bba30a8519ceaa59f5fa1a5ec8390dc4a10f72d8b9b1ea35631
+run.py: 678f039bee60c168297da27351f159e8b56617ea8b3d63065c782d57ef411acd
+cleanup_read.py: 807480f0ec0838de50cc1e838ece8d0e6b9323287e804a2d45b1dc6c22b3b214
+```
+
+### Coordinator Questions and Landing
+
+Retain R6's conservative migration-user validation, or separately order validation against the declared identity's effective schema list (current_schemas), covering both $user and USAGE filtering? $user canonicalization alone would not cover the latter. Residual constant SQL consumers and WHEN-less trigger arguments remain documented under the stopping rule; no extra implementation is deferred from this order.
+
+The coordinator owns Astra's eleventh stopping-rule pass, fresh raw full-data six-source TEST-clone rehearsal without reconstruction/stamp removal, owner fleet/template application, final whole-tree PostgreSQL gate, and the named gateway restart after the product-code pull. #812 vector-helper/debt work, Q3 labels and Q5's MEMNON SQL slice remain deferred. No UI rebuild is owed. This PR is not merged. No paid call, fleet/template/ref write, owner service start, main/other-worktree edit, stash, rebase or history rewrite occurred.
+
+Authored by Codex, running GPT-6.
+
+
+### Pre-Push Closeout
+
+The final fetch confirms origin/main `160134540517f6b74aacd1d1e1f3f584454eef86`; required git merge origin/main reports `Already up to date.` Both mandatory lints are rerun after the final header corrections. No executable SQL/Python differs from the full current proof. The read-only cleanup finds no implementation databases or roles. Normal push and PR-body PATCH are the remaining closeout actions; no PR merge is authorized.
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py closeout-r10-comments /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+EXIT STATUS: 0
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/813-S1/after-review-r10/run.py closeout-r10-exceptions /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+```
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+EXIT STATUS: 0
+```
+
+Authored by Codex, running GPT-6.

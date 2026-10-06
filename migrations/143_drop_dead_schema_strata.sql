@@ -12,23 +12,23 @@
 -- Each wait is bounded at five seconds; queued characters readers can also wait.
 -- A timeout rolls back the whole transaction.
 --
--- Contract: PostgreSQL decides catalog dependencies: every drop is RESTRICT, and SQL-
--- standard bodies (prosqlbody) carry real dependencies. String-bodied routines are
+-- Contract: PostgreSQL decides catalog dependencies: every drop is RESTRICT, and
+-- SQL-standard bodies (prosqlbody) carry real dependencies. String-bodied routines are
 -- decided lexically under allowlisted declared SET clauses on top of session startup
 -- settings: a token naming a drop target refuses, every decoded string literal or
 -- decoded name-array element resolving to a drop target refuses, and an unclassifiable
 -- form refuses. After the drops, PostgreSQL's validators check every surviving
 -- application routine under that environment, with identity settings reserved for
--- scanner lookups and validators run as the migration user. The guard refuses non-
--- extension format/concat/concat_ws functions and || operators outside pg_catalog;
+-- scanner lookups and validators run as the migration user. The guard refuses non-extension
+-- format/concat/concat_ws functions and || operators outside pg_catalog;
 -- proconfig names other than search_path, role, session_authorization,
 -- standard_conforming_strings, backslash_quote, DateStyle, IntervalStyle, TimeZone,
 -- extra_float_digits, default_text_search_config, client_min_messages and
 -- application_name; statement-initial bare SET/RESET, any set_config identifier and
 -- recognized pg_settings UPDATE targets; enabled event triggers before helper DDL;
 -- unsupported application languages or different SECURITY DEFINER owners; raw U&' or U&"
--- or UESCAPE, even in comments/data; target-bearing unmodeled column-definition lists;
--- and nonconstant or unresolved SQL in recognized EXECUTE, DO, nested CREATE
+-- or UESCAPE, even in comments/data; target-bearing unmodeled column-definition lists; recognized nonliteral or unresolved
+-- catalog-input operands (reg* casts, to_reg*, nextval/currval/setval); and nonconstant or unresolved SQL in recognized EXECUTE, DO, nested CREATE
 -- FUNCTION/PROCEDURE and SQL-text consumer forms. Migration parsing/deparsing pins
 -- search_path=pg_catalog, standard_conforming_strings=on, backslash_quote=safe_encoding,
 -- exit_on_error=off, quote_all_identifiers=off and lock_timeout=5s; validators reassert
@@ -76,19 +76,19 @@
 -- No persistent helper/debt remains.
 --
 -- Residuals:
--- - R3 conservatively refuses statement-start set/reset variables, SET CONSTRAINTS and
--- SET TRANSACTION; the owner renames or restructures (Astra pass 10 P3; third panel #9).
+-- - R3 conservatively refuses statement-start set/reset variables and declaration-entry
+-- collateral, SET CONSTRAINTS and SET TRANSACTION; the owner renames or restructures (Astra pass 10 P3; third panel #9).
 -- - Query-column proof conservatively refuses INSERT column lists, EXCLUDED columns, and
--- FROM in extract/substring/IS DISTINCT FROM; flat clause/alias ambiguity remains fail-
--- closed (third panel #9; second panel column-position reproductions).
+-- FROM in extract/substring/IS DISTINCT FROM; flat clause/alias ambiguity remains
+-- fail-closed (third panel #9; second panel column-position reproductions).
 -- - R6 validators bind names as the superuser migration user: role-specific $user and
 -- missing USAGE on an earlier schema can falsely refuse healthy routines; scanner
 -- lookups still use the declared identity (third panel #19; R9 granted $user probe).
 -- - Runtime/computed catalog names, including implicit reg* parameters such as
 -- pg_relation_size(v), and SQL or path/role changes through unrecognized forms remain
--- outside the guarantee; pg_settings through an updatable view and set_config in a
--- caller default are examples (third panel #10, #16, #23; second panel runtime-data
--- reproductions).
+-- outside the guarantee. Unrecognized setting mutations via an updatable pg_settings
+-- view or set_config in a caller default remain in-contract residuals (third panel
+-- #10, #16, #23; second panel runtime-data reproductions).
 -- - Extension SQL-text consumers such as tablefunc.crosstab are an in-contract residual:
 -- the guard does not recognize their constant SQL arguments; non-SQL/plpgsql DO
 -- languages are unproved when the language is unavailable (third panel #3 variant;
@@ -101,8 +101,8 @@
 -- parsing only (third panel #1 controls, #21).
 -- - Late-bound PL/pgSQL expressions, polymorphic SQL validation and runtime data remain
 -- outside the second-line guarantee. Unmodeled constant folds refuse when recognized;
--- arbitrary unrecognized SQL consumers remain the residual above (both stopping-rule
--- reviews).
+-- arbitrary unrecognized SQL consumers remain the residual above (third panel :23
+-- implicit-reg* parameter reproductions; Astra pass 10 contract audit).
 
 -- The migration's own code resolves unqualified functions, operators and
 -- types under a single-schema path, pg_catalog alone, for its whole run: this
@@ -1451,8 +1451,8 @@ DROP TYPE public.threat_domain_type RESTRICT;
 DROP TYPE public.threat_lifecycle_type RESTRICT;
 DROP TYPE public.trait RESTRICT;
 -- Independent second line: PostgreSQL's language validators check every surviving
--- application function/procedure against the post-drop catalog, exactly as
--- CREATE FUNCTION would, without creating or replacing anything.
+-- application function/procedure against the post-drop catalog as the migration
+-- user, skipping identity settings, without creating or replacing anything.
 SET LOCAL check_function_bodies = on;
 DO $validate$
 DECLARE
