@@ -2918,3 +2918,56 @@ def test_migration_143_round10_locked_runner(
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute("SHOW default_transaction_read_only")
             assert cur.fetchone() == ("on",)
+
+
+@pytest.mark.parametrize("language", ("sql", "plpgsql"))
+@pytest.mark.parametrize("form", ("filter", "predicate", "target-filter"))
+def test_migration_143_round11_column_contexts(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    language: str,
+    form: str,
+) -> None:
+    """Filters/predicates preserve column proof, including target-typed refusals."""
+    target = form == "target-filter"
+    query = (
+        "SELECT count(*) FROM public.character_relationships cr "
+        "WHERE (cr.character1_id > 0) AND (cr.emotional_valence LIKE '+%')"
+        if form == "predicate"
+        else "SELECT count(*) FILTER (WHERE cr.emotional_valence"
+        + ("::text" if target else "")
+        + " LIKE '+%') FROM "
+        + ("public.probe813_columns" if target else "public.character_relationships")
+        + " cr"
+    )
+    body = query if language == "sql" else f"BEGIN RETURN {query}; END"
+    with _clone(archives, tmp_path) as dbname:
+        _load_fixture(dbname)
+        if target:
+            _sql(
+                dbname,
+                "CREATE TABLE public.probe813_columns"
+                "(emotional_valence public.emotional_valence)",
+            )
+        _sql(
+            dbname,
+            "CREATE FUNCTION public.probe813_r11() RETURNS bigint "
+            f"LANGUAGE {language} AS $body${body}$body$",
+        )
+        call = "SELECT public.probe813_r11()"
+        outcome = _routine_outcome(dbname, call)
+        assert outcome[0], outcome
+        before = _snapshot(dbname, surviving=not target)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        print("ROUND11", form, language, "applied:", applied, flush=True)
+        assert applied is (not target), caplog.text
+        if target:
+            assert "target-typed query column" in caplog.text, caplog.text
+            assert _stamps(dbname) == stamps
+        else:
+            assert _routine_outcome(dbname, call) == outcome
+        assert _snapshot(dbname, surviving=not target) == before
+        assert _function_catalog(dbname) == functions
