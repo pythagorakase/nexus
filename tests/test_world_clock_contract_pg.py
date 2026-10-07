@@ -400,10 +400,24 @@ def test_null_base_rejects_first_chunk() -> None:
             assert _metadata_count(dbname) == 0
 
 
+def _layers(dbname: str) -> list[str]:
+    """Return each chunk's world_layer, in chunk order."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT world_layer::text FROM chunk_metadata ORDER BY chunk_id")
+        return [row[0] for row in cur.fetchall()]
+
+
 def test_null_base_rejects_later_writes(clock_db: tuple[str, int]) -> None:
-    """With chunks stored, a NULL base fails every metadata write."""
+    """With chunks stored, a NULL base fails every metadata write.
+
+    The writes are an INSERT, an UPDATE of time_delta, and an UPDATE of
+    world_layer alone (the flashback made primary, which would move the
+    clocks to (0, 7, 10, 10) under a base).
+    """
     dbname, _ = clock_db
     _null_the_base(dbname)
+    layers = _layers(dbname)
+    assert layers == ["primary", "primary", "flashback", "retrograde"]
     with closing(connect(dbname)) as conn:
         with pytest.raises(psycopg2.errors.RaiseException) as inserted:
             with conn, conn.cursor() as cur:
@@ -413,7 +427,16 @@ def test_null_base_rejects_later_writes(clock_db: tuple[str, int]) -> None:
             with conn, conn.cursor() as cur:
                 cur.execute("UPDATE chunk_metadata SET time_delta = time_delta")
         assert NO_BASE in str(updated.value)
+        with pytest.raises(psycopg2.errors.RaiseException) as relayered:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE chunk_metadata SET world_layer = 'primary' "
+                    "WHERE world_layer = 'flashback'"
+                )
+        assert NO_BASE in str(relayered.value)
     assert _clock_minutes(dbname) == [0, 7, 7, 7]
+    assert _layers(dbname) == layers
+    assert _metadata_count(dbname) == 4
 
 
 def test_base_timestamp_fixed_once_chunks_exist(clock_db: tuple[str, int]) -> None:
