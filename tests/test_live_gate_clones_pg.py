@@ -29,11 +29,12 @@ from sqlalchemy.orm import Session
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.retrograde_maturation import (
     _load_job_context,
-    _load_story_setting,
+    _load_story_weird_inputs,
     _maturation_settings,
     build_runtime_maturation_packet,
     enqueue_declared_entity_maturations,
 )
+from nexus.agents.orrery.retrograde_packet import resolve_weird_profile
 from nexus.agents.orrery.retrograde_vocabulary import (
     enumerate_seed_eligible_vocabulary,
 )
@@ -41,8 +42,10 @@ from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api import slot_utils
 from nexus.api.config_utils import get_new_story_model
 from nexus.api.new_story_cache import get_trait_menu, read_cache
+from nexus.api.narrative_schemas import WeirdLevel
+from nexus.api.new_story_flow import _record_genesis_weird
 from nexus.api.save_slots import get_slot_model
-from nexus.config import load_settings_as_dict, resolve_model_ref
+from nexus.config import load_settings, load_settings_as_dict, resolve_model_ref
 from tests.model_registry_helpers import registry_model
 from tests.pg_fixtures import (
     connect,
@@ -187,7 +190,7 @@ def test_maturation_enqueue_is_idempotent_on_the_routed_clone(
             row = cur.fetchone()
             assert row is not None
             context = _load_job_context(cur, row=row, cfg=cfg)
-            story_setting = _load_story_setting(cur)
+            story_setting, genesis_weird = _load_story_weird_inputs(cur)
         conn.rollback()
         seeded_setting = json.loads(MATURATION_SETTING_FIXTURE.read_text())["setting"]
         assert story_setting["genre"] == seeded_setting["genre"] == "thriller"
@@ -201,12 +204,59 @@ def test_maturation_enqueue_is_idempotent_on_the_routed_clone(
             cfg=cfg,
             dbname=clone,
             setting=story_setting,
+            genesis_weird=genesis_weird,
         )
         assert packet["dbname"] == clone
         assert packet["maturation_target"]["name"] == name
         assert packet["requesting_chunk_id"] == story.chunk_id
         assert packet["weird"]["genre"] == "thriller"
         assert name in packet["seed_generation_prompt"]
+        settings = load_settings()
+        assert settings.orrery is not None
+        weird_settings = settings.orrery.retrograde.weird
+        assert genesis_weird is None
+        assert packet["weird"]["level_source"] == "no_genesis_record"
+        assert packet["weird"]["level"] == weird_settings.default_level
+
+        # A genesis record on the clone decides the level: the player's
+        # choice (genesis_selected) or the default genesis resolved
+        # (genesis_default). The band comes from today's tables.
+        genesis_cases: tuple[tuple[WeirdLevel, WeirdLevel | None, str], ...] = (
+            ("high", "high", "genesis_selected"),
+            ("low", None, "genesis_default"),
+        )
+        for level, selected_level, level_source in genesis_cases:
+            with conn.cursor() as cur:
+                _record_genesis_weird(
+                    cur,
+                    resolve_weird_profile(
+                        settings=settings,
+                        setting=story_setting,
+                        weird_level=level,
+                    ),
+                    selected_level=selected_level,
+                )
+            conn.commit()
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                story_setting, genesis_weird = _load_story_weird_inputs(cur)
+            conn.rollback()
+            assert genesis_weird is not None
+            assert genesis_weird["selected_level"] == selected_level
+            packet = build_runtime_maturation_packet(
+                vocabulary=enumerate_seed_eligible_vocabulary(clone),
+                row=row,
+                context=context,
+                cfg=cfg,
+                dbname=clone,
+                setting=story_setting,
+                genesis_weird=genesis_weird,
+                settings=settings,
+            )
+            band = getattr(weird_settings.bands_by_genre["thriller"], level)
+            assert packet["weird"]["level"] == level
+            assert packet["weird"]["level_source"] == level_source
+            assert packet["weird"]["genre"] == "thriller"
+            assert packet["weird"]["raw_min"] == band.min
 
         rerun = enqueue_declared_entity_maturations(
             conn,

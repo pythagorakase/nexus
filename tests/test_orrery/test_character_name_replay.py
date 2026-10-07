@@ -141,6 +141,7 @@ def test_pending_maturation_targets_current_name_but_finds_original_excerpt(
         cfg=cfg,
         dbname="unused-offline-db",
         setting={"genre": "fantasy"},
+        genesis_weird=None,
     )
 
     assert packet["maturation_target"]["name"] == new_name
@@ -298,6 +299,7 @@ def test_maturation_context_excludes_renamed_target_by_identity(
         cfg=cfg,
         dbname=dbname,
         setting={"genre": "fantasy"},
+        genesis_weird=None,
     )
     assert packet["maturation_target"]["name"] == "Anika Sayegh"
     assert packet["seed_generation_request"]["project_intent_policy"][

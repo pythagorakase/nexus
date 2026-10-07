@@ -2880,10 +2880,6 @@ class OrreryRetrogradeMaturationSettings(BaseModel):
         ge=0,
         description="Deferred-secret cap for a single-entity runtime packet.",
     )
-    weird_level: Literal["low", "medium", "high"] = Field(
-        default="medium",
-        description="Coarse weirdness level for runtime maturation seeds.",
-    )
     weird_band_fraction: float = Field(
         default=0.6,
         gt=0.0,

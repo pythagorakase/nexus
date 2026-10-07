@@ -770,7 +770,7 @@ def _mature_one(
                 )
                 return manifest
             context = _load_job_context(cur, row=row, cfg=cfg)
-            story_setting = _load_story_setting(cur)
+            story_setting, genesis_weird = _load_story_weird_inputs(cur)
 
     from nexus.agents.orrery.retrograde_vocabulary import (
         enumerate_seed_eligible_vocabulary,
@@ -784,6 +784,7 @@ def _mature_one(
         cfg=cfg,
         dbname=dbname,
         setting=story_setting,
+        genesis_weird=genesis_weird,
         settings=settings,
     )
 
@@ -811,6 +812,7 @@ def _mature_one(
                 "persisted": False,
                 "skipped": "no_seeds_selected",
                 "seed_model": seed_result["model"],
+                "weird": _manifest_weird_block(packet["weird"]),
                 "timings_seconds": {
                     "seed": round(seed_elapsed, 2),
                     "total": round(time.monotonic() - started, 2),
@@ -862,6 +864,7 @@ def _mature_one(
                         "skipped": "no_seeds_selected",
                         "seed_model": seed_result["model"],
                         "expansion_model": expansion_result["model"],
+                        "weird": _manifest_weird_block(packet["weird"]),
                         "timings_seconds": {
                             "seed": round(seed_elapsed, 2),
                             "expansion": round(expansion_elapsed, 2),
@@ -911,6 +914,7 @@ def _mature_one(
                     "persisted": True,
                     "seed_model": seed_result["model"],
                     "expansion_model": expansion_result["model"],
+                    "weird": _manifest_weird_block(packet["weird"]),
                     "counters": persistence["counters"],
                     "world_event_ids": persistence["commit_readiness"][
                         "event_ref_to_id"
@@ -1033,6 +1037,7 @@ def build_runtime_maturation_packet(
     cfg: OrreryRetrogradeMaturationSettings,
     dbname: str,
     setting: Mapping[str, Any],
+    genesis_weird: Optional[Mapping[str, Any]],
     settings: Optional[Settings] = None,
 ) -> dict[str, Any]:
     """Build a scoped single-entity packet for the runtime maturation pass.
@@ -1041,7 +1046,9 @@ def build_runtime_maturation_packet(
     validator sees an identical contract; only the scaffolds, budget, weird
     band, and an explicit maturation directive differ. ``setting`` is the
     persisted ``global_variables.setting`` payload whose genre selects the
-    weird band.
+    weird band. ``genesis_weird`` is the persisted
+    ``global_variables.genesis_weird`` record (None when the story has none)
+    whose ``level`` sets the maturation strangeness level.
     """
 
     from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
@@ -1098,6 +1105,7 @@ def build_runtime_maturation_packet(
     weird = _resolve_maturation_weird(
         settings=settings,
         setting=setting,
+        genesis_weird=genesis_weird,
         cfg=cfg,
     )
     request = build_seed_generation_request(
@@ -1314,13 +1322,59 @@ def load_maturation_status_sync(cur: Any) -> dict[str, Any]:
 # ============================================================================
 
 
+def _genesis_level(genesis_weird: Mapping[str, Any]) -> tuple[str, str]:
+    """Return the maturation level and its source from a genesis record.
+
+    Reads only ``level`` and ``selected_level`` from the record
+    ``_record_genesis_weird`` stores; the raw bounds, genre, and band source
+    stay as genesis provenance and are never reused here.
+
+    Raises:
+        ValueError: If ``level`` is not a strangeness level, the
+            ``selected_level`` key is absent, or a non-null ``selected_level``
+            differs from ``level``.
+    """
+
+    from nexus.agents.orrery.retrograde_packet import WEIRD_LEVELS
+
+    level = genesis_weird.get("level")
+    if not isinstance(level, str) or level not in WEIRD_LEVELS:
+        raise ValueError(
+            "global_variables.genesis_weird.level must be low, medium, or high; "
+            f"got {level!r}"
+        )
+    if "selected_level" not in genesis_weird:
+        raise ValueError(
+            "global_variables.genesis_weird has no selected_level key; the "
+            "genesis record must say whether the player chose its level"
+        )
+    selected_level = genesis_weird["selected_level"]
+    if selected_level is None:
+        return str(level), "genesis_default"
+    if selected_level != level:
+        raise ValueError(
+            "global_variables.genesis_weird.selected_level "
+            f"{selected_level!r} differs from its resolved level {level!r}"
+        )
+    return str(level), "genesis_selected"
+
+
 def _resolve_maturation_weird(
     *,
     settings: Any,
     setting: Mapping[str, Any],
+    genesis_weird: Optional[Mapping[str, Any]],
     cfg: OrreryRetrogradeMaturationSettings,
 ) -> dict[str, Any]:
-    """Resolve the genre weird band, contracted for runtime maturation.
+    """Resolve the story's genesis weird level into a contracted maturation band.
+
+    The level follows the story: a ``global_variables.genesis_weird`` record
+    gives its ``level`` (``level_source`` ``genesis_selected`` when the player
+    chose it, ``genesis_default`` when genesis resolved the default); a story
+    with no record (``genesis_weird`` None) matures at
+    ``[orrery.retrograde.weird].default_level`` (``no_genesis_record``). The
+    band is resolved again from today's genre band tables; the record's raw
+    bounds stay as genesis provenance.
 
     entropy(cold_start) > entropy(maturation): the wizard rolls the full
     genre band because cold-start history *becomes* the baseline, while a
@@ -1328,14 +1382,23 @@ def _resolve_maturation_weird(
     introduction. ``weird_band_fraction`` keeps the band floor and lowers
     the ceiling; the R3 graph builder then rolls within the contracted
     band from its own seeded RNG.
+
+    Raises:
+        ValueError: If the genesis record is malformed (see
+            ``_genesis_level``) or the story genre has no configured band.
     """
 
     from nexus.agents.orrery.retrograde_packet import resolve_weird_profile
 
+    if genesis_weird is None:
+        level = settings.orrery.retrograde.weird.default_level
+        level_source = "no_genesis_record"
+    else:
+        level, level_source = _genesis_level(genesis_weird)
     profile = resolve_weird_profile(
         settings=settings,
         setting=setting,
-        weird_level=cfg.weird_level,
+        weird_level=level,
     )
     raw_min = float(profile["raw_min"])
     width = float(profile["raw_max"]) - raw_min
@@ -1343,19 +1406,30 @@ def _resolve_maturation_weird(
     return {
         **profile,
         "source": "maturation_band",
+        "level_source": level_source,
         "band_fraction": float(cfg.weird_band_fraction),
         "raw_max": raw_max,
         "raw_midpoint": (raw_min + raw_max) / 2.0,
     }
 
 
-def _load_story_setting(cur: Any) -> dict[str, Any]:
-    """Load the persisted wizard setting payload for weird-band resolution."""
+def _load_story_weird_inputs(
+    cur: Any,
+) -> tuple[dict[str, Any], Optional[dict[str, Any]]]:
+    """Load the wizard setting and genesis strangeness record for maturation.
+
+    Returns ``(setting, genesis_weird)``; ``genesis_weird`` is None when the
+    column is NULL (a story with no genesis record).
+
+    Raises:
+        ValueError: If the setting payload is missing or empty, or
+            ``genesis_weird`` is neither a JSON object nor NULL.
+    """
 
     cur.execute(
         """
-        /* orrery:maturation:story_setting */
-        SELECT setting FROM global_variables WHERE id = true
+        /* orrery:maturation:story_weird_inputs */
+        SELECT setting, genesis_weird FROM global_variables WHERE id = true
         """
     )
     row = cur.fetchone()
@@ -1365,7 +1439,13 @@ def _load_story_setting(cur: Any) -> dict[str, Any]:
             "global_variables.setting is missing or empty; runtime maturation "
             "needs the wizard setting payload to resolve its genre weird band"
         )
-    return dict(setting)
+    genesis_weird = _row_value(row, "genesis_weird", 1)
+    if genesis_weird is not None and not isinstance(genesis_weird, Mapping):
+        raise ValueError(
+            "global_variables.genesis_weird must be a JSON object or NULL; "
+            "runtime maturation reads its level"
+        )
+    return dict(setting), (None if genesis_weird is None else dict(genesis_weird))
 
 
 def _load_job_context(
@@ -1665,6 +1745,21 @@ def _base_manifest(
         "requesting_chunk_id": int(row["requesting_chunk_id"]),
         "budget_seconds": cfg.budget_seconds,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _manifest_weird_block(weird: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the result-manifest record of the packet's resolved strangeness."""
+
+    return {
+        "level": weird["level"],
+        "level_source": weird["level_source"],
+        "band": {
+            "genre": weird["genre"],
+            "raw_min": weird["raw_min"],
+            "raw_max": weird["raw_max"],
+            "band_fraction": weird["band_fraction"],
+        },
     }
 
 
