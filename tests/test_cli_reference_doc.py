@@ -136,6 +136,21 @@ def test_renderer_refuses_unrenderable_parsers(
         )
 
 
+def test_renderer_refuses_a_flag_transport_without_a_long_option() -> None:
+    """A flag transport whose destination has only a short option is refused."""
+    parser = argparse.ArgumentParser(add_help=False)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    leaf = subparsers.add_parser("orphan", help="Has a short-only switch")
+    leaf.add_argument("-x", dest="xray", action="store_true", help="Short only")
+    with pytest.raises(ValueError, match="nexus orphan: flag_transports names 'xray'"):
+        render_cli_reference(
+            parser,
+            command_transports={"orphan": "http"},
+            flag_transports={"orphan": (("xray", "database"),)},
+            remote_profile_transports={},
+        )
+
+
 def test_zero_default_is_not_blank() -> None:
     """A default of 0 renders as `0`, not as the blank of False or None."""
     section = _section(_committed(), "### `nexus trait-audit`")
