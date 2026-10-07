@@ -1,10 +1,5 @@
 [
   {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/calibration.json",
-    "sha256": "2add9397b1928db5a575dc98ddd0c352997679220b06a39471018ef0088fa286",
-    "bytes": 976735
-  },
-  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_armed_hsl_43_40__70__-control.png",
     "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
     "bytes": 138
@@ -2225,6 +2220,11 @@
     "bytes": 294
   },
   {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/calibration.json",
+    "sha256": "2add9397b1928db5a575dc98ddd0c352997679220b06a39471018ef0088fa286",
+    "bytes": 976735
+  },
+  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/commands.md",
     "sha256": "18f4d6964dbe3051134f2f71da084985b1ee627409bc223b034d87393bdf6296",
     "bytes": 70109
@@ -2505,11 +2505,6 @@
     "bytes": 7857
   },
   {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/plants.md",
-    "sha256": "248a0938734424070eb66181bfbb308e8db0d283e8f73e3fe9ed5e068bb96e94",
-    "bytes": 6362
-  },
-  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/plants/before-plants.json",
     "sha256": "06987f8532859cb235c8618a6befd415bf7878e30981581823a13250676d33d8",
     "bytes": 430
@@ -2760,6 +2755,11 @@
     "bytes": 1357
   },
   {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/plants.md",
+    "sha256": "248a0938734424070eb66181bfbb308e8db0d283e8f73e3fe9ed5e068bb96e94",
+    "bytes": 6362
+  },
+  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/regeneration-after-protocol.json",
     "sha256": "773383a66ad5ab40b98d062413a59d426e0ca69f790baf16ded3c3fb69bd12f3",
     "bytes": 474229
@@ -2958,11 +2958,6 @@
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/build.log",
     "sha256": "69d9427df5a8ab8df3a608933101b7d685ca12a3779d3f1d835c27fcb9d3e0b2",
     "bytes": 6529
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration-maxima.md",
-    "sha256": "111589923bc1f17a2085acdf0c9c656adf2b12e2211f22f099dab20a0f053a70",
-    "bytes": 856
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_armed_hsl_43_40__70__-control.png",
@@ -5183,6 +5178,11 @@
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_memory_fill_over__b83d7a-painted.png",
     "sha256": "33d4deabd91989aa7476406f1cb4265621a985a85f34946decf2ad49397e08f2",
     "bytes": 294
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration-maxima.md",
+    "sha256": "111589923bc1f17a2085acdf0c9c656adf2b12e2211f22f099dab20a0f053a70",
+    "bytes": 856
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/check.json",
