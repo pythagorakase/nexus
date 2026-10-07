@@ -69,8 +69,13 @@ class GenerationScenario:
     # snapshot, plus any interval read its stage poller takes before the
     # transition POST is sent (the poller starts first).
     snapshot_reads: int = 0
-    # The record each of those reads served.
+    # The record each of those reads served. The gateway always serves
+    # stage_before there, so this guards the fake gateway, not the CLI.
     snapshot_served: list[dict[str, Any]] = field(default_factory=list)
+    # Interval reads the transition POST waits for before it counts as
+    # received, which forces the early read a slow host can produce.
+    interval_reads_before_post: int = 0
+    pre_post_reads_seen: Event = field(default_factory=Event)
     scripted_reads: int = 0
     # Ordinals (from 0) of the status reads answered with a 502.
     failed_reads: set[int] = field(default_factory=set)
@@ -141,6 +146,10 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     }
                 )
             elif self.path == "/api/story/new/transition":
+                if scenario.interval_reads_before_post:
+                    assert scenario.pre_post_reads_seen.wait(
+                        timeout=10
+                    ), "interval read never arrived"
                 scenario.transition_posted = True
                 if scenario.result == "transition_drop":
                     # The gateway dies while transitioning: no answer at all.
@@ -220,6 +229,11 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     scenario.snapshot_reads += 1
                     payload = scenario.stage_before
                     scenario.snapshot_served.append(payload)
+                    if (
+                        scenario.snapshot_reads
+                        >= 1 + scenario.interval_reads_before_post
+                    ):
+                        scenario.pre_post_reads_seen.set()
                 elif scenario.outcome_recorded and scenario.stage_outcome:
                     payload = scenario.stage_outcome
                 elif script:
@@ -729,14 +743,21 @@ def _stage_lines(stdout: str) -> list[str]:
     return [line for line in stdout.splitlines() if line.startswith("Genesis stage")]
 
 
+@pytest.mark.parametrize(
+    "interval_reads_before_post", [0, 1], ids=["posted-first", "interval-read-first"]
+)
 @pytest.mark.parametrize("ready", [False, True], ids=["seed-confirm", "ready-resume"])
 def test_cli_prints_each_genesis_stage_once_while_transition_runs(
-    tmp_path: Path, ready: bool
+    tmp_path: Path, ready: bool, interval_reads_before_post: int
 ) -> None:
     """Human output names each Retrograde stage once, in order, through done."""
 
     scenario = GenerationScenario(
-        seed=not ready, ready=ready, stage_script=GENESIS_SCRIPT, stage_outcome=DONE
+        seed=not ready,
+        ready=ready,
+        stage_script=GENESIS_SCRIPT,
+        stage_outcome=DONE,
+        interval_reads_before_post=interval_reads_before_post,
     )
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 0, (stdout, stderr)
@@ -752,8 +773,10 @@ def test_cli_prints_each_genesis_stage_once_while_transition_runs(
     scripted = [payload["stage"] for payload in GENESIS_SCRIPT]
     # The stage poller starts before the transition is posted, so an interval
     # read can precede the post; each such read serves the previous record.
+    # "interval-read-first" holds the post until one has been answered.
     before = scenario.snapshot_reads
-    assert before >= 1
+    assert before >= 1 + interval_reads_before_post
+    # A guard on the fake gateway: it serves stage_before to every such read.
     assert scenario.snapshot_served == [scenario.stage_before] * before
     assert scenario.stages_read[: before + len(scripted)] == [
         *(["idle"] * before),
@@ -848,7 +871,9 @@ def test_cli_prints_a_terminal_stage_recorded_before_its_first_interval_read(
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 1, (stdout, stderr)
     assert _stage_lines(stdout) == ["Genesis stage: failed (persistence)"]
-    # One read before the post, one after the answer; no interval read.
+    # The snapshot count is loosened to match the genesis-stage test; at this
+    # 60 s interval the exact stages_read below still pins one read before the
+    # post and one after the answer, with no interval read.
     assert scenario.snapshot_reads >= 1
     assert scenario.snapshot_served == [before] * scenario.snapshot_reads
     assert scenario.stages_read == [before["stage"], "failed"]
