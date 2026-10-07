@@ -48,10 +48,13 @@ Each line the order cites was read in this worktree before the change.
 ## Live Usage Ledger, Read Only
 
 Every event in `/Users/pythagor/nexus/.nexus/runtime/usage/usage-*.jsonl`,
-counted by `(provider, transport)` on 2026-10-07 (read with `cat` piped into
-an isolated `python -I` counter; nothing written):
+counted by `(provider, transport)` on 2026-10-07 (read-only: `cat` piped into
+an isolated `python -I` counter; nothing written). First read at `d94681d8`;
+the same command, rerun at `797205b5`, gave the identical output below:
 
 ```
+$ PY=/Users/pythagor/nexus/.venv/bin/python
+$ cat /Users/pythagor/nexus/.nexus/runtime/usage/usage-*.jsonl | $PY -I -c 'import collections,json,sys; c=collections.Counter((e.get("provider"),e.get("transport")) for e in map(json.loads,filter(str.strip,sys.stdin))); [print(n,k) for k,n in c.most_common()]; print(sum(c.values()))'
 648 ('openai', 'responses')
 171 ('openai', 'pydantic_ai')
 14 ('test', 'pydantic_ai')
@@ -164,17 +167,98 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 ```
 
 Static checks on the three changed Python files, branch against their
-`origin/main` versions:
+`origin/main` versions, run at `797205b5` by
+`scratchpad/802-S1b/static2.sh` (session scratchpad, not committed), which
+prints each command before its verbatim output and exit status. The names it
+uses:
 
-- Black: `3 files would be left unchanged.`
-- flake8: the same 15 pre-existing `E501` lines in
-  `tests/test_api/test_attempt_manifest_pg.py` on both sides (on the branch
-  the ones after `:296` sit 12 lines lower); none in the other two files.
-- `mypy --explicit-package-bases`: one identical pre-existing error on both
-  sides, `tests/test_api/test_attempt_manifest_pg.py:10: error: Library stubs
-  not installed for "requests"  [import-untyped]`.
-- `$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
-  `OK: exception disposition coverage and shrink-only baseline verified.`
+```
+W=/Users/pythagor/nexus/.claude/worktrees/802-cache-and-tag-report
+M=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/802-S1b/main
+PY=/Users/pythagor/nexus/.venv/bin/python
+FILES="nexus/telemetry/turn_observation.py tests/test_turn_observation.py tests/test_api/test_attempt_manifest_pg.py"
+# origin/main copies, made before the main-side runs:
+for f in $FILES; do git show origin/main:$f > $M/$f; done
+cp $W/pyproject.toml $W/.flake8 $M/
+```
+
+```
+### branch (cwd $W, HEAD 797205b5)
+$ $PY -m black --check $FILES
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+[exit 0]
+
+$ $PY -m flake8 $FILES
+tests/test_api/test_attempt_manifest_pg.py:82:89: E501 line too long (131 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:133:89: E501 line too long (121 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:137:89: E501 line too long (138 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:141:89: E501 line too long (126 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:157:89: E501 line too long (166 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:162:89: E501 line too long (106 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:238:89: E501 line too long (100 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:259:89: E501 line too long (96 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:441:89: E501 line too long (131 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:449:89: E501 line too long (125 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:480:89: E501 line too long (111 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:484:89: E501 line too long (122 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:510:89: E501 line too long (93 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:527:89: E501 line too long (118 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:547:89: E501 line too long (91 > 88 characters)
+[exit 1]
+
+$ PYTHONPATH=$W $PY -m mypy --explicit-package-bases $FILES
+tests/test_api/test_attempt_manifest_pg.py:10: error: Library stubs not installed for "requests"  [import-untyped]
+tests/test_api/test_attempt_manifest_pg.py:10: note: Hint: "python3 -m pip install types-requests"
+tests/test_api/test_attempt_manifest_pg.py:10: note: (or run "mypy --install-types" to install all missing stub packages)
+tests/test_api/test_attempt_manifest_pg.py:10: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+Found 1 error in 1 file (checked 3 source files)
+[exit 1]
+
+### origin/main copies (cwd $M, origin/main 364fef4b)
+$ $PY -m black --check $FILES
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+[exit 0]
+
+$ $PY -m flake8 $FILES
+tests/test_api/test_attempt_manifest_pg.py:82:89: E501 line too long (131 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:133:89: E501 line too long (121 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:137:89: E501 line too long (138 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:141:89: E501 line too long (126 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:157:89: E501 line too long (166 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:162:89: E501 line too long (106 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:238:89: E501 line too long (100 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:259:89: E501 line too long (96 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:429:89: E501 line too long (131 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:437:89: E501 line too long (125 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:468:89: E501 line too long (111 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:472:89: E501 line too long (122 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:498:89: E501 line too long (93 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:515:89: E501 line too long (118 > 88 characters)
+tests/test_api/test_attempt_manifest_pg.py:535:89: E501 line too long (91 > 88 characters)
+[exit 1]
+
+$ MYPYPATH=$W $PY -m mypy --explicit-package-bases $FILES
+tests/test_api/test_attempt_manifest_pg.py:10: error: Library stubs not installed for "requests"  [import-untyped]
+tests/test_api/test_attempt_manifest_pg.py:10: note: Hint: "python3 -m pip install types-requests"
+tests/test_api/test_attempt_manifest_pg.py:10: note: (or run "mypy --install-types" to install all missing stub packages)
+tests/test_api/test_attempt_manifest_pg.py:10: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+Found 1 error in 1 file (checked 3 source files)
+[exit 1]
+```
+
+Conclusion: no new diagnostics. Black is clean on both sides. flake8 reports
+the same 15 pre-existing `E501` lines in
+`tests/test_api/test_attempt_manifest_pg.py` on both sides; the seven after
+`:296` sit 12 lines lower on the branch (the added `providers`/`comparable`
+assertions), and none falls on a changed line. mypy reports the same one
+pre-existing error on both sides (`requests` stubs, `:10`).
+
+```
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+```
 
 ## Landing Notes
 
