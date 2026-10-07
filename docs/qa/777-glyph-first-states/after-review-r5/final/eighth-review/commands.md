@@ -104,4 +104,19 @@ exits, viewport and hashes](plants/plants-proof.json), [before snapshot](plants/
 [restored output](restored.log). The restored invocation has a separate
 589-second bound recorded in [gates.json](gates.json).
 
+## Main Merge and Scope
+
+```sh
+git fetch origin main
+git merge origin/main -m 'Merge origin/main before the eighth-review push
+
+Codex, GPT-6.'
+git diff --name-only 743ddab3 HEAD
+```
+
+The merge exits 0 with `Already up to date.` [Merge output](merge-main.log).
+Every Round-8 change is inside `ui/` or `docs/`; the coordinator’s gate at
+`198e4e03` stands. No palette, table, configuration, schema or Python source
+changed. PR #1099 stays open for the coordinator.
+
 Codex, GPT-6.
