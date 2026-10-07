@@ -47,10 +47,6 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
         "Describe the character revision before continuing.",
     ): "Player-facing API diagnostic explaining how to complete an active revision.",
     (
-        "nexus/api/wizard_chat.py",
-        "Use the non-streaming wizard route to confirm or revise this artifact.",
-    ): "API client routing diagnostic for a pending player confirmation.",
-    (
         "nexus/cli.py",
         "The saved  draft awaits confirmation. Use 'nexus continue --slot ' to confirm, or supply --user-text to revise it.",
     ): "Operator-facing CLI recovery instruction for a saved pending draft.",

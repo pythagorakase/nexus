@@ -158,6 +158,27 @@ episodes, seasons and legacy-vector tables/data remain outside this cleanup.
 subtraction is unchanged. This slice completes no deferred 813-R5 function drop
 and adds or reopens no owner question.
 
+### Read-Only SQL Subtraction and Retained Labels (2026-10-07)
+
+813-Q5 binds: "Delete execute_readonly_sql only". `MEMNON.execute_readonly_sql`,
+its `READONLY_SQL_ALLOWED_TABLES` allowlist, and
+`tests/test_orrery/test_memnon_whitelist.py`, which tested only the allowlist,
+are deleted. No caller existed under `nexus/`, `scripts/`, `tests/` or `ui/`.
+Its FROM/JOIN patterns were raw strings with doubled backslashes, so the
+allowlist matched no table, and it discarded a failed
+`SET LOCAL statement_timeout`. Its two baselined handlers leave
+`config/exception_disposition_baseline.json`. `MEMNON.get_schema_summary` stays
+unchanged. It returns column names but no comments, because its comment queries
+run after its connection closes; `CLAUDE.md` now says so and names no caller,
+because none exists.
+
+813-Q3 binds: "Keep the labels, documented. Migration 135's comments already say
+no writer uses them." The `event_source_kind` labels `apex`, `narrator` and
+`bleed` and the `orrery_narration_status` label `leased` stay, and no migration
+rebuilds either type. A read-only check on 2026-10-07 found no `world_events` or
+`orrery_resolutions` row with any of these labels in `NEXUS_template` or
+`save_01` through `save_05`.
+
 ## Legacy Columns Without Evidence
 
 #819 retires a schema-documentation baseline entry only with a comment that cites reader or writer evidence (`docs/database.md`, Schema Documentation). These nine table columns have no such evidence. They stay uncommented in `config/schema_docs_baseline.json`, whose reasons point here, as #813 debt. This section records them and decides no drop. A drop follows the discipline of migration 143: row and dependency preflights against the fleet and a frozen manifest.
