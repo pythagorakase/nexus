@@ -101,6 +101,9 @@ reason = "README.md and docs/orrery_design_plan.md background worker."
 target = "nexus/agents/orrery/catalog.py:main"
 reason = ".pre-commit-config.yaml catalog regeneration."
 [[operators]]
+target = "scripts/render_cli_reference.py:main"
+reason = "Regenerates docs/cli_reference.md; tests/test_cli_reference_doc.py checks it (#817)."
+[[operators]]
 target = "scripts/validate_config_commit.py:main"
 reason = ".pre-commit-config.yaml config validation."
 [[operators]]
@@ -398,6 +401,7 @@ paths = [
     { path = "scripts/register_drift_study.py", class = "test-only", reason = "test root tests/test_register_drift_study.py:<module>" },
     { path = "scripts/register_production_conditions.sh", class = "dead", reason = "Runs scripts/run_apex_audition_batch.py (:15), which does not exist." },
     { path = "scripts/remove_storyteller_contamination.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
+    { path = "scripts/render_cli_reference.py", class = "operator", reason = "operator root scripts/render_cli_reference.py:main" },
     { path = "scripts/replay_state.py", class = "operator", reason = "operator root scripts/replay_state.py:main" },
     { path = "scripts/report_retrieval_coverage.py", class = "test-only", reason = "test root tests/test_lore/test_retrieval_coverage.py:<module>" },
     { path = "scripts/resequence_chunks.sql", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },

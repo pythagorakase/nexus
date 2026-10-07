@@ -189,7 +189,6 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         ("GET", "/api/story/new/slots"): _player("slot.read", "read"),
         # wizard_chat
         ("POST", "/api/story/new/chat"): _WIZARD_TURN,
-        ("POST", "/api/story/new/chat/stream"): _WIZARD_TURN,
         # Records the genesis strangeness selection on the wizard cache.
         ("PUT", "/api/story/new/weird"): _WIZARD_EDIT,
         # Deletes the slot's existing world and restarts its id sequences.

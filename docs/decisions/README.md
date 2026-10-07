@@ -3,7 +3,7 @@ status: canonical
 sources:
   - tests/test_doc_front_matter.py
   - README.md
-verified_commit: "41783c1dfcb16ff94e31e26bf2723b597b97803b"
+verified_commit: "364fef4b10ae0e7e0b63fc8e86cf292cca4087e4"
 ---
 
 # Document Status and the Decision Ledger
@@ -51,9 +51,9 @@ No other keys are accepted.
   own successor, if any, continues the chain. `README.md` never references it.
 
 Documents without front matter are unclassified. Classify a document when you
-verify it against its sources or retire it. Generated documents, such as
-`docs/orrery_packages.md`, carry no front matter; their generators' tests check
-their freshness.
+verify it against its sources or retire it. Generated documents,
+`docs/orrery_packages.md` and `docs/cli_reference.md`, carry no front matter;
+their generators' tests check their freshness.
 
 ### Scope and Validation
 

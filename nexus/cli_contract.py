@@ -22,6 +22,8 @@ a local-operator command whose handler serves the remote profile over HTTP
 itself lists that in :data:`REMOTE_PROFILE_TRANSPORTS`. Commands whose
 ``--config`` selects the runtime configuration are in
 :data:`RUNTIME_CONFIG_COMMANDS`, so the remote check reads that file.
+``docs/cli_reference.md`` is rendered from ``build_parser()`` and these tables
+by ``scripts/render_cli_reference.py``.
 
 Remote Refusal
 --------------
@@ -188,6 +190,18 @@ REFUSED_REMOTE_TRANSPORTS: FrozenSet[Transport] = frozenset(
     {"database", "local_operator"}
 )
 
+# What each transport opens, in the order the generated reference lists them.
+TRANSPORT_OPENS: Mapping[Transport, str] = MappingProxyType(
+    {
+        "http": "The NEXUS API only",
+        "database": "A slot database directly",
+        "local_operator": (
+            "This machine's processes, logs, runtime home, usage ledger, model "
+            "artifacts, local files, or provider credentials"
+        ),
+    }
+)
+
 
 class ExitCode(IntEnum):
     """Stable process exit codes of the NEXUS CLI."""
@@ -268,24 +282,40 @@ def _subparsers(parser: argparse.ArgumentParser) -> Optional[argparse.Action]:
     return None
 
 
-def iter_command_paths(parser: argparse.ArgumentParser) -> Iterator[str]:
-    """Yield the full path of every leaf command the parser registers."""
+def iter_command_parsers(
+    parser: argparse.ArgumentParser,
+) -> Iterator[Tuple[str, argparse.ArgumentParser, Optional[str]]]:
+    """Yield every registered subparser as (full path, parser, one-line help).
 
-    def walk(node: argparse.ArgumentParser, prefix: Tuple[str, ...]) -> Iterator[str]:
+    The walk is depth-first in registration order, so a group precedes its
+    verbs. The help is the ``help`` of the parent's choice action for that
+    name (argparse keeps it there, not on the child parser), or None.
+    """
+
+    def walk(
+        node: argparse.ArgumentParser, prefix: Tuple[str, ...]
+    ) -> Iterator[Tuple[str, argparse.ArgumentParser, Optional[str]]]:
         action = _subparsers(node)
         if action is None:
-            yield " ".join(prefix)
             return
+        assert isinstance(action, argparse._SubParsersAction)
         assert isinstance(action.choices, dict)
+        helps = {choice.dest: choice.help for choice in action._choices_actions}
         for name, child in action.choices.items():
-            yield from walk(child, (*prefix, name))
+            path = (*prefix, name)
+            yield " ".join(path), child, helps.get(name)
+            yield from walk(child, path)
 
-    root = _subparsers(parser)
-    if root is None:
+    if _subparsers(parser) is None:
         raise ValueError("The CLI parser registers no subcommands")
-    assert isinstance(root.choices, dict)
-    for name, child in root.choices.items():
-        yield from walk(child, (name,))
+    yield from walk(parser, ())
+
+
+def iter_command_paths(parser: argparse.ArgumentParser) -> Iterator[str]:
+    """Yield the full path of every leaf command the parser registers."""
+    for path, child, _help in iter_command_parsers(parser):
+        if _subparsers(child) is None:
+            yield path
 
 
 def command_path(parser: argparse.ArgumentParser, args: argparse.Namespace) -> str:
