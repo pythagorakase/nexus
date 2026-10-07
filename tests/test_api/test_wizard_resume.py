@@ -207,13 +207,12 @@ def test_resume_rejects_missing_session(
     factory.assert_not_called()
 
 
-@pytest.mark.parametrize("streaming", [False, True])
 @pytest.mark.parametrize("reply", ["choices", "debug", "artifact"])
 @pytest.mark.parametrize("message_origin", ["user", "wizard_control"])
 def test_resume_keeps_only_choices_from_the_latest_turn(
-    monkeypatch: pytest.MonkeyPatch, streaming: bool, reply: str, message_origin: str
+    monkeypatch: pytest.MonkeyPatch, reply: str, message_origin: str
 ) -> None:
-    """Both chat transports must replace old choices, including with an empty set."""
+    """A chat turn must replace old choices, including with an empty set."""
     storage = ConversationsClient("TEST")
     thread_id = storage.create_thread()
     storage.add_message(thread_id, "assistant", "Welcome")
@@ -252,13 +251,6 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
         )
     )
 
-    class GeneratedTurn:
-        async def stream_output(self):
-            yield output
-
-        async def get_output(self):
-            return output
-
     class Agent:
         def set_artifact(self, context: Any) -> None:
             if reply == "artifact":
@@ -273,11 +265,6 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
             self.set_artifact(kwargs["deps"])
             return SimpleNamespace(output=output)
 
-        async def run_stream(self, *args: Any, **kwargs: Any):
-            seen_history.extend(kwargs["message_history"])
-            self.set_artifact(kwargs["deps"])
-            yield GeneratedTurn()
-
     monkeypatch.setattr(slot_state, "get_slot_state", lambda slot: state)
     monkeypatch.setattr(wizard_agent, "read_cache", lambda dbname: cache)
     monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
@@ -288,7 +275,6 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
     monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: storage)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
     monkeypatch.setattr(wizard_chat, "wizard_debug_agent", Agent())
-    monkeypatch.setattr(wizard_chat, "get_wizard_streaming_enabled", lambda: True)
     monkeypatch.setattr(
         wizard_chat,
         "build_pydantic_ai_model_with_provider",
@@ -308,11 +294,10 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
     app.include_router(setup_endpoints.router)
     client = TestClient(app)
 
-    endpoint = "/api/story/new/chat/stream" if streaming else "/api/story/new/chat"
     payload = {"slot": 4, "message": message, "dev": reply == "debug"}
     if message_origin == "wizard_control":
         payload["message_origin"] = message_origin
-    response = client.post(endpoint, json=payload)
+    response = client.post("/api/story/new/chat", json=payload)
     assert response.status_code == 200, response.text
     resumed = client.get("/api/story/new/setup/resume?slot=4")
     assert resumed.status_code == 200, resumed.text

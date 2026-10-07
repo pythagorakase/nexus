@@ -3869,9 +3869,6 @@ class WizardSettings(BaseModel):
     max_tokens: int = Field(
         default=4096, ge=1, description="Max output tokens for wizard responses"
     )
-    enable_streaming: bool = Field(
-        default=True, description="Enable wizard streaming endpoint"
-    )
     trait_inputs: WizardTraitInputsSettings = Field(
         default_factory=WizardTraitInputsSettings,
         description="Transition-time trait input derivation settings",

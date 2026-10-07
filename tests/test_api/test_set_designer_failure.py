@@ -1,7 +1,7 @@
 """Real TEST wizard design proofs on disposable assets.new_story_creator rows.
 
-The streaming live proof is deferred to #1081. All services, configuration,
-usage, and database writes belong to this fixture, never to an owner's slot.
+All services, configuration, usage, and database writes belong to this
+fixture, never to an owner's slot.
 """
 
 import ast
@@ -304,18 +304,18 @@ def test_chat_set_design_write_failure_returns_500_without_design_draft(
 
 
 def test_neither_provider_branch_swallows_set_design_errors() -> None:
-    """All four branches reach the boundary, including unexercised production."""
+    """Both branches reach the boundary, including unexercised production."""
     path = Path(__file__).resolve().parents[2] / "nexus/api/wizard_chat.py"
     source = path.read_text()
     assert "set_design_error" not in source
     tree = ast.parse(source)
     expected = {
-        "query_wizard_cache": 2,
-        "generate_set_design": 2,
-        "_record_set_design": 4,
+        "query_wizard_cache": 1,
+        "generate_set_design": 1,
+        "_record_set_design": 2,
     }
     found = dict.fromkeys(expected, 0)
-    for endpoint_name in ("new_story_chat_endpoint", "new_story_chat_stream_endpoint"):
+    for endpoint_name in ("new_story_chat_endpoint",):
         endpoint = next(
             node
             for node in tree.body

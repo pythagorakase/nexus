@@ -1,8 +1,8 @@
-"""A started wizard stream must report stale drafts without a broken body."""
+"""A generated wizard artifact must report stale drafts as a 409, never success."""
 
 from contextlib import contextmanager
 from copy import deepcopy
-import json
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from fastapi import FastAPI
@@ -13,13 +13,21 @@ import pytest
 from nexus.api import new_story_cache, slot_state, wizard_agent, wizard_chat
 from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import WizardCache
-from nexus.api.new_story_schemas import WizardResponse
 from nexus.api.slot_state import SlotState, WizardState
 
 
-@pytest.mark.parametrize("changed_at", ["session", "artifact", "write_lock"])
-def test_started_stream_ends_with_conflict_event(monkeypatch, changed_at) -> None:
-    """Concurrent edits after a preview must yield recovery, never stale success."""
+@pytest.mark.parametrize(
+    ("changed_at", "detail"),
+    [
+        ("session", "The wizard session changed."),
+        ("artifact", "This artifact changed before its response arrived."),
+        ("write_lock", "The wizard changed while this response was being generated."),
+    ],
+)
+def test_generated_artifact_ends_with_conflict(
+    monkeypatch, changed_at: str, detail: str
+) -> None:
+    """Concurrent edits during generation must yield recovery, never stale success."""
     storage = ConversationsClient("TEST")
     thread_id = storage.create_thread()
     storage.add_message(thread_id, "assistant", "Welcome")
@@ -40,19 +48,11 @@ def test_started_stream_ends_with_conflict_event(monkeypatch, changed_at) -> Non
         ),
     )
 
-    class GeneratedTurn:
-        def __init__(self, context):
-            self.context = context
-
-        async def stream_output(self):
-            yield WizardResponse(
-                message="Draft preview", choices=["Old choice", "Another old choice"]
-            )
-
-        async def get_output(self):
+    class Agent:
+        async def run(self, *args, deps, **kwargs):
             cache.setting.genre = "fantasy"
             cache.setting.world_name = "Original draft"
-            self.context.last_tool_result = {
+            deps.last_tool_result = {
                 "phase_complete": True,
                 "choices": ["Stale artifact choice"],
                 **cache.confirmation_metadata(),
@@ -61,11 +61,7 @@ def test_started_stream_ends_with_conflict_event(monkeypatch, changed_at) -> Non
                 cache.thread_id = "replacement-story"
             elif changed_at == "artifact":
                 cache.setting.world_name = "Newer draft"
-            return DeferredToolRequests()
-
-    class Agent:
-        async def run_stream(self, *args, deps, **kwargs):
-            yield GeneratedTurn(deps)
+            return SimpleNamespace(output=DeferredToolRequests())
 
     @contextmanager
     def connection(*args, **kwargs):
@@ -83,7 +79,6 @@ def test_started_stream_ends_with_conflict_event(monkeypatch, changed_at) -> Non
     )
     monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: storage)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
-    monkeypatch.setattr(wizard_chat, "get_wizard_streaming_enabled", lambda: True)
     monkeypatch.setattr(
         wizard_chat,
         "build_pydantic_ai_model_with_provider",
@@ -97,22 +92,10 @@ def test_started_stream_ends_with_conflict_event(monkeypatch, changed_at) -> Non
     client = TestClient(app, raise_server_exceptions=False)
 
     response = client.post(
-        "/api/story/new/chat/stream", json={"slot": 4, "message": "A harbor city"}
+        "/api/story/new/chat", json={"slot": 4, "message": "A harbor city"}
     )
 
-    # Once the preview starts, HTTP status is fixed; the last NDJSON record is
-    # authoritative. The HTTP exception must not escape and truncate the stream.
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "application/x-ndjson"
-    assert response.text.endswith("\n"), response.text
-    records = [json.loads(line) for line in response.text.splitlines()]
-    assert records[0] == {
-        "type": "message",
-        "message": "Draft preview",
-        "choices": ["Old choice", "Another old choice"],
-    }
-    assert [record["type"] for record in records] == ["message", "error"]
-    assert records[-1]["status_code"] == 409
-    assert "changed" in records[-1]["detail"]
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"].startswith(detail)
     assert cache.choices == ["Current choice"]
     write_choices.assert_not_called()

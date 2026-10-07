@@ -37,11 +37,6 @@ def get_wizard_max_tokens() -> int:
     return get_wizard_settings().max_tokens
 
 
-def get_wizard_streaming_enabled() -> bool:
-    """Return whether the wizard streaming endpoint is enabled."""
-    return get_wizard_settings().enable_streaming
-
-
 def get_max_choice_text_length() -> int:
     """Get the maximum allowed length for choice selection text."""
     settings = load_settings_as_dict()
