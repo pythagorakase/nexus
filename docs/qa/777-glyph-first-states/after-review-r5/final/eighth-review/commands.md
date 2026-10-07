@@ -59,4 +59,15 @@ The measured-sample hash remains
 [Comparison output](comparison.log). The shipping receipt was replaced only
 after this comparison passed; no palette, table or exception changed.
 
+## Focused and Full UI Suites
+
+```sh
+npm --prefix ui test -- state-shades StateGlyphs shell-accessibility
+npm --prefix ui test
+```
+
+Both exit 0 under individual 589-second bounds: focused **108 passed**, full
+**586 passed**. [Focused output](focused.log), [full output](full.log),
+[exact arguments, exits and bounds](gates.json).
+
 Codex, GPT-6.
