@@ -104,53 +104,183 @@ For N in 02, 03, 04: `createdb -T template0 qa640_778s1b_N`;
 --no-acl`; `SELECT chunk_id, world_layer, time_delta, world_time FROM
 chunk_metadata ORDER BY chunk_id` before and after
 `PYTHONPATH=$PWD $PY scripts/migrate.py --dbname qa640_778s1b_N`; `cmp`; drop.
+The transcripts below are the `set -x` logs, verbatim (zsh prints each command
+with `+(eval):1>`; `cmp` printed nothing, so `echo IDENTICAL` ran). They ran
+before `00dba586`; `migrations/144_world_clock_base_contract.sql` has not
+changed since `36cc28ea`.
+
+`zero-change-02.log`:
 
 ```text
-save_02: Applied 144; level 144; 1425 rows; cmp IDENTICAL; sha1 3c9fda06e9785affe2f19fadc0d4c4f89e93da91 (before = after)
-save_03: Applied 144; level 144;   40 rows; cmp IDENTICAL; sha1 2d79726a12e7063e2c7f190ad813083b3f1720a2 (before = after)
-save_04: Applied 144; level 144;   46 rows; cmp IDENTICAL; sha1 0b18288107f4310327e6f0200d14e8ae408178c7 (before = after)
+== save_02 -> qa640_778s1b_02
++(eval):1> createdb -T template0 qa640_778s1b_02
++(eval):1> nice -n 15 pg_dump '--format=custom' -f /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_02.dump save_02
++(eval):1> nice -n 15 pg_restore --exit-on-error --no-owner --no-acl -d qa640_778s1b_02 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_02.dump
++(eval):1> psql -At -d qa640_778s1b_02 -c 'SELECT chunk_id, world_layer, time_delta, world_time FROM chunk_metadata ORDER BY chunk_id'
++(eval):1> PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/778-null-base-guard nice -n 15 /Users/pythagor/nexus/.venv/bin/python scripts/migrate.py --dbname qa640_778s1b_02
+INFO Migrating qa640_778s1b_02...
+INFO   Applied: 144_world_clock_base_contract
+INFO 
+INFO Summary: 1 applied, 0 skipped/failed
+INFO qa640_778s1b_02: 141 migration stamps; level 144
++(eval):1> psql -At -d qa640_778s1b_02 -c 'SELECT chunk_id, world_layer, time_delta, world_time FROM chunk_metadata ORDER BY chunk_id'
++(eval):1> wc -l
+    1425
++(eval):1> cmp /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/zc_02_before.txt /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/zc_02_after.txt
++(eval):1> echo IDENTICAL
+IDENTICAL
++(eval):1> psql -At -d qa640_778s1b_02 -c 'SELECT max(version) FROM schema_migrations'
+144
++(eval):1> dropdb qa640_778s1b_02
++(eval):1> rm -f /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_02.dump
++(eval):1> set +x
+```
+
+`zero-change-03.log`:
+
+```text
+== save_03 -> qa640_778s1b_03
++(eval):1> createdb -T template0 qa640_778s1b_03
++(eval):1> nice -n 15 pg_dump '--format=custom' -f /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_03.dump save_03
++(eval):1> nice -n 15 pg_restore --exit-on-error --no-owner --no-acl -d qa640_778s1b_03 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_03.dump
++(eval):1> psql -At -d qa640_778s1b_03 -c 'SELECT chunk_id, world_layer, time_delta, world_time FROM chunk_metadata ORDER BY chunk_id'
++(eval):1> PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/778-null-base-guard nice -n 15 /Users/pythagor/nexus/.venv/bin/python scripts/migrate.py --dbname qa640_778s1b_03
+INFO Migrating qa640_778s1b_03...
+INFO   Applied: 144_world_clock_base_contract
+INFO 
+INFO Summary: 1 applied, 0 skipped/failed
+INFO qa640_778s1b_03: 141 migration stamps; level 144
++(eval):1> psql -At -d qa640_778s1b_03 -c 'SELECT chunk_id, world_layer, time_delta, world_time FROM chunk_metadata ORDER BY chunk_id'
++(eval):1> wc -l
+      40
++(eval):1> cmp /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/zc_03_before.txt /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/zc_03_after.txt
++(eval):1> echo IDENTICAL
+IDENTICAL
++(eval):1> psql -At -d qa640_778s1b_03 -c 'SELECT max(version) FROM schema_migrations'
+144
++(eval):1> dropdb qa640_778s1b_03
++(eval):1> rm -f /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_03.dump
++(eval):1> set +x
+```
+
+`zero-change-04.log`:
+
+```text
+== save_04 -> qa640_778s1b_04
++(eval):1> createdb -T template0 qa640_778s1b_04
++(eval):1> nice -n 15 pg_dump '--format=custom' -f /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_04.dump save_04
++(eval):1> nice -n 15 pg_restore --exit-on-error --no-owner --no-acl -d qa640_778s1b_04 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_04.dump
++(eval):1> psql -At -d qa640_778s1b_04 -c 'SELECT chunk_id, world_layer, time_delta, world_time FROM chunk_metadata ORDER BY chunk_id'
++(eval):1> PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/778-null-base-guard nice -n 15 /Users/pythagor/nexus/.venv/bin/python scripts/migrate.py --dbname qa640_778s1b_04
+INFO Migrating qa640_778s1b_04...
+INFO   Applied: 144_world_clock_base_contract
+INFO 
+INFO Summary: 1 applied, 0 skipped/failed
+INFO qa640_778s1b_04: 141 migration stamps; level 144
++(eval):1> psql -At -d qa640_778s1b_04 -c 'SELECT chunk_id, world_layer, time_delta, world_time FROM chunk_metadata ORDER BY chunk_id'
++(eval):1> wc -l
+      46
++(eval):1> cmp /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/zc_04_before.txt /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/zc_04_after.txt
++(eval):1> echo IDENTICAL
+IDENTICAL
++(eval):1> psql -At -d qa640_778s1b_04 -c 'SELECT max(version) FROM schema_migrations'
+144
++(eval):1> dropdb qa640_778s1b_04
++(eval):1> rm -f /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/778-S1b-resume/save_04.dump
++(eval):1> set +x
 ```
 
 No `qa640_778s1b_*` database remains (`psql -Atl`).
 
 ## Red Run
 
-Three scratch copies of 144, each copied over the migration for one run and
-reverted before commit (`git status --short migrations` clean afterwards). The
-five new tests under each:
+Three scratch copies of 144 (`144.plantA.sql`, `144.plantB.sql`,
+`144.plantC.sql` in the scratch directory `778-S1b-resume/`). For each, a
+script waited until the one-minute load was below 24, recorded `uptime`, copied
+the plant over `migrations/144_world_clock_base_contract.sql`, ran the five new
+tests with the command shown, and restored the file with `git checkout`; the
+last line of each log counts the changed migration files afterwards. The tails
+ran on `00dba586` with the plant applied, under `-rfEp` so the short summary
+names every failure, error and pass with its message. `7 deselected` is the
+other seven tests of the file, which `-k` leaves out. Each block is the log's
+first two lines, then the log from the `secret-store guard` line to the end,
+verbatim (the separator width comes from `COLUMNS=400`).
 
-- Plant A (140's function body, guard kept):
-  ```text
-  PASSED test_base_timestamp_fixed_once_chunks_exist
-  PASSED test_base_timestamp_free_before_chunks
-  FAILED test_null_base_rejects_first_chunk            tests/test_world_clock_contract_pg.py:396: Failed: DID NOT RAISE <class 'psycopg2.errors.RaiseException'>
-  FAILED test_null_base_rejects_later_writes           tests/test_world_clock_contract_pg.py:408: Failed: DID NOT RAISE <class 'psycopg2.errors.RaiseException'>
-  FAILED test_migration_144_refuses_null_base_and_reruns  tests/test_world_clock_contract_pg.py:492: assert (1, 0) == (0, 1)
-  3 failed, 2 passed, 7 deselected in 7.71s
-  ```
-- Plant B (no `CREATE TRIGGER` and no `COMMENT ON TRIGGER`):
-  ```text
-  PASSED test_null_base_rejects_first_chunk
-  PASSED test_base_timestamp_free_before_chunks
-  FAILED test_null_base_rejects_later_writes           tests/test_world_clock_contract_pg.py:366: psycopg2.errors.UndefinedObject: trigger "trg_global_variables_base_timestamp_fixed" for table "global_variables" does not exist
-  FAILED test_base_timestamp_fixed_once_chunks_exist   tests/test_world_clock_contract_pg.py:423: Failed: DID NOT RAISE <class 'psycopg2.errors.RaiseException'>
-  FAILED test_migration_144_refuses_null_base_and_reruns  tests/test_world_clock_contract_pg.py:366: psycopg2.errors.UndefinedObject: trigger "trg_global_variables_base_timestamp_fixed" for table "global_variables" does not exist
-  3 failed, 2 passed, 7 deselected in 7.72s
-  ```
-  Tests 2 and 5 fail on the missing trigger in `_set_guard`, which runs in the
-  test body (not in a fixture), so pytest reports FAILED rather than a setup
-  ERROR. Test 3 fails on its own assertion.
-- Plant C (`refuse_base_timestamp_change()` always raises):
-  ```text
-  PASSED test_null_base_rejects_first_chunk
-  ERROR  test_null_base_rejects_later_writes           (clock_db: seed_protagonist -> tests/pg_fixtures.py:613 RaiseException: ... is fixed once chunk_metadata holds a row: refusing to change it from <NULL> to 2189-10-17 19:12:00+00)
-  ERROR  test_base_timestamp_fixed_once_chunks_exist   (same setup error)
-  FAILED test_base_timestamp_free_before_chunks        (seed_story_base -> same RaiseException with no chunk)
-  FAILED test_migration_144_refuses_null_base_and_reruns  (seed_protagonist -> same RaiseException)
-  2 failed, 1 passed, 7 deselected, 2 errors in 7.20s
-  ```
+An earlier red run at 13:38 gave the same counts (`3 failed, 2 passed`;
+`3 failed, 2 passed`; `2 failed, 1 passed, 2 errors`); these reruns replace it
+in this file.
 
-Test 4 (`test_base_timestamp_free_before_chunks`) passes under Plants A and B.
+Plant A (140's function body, guard kept):
+
+```text
+uptime: 14:45  up  1:25, 5 users, load averages: 15.10 13.82 14.06
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT COLUMNS=400 NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/778-null-base-guard nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -rfEp -p tests.dbname_audit tests/test_world_clock_contract_pg.py -k 'test_null_base_rejects_first_chunk or test_null_base_rejects_later_writes or test_base_timestamp_fixed_once_chunks_exist or test_base_timestamp_free_before_chunks or test_migration_144_refuses_null_base_and_reruns'
+...
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 6 targets: postgres, qa640_clock_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/test_world_clock_contract_pg.py::test_null_base_rejects_first_chunk - Failed: DID NOT RAISE <class 'psycopg2.errors.RaiseException'>
+FAILED tests/test_world_clock_contract_pg.py::test_null_base_rejects_later_writes - Failed: DID NOT RAISE <class 'psycopg2.errors.RaiseException'>
+FAILED tests/test_world_clock_contract_pg.py::test_migration_144_refuses_null_base_and_reruns - assert (1, 0) == (0, 1)
+PASSED tests/test_world_clock_contract_pg.py::test_base_timestamp_fixed_once_chunks_exist
+PASSED tests/test_world_clock_contract_pg.py::test_base_timestamp_free_before_chunks
+3 failed, 2 passed, 7 deselected in 7.16s
+exit=1; plant reverted: 0 changed migration files
+```
+
+Plant B (no `CREATE TRIGGER` and no `COMMENT ON TRIGGER`):
+
+```text
+uptime: 14:45  up  1:25, 5 users, load averages: 14.94 13.80 14.05
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT COLUMNS=400 NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/778-null-base-guard nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -rfEp -p tests.dbname_audit tests/test_world_clock_contract_pg.py -k 'test_null_base_rejects_first_chunk or test_null_base_rejects_later_writes or test_base_timestamp_fixed_once_chunks_exist or test_base_timestamp_free_before_chunks or test_migration_144_refuses_null_base_and_reruns'
+...
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 6 targets: postgres, qa640_clock_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/test_world_clock_contract_pg.py::test_null_base_rejects_later_writes - psycopg2.errors.UndefinedObject: trigger "trg_global_variables_base_timestamp_fixed" for table "global_variables" does not exist
+FAILED tests/test_world_clock_contract_pg.py::test_base_timestamp_fixed_once_chunks_exist - Failed: DID NOT RAISE <class 'psycopg2.errors.RaiseException'>
+FAILED tests/test_world_clock_contract_pg.py::test_migration_144_refuses_null_base_and_reruns - psycopg2.errors.UndefinedObject: trigger "trg_global_variables_base_timestamp_fixed" for table "global_variables" does not exist
+PASSED tests/test_world_clock_contract_pg.py::test_null_base_rejects_first_chunk
+PASSED tests/test_world_clock_contract_pg.py::test_base_timestamp_free_before_chunks
+3 failed, 2 passed, 7 deselected in 7.23s
+exit=1; plant reverted: 0 changed migration files
+```
+
+Plant C (`refuse_base_timestamp_change()` always raises):
+
+```text
+uptime: 14:45  up  1:25, 5 users, load averages: 13.87 13.61 13.98
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT COLUMNS=400 NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/778-null-base-guard nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -rfEp -p tests.dbname_audit tests/test_world_clock_contract_pg.py -k 'test_null_base_rejects_first_chunk or test_null_base_rejects_later_writes or test_base_timestamp_fixed_once_chunks_exist or test_base_timestamp_free_before_chunks or test_migration_144_refuses_null_base_and_reruns'
+...
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 6 targets: postgres, qa640_clock_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================================================================================================================================================================================== short test summary info ============================================================================================================================================================================================
+FAILED tests/test_world_clock_contract_pg.py::test_base_timestamp_free_before_chunks - psycopg2.errors.RaiseException: global_variables.base_timestamp is fixed once chunk_metadata holds a row: refusing to change it from <NULL> to 2189-10-17 19:12:00+00
+FAILED tests/test_world_clock_contract_pg.py::test_migration_144_refuses_null_base_and_reruns - psycopg2.errors.RaiseException: global_variables.base_timestamp is fixed once chunk_metadata holds a row: refusing to change it from <NULL> to 2189-10-17 19:12:00+00
+ERROR tests/test_world_clock_contract_pg.py::test_null_base_rejects_later_writes - psycopg2.errors.RaiseException: global_variables.base_timestamp is fixed once chunk_metadata holds a row: refusing to change it from <NULL> to 2189-10-17 19:12:00+00
+ERROR tests/test_world_clock_contract_pg.py::test_base_timestamp_fixed_once_chunks_exist - psycopg2.errors.RaiseException: global_variables.base_timestamp is fixed once chunk_metadata holds a row: refusing to change it from <NULL> to 2189-10-17 19:12:00+00
+PASSED tests/test_world_clock_contract_pg.py::test_null_base_rejects_first_chunk
+2 failed, 1 passed, 7 deselected, 2 errors in 7.18s
+exit=1; plant reverted: 0 changed migration files
+```
+
+Under Plant B, tests 2 and 5 fail on the missing trigger in `_set_guard`,
+which runs in the test body (not in a fixture), so pytest reports FAILED
+rather than a setup ERROR; test 3 fails on its own assertion. Under Plant C,
+tests 2 and 3 error in the `clock_db` fixture's `seed_protagonist`, and tests 4
+and 5 fail in their own base seed.
+
+Test 4 (`test_base_timestamp_free_before_chunks`) passes under Plants A and B
+(the `PASSED` lines above).
 
 ## Item 8: Production Writers
 
@@ -158,8 +288,20 @@ Test 4 (`test_base_timestamp_free_before_chunks`) passes under Plants A and B.
   `nexus/api/new_story_db_mapper.py:612-619`, inside the wizard-to-narrative
   transition, before the character rows and before the Retrograde hook
   (`:680`) writes the prologue metadata
-  (`nexus/agents/orrery/retrograde_persistence.py:2575`). No production path
-  writes the base after `chunk_metadata` holds a row. The other
+  (`nexus/agents/orrery/retrograde_persistence.py:2575`). That base write has
+  no chunk-empty precondition: `perform_transition` deletes the entity tables
+  (`:572-585`) but never `chunk_metadata` or `narrative_chunks`, so it writes
+  the base before any chunk only because the caller gives it a fresh slot or
+  one cleared by `reset_setup` (`nexus/api/new_story_flow.py:704-740`, which
+  recreates the slot from `NEXUS_template`). `start_setup` reuses an existing
+  database without clearing chunks, and `scripts/new_story_setup.py --mode
+  clone` leaves a data-bearing slot that `_post_clone_cleanup`
+  (`scripts/new_story_setup.py:528-532`) marks `new_story = TRUE`. A
+  transition over a slot that holds chunks now raises `global_variables.base_timestamp
+  is fixed once chunk_metadata holds a row` in that `UPDATE` instead of
+  silently re-basing the stored chunks. So the answer is no only on the
+  condition that the caller resets the slot first, which the transition does
+  not check. The guard is unchanged; this is reported only. The other
   `base_timestamp` writes in `nexus/` (`nexus/api/new_story_cache.py:1190`,
   `:1753`) target `assets.new_story_creator`, the wizard cache, not
   `global_variables`. `scripts/qa_shift/` only reads the base
@@ -237,6 +379,17 @@ Load: every run before the last two started at a one-minute load between 5.7
 and 10.5. Final run A started at 33.72 (I did not read `uptime` before
 launching it; the guard was skipped by mistake). Before run B the bounded wait
 loop ran and found 14.65 (no wait).
+
+## Review Fixes (Commit `00dba586`)
+
+The `seed_protagonist` docstring now gives migration 144's guard as the reason
+it refuses to move a set base, in place of the pre-144 desynchronization
+sentence. Black left `tests/pg_fixtures.py` unchanged. Rerun on `00dba586`:
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_world_clock_contract_pg.py tests/test_pg_disposable_target.py
+{block}
+```
 
 ## Tails
 
