@@ -261,13 +261,13 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/exceptions.md",
-    "sha256": "bf61128252078c57d8aba5e9c7544ddc86525fae1ae713e3a8b70f6f85acb49c",
+    "sha256": "85726f0a47f9ff3d0023d631d848a31388ba47f519c3f5be691c76ea128a07d7",
     "bytes": 1911
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-joint.json",
-    "sha256": "3596edbe57376998e3bd54232b244622a2726c5263c24d05815683f040c06edd",
-    "bytes": 3126732
+    "sha256": "1210892c65cd14b7472dd43b99fc21b30eab81ceee8a299bce8e8246bb958fe2",
+    "bytes": 3126738
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-pairs.md",
@@ -316,8 +316,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.csv",
-    "sha256": "f02f38d4b1c5dbe3ab1ce402e62bb404cbb8cb4c47d96d5056be72bc18d78be1",
-    "bytes": 3159210
+    "sha256": "451c4fd74cbd779c773be44ec572c08264bc58538d31bff12b55176800be3686",
+    "bytes": 3159220
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.md",
@@ -351,13 +351,13 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json",
-    "sha256": "850a167e6bc6903b9fe91d9a75855705bbb81ed3107848aabea13960b582fb50",
-    "bytes": 146809
+    "sha256": "db23b7d03dffdee9a09cd8163cc71eb2ca5c7a4627fe1561394960ff2c525d58",
+    "bytes": 146737
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/vector-joint.json",
-    "sha256": "d72c7f695e518f172f8ec4bafafab15dc0391d632a5fa5f68f120478a49b112d",
-    "bytes": 3103664
+    "sha256": "f058bee6476b06f028707c04acea97ad414feac422cf28748803c5d9aa93b27b",
+    "bytes": 3103667
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/vector-pairs.md",
@@ -366,8 +366,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/veil-joint.json",
-    "sha256": "7ce5392495c0348a6e9a541cfdc4d1862ec3bb02ce2999efa37915b513f2d8ac",
-    "bytes": 3172824
+    "sha256": "796119b00f2e7ac6891957b749bc8cf18c974461e45c153121299d0b7c71d751",
+    "bytes": 3172823
   },
   {
     "path": "docs/qa/777-glyph-first-states/amendment-2/veil-pairs.md",

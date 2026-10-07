@@ -19,7 +19,7 @@
     "shippedMinimum": 14.631357904466427,
     "changes": 2,
     "actualShippedMinimum": 14.631357904466427,
-    "shortfalls": 13
+    "shortfalls": 12
   },
   {
     "theme": "Veil",
@@ -103,7 +103,7 @@
     "surface": "delete",
     "best": 23.28801782847145,
     "threshold": 15,
-    "feasible": 153,
+    "feasible": 156,
     "shippedMinimum": 15.764553113030438,
     "changes": 0,
     "actualShippedMinimum": 15.764553113030438,

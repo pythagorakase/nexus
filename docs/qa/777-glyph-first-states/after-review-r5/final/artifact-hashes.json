@@ -2231,8 +2231,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/completion.md",
-    "sha256": "4d01a1d457b7f7ba0355a8120ed2c91e07e0549f71c9138919d5b2a2dd1d16c7",
-    "bytes": 9470
+    "sha256": "8def9e9402552253d5694f7f3e6117ce79e264a5ab82dc6d1d5aaf1215692f90",
+    "bytes": 11808
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/focused.json",
@@ -2496,7 +2496,7 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/group-results.json",
-    "sha256": "31b1726d17717cf8af48eed173be910a516b26d8c0edc308895845f193d300ca",
+    "sha256": "e5f4c19f812e98f2b3bc8d650f761a5c6f5b30209dc61018e557f979442c66d5",
     "bytes": 3167
   },
   {
@@ -2810,166 +2810,6 @@
     "bytes": 3172824
   },
   {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/swatch-inputs.json",
-    "sha256": "c57b8c8353f3bb82b701aabe1cd7ad4c81e2dc2d302752164f17ecc7f2d13c05",
-    "bytes": 20292
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/tiebreak-deltas.json",
-    "sha256": "4f9b86db5c5d89fa406bf9a5d9f946c748d05588b66ea05dfca59efa91d5bf2c",
-    "bytes": 1085
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/token-changes.json",
-    "sha256": "09c09db7b941fced6d1882db2252e7336536686c81e924bf8d110f83691291ff",
-    "bytes": 4772
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/token-changes.md",
-    "sha256": "ace2077bbff05f8b8019275767646c0daad9f09821e337accbd5c224e8b4e717",
-    "bytes": 3095
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/backdrop-correction.json",
-    "sha256": "af95e7f98455f869a408aaa676240a5e726568d33d6e6751c9d6dc321282b6b4",
-    "bytes": 7972
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/browser-proof.json",
-    "sha256": "75b1743aaf77d03552208473e40f0c8a0caf2cb5b8df9e67a66d890a6ff5b55a",
-    "bytes": 8969
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/commands.md",
-    "sha256": "7b7757ee256203ca19c532a2bace5a18eae28c123e4aa3d0269176c1dd136794",
-    "bytes": 27537
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/exceptions.md",
-    "sha256": "bf61128252078c57d8aba5e9c7544ddc86525fae1ae713e3a8b70f6f85acb49c",
-    "bytes": 1911
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-joint.json",
-    "sha256": "3596edbe57376998e3bd54232b244622a2726c5263c24d05815683f040c06edd",
-    "bytes": 3126732
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-pairs.md",
-    "sha256": "9b1672635d74b6f0c62c686b0c9cc0cbe28a2e2fe13496f482bc9b3257e8b1ad",
-    "bytes": 15651
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/global-proof.json",
-    "sha256": "c1e364b3507fe29de2a4b09646f0d888649bc7117d08eb114c41020aa2f48058",
-    "bytes": 100807
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/global-swatches.png",
-    "sha256": "b3a0a30131537a815afaee7d5e06a91cc08025c8d1abcf720f225280cc86c7b6",
-    "bytes": 271872
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/global-swatches.svg",
-    "sha256": "83ddc388f5a5f8a8d9ace029094e1313fd6f565b096c3a08ceb1b73707f59c8e",
-    "bytes": 76699
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/global-tokens.md",
-    "sha256": "c07cc3af843ee639abd2e6fcddd08628fb8ad7898045074d48f39719d7a50bc2",
-    "bytes": 33397
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/globals-after.png",
-    "sha256": "e05c0a10fa77ccec4dbfc5ee7a8c131abe50a051e959f6702b4622f06cd9337c",
-    "bytes": 154591
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/globals-before.png",
-    "sha256": "54fa1fb6e152ca60da5a2a69c597cc7df7e0307452a6157f7624a3b52c8d3341",
-    "bytes": 154592
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/glyphs-monochrome-reduced-motion.png",
-    "sha256": "a718dfe9e5cd65fcfb640052d7d814c7da24b42fed967225a8af43b27d4f53e7",
-    "bytes": 20656
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/glyphs-reduced-motion.png",
-    "sha256": "20d5c381e4d59495d7955a5f8dbf453a4d156235559b765c21257fa7aa143faf",
-    "bytes": 26215
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.csv",
-    "sha256": "f02f38d4b1c5dbe3ab1ce402e62bb404cbb8cb4c47d96d5056be72bc18d78be1",
-    "bytes": 3159210
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.md",
-    "sha256": "b44d26f6c89c6ab90b0e483f33fb27c880042d04dce49fef8ec4505f0fe36d53",
-    "bytes": 403
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/production-panes-reduced-motion.png",
-    "sha256": "49dc2cbd90b4607bbf175cd3d8a0fd409dda03ad65a355b8dd816c9e4f43b3e5",
-    "bytes": 247128
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.json",
-    "sha256": "53687cdaed94be51d7e96967cadaf952fd6866a423d130c9692a53f2053d9556",
-    "bytes": 5157
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.md",
-    "sha256": "b1973b33869dd34f2cc147cdf601f105d5d6098b258ec97d08900f2b18660617",
-    "bytes": 3297
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.png",
-    "sha256": "d0e96bb373cfd9b2deabb9f5c22b64aeb2889d2e0b8a22d2e87b6e141b597a28",
-    "bytes": 80042
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.svg",
-    "sha256": "e99ac1faaa549bf7a8c70ce8ba1b27f802c4b345fad72b11b8bb82c7f49846b7",
-    "bytes": 13285
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json",
-    "sha256": "850a167e6bc6903b9fe91d9a75855705bbb81ed3107848aabea13960b582fb50",
-    "bytes": 146809
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/vector-joint.json",
-    "sha256": "d72c7f695e518f172f8ec4bafafab15dc0391d632a5fa5f68f120478a49b112d",
-    "bytes": 3103664
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/vector-pairs.md",
-    "sha256": "9e15ebece7f09a1c43937359257ea1471fbbee269c8cbc1f91bf558291e4bf9f",
-    "bytes": 15644
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/veil-joint.json",
-    "sha256": "7ce5392495c0348a6e9a541cfdc4d1862ec3bb02ce2999efa37915b513f2d8ac",
-    "bytes": 3172824
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/amendment-2/veil-pairs.md",
-    "sha256": "65c3eeac2567ae00406a4aa0e74e654fef38fabe3a3019db50d4107039d98ee3",
-    "bytes": 15683
-  },
-  {
-    "path": "docs/qa/777-glyph-first-states/verification.md",
-    "sha256": "de911381a6384cff6b5053bef85a67bd5ce8a83df0de673e220cb13549a8d0e1",
-    "bytes": 105078
-  },
-  {
-    "path": "ui/client/src/state-surfaces.resolved.json",
-    "sha256": "8564787141402230bfe5e24e94753964ebe1f0cba84aefb4d7411276179179d3",
-    "bytes": 383759346
-  },
-  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/build.json",
     "sha256": "572001ea54c504f2c3da053e744583eb34fcd14643c774a98d3b485383e274e8",
     "bytes": 152
@@ -2998,6 +2838,2271 @@
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/check.log",
     "sha256": "c051bf7d3581c47d3811c3cb8bece2c43aa8194ad48e4e87d1fc54bb95f2c60d",
     "bytes": 142
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_armed_hsl_43_40__70__-control.png",
+    "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_armed_hsl_43_40__70__-painted.png",
+    "sha256": "9d9841eebaf757af3cbf537ab2475909f99d8d66b5d79439e41192d60405ffc4",
+    "bytes": 1135
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_unarmed_hsl_43_40__70__-control.png",
+    "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_unarmed_hsl_43_40__70__-painted.png",
+    "sha256": "a6bfc6346eff5d19f102e40be9f1eb322955513d3356fadbe5edc7ab571e228d",
+    "bytes": 817
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_focus-visible_armed_hsl_43_40__70__-control.png",
+    "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_focus-visible_armed_hsl_43_40__70__-painted.png",
+    "sha256": "9d9841eebaf757af3cbf537ab2475909f99d8d66b5d79439e41192d60405ffc4",
+    "bytes": 1135
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_43_40__70__-control.png",
+    "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_43_40__70__-painted.png",
+    "sha256": "a6bfc6346eff5d19f102e40be9f1eb322955513d3356fadbe5edc7ab571e228d",
+    "bytes": 817
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_rest_armed_hsl_43_40__70__-control.png",
+    "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_rest_armed_hsl_43_40__70__-painted.png",
+    "sha256": "9d9841eebaf757af3cbf537ab2475909f99d8d66b5d79439e41192d60405ffc4",
+    "bytes": 1135
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_rest_unarmed_hsl_43_40__70__-control.png",
+    "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_rest_unarmed_hsl_43_40__70__-painted.png",
+    "sha256": "a6bfc6346eff5d19f102e40be9f1eb322955513d3356fadbe5edc7ab571e228d",
+    "bytes": 817
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_row-hover_armed_hsl_43_40__70__-control.png",
+    "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_row-hover_armed_hsl_43_40__70__-painted.png",
+    "sha256": "9d9841eebaf757af3cbf537ab2475909f99d8d66b5d79439e41192d60405ffc4",
+    "bytes": 1135
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_row-hover_unarmed_hsl_43_40__70__-control.png",
+    "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_row-hover_unarmed_hsl_43_40__70__-painted.png",
+    "sha256": "a6bfc6346eff5d19f102e40be9f1eb322955513d3356fadbe5edc7ab571e228d",
+    "bytes": 817
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_button-hover_armed_hsl_43_40__70__-control.png",
+    "sha256": "1bfa69ef1191787c67948ce487a756fc0ab903a33fd73921d89ec43f640317c9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_button-hover_armed_hsl_43_40__70__-painted.png",
+    "sha256": "4deea162f70a68e9bbde899dca61819fb3e1aed7c3022c487ff5054c253daeb9",
+    "bytes": 1348
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_button-hover_unarmed_hsl_43_40__70__-control.png",
+    "sha256": "1bfa69ef1191787c67948ce487a756fc0ab903a33fd73921d89ec43f640317c9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_button-hover_unarmed_hsl_43_40__70__-painted.png",
+    "sha256": "b64bb1c10ffb97cbe7881e3119750326137ea89d13c6124959a8ffa67a5770f7",
+    "bytes": 941
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_focus-visible_armed_hsl_43_40__70__-control.png",
+    "sha256": "1bfa69ef1191787c67948ce487a756fc0ab903a33fd73921d89ec43f640317c9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_focus-visible_armed_hsl_43_40__70__-painted.png",
+    "sha256": "4deea162f70a68e9bbde899dca61819fb3e1aed7c3022c487ff5054c253daeb9",
+    "bytes": 1348
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_focus-visible_unarmed_hsl_43_40__70__-control.png",
+    "sha256": "1bfa69ef1191787c67948ce487a756fc0ab903a33fd73921d89ec43f640317c9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_focus-visible_unarmed_hsl_43_40__70__-painted.png",
+    "sha256": "b64bb1c10ffb97cbe7881e3119750326137ea89d13c6124959a8ffa67a5770f7",
+    "bytes": 941
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_rest_armed_hsl_43_40__70__-control.png",
+    "sha256": "1bfa69ef1191787c67948ce487a756fc0ab903a33fd73921d89ec43f640317c9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_rest_armed_hsl_43_40__70__-painted.png",
+    "sha256": "4deea162f70a68e9bbde899dca61819fb3e1aed7c3022c487ff5054c253daeb9",
+    "bytes": 1348
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_rest_unarmed_hsl_43_40__70__-control.png",
+    "sha256": "1bfa69ef1191787c67948ce487a756fc0ab903a33fd73921d89ec43f640317c9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_rest_unarmed_hsl_43_40__70__-painted.png",
+    "sha256": "b64bb1c10ffb97cbe7881e3119750326137ea89d13c6124959a8ffa67a5770f7",
+    "bytes": 941
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_row-hover_armed_hsl_43_40__70__-control.png",
+    "sha256": "1bfa69ef1191787c67948ce487a756fc0ab903a33fd73921d89ec43f640317c9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_row-hover_armed_hsl_43_40__70__-painted.png",
+    "sha256": "4deea162f70a68e9bbde899dca61819fb3e1aed7c3022c487ff5054c253daeb9",
+    "bytes": 1348
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_row-hover_unarmed_hsl_43_40__70__-control.png",
+    "sha256": "1bfa69ef1191787c67948ce487a756fc0ab903a33fd73921d89ec43f640317c9",
+    "bytes": 138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready_row-hover_unarmed_hsl_43_40__70__-painted.png",
+    "sha256": "b64bb1c10ffb97cbe7881e3119750326137ea89d13c6124959a8ffa67a5770f7",
+    "bytes": 941
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_focus-visible_optional-absent_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_focus-visible_optional-absent_hsl_43_40__30__-painted.png",
+    "sha256": "373b4ed79d568a3e40caef8086ba57bc19f216cc0dbec41f073c96958d1ec522",
+    "bytes": 1372
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_focus-visible_present_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_focus-visible_present_hsl_43_40__30__-painted.png",
+    "sha256": "5c775d068f4db7c092b3dd904fab77bbc6ed0a76d70708b291cc642084f9785f",
+    "bytes": 1471
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_focus-visible_verified_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_focus-visible_verified_hsl_43_40__30__-painted.png",
+    "sha256": "f5e946a76909816530eade6bd2febae58bf11eb7d109a1018796cff4fcc60979",
+    "bytes": 1999
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_hover_optional-absent_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_hover_optional-absent_hsl_43_40__30__-painted.png",
+    "sha256": "373b4ed79d568a3e40caef8086ba57bc19f216cc0dbec41f073c96958d1ec522",
+    "bytes": 1372
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_hover_present_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_hover_present_hsl_43_40__30__-painted.png",
+    "sha256": "5c775d068f4db7c092b3dd904fab77bbc6ed0a76d70708b291cc642084f9785f",
+    "bytes": 1471
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_hover_verified_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_hover_verified_hsl_43_40__30__-painted.png",
+    "sha256": "f5e946a76909816530eade6bd2febae58bf11eb7d109a1018796cff4fcc60979",
+    "bytes": 1999
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_rest_optional-absent_hsl_43_40__30__-control.png",
+    "sha256": "43fcd83aa93857d9a4c802d1d7b38c8bec813be6771ff6632e6830f7be6d32b9",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_rest_optional-absent_hsl_43_40__30__-painted.png",
+    "sha256": "315fd51f3b69fe469283cc45fb01427291f6eb1d75dcf02005a6e000847e00bd",
+    "bytes": 1214
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_rest_present_hsl_43_40__30__-control.png",
+    "sha256": "43fcd83aa93857d9a4c802d1d7b38c8bec813be6771ff6632e6830f7be6d32b9",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_rest_present_hsl_43_40__30__-painted.png",
+    "sha256": "7d80014d44cce1dc89b997d9783ee23ff559dd833a9c0b6840b597737d7de09f",
+    "bytes": 1303
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_rest_verified_hsl_43_40__30__-control.png",
+    "sha256": "43fcd83aa93857d9a4c802d1d7b38c8bec813be6771ff6632e6830f7be6d32b9",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_optional_rest_verified_hsl_43_40__30__-painted.png",
+    "sha256": "cdca5788b881a5991949d8301c95180ffa096d29d05aef6713483e1b0ea59e75",
+    "bytes": 1609
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_focus-visible_present_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_focus-visible_present_hsl_43_40__30__-painted.png",
+    "sha256": "044f91d43a5c948dbde31240480f6c2c3f0949d236983240014731423e70c1be",
+    "bytes": 1474
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_focus-visible_required-missing_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_focus-visible_required-missing_hsl_43_40__30__-painted.png",
+    "sha256": "04b01e0491d22fb4ccc73c3ed563cbec61447b63569b92c5d9d08a272b0db9eb",
+    "bytes": 1060
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_focus-visible_verified_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_focus-visible_verified_hsl_43_40__30__-painted.png",
+    "sha256": "9fb1659a8cf1898c8f16579f71aa8472c4ac88ca36a5fefe9f8e98051ec9e262",
+    "bytes": 1998
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_hover_present_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_hover_present_hsl_43_40__30__-painted.png",
+    "sha256": "044f91d43a5c948dbde31240480f6c2c3f0949d236983240014731423e70c1be",
+    "bytes": 1474
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_hover_required-missing_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_hover_required-missing_hsl_43_40__30__-painted.png",
+    "sha256": "04b01e0491d22fb4ccc73c3ed563cbec61447b63569b92c5d9d08a272b0db9eb",
+    "bytes": 1060
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_hover_verified_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_hover_verified_hsl_43_40__30__-painted.png",
+    "sha256": "9fb1659a8cf1898c8f16579f71aa8472c4ac88ca36a5fefe9f8e98051ec9e262",
+    "bytes": 1998
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_rest_present_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_rest_present_hsl_43_40__30__-painted.png",
+    "sha256": "044f91d43a5c948dbde31240480f6c2c3f0949d236983240014731423e70c1be",
+    "bytes": 1474
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_rest_required-missing_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_rest_required-missing_hsl_43_40__30__-painted.png",
+    "sha256": "04b01e0491d22fb4ccc73c3ed563cbec61447b63569b92c5d9d08a272b0db9eb",
+    "bytes": 1060
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_rest_verified_hsl_43_40__30__-control.png",
+    "sha256": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_key_required_rest_verified_hsl_43_40__30__-painted.png",
+    "sha256": "9fb1659a8cf1898c8f16579f71aa8472c4ac88ca36a5fefe9f8e98051ec9e262",
+    "bytes": 1998
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_fill_current_hsl_30_60__60__-control.png",
+    "sha256": "2435974540fd514c614329f9c3a59a4485ae0fc8b6044e77e3d15e9c112603d1",
+    "bytes": 117
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_fill_current_hsl_30_60__60__-painted.png",
+    "sha256": "86de86a6c002230363cee91f1ca083e0d48f3e405a9841567edea505a49cd7e8",
+    "bytes": 553
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_fill_hovered_hsl_30_60__60__-control.png",
+    "sha256": "2435974540fd514c614329f9c3a59a4485ae0fc8b6044e77e3d15e9c112603d1",
+    "bytes": 117
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_fill_hovered_hsl_30_60__60__-painted.png",
+    "sha256": "f00e1aeeb5abfabc6818f2ca7a8bc531f59ad7d276f7d82f1924d480c49a3886",
+    "bytes": 312
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_fill_rest_hsl_30_60__60__-control.png",
+    "sha256": "2435974540fd514c614329f9c3a59a4485ae0fc8b6044e77e3d15e9c112603d1",
+    "bytes": 117
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_fill_rest_hsl_30_60__60__-painted.png",
+    "sha256": "86de86a6c002230363cee91f1ca083e0d48f3e405a9841567edea505a49cd7e8",
+    "bytes": 553
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_fill_selected_hsl_30_60__60__-control.png",
+    "sha256": "2435974540fd514c614329f9c3a59a4485ae0fc8b6044e77e3d15e9c112603d1",
+    "bytes": 117
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_fill_selected_hsl_30_60__60__-painted.png",
+    "sha256": "fed111d73fe7604fbd616797352209769f76f2fec7e184c07dd449bf0328e9d8",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_ring_current_hsl_30_60__60__-control.png",
+    "sha256": "3a3342a80810eb358c10b447a3479135d00c91e2ffe8290b9faa7975ea8c1446",
+    "bytes": 1995
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_ring_current_hsl_30_60__60__-painted.png",
+    "sha256": "5b322c1402a7cc768209429b0244519aec3c41889a4bc37076ac399321e0e7fe",
+    "bytes": 3622
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_ring_hovered_hsl_30_60__60__-control.png",
+    "sha256": "9a2db03e3f0216881887933c881d1ef764e7e1e49f9203988bf15a11d5ded6f6",
+    "bytes": 1328
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_ring_hovered_hsl_30_60__60__-painted.png",
+    "sha256": "36e8b4b0707c1591384ba44874858c6af9939249b6317474881af80373acbe27",
+    "bytes": 2126
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_ring_rest_hsl_30_60__60__-control.png",
+    "sha256": "2435974540fd514c614329f9c3a59a4485ae0fc8b6044e77e3d15e9c112603d1",
+    "bytes": 117
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_ring_rest_hsl_30_60__60__-painted.png",
+    "sha256": "86de86a6c002230363cee91f1ca083e0d48f3e405a9841567edea505a49cd7e8",
+    "bytes": 553
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_ring_selected_hsl_30_60__60__-control.png",
+    "sha256": "4a329ea9392a1cf02e277d29500308d934b39ec4d969fdde29ba908c3cbc42a1",
+    "bytes": 1637
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-land_ring_selected_hsl_30_60__60__-painted.png",
+    "sha256": "3fb1077ed893ad2da3b39c1beeb856a0303e6333d4b4dcaec3403d384c3be992",
+    "bytes": 1589
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_fill_current_hsl_30_60__60__-control.png",
+    "sha256": "e611018d8fc79cafffddb522141ac7c28d936773672513114a978b9de11be50b",
+    "bytes": 114
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_fill_current_hsl_30_60__60__-painted.png",
+    "sha256": "126a8bb56ef5e0921ecbe5aa6cd33b2abffc9d2b363ba76338fd5bff551a8c6f",
+    "bytes": 566
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_fill_hovered_hsl_30_60__60__-control.png",
+    "sha256": "e611018d8fc79cafffddb522141ac7c28d936773672513114a978b9de11be50b",
+    "bytes": 114
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_fill_hovered_hsl_30_60__60__-painted.png",
+    "sha256": "e632d9207a359bedd21494651677813c8c34a4e4119eeed5e20cd806341da169",
+    "bytes": 314
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_fill_rest_hsl_30_60__60__-control.png",
+    "sha256": "e611018d8fc79cafffddb522141ac7c28d936773672513114a978b9de11be50b",
+    "bytes": 114
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_fill_rest_hsl_30_60__60__-painted.png",
+    "sha256": "126a8bb56ef5e0921ecbe5aa6cd33b2abffc9d2b363ba76338fd5bff551a8c6f",
+    "bytes": 566
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_fill_selected_hsl_30_60__60__-control.png",
+    "sha256": "e611018d8fc79cafffddb522141ac7c28d936773672513114a978b9de11be50b",
+    "bytes": 114
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_fill_selected_hsl_30_60__60__-painted.png",
+    "sha256": "fed111d73fe7604fbd616797352209769f76f2fec7e184c07dd449bf0328e9d8",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_ring_current_hsl_30_60__60__-control.png",
+    "sha256": "0a313ea158a445b62ede6b7d2a864e072ade6d93f16e13f12f2abd33884a8a13",
+    "bytes": 2036
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_ring_current_hsl_30_60__60__-painted.png",
+    "sha256": "30e72278ef1287371132f296dcd0b91ed5ec74b82be1ed7533643fc018c27f82",
+    "bytes": 3737
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_ring_hovered_hsl_30_60__60__-control.png",
+    "sha256": "081117f1cfd9eb50891506943707b76e7586e2b1d231b2d0a3b5b1895c53b510",
+    "bytes": 1359
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_ring_hovered_hsl_30_60__60__-painted.png",
+    "sha256": "8f2ba303db76788dd4da9db3f0f266de33e8e8b1863f2e9f53baa6e9d95562c1",
+    "bytes": 2099
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_ring_rest_hsl_30_60__60__-control.png",
+    "sha256": "e611018d8fc79cafffddb522141ac7c28d936773672513114a978b9de11be50b",
+    "bytes": 114
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_ring_rest_hsl_30_60__60__-painted.png",
+    "sha256": "126a8bb56ef5e0921ecbe5aa6cd33b2abffc9d2b363ba76338fd5bff551a8c6f",
+    "bytes": 566
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_ring_selected_hsl_30_60__60__-control.png",
+    "sha256": "f8b6bafe25534703ffd858772357105408135e7b233c3c8d795f02f20a17a1e2",
+    "bytes": 1658
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_canvas-sea_ring_selected_hsl_30_60__60__-painted.png",
+    "sha256": "2a26f784b197e8e9ac30b9b2ca1dff5cea15323bb5d50435d8949e349013193b",
+    "bytes": 1581
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_fill_current_hsl_30_60__60__-control.png",
+    "sha256": "276a1e217fa68d5db9cd8ccbbad4a0ac2b57f66cbd318c5666389fcc258e5300",
+    "bytes": 128
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_fill_current_hsl_30_60__60__-painted.png",
+    "sha256": "7cfbb4dbfbd7527befc9862c9e4307053165a3694ad2f23a0c72fc143a707077",
+    "bytes": 467
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_fill_rest_hsl_30_60__60__-control.png",
+    "sha256": "899d49de2759d745013246aaaeca9c9c4b98a3f655cb5b196fb8dfb544e17948",
+    "bytes": 113
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_fill_rest_hsl_30_60__60__-painted.png",
+    "sha256": "1a8a66f6da44978f05c77d74e9e0cfd583423fbe30129f2bef407ade6da8cd32",
+    "bytes": 459
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_fill_selected_hsl_30_60__60__-control.png",
+    "sha256": "41c026a5c443ad5138b2caa0aecc74508779d5e768d1339702720bd9cb57bf92",
+    "bytes": 213
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_fill_selected_hsl_30_60__60__-painted.png",
+    "sha256": "8c15a00b2cba14d9c821b8d3717c81eb3248c123bd3267acf3d49c9c0f9a840d",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_ring_current_hsl_30_60__60__-control.png",
+    "sha256": "eac560cc61fb29a76dd9aacb85e7f45fc0566abd6bfcc130e0e28fe7864bac4b",
+    "bytes": 566
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_ring_current_hsl_30_60__60__-painted.png",
+    "sha256": "0a13449ce39de4583829d3edb3050c8fa1739ee08afb0aa1077db4a8de9b68df",
+    "bytes": 1496
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_ring_rest_hsl_30_60__60__-control.png",
+    "sha256": "899d49de2759d745013246aaaeca9c9c4b98a3f655cb5b196fb8dfb544e17948",
+    "bytes": 113
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_ring_rest_hsl_30_60__60__-painted.png",
+    "sha256": "1a8a66f6da44978f05c77d74e9e0cfd583423fbe30129f2bef407ade6da8cd32",
+    "bytes": 459
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_ring_selected_hsl_30_60__60__-control.png",
+    "sha256": "19df028b5aa515fb077c44b257e915f15d8fc97ab2b8e0392f93d298b14c3969",
+    "bytes": 544
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_hover_ring_selected_hsl_30_60__60__-painted.png",
+    "sha256": "ce547e04da8e19b74a875d9d0b318181b26a446ce621dbafc838e1ea95afb462",
+    "bytes": 583
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_fill_current_hsl_30_60__60__-control.png",
+    "sha256": "220d05ebb7f9953b766422bee9238c97df39c67b0035645ffef3b67cfd6b345c",
+    "bytes": 126
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_fill_current_hsl_30_60__60__-painted.png",
+    "sha256": "75722723a217d53fc480e29cbdf704c55ef694b4a4350785a16742d00ec4e6bb",
+    "bytes": 465
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_fill_hovered_hsl_30_60__60__-control.png",
+    "sha256": "42f9de6f1424ebfd47984f52b55ef08de5e932b04882a20b7965d3bf51783ffb",
+    "bytes": 412
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_fill_hovered_hsl_30_60__60__-painted.png",
+    "sha256": "863bcbc95f431a501662cec12febbf73c4f0e55c03a12bbabfd1cd793c0fb7d6",
+    "bytes": 419
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_fill_rest_hsl_30_60__60__-control.png",
+    "sha256": "b2498b1584e0daa3a429d0bf58926f8d217e49e6cc37ddeb4ab01a4b2806b4ef",
+    "bytes": 205
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_fill_rest_hsl_30_60__60__-painted.png",
+    "sha256": "8fb201d4f969e534ab9757f038121ee4eb9a628a84ae1d842e58559b9f4d4d0d",
+    "bytes": 493
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_fill_selected_hsl_30_60__60__-control.png",
+    "sha256": "41c026a5c443ad5138b2caa0aecc74508779d5e768d1339702720bd9cb57bf92",
+    "bytes": 213
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_fill_selected_hsl_30_60__60__-painted.png",
+    "sha256": "8c15a00b2cba14d9c821b8d3717c81eb3248c123bd3267acf3d49c9c0f9a840d",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_ring_current_hsl_30_60__60__-control.png",
+    "sha256": "41d19ccf74b33eb93dfa201fa07ce59e5a2659e526d88562d743a5f7142b6c2e",
+    "bytes": 568
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_ring_current_hsl_30_60__60__-painted.png",
+    "sha256": "e2bfe31dea8b298d8a1474ee3ed33cf8c6183f6e56db0dfc9c597e40663125be",
+    "bytes": 1531
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_ring_hovered_hsl_30_60__60__-control.png",
+    "sha256": "cdf9fbd148e6c0198bcc0c564113dc7dbf14f82666c68e5a3c1a908b79769551",
+    "bytes": 658
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_ring_hovered_hsl_30_60__60__-painted.png",
+    "sha256": "7d2d5d3228c2a2eae7d3029edad70342a90c18c0fc35414e5533f3ab83a751d3",
+    "bytes": 1134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_ring_rest_hsl_30_60__60__-control.png",
+    "sha256": "b2498b1584e0daa3a429d0bf58926f8d217e49e6cc37ddeb4ab01a4b2806b4ef",
+    "bytes": 205
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_ring_rest_hsl_30_60__60__-painted.png",
+    "sha256": "8fb201d4f969e534ab9757f038121ee4eb9a628a84ae1d842e58559b9f4d4d0d",
+    "bytes": 493
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_ring_selected_hsl_30_60__60__-control.png",
+    "sha256": "19df028b5aa515fb077c44b257e915f15d8fc97ab2b8e0392f93d298b14c3969",
+    "bytes": 544
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_rest_ring_selected_hsl_30_60__60__-painted.png",
+    "sha256": "ce547e04da8e19b74a875d9d0b318181b26a446ce621dbafc838e1ea95afb462",
+    "bytes": 583
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_fill_current_hsl_30_60__60__-control.png",
+    "sha256": "a83492630385f5dd2326137a046ef4e947c842cdf4e51ce0169d2c1d692575ab",
+    "bytes": 128
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_fill_current_hsl_30_60__60__-painted.png",
+    "sha256": "f8f8b2f07b1f8a3d13e0fa690bc663fbee902698013a0e9ea87cb42cd841f64c",
+    "bytes": 466
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_fill_hovered_hsl_30_60__60__-control.png",
+    "sha256": "42f9de6f1424ebfd47984f52b55ef08de5e932b04882a20b7965d3bf51783ffb",
+    "bytes": 412
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_fill_hovered_hsl_30_60__60__-painted.png",
+    "sha256": "863bcbc95f431a501662cec12febbf73c4f0e55c03a12bbabfd1cd793c0fb7d6",
+    "bytes": 419
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_fill_rest_hsl_30_60__60__-control.png",
+    "sha256": "b2498b1584e0daa3a429d0bf58926f8d217e49e6cc37ddeb4ab01a4b2806b4ef",
+    "bytes": 205
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_fill_rest_hsl_30_60__60__-painted.png",
+    "sha256": "8fb201d4f969e534ab9757f038121ee4eb9a628a84ae1d842e58559b9f4d4d0d",
+    "bytes": 493
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_fill_selected_hsl_30_60__60__-control.png",
+    "sha256": "41c026a5c443ad5138b2caa0aecc74508779d5e768d1339702720bd9cb57bf92",
+    "bytes": 213
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_fill_selected_hsl_30_60__60__-painted.png",
+    "sha256": "8c15a00b2cba14d9c821b8d3717c81eb3248c123bd3267acf3d49c9c0f9a840d",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_ring_current_hsl_30_60__60__-control.png",
+    "sha256": "0e1c757e392cafa533002f2b985621952f565e9efef717e0dee2829d1d829de8",
+    "bytes": 563
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_ring_current_hsl_30_60__60__-painted.png",
+    "sha256": "04756f4a21de45c3b0f6a5a70145c1ba76edd6fff68c24ccc7beba6710b7257d",
+    "bytes": 1516
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_ring_hovered_hsl_30_60__60__-control.png",
+    "sha256": "cdf9fbd148e6c0198bcc0c564113dc7dbf14f82666c68e5a3c1a908b79769551",
+    "bytes": 658
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_ring_hovered_hsl_30_60__60__-painted.png",
+    "sha256": "7d2d5d3228c2a2eae7d3029edad70342a90c18c0fc35414e5533f3ab83a751d3",
+    "bytes": 1134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_ring_rest_hsl_30_60__60__-control.png",
+    "sha256": "b2498b1584e0daa3a429d0bf58926f8d217e49e6cc37ddeb4ab01a4b2806b4ef",
+    "bytes": 205
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_ring_rest_hsl_30_60__60__-painted.png",
+    "sha256": "8fb201d4f969e534ab9757f038121ee4eb9a628a84ae1d842e58559b9f4d4d0d",
+    "bytes": 493
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_ring_selected_hsl_30_60__60__-control.png",
+    "sha256": "19df028b5aa515fb077c44b257e915f15d8fc97ab2b8e0392f93d298b14c3969",
+    "bytes": 544
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_map_sidebar_selected-current_ring_selected_hsl_30_60__60__-painted.png",
+    "sha256": "ce547e04da8e19b74a875d9d0b318181b26a446ce621dbafc838e1ea95afb462",
+    "bytes": 583
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_memory_fill_normal_hsl_43_74__47__-control.png",
+    "sha256": "24ebab4724302c81e279920e8d6479c726510c31116b715c4020d7727fd1ac00",
+    "bytes": 215
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_memory_fill_normal_hsl_43_74__47__-painted.png",
+    "sha256": "2c8c74454c91f3880bd9a95b9b67c3ad3fe39e4af1646b2618e97eabdd900d2c",
+    "bytes": 242
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_memory_fill_over_hsl_43_74__47__-control.png",
+    "sha256": "700cdf73dfe7c1679d108d711dabcef5cc5e3119631c36c998f3bf3e5acc6c45",
+    "bytes": 259
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_memory_fill_over_hsl_43_74__47__-painted.png",
+    "sha256": "b2430945fe8ce9653dd5a1006737c3c62c8631ae305ca187f851ec09d46b8a1e",
+    "bytes": 306
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_button-hover_armed_hsl_185_40__55__-control.png",
+    "sha256": "4a3db162470b32ca19c56b94a29233926f56dc9d430b8f45fb97e8b136e8c04f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_button-hover_armed_hsl_185_40__55__-painted.png",
+    "sha256": "0b553084495bf3bb8f083a1f82d5cd9bc4a4fb3395c09929a63dbd663d720f68",
+    "bytes": 1196
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_button-hover_unarmed_hsl_185_40__55__-control.png",
+    "sha256": "4a3db162470b32ca19c56b94a29233926f56dc9d430b8f45fb97e8b136e8c04f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_button-hover_unarmed_hsl_185_40__55__-painted.png",
+    "sha256": "9262841f74f0014637710a39d08efce1d34e5ac3c47075a42480340e87dceebd",
+    "bytes": 876
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_focus-visible_armed_hsl_185_40__55__-control.png",
+    "sha256": "77350df9a1f163ba474bb7e0dea496c2abbd8efb61b1b67c1a7fac424f8cd136",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_focus-visible_armed_hsl_185_40__55__-painted.png",
+    "sha256": "b4c97906c96a0896513940c7244605c2cfc77a9f0bbc8882536aa21a79d5e20d",
+    "bytes": 1202
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_185_40__55__-control.png",
+    "sha256": "77350df9a1f163ba474bb7e0dea496c2abbd8efb61b1b67c1a7fac424f8cd136",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_185_40__55__-painted.png",
+    "sha256": "39e2dd775bbc58611cc93c23d9abb11f5527b5e5717feddf869cfb7383dc920d",
+    "bytes": 895
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_rest_armed_hsl_185_40__55__-control.png",
+    "sha256": "4a3db162470b32ca19c56b94a29233926f56dc9d430b8f45fb97e8b136e8c04f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_rest_armed_hsl_185_40__55__-painted.png",
+    "sha256": "0b553084495bf3bb8f083a1f82d5cd9bc4a4fb3395c09929a63dbd663d720f68",
+    "bytes": 1196
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_rest_unarmed_hsl_185_40__55__-control.png",
+    "sha256": "4a3db162470b32ca19c56b94a29233926f56dc9d430b8f45fb97e8b136e8c04f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_rest_unarmed_hsl_185_40__55__-painted.png",
+    "sha256": "9262841f74f0014637710a39d08efce1d34e5ac3c47075a42480340e87dceebd",
+    "bytes": 876
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_row-hover_armed_hsl_185_40__55__-control.png",
+    "sha256": "4a3db162470b32ca19c56b94a29233926f56dc9d430b8f45fb97e8b136e8c04f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_row-hover_armed_hsl_185_40__55__-painted.png",
+    "sha256": "0b553084495bf3bb8f083a1f82d5cd9bc4a4fb3395c09929a63dbd663d720f68",
+    "bytes": 1196
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_row-hover_unarmed_hsl_185_40__55__-control.png",
+    "sha256": "4a3db162470b32ca19c56b94a29233926f56dc9d430b8f45fb97e8b136e8c04f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready-exceeds_row-hover_unarmed_hsl_185_40__55__-painted.png",
+    "sha256": "9262841f74f0014637710a39d08efce1d34e5ac3c47075a42480340e87dceebd",
+    "bytes": 876
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_button-hover_armed_hsl_185_40__55__-control.png",
+    "sha256": "f05c3b3c4caae21973aae64dab95a82e1fecae548c3dd8652be17155206e789f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_button-hover_armed_hsl_185_40__55__-painted.png",
+    "sha256": "60ae2c924d00d37ddaa271ba32396dde835b89027e9477b75dd9e93a756f8eb2",
+    "bytes": 1396
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_button-hover_unarmed_hsl_185_40__55__-control.png",
+    "sha256": "f05c3b3c4caae21973aae64dab95a82e1fecae548c3dd8652be17155206e789f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_button-hover_unarmed_hsl_185_40__55__-painted.png",
+    "sha256": "0dedfd906a965ef16dfc9fd74008fba6102af394b63b0f19f55d0cfa0c8130f6",
+    "bytes": 995
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_focus-visible_armed_hsl_185_40__55__-control.png",
+    "sha256": "66a303ebfbe0818b61eacd96aeda343d3ef9df32c592f876e3b0efaecf883c7f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_focus-visible_armed_hsl_185_40__55__-painted.png",
+    "sha256": "872dc98a05f7555c568931b84ef267d81089ac98c7818e52092d8f717da0df10",
+    "bytes": 1411
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_focus-visible_unarmed_hsl_185_40__55__-control.png",
+    "sha256": "66a303ebfbe0818b61eacd96aeda343d3ef9df32c592f876e3b0efaecf883c7f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_focus-visible_unarmed_hsl_185_40__55__-painted.png",
+    "sha256": "a49a5d4c4fc21832e54e0a3d4ce910ccbfef15a3843f843d99e5134040a2307e",
+    "bytes": 1008
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_rest_armed_hsl_185_40__55__-control.png",
+    "sha256": "f05c3b3c4caae21973aae64dab95a82e1fecae548c3dd8652be17155206e789f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_rest_armed_hsl_185_40__55__-painted.png",
+    "sha256": "60ae2c924d00d37ddaa271ba32396dde835b89027e9477b75dd9e93a756f8eb2",
+    "bytes": 1396
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_rest_unarmed_hsl_185_40__55__-control.png",
+    "sha256": "f05c3b3c4caae21973aae64dab95a82e1fecae548c3dd8652be17155206e789f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_rest_unarmed_hsl_185_40__55__-painted.png",
+    "sha256": "0dedfd906a965ef16dfc9fd74008fba6102af394b63b0f19f55d0cfa0c8130f6",
+    "bytes": 995
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_row-hover_armed_hsl_185_40__55__-control.png",
+    "sha256": "f05c3b3c4caae21973aae64dab95a82e1fecae548c3dd8652be17155206e789f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_row-hover_armed_hsl_185_40__55__-painted.png",
+    "sha256": "60ae2c924d00d37ddaa271ba32396dde835b89027e9477b75dd9e93a756f8eb2",
+    "bytes": 1396
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_row-hover_unarmed_hsl_185_40__55__-control.png",
+    "sha256": "f05c3b3c4caae21973aae64dab95a82e1fecae548c3dd8652be17155206e789f",
+    "bytes": 159
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_delete_ready_row-hover_unarmed_hsl_185_40__55__-painted.png",
+    "sha256": "0dedfd906a965ef16dfc9fd74008fba6102af394b63b0f19f55d0cfa0c8130f6",
+    "bytes": 995
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_focus-visible_optional-absent_hsl_185_40__50__-control.png",
+    "sha256": "36503671806877ac9034707d8531053c32d488140e18d9d34acbcfc78327c1a8",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_focus-visible_optional-absent_hsl_185_40__50__-painted.png",
+    "sha256": "aa69b3d970f21afa3f5c7af99f954579dfb35ee03fcb712d9921e17f9ef67ba9",
+    "bytes": 1567
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_focus-visible_present_hsl_185_40__50__-control.png",
+    "sha256": "4cf22a749ba599c4bde4434049b4d8c9177ef679d63265daff7ab5078753f804",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_focus-visible_present_hsl_185_40__50__-painted.png",
+    "sha256": "2e1c3f7924f3917f9966f33dc9361a5dc19e3980e63196acf56af6235857296d",
+    "bytes": 1678
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_focus-visible_verified_hsl_185_40__50__-control.png",
+    "sha256": "554f5cc0f06efdebcf3a73c6ffba1cf9fc4e5f7760ed231c73048755ee2ee2c7",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_focus-visible_verified_hsl_185_40__50__-painted.png",
+    "sha256": "bb5ce791af9fd3bbbe00af5cc524cbf65c36358cdc1e51dd0eb59d95c0cd6623",
+    "bytes": 2416
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_hover_optional-absent_hsl_185_40__50__-control.png",
+    "sha256": "36503671806877ac9034707d8531053c32d488140e18d9d34acbcfc78327c1a8",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_hover_optional-absent_hsl_185_40__50__-painted.png",
+    "sha256": "aa69b3d970f21afa3f5c7af99f954579dfb35ee03fcb712d9921e17f9ef67ba9",
+    "bytes": 1567
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_hover_present_hsl_185_40__50__-control.png",
+    "sha256": "4cf22a749ba599c4bde4434049b4d8c9177ef679d63265daff7ab5078753f804",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_hover_present_hsl_185_40__50__-painted.png",
+    "sha256": "2e1c3f7924f3917f9966f33dc9361a5dc19e3980e63196acf56af6235857296d",
+    "bytes": 1678
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_hover_verified_hsl_185_40__50__-control.png",
+    "sha256": "554f5cc0f06efdebcf3a73c6ffba1cf9fc4e5f7760ed231c73048755ee2ee2c7",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_hover_verified_hsl_185_40__50__-painted.png",
+    "sha256": "bb5ce791af9fd3bbbe00af5cc524cbf65c36358cdc1e51dd0eb59d95c0cd6623",
+    "bytes": 2416
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_rest_optional-absent_hsl_185_40__50__-control.png",
+    "sha256": "8fe00297ecd3b2e329f2570e8212488943cf0d8ab1d19e4d86f21910d00c9dcd",
+    "bytes": 168
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_rest_optional-absent_hsl_185_40__50__-painted.png",
+    "sha256": "84e7f4ba8e75fac517c4dc171eb82ab39970c2dcce2bcd843c4c8ba08668c1a7",
+    "bytes": 1403
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_rest_present_hsl_185_40__50__-control.png",
+    "sha256": "8375c3a1b2a63d5a06f8e8c19c649e4a8c44a9b58ccf1eb42a995835400be869",
+    "bytes": 168
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_rest_present_hsl_185_40__50__-painted.png",
+    "sha256": "fd4e54bfc41514f4f5bc14c77d385a3bf7232914c3eec2d315693b14ecc70846",
+    "bytes": 1484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_rest_verified_hsl_185_40__50__-control.png",
+    "sha256": "c73abd7858376e8a635f47408165eaf252e99b4cab5fa1e51de883df67c3a34f",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_optional_rest_verified_hsl_185_40__50__-painted.png",
+    "sha256": "aacef6160fef67fc6483bf8b065a926315e00f2ec70fd0f808ca5a51abde7254",
+    "bytes": 1971
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_focus-visible_present_hsl_185_40__50__-control.png",
+    "sha256": "36503671806877ac9034707d8531053c32d488140e18d9d34acbcfc78327c1a8",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_focus-visible_present_hsl_185_40__50__-painted.png",
+    "sha256": "54c89d309c1937b032d7cb417bd1f1c8840ea95a4dc8ecd20cb8b5749d531079",
+    "bytes": 1697
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_focus-visible_required-missing_hsl_185_40__50__-control.png",
+    "sha256": "1c2cc42ec97ebb3f596d74a7aa57070fcd6a31da531cbe166d413c4152ac1858",
+    "bytes": 166
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_focus-visible_required-missing_hsl_185_40__50__-painted.png",
+    "sha256": "d4c15cd1d5f007046408bf3f2c0299160f46edc6ffd05df79268c871bb31a4bf",
+    "bytes": 1365
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_focus-visible_verified_hsl_185_40__50__-control.png",
+    "sha256": "4cf22a749ba599c4bde4434049b4d8c9177ef679d63265daff7ab5078753f804",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_focus-visible_verified_hsl_185_40__50__-painted.png",
+    "sha256": "9554359bb38d3c48db14cd4db06487584e12927344c7e9e58a3d3af09c05f589",
+    "bytes": 2422
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_hover_present_hsl_185_40__50__-control.png",
+    "sha256": "36503671806877ac9034707d8531053c32d488140e18d9d34acbcfc78327c1a8",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_hover_present_hsl_185_40__50__-painted.png",
+    "sha256": "54c89d309c1937b032d7cb417bd1f1c8840ea95a4dc8ecd20cb8b5749d531079",
+    "bytes": 1697
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_hover_required-missing_hsl_185_40__50__-control.png",
+    "sha256": "1c2cc42ec97ebb3f596d74a7aa57070fcd6a31da531cbe166d413c4152ac1858",
+    "bytes": 166
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_hover_required-missing_hsl_185_40__50__-painted.png",
+    "sha256": "d4c15cd1d5f007046408bf3f2c0299160f46edc6ffd05df79268c871bb31a4bf",
+    "bytes": 1365
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_hover_verified_hsl_185_40__50__-control.png",
+    "sha256": "4cf22a749ba599c4bde4434049b4d8c9177ef679d63265daff7ab5078753f804",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_hover_verified_hsl_185_40__50__-painted.png",
+    "sha256": "9554359bb38d3c48db14cd4db06487584e12927344c7e9e58a3d3af09c05f589",
+    "bytes": 2422
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_rest_present_hsl_185_40__50__-control.png",
+    "sha256": "36503671806877ac9034707d8531053c32d488140e18d9d34acbcfc78327c1a8",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_rest_present_hsl_185_40__50__-painted.png",
+    "sha256": "54c89d309c1937b032d7cb417bd1f1c8840ea95a4dc8ecd20cb8b5749d531079",
+    "bytes": 1697
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_rest_required-missing_hsl_185_40__50__-control.png",
+    "sha256": "1c2cc42ec97ebb3f596d74a7aa57070fcd6a31da531cbe166d413c4152ac1858",
+    "bytes": 166
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_rest_required-missing_hsl_185_40__50__-painted.png",
+    "sha256": "d4c15cd1d5f007046408bf3f2c0299160f46edc6ffd05df79268c871bb31a4bf",
+    "bytes": 1365
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_rest_verified_hsl_185_40__50__-control.png",
+    "sha256": "4cf22a749ba599c4bde4434049b4d8c9177ef679d63265daff7ab5078753f804",
+    "bytes": 167
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_key_required_rest_verified_hsl_185_40__50__-painted.png",
+    "sha256": "9554359bb38d3c48db14cd4db06487584e12927344c7e9e58a3d3af09c05f589",
+    "bytes": 2422
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_fill_current_hsl_200_90__55__-control.png",
+    "sha256": "652763ab5e97b0f6af07e88722f4de60a2914e0f85e22f076ab57831fd0ccb88",
+    "bytes": 132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_fill_current_hsl_200_90__55__-painted.png",
+    "sha256": "85c69f08bbd54ec2452a3a634dbddb3e9fef0518e098fcc43793d05086640153",
+    "bytes": 565
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_fill_hovered_hsl_200_90__55__-control.png",
+    "sha256": "652763ab5e97b0f6af07e88722f4de60a2914e0f85e22f076ab57831fd0ccb88",
+    "bytes": 132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_fill_hovered_hsl_200_90__55__-painted.png",
+    "sha256": "5d616bf9fdcaf0bac983bfd4c46901b3565b1cbbbbd8b5dd892f84b268fd980a",
+    "bytes": 398
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_fill_rest_hsl_200_90__55__-control.png",
+    "sha256": "53ffcde48c6aedd5a26f2bbec6d4622ff845c86033d6ffb8891c5e0fc8acdc29",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_fill_rest_hsl_200_90__55__-painted.png",
+    "sha256": "5663edbce10cc93dcf05647928a328d8438c63000cfb034b80c857114d18d843",
+    "bytes": 567
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_fill_selected_hsl_200_90__55__-control.png",
+    "sha256": "53ffcde48c6aedd5a26f2bbec6d4622ff845c86033d6ffb8891c5e0fc8acdc29",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_fill_selected_hsl_200_90__55__-painted.png",
+    "sha256": "88c6e60d694a45873ebc57077219a6e0ab1c7aafa36059a7bcf626b3183e9e6e",
+    "bytes": 135
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_ring_current_hsl_200_90__55__-control.png",
+    "sha256": "e017d7253a3aadf55e5b4a34457018cf6c1904e2cb27a29a562d1c2d2dd0d190",
+    "bytes": 1948
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_ring_current_hsl_200_90__55__-painted.png",
+    "sha256": "43870872aa1a7afea4625c3f1ae87683b59c919ad01616cd55edfc57650e4331",
+    "bytes": 3694
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_ring_hovered_hsl_200_90__55__-control.png",
+    "sha256": "9aacbf66a4e5eba4768aa2c69b66a92a26b3279560e0042279865ff55269f05a",
+    "bytes": 1450
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_ring_hovered_hsl_200_90__55__-painted.png",
+    "sha256": "16d3f9a671a98b85f55a748a9fba60dd6aa76e842463fe8db0eda0c2c8846bf0",
+    "bytes": 2642
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_ring_rest_hsl_200_90__55__-control.png",
+    "sha256": "53ffcde48c6aedd5a26f2bbec6d4622ff845c86033d6ffb8891c5e0fc8acdc29",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_ring_rest_hsl_200_90__55__-painted.png",
+    "sha256": "5663edbce10cc93dcf05647928a328d8438c63000cfb034b80c857114d18d843",
+    "bytes": 567
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_ring_selected_hsl_200_90__55__-control.png",
+    "sha256": "9d1f52c4188c62757fd496d19acb8d0ef5c4ec5688575d27be6dfe4be2cd29d5",
+    "bytes": 1642
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-land_ring_selected_hsl_200_90__55__-painted.png",
+    "sha256": "a19fa4cebe0019b3d717c071b8d0c65f4f1a290c1094b75cb0dee9da3bb12b39",
+    "bytes": 1703
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_fill_current_hsl_200_90__55__-control.png",
+    "sha256": "65c3e0a13cf3c506d8cb2492ab01c2e1981f0ac9731e48949cb2f5559d115d9e",
+    "bytes": 130
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_fill_current_hsl_200_90__55__-painted.png",
+    "sha256": "f7852ce2aff5f397d956173f14de9156637b1d9e34a69533c132a70ac7ddbc00",
+    "bytes": 572
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_fill_hovered_hsl_200_90__55__-control.png",
+    "sha256": "65c3e0a13cf3c506d8cb2492ab01c2e1981f0ac9731e48949cb2f5559d115d9e",
+    "bytes": 130
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_fill_hovered_hsl_200_90__55__-painted.png",
+    "sha256": "fc15361bbb73702539c9f9d7aa0cf195ab38a86f49caf92286e87902f82a2c6c",
+    "bytes": 395
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_fill_rest_hsl_200_90__55__-control.png",
+    "sha256": "a8c78691af10df106c3c20a24e942e5de019be1e64952c1a8bda9eab89cdbbbc",
+    "bytes": 132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_fill_rest_hsl_200_90__55__-painted.png",
+    "sha256": "7fddc06beadda456c5a2be356106662d0a77d39fbe72241ac18a82d7c42a1b1a",
+    "bytes": 578
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_fill_selected_hsl_200_90__55__-control.png",
+    "sha256": "a8c78691af10df106c3c20a24e942e5de019be1e64952c1a8bda9eab89cdbbbc",
+    "bytes": 132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_fill_selected_hsl_200_90__55__-painted.png",
+    "sha256": "88c6e60d694a45873ebc57077219a6e0ab1c7aafa36059a7bcf626b3183e9e6e",
+    "bytes": 135
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_ring_current_hsl_200_90__55__-control.png",
+    "sha256": "bf9f5d4300fecda25e5787ae15eeffc0868f60c86a1d3c203dd650ffad08e55e",
+    "bytes": 1916
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_ring_current_hsl_200_90__55__-painted.png",
+    "sha256": "765f60818c892af6948c1c2ed63ce678f6c193141f2e9adbdfbd13c9fbf4e83f",
+    "bytes": 3694
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_ring_hovered_hsl_200_90__55__-control.png",
+    "sha256": "71d94a6d9554ef5264f1ee59136dbe4f09a9ee2c67d67cff95cb892e6cea770e",
+    "bytes": 1352
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_ring_hovered_hsl_200_90__55__-painted.png",
+    "sha256": "40710e06ea0a96df13abc2ccf84e75d7522ae9abc6080f6af1439009d63fab28",
+    "bytes": 2565
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_ring_rest_hsl_200_90__55__-control.png",
+    "sha256": "a8c78691af10df106c3c20a24e942e5de019be1e64952c1a8bda9eab89cdbbbc",
+    "bytes": 132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_ring_rest_hsl_200_90__55__-painted.png",
+    "sha256": "7fddc06beadda456c5a2be356106662d0a77d39fbe72241ac18a82d7c42a1b1a",
+    "bytes": 578
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_ring_selected_hsl_200_90__55__-control.png",
+    "sha256": "d3f70950e2971c60233403d72d03987934e7c3c2d17a28a3385085bdbb17438e",
+    "bytes": 1591
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_canvas-sea_ring_selected_hsl_200_90__55__-painted.png",
+    "sha256": "ed853c785be1105593b797297e906addec879d78a09a699490d2747c5c07fda7",
+    "bytes": 1645
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_fill_current_hsl_200_90__55__-control.png",
+    "sha256": "fbdc6595367e514b8c6642f4f118df54703cb52b293c7f682eff1d6c68eb4cd1",
+    "bytes": 146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_fill_current_hsl_200_90__55__-painted.png",
+    "sha256": "36b0c698b608a01528aefefe20b92344293092ea8d8fb4fc23c3353c25f90458",
+    "bytes": 481
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_fill_rest_hsl_200_90__55__-control.png",
+    "sha256": "87ea01802571108b2b647f36ade2a5ffaf9a209d001b5c6fba212d6107bfd3c1",
+    "bytes": 175
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_fill_rest_hsl_200_90__55__-painted.png",
+    "sha256": "9c66cc6fe777c79459a7c42f96c5fdddf95ebdba9a2741747977a099d50255ae",
+    "bytes": 475
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_fill_selected_hsl_200_90__55__-control.png",
+    "sha256": "17fd787d0a12275a87fad3290e8f979494743db6d84576a34bcd728ba1d8f617",
+    "bytes": 239
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_fill_selected_hsl_200_90__55__-painted.png",
+    "sha256": "faacdb3ea6e1ab7d83e28a7b3cfa2c0dce783662dbcdb000333bc0803e875031",
+    "bytes": 154
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_ring_current_hsl_200_90__55__-control.png",
+    "sha256": "00db3f4d169178322b010e1f3b8d8696a8e2495c4fa87e34b3c60897e290fbe0",
+    "bytes": 601
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_ring_current_hsl_200_90__55__-painted.png",
+    "sha256": "a6cfb3e45942714aff1c8e94dc0c38639f23803e7b75e43550125298d2fb03b8",
+    "bytes": 1568
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_ring_rest_hsl_200_90__55__-control.png",
+    "sha256": "87ea01802571108b2b647f36ade2a5ffaf9a209d001b5c6fba212d6107bfd3c1",
+    "bytes": 175
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_ring_rest_hsl_200_90__55__-painted.png",
+    "sha256": "9c66cc6fe777c79459a7c42f96c5fdddf95ebdba9a2741747977a099d50255ae",
+    "bytes": 475
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_ring_selected_hsl_200_90__55__-control.png",
+    "sha256": "52ab3ad4998ad6330059a54a24c4bf1b3ddbb342f99ad812042a08683cc87fd0",
+    "bytes": 594
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_hover_ring_selected_hsl_200_90__55__-painted.png",
+    "sha256": "1af8b002766955ff58ff3b22e67315421f1f52e849a7f997f3e17a7fac429544",
+    "bytes": 666
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_fill_current_hsl_200_90__55__-control.png",
+    "sha256": "a3b7de691b31754fbcabf4b903f7e12fa84e84a86cd572e611ab715e800cfecb",
+    "bytes": 143
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_fill_current_hsl_200_90__55__-painted.png",
+    "sha256": "3b9b9db671f12e0882c99cc9bbff4289042cfd80eaa65b30a721074ae88938bd",
+    "bytes": 477
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_fill_hovered_hsl_200_90__55__-control.png",
+    "sha256": "42f29b0240d9f0111bf73deb1489f4f6f7e27be68f1d43dee1c864538daa4d0c",
+    "bytes": 450
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_fill_hovered_hsl_200_90__55__-painted.png",
+    "sha256": "7454acc4966d0c2eb22b2762894564862edf9abae80326d728b95327a9d6d86d",
+    "bytes": 516
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_fill_rest_hsl_200_90__55__-control.png",
+    "sha256": "bba733ac31f41406b60fd8d489fe25d89583514660ee8c5038a4579f8cb86e09",
+    "bytes": 218
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_fill_rest_hsl_200_90__55__-painted.png",
+    "sha256": "5e3cd956d9d7e8711bb8a3ea67e49d04fe8082b582c73852b3357c319d6f15db",
+    "bytes": 492
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_fill_selected_hsl_200_90__55__-control.png",
+    "sha256": "17fd787d0a12275a87fad3290e8f979494743db6d84576a34bcd728ba1d8f617",
+    "bytes": 239
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_fill_selected_hsl_200_90__55__-painted.png",
+    "sha256": "faacdb3ea6e1ab7d83e28a7b3cfa2c0dce783662dbcdb000333bc0803e875031",
+    "bytes": 154
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_ring_current_hsl_200_90__55__-control.png",
+    "sha256": "2a8cee8b1c6bf51abfc495a4ed1e17c4e502a28b8fa6d54f71177e6597d0ed03",
+    "bytes": 596
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_ring_current_hsl_200_90__55__-painted.png",
+    "sha256": "da1d5e47b95aa8451f51500385c40b4c578f8c09b3c9aba8978d3cfe3892a657",
+    "bytes": 1589
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_ring_hovered_hsl_200_90__55__-control.png",
+    "sha256": "f5d492fadd1ae072daa074b46e404c579fd83804dd29d2fafe4df0363dd8757d",
+    "bytes": 815
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_ring_hovered_hsl_200_90__55__-painted.png",
+    "sha256": "1589e3022fafb496c94fb5d023cee4737e8553d0843586764a19b836fda1a540",
+    "bytes": 1389
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_ring_rest_hsl_200_90__55__-control.png",
+    "sha256": "bba733ac31f41406b60fd8d489fe25d89583514660ee8c5038a4579f8cb86e09",
+    "bytes": 218
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_ring_rest_hsl_200_90__55__-painted.png",
+    "sha256": "5e3cd956d9d7e8711bb8a3ea67e49d04fe8082b582c73852b3357c319d6f15db",
+    "bytes": 492
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_ring_selected_hsl_200_90__55__-control.png",
+    "sha256": "52ab3ad4998ad6330059a54a24c4bf1b3ddbb342f99ad812042a08683cc87fd0",
+    "bytes": 594
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_rest_ring_selected_hsl_200_90__55__-painted.png",
+    "sha256": "1af8b002766955ff58ff3b22e67315421f1f52e849a7f997f3e17a7fac429544",
+    "bytes": 666
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_fill_current_hsl_200_90__55__-control.png",
+    "sha256": "30d7e66023fe63a8d895f0c33e456d386d947126145fa7b9a60373806fa41320",
+    "bytes": 145
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_fill_current_hsl_200_90__55__-painted.png",
+    "sha256": "d9a64c922f76d96fef0781b7b0643c2bda1221f3807fb1fc5e4d4d2c6280014e",
+    "bytes": 482
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_fill_hovered_hsl_200_90__55__-control.png",
+    "sha256": "42f29b0240d9f0111bf73deb1489f4f6f7e27be68f1d43dee1c864538daa4d0c",
+    "bytes": 450
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_fill_hovered_hsl_200_90__55__-painted.png",
+    "sha256": "7454acc4966d0c2eb22b2762894564862edf9abae80326d728b95327a9d6d86d",
+    "bytes": 516
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_fill_rest_hsl_200_90__55__-control.png",
+    "sha256": "bba733ac31f41406b60fd8d489fe25d89583514660ee8c5038a4579f8cb86e09",
+    "bytes": 218
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_fill_rest_hsl_200_90__55__-painted.png",
+    "sha256": "5e3cd956d9d7e8711bb8a3ea67e49d04fe8082b582c73852b3357c319d6f15db",
+    "bytes": 492
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_fill_selected_hsl_200_90__55__-control.png",
+    "sha256": "17fd787d0a12275a87fad3290e8f979494743db6d84576a34bcd728ba1d8f617",
+    "bytes": 239
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_fill_selected_hsl_200_90__55__-painted.png",
+    "sha256": "faacdb3ea6e1ab7d83e28a7b3cfa2c0dce783662dbcdb000333bc0803e875031",
+    "bytes": 154
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_ring_current_hsl_200_90__55__-control.png",
+    "sha256": "fd17ff7f70fe7a43d10a534bc0b6f01097c4af638f7ea8199d9f855e9376661a",
+    "bytes": 607
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_ring_current_hsl_200_90__55__-painted.png",
+    "sha256": "b4a9859dfc4b1f2d49ee185afc8ee0acd1daa8b0229f727c87aa1c4f9a0613a4",
+    "bytes": 1581
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_ring_hovered_hsl_200_90__55__-control.png",
+    "sha256": "f5d492fadd1ae072daa074b46e404c579fd83804dd29d2fafe4df0363dd8757d",
+    "bytes": 815
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_ring_hovered_hsl_200_90__55__-painted.png",
+    "sha256": "1589e3022fafb496c94fb5d023cee4737e8553d0843586764a19b836fda1a540",
+    "bytes": 1389
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_ring_rest_hsl_200_90__55__-control.png",
+    "sha256": "bba733ac31f41406b60fd8d489fe25d89583514660ee8c5038a4579f8cb86e09",
+    "bytes": 218
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_ring_rest_hsl_200_90__55__-painted.png",
+    "sha256": "5e3cd956d9d7e8711bb8a3ea67e49d04fe8082b582c73852b3357c319d6f15db",
+    "bytes": 492
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_ring_selected_hsl_200_90__55__-control.png",
+    "sha256": "52ab3ad4998ad6330059a54a24c4bf1b3ddbb342f99ad812042a08683cc87fd0",
+    "bytes": 594
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_map_sidebar_selected-current_ring_selected_hsl_200_90__55__-painted.png",
+    "sha256": "1af8b002766955ff58ff3b22e67315421f1f52e849a7f997f3e17a7fac429544",
+    "bytes": 666
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_memory_fill_normal_hsl_185_100__50__-control.png",
+    "sha256": "f84a551d60d8363f252829c83602b793755c1d6112f8e0458f1881960820a3b8",
+    "bytes": 200
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_memory_fill_normal_hsl_185_100__50__-painted.png",
+    "sha256": "d0b0eba390b2515245d60515575ec4ee7846e2326ebbfc6072d136a0b302de7e",
+    "bytes": 234
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_memory_fill_over_hsl_185_100__50__-control.png",
+    "sha256": "a377ab44f9810c9d93087e975bca118ad052c79ae4c3318ccb6c8b78dbaa6330",
+    "bytes": 270
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Vector_calibration_memory_fill_over_hsl_185_100__50__-painted.png",
+    "sha256": "1e5724155614c4bf931b58385de8f89344db5c422a559e56437c602c72bfb09f",
+    "bytes": 318
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_button-hover_armed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_button-hover_armed_hsl_42_30__70__-painted.png",
+    "sha256": "61180996a8e4c59e1a343859e204000177448676090dafadb52658fba3d25ec9",
+    "bytes": 1132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_button-hover_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_button-hover_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "db96873ffb46a965235b8c29989496819c7b19cadae1007f444a066be43a539d",
+    "bytes": 821
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_armed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_armed_hsl_42_30__70__-painted.png",
+    "sha256": "61180996a8e4c59e1a343859e204000177448676090dafadb52658fba3d25ec9",
+    "bytes": 1132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "db96873ffb46a965235b8c29989496819c7b19cadae1007f444a066be43a539d",
+    "bytes": 821
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_rest_armed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_rest_armed_hsl_42_30__70__-painted.png",
+    "sha256": "61180996a8e4c59e1a343859e204000177448676090dafadb52658fba3d25ec9",
+    "bytes": 1132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_rest_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_rest_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "db96873ffb46a965235b8c29989496819c7b19cadae1007f444a066be43a539d",
+    "bytes": 821
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_row-hover_armed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_row-hover_armed_hsl_42_30__70__-painted.png",
+    "sha256": "61180996a8e4c59e1a343859e204000177448676090dafadb52658fba3d25ec9",
+    "bytes": 1132
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_row-hover_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_row-hover_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "db96873ffb46a965235b8c29989496819c7b19cadae1007f444a066be43a539d",
+    "bytes": 821
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_button-hover_armed_hsl_42_30__70__-control.png",
+    "sha256": "83c7999992820edd6604aec634eac7b9ad7158ddff9d19cf0d643d593e8c171b",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_button-hover_armed_hsl_42_30__70__-painted.png",
+    "sha256": "ea23de40102696005c6a922f34d4923729a0aa1c551a2c3aecec35494f5c3ff0",
+    "bytes": 1369
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_button-hover_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "83c7999992820edd6604aec634eac7b9ad7158ddff9d19cf0d643d593e8c171b",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_button-hover_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "7eef9f1d150e0723e41e0923fd72cfc03071a7dc42249920eb703ce32160f0f9",
+    "bytes": 943
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_focus-visible_armed_hsl_42_30__70__-control.png",
+    "sha256": "83c7999992820edd6604aec634eac7b9ad7158ddff9d19cf0d643d593e8c171b",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_focus-visible_armed_hsl_42_30__70__-painted.png",
+    "sha256": "ea23de40102696005c6a922f34d4923729a0aa1c551a2c3aecec35494f5c3ff0",
+    "bytes": 1369
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_focus-visible_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "83c7999992820edd6604aec634eac7b9ad7158ddff9d19cf0d643d593e8c171b",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_focus-visible_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "7eef9f1d150e0723e41e0923fd72cfc03071a7dc42249920eb703ce32160f0f9",
+    "bytes": 943
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_rest_armed_hsl_42_30__70__-control.png",
+    "sha256": "83c7999992820edd6604aec634eac7b9ad7158ddff9d19cf0d643d593e8c171b",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_rest_armed_hsl_42_30__70__-painted.png",
+    "sha256": "ea23de40102696005c6a922f34d4923729a0aa1c551a2c3aecec35494f5c3ff0",
+    "bytes": 1369
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_rest_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "83c7999992820edd6604aec634eac7b9ad7158ddff9d19cf0d643d593e8c171b",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_rest_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "7eef9f1d150e0723e41e0923fd72cfc03071a7dc42249920eb703ce32160f0f9",
+    "bytes": 943
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_row-hover_armed_hsl_42_30__70__-control.png",
+    "sha256": "83c7999992820edd6604aec634eac7b9ad7158ddff9d19cf0d643d593e8c171b",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_row-hover_armed_hsl_42_30__70__-painted.png",
+    "sha256": "ea23de40102696005c6a922f34d4923729a0aa1c551a2c3aecec35494f5c3ff0",
+    "bytes": 1369
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_row-hover_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "83c7999992820edd6604aec634eac7b9ad7158ddff9d19cf0d643d593e8c171b",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_delete_ready_row-hover_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "7eef9f1d150e0723e41e0923fd72cfc03071a7dc42249920eb703ce32160f0f9",
+    "bytes": 943
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_focus-visible_optional-absent_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_focus-visible_optional-absent_hsl_42_50__30__-painted.png",
+    "sha256": "834751409d80ba776bba8fba7df3095fabe73d08d3e61e80a31ad9073bcea70e",
+    "bytes": 1370
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_focus-visible_present_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_focus-visible_present_hsl_42_50__30__-painted.png",
+    "sha256": "869f69e864e636eea9d647dd173de8477a9e9dd4c8cca64f687c3fb11ac93f0b",
+    "bytes": 1484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_focus-visible_verified_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_focus-visible_verified_hsl_42_50__30__-painted.png",
+    "sha256": "4803fcd8758746721f24bcacb91bb1e3207cd8b75790a39f2f84e979e7ac9b10",
+    "bytes": 1983
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_hover_optional-absent_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_hover_optional-absent_hsl_42_50__30__-painted.png",
+    "sha256": "834751409d80ba776bba8fba7df3095fabe73d08d3e61e80a31ad9073bcea70e",
+    "bytes": 1370
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_hover_present_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_hover_present_hsl_42_50__30__-painted.png",
+    "sha256": "869f69e864e636eea9d647dd173de8477a9e9dd4c8cca64f687c3fb11ac93f0b",
+    "bytes": 1484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_hover_verified_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_hover_verified_hsl_42_50__30__-painted.png",
+    "sha256": "4803fcd8758746721f24bcacb91bb1e3207cd8b75790a39f2f84e979e7ac9b10",
+    "bytes": 1983
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_rest_optional-absent_hsl_42_50__30__-control.png",
+    "sha256": "7b79867e28a838d065872c08702826bc52323796c10999cdfcd7eb008df8d759",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_rest_optional-absent_hsl_42_50__30__-painted.png",
+    "sha256": "c8694e7e287cbcd7fb24927eeaacf2984bf89346e5fe3a02a94154ec0fed2a6e",
+    "bytes": 1232
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_rest_present_hsl_42_50__30__-control.png",
+    "sha256": "7b79867e28a838d065872c08702826bc52323796c10999cdfcd7eb008df8d759",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_rest_present_hsl_42_50__30__-painted.png",
+    "sha256": "490357ddd39df7453d91f5c38c1bb8584cc8ba0cd036b7e6299a1659edbd8f59",
+    "bytes": 1320
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_rest_verified_hsl_42_50__30__-control.png",
+    "sha256": "7b79867e28a838d065872c08702826bc52323796c10999cdfcd7eb008df8d759",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_optional_rest_verified_hsl_42_50__30__-painted.png",
+    "sha256": "9a33882d1b65963eac278b354962cdea53213892c0dabaafd2769e6e0c4653f9",
+    "bytes": 1631
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_focus-visible_present_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_focus-visible_present_hsl_42_50__30__-painted.png",
+    "sha256": "183b0838a6b09b080fa77b1496cf588a3daad56ab0004d112504bc238c4e8c82",
+    "bytes": 1484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_focus-visible_required-missing_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_focus-visible_required-missing_hsl_42_50__30__-painted.png",
+    "sha256": "a3e3579e52f671b8eb857772b26638e46e4ac0eb5c6a76e2eb5e7da1eea36cc4",
+    "bytes": 1060
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_focus-visible_verified_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_focus-visible_verified_hsl_42_50__30__-painted.png",
+    "sha256": "d0515e34671dcb398acfa4e491393d86f22e30d9b435c0451dda7b982aff7d7f",
+    "bytes": 1983
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_hover_present_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_hover_present_hsl_42_50__30__-painted.png",
+    "sha256": "183b0838a6b09b080fa77b1496cf588a3daad56ab0004d112504bc238c4e8c82",
+    "bytes": 1484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_hover_required-missing_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_hover_required-missing_hsl_42_50__30__-painted.png",
+    "sha256": "a3e3579e52f671b8eb857772b26638e46e4ac0eb5c6a76e2eb5e7da1eea36cc4",
+    "bytes": 1060
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_hover_verified_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_hover_verified_hsl_42_50__30__-painted.png",
+    "sha256": "d0515e34671dcb398acfa4e491393d86f22e30d9b435c0451dda7b982aff7d7f",
+    "bytes": 1983
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_rest_present_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_rest_present_hsl_42_50__30__-painted.png",
+    "sha256": "183b0838a6b09b080fa77b1496cf588a3daad56ab0004d112504bc238c4e8c82",
+    "bytes": 1484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_rest_required-missing_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_rest_required-missing_hsl_42_50__30__-painted.png",
+    "sha256": "a3e3579e52f671b8eb857772b26638e46e4ac0eb5c6a76e2eb5e7da1eea36cc4",
+    "bytes": 1060
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_rest_verified_hsl_42_50__30__-control.png",
+    "sha256": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19",
+    "bytes": 148
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_key_required_rest_verified_hsl_42_50__30__-painted.png",
+    "sha256": "d0515e34671dcb398acfa4e491393d86f22e30d9b435c0451dda7b982aff7d7f",
+    "bytes": 1983
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_fill_current_hsl_15_75__60__-control.png",
+    "sha256": "153b74367922e6a5f3e9c17a9928b2a28a151c446e5646594fbad2758dd57e62",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_fill_current_hsl_15_75__60__-painted.png",
+    "sha256": "cbf88a2411e71af35851c28e46cd224a09afeabe72cad7ea4029dd56659794ec",
+    "bytes": 548
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_fill_hovered_hsl_15_75__60__-control.png",
+    "sha256": "153b74367922e6a5f3e9c17a9928b2a28a151c446e5646594fbad2758dd57e62",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_fill_hovered_hsl_15_75__60__-painted.png",
+    "sha256": "951921ff0f94f0ce07ce9870e1848beed0b5c9d56daac19f084327ee0403a9d0",
+    "bytes": 306
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_fill_rest_hsl_15_75__60__-control.png",
+    "sha256": "153b74367922e6a5f3e9c17a9928b2a28a151c446e5646594fbad2758dd57e62",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_fill_rest_hsl_15_75__60__-painted.png",
+    "sha256": "cbf88a2411e71af35851c28e46cd224a09afeabe72cad7ea4029dd56659794ec",
+    "bytes": 548
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_fill_selected_hsl_15_75__60__-control.png",
+    "sha256": "153b74367922e6a5f3e9c17a9928b2a28a151c446e5646594fbad2758dd57e62",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_fill_selected_hsl_15_75__60__-painted.png",
+    "sha256": "0566f797478b0a880ec4ac40c00a0f11839d789308abd2c3529bde8027a7bb48",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_ring_current_hsl_15_75__60__-control.png",
+    "sha256": "7b70b62931805b6f501f3c548617425ff19ff6ad62ddb27290cd2e38c11d99a3",
+    "bytes": 2052
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_ring_current_hsl_15_75__60__-painted.png",
+    "sha256": "0ea5a9abd40cd2ec2973c7d809eb7d253a62e21e8f856450ff2fc0424d9f3350",
+    "bytes": 3634
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_ring_hovered_hsl_15_75__60__-control.png",
+    "sha256": "60f29dcef37b047b715e78432e8bf883a35da34799d71a229ce6cf293b741448",
+    "bytes": 1398
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_ring_hovered_hsl_15_75__60__-painted.png",
+    "sha256": "4d4485da6566ece6141c9ff0bb8c59f2aca3152fd189d2d4ccef3413e0fb8a0b",
+    "bytes": 2316
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_ring_rest_hsl_15_75__60__-control.png",
+    "sha256": "153b74367922e6a5f3e9c17a9928b2a28a151c446e5646594fbad2758dd57e62",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_ring_rest_hsl_15_75__60__-painted.png",
+    "sha256": "cbf88a2411e71af35851c28e46cd224a09afeabe72cad7ea4029dd56659794ec",
+    "bytes": 548
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_ring_selected_hsl_15_75__60__-control.png",
+    "sha256": "6e811c615fb53b2cd7f85108900ce37a821e9959898e2cb8958a959ac3d92a9a",
+    "bytes": 1579
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-land_ring_selected_hsl_15_75__60__-painted.png",
+    "sha256": "b825d4c7ba53cf72af8b8d350e298ee32b058397da88e2ec715a4c0d8fc95d7b",
+    "bytes": 1551
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_fill_current_hsl_15_75__60__-control.png",
+    "sha256": "3d233049ad9c31cb47c8a5c26fbe8f0ee80920349177566554e352d78a28e285",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_fill_current_hsl_15_75__60__-painted.png",
+    "sha256": "ea92293de2b4e33b0d91ff5d01d47635952aed5e143bd89eedc85a150c1b25e8",
+    "bytes": 555
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_fill_hovered_hsl_15_75__60__-control.png",
+    "sha256": "3d233049ad9c31cb47c8a5c26fbe8f0ee80920349177566554e352d78a28e285",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_fill_hovered_hsl_15_75__60__-painted.png",
+    "sha256": "5a3c2f3b3e154a09c5557539cdf8313b1a193d2e850ae8860e82cd41a80e6d45",
+    "bytes": 312
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_fill_rest_hsl_15_75__60__-control.png",
+    "sha256": "3d233049ad9c31cb47c8a5c26fbe8f0ee80920349177566554e352d78a28e285",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_fill_rest_hsl_15_75__60__-painted.png",
+    "sha256": "ea92293de2b4e33b0d91ff5d01d47635952aed5e143bd89eedc85a150c1b25e8",
+    "bytes": 555
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_fill_selected_hsl_15_75__60__-control.png",
+    "sha256": "3d233049ad9c31cb47c8a5c26fbe8f0ee80920349177566554e352d78a28e285",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_fill_selected_hsl_15_75__60__-painted.png",
+    "sha256": "0566f797478b0a880ec4ac40c00a0f11839d789308abd2c3529bde8027a7bb48",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_ring_current_hsl_15_75__60__-control.png",
+    "sha256": "4d49d829e2d80763cabb337fadf7dc895ef0a2ed7cd47505d55bd2b75e4dcee4",
+    "bytes": 2131
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_ring_current_hsl_15_75__60__-painted.png",
+    "sha256": "59de89145382767585951237e604678897eebcc61663de36bb1904c0ebbdcabf",
+    "bytes": 3716
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_ring_hovered_hsl_15_75__60__-control.png",
+    "sha256": "105e6ab12744b56593e82b90fbed112df9329cbccb41977067cb7df2f3c0ad34",
+    "bytes": 1404
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_ring_hovered_hsl_15_75__60__-painted.png",
+    "sha256": "391fbe17041bd7d992147098d0a976f7d668abebef3cfede37152e70222f2f60",
+    "bytes": 2297
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_ring_rest_hsl_15_75__60__-control.png",
+    "sha256": "3d233049ad9c31cb47c8a5c26fbe8f0ee80920349177566554e352d78a28e285",
+    "bytes": 116
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_ring_rest_hsl_15_75__60__-painted.png",
+    "sha256": "ea92293de2b4e33b0d91ff5d01d47635952aed5e143bd89eedc85a150c1b25e8",
+    "bytes": 555
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_ring_selected_hsl_15_75__60__-control.png",
+    "sha256": "b8abdac4e6b43d30e28063927984b7b4834c4f9b8d3c8144ab1cb6c6c06f2142",
+    "bytes": 1728
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_canvas-sea_ring_selected_hsl_15_75__60__-painted.png",
+    "sha256": "580d8d8ac11562e2365b9b1396d900b858fae28824e665c3f2476f5a4df991c2",
+    "bytes": 1672
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_fill_current_hsl_15_75__60__-control.png",
+    "sha256": "32e69b11b92aa6dd7aee00169e1b1479c181783a35ea37c25f707d8f3d2212fa",
+    "bytes": 127
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_fill_current_hsl_15_75__60__-painted.png",
+    "sha256": "b780f42929ae6f5701bc40dbe494a0784be7d248007b55932be53fcb4bd9e67e",
+    "bytes": 463
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_fill_rest_hsl_15_75__60__-control.png",
+    "sha256": "239ce79eb0c20284a71c5b39c0201fbad6aba29c6cb50db840d5ea25c0590fe5",
+    "bytes": 211
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_fill_rest_hsl_15_75__60__-painted.png",
+    "sha256": "f63b3c4a0a8d24e4ba99ac7591bc01332110b8f451d70d7c2c75c3502c426ecf",
+    "bytes": 484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_fill_selected_hsl_15_75__60__-control.png",
+    "sha256": "de569350e9698668b7a0e792640c1e9d827d5ccf818e865472ace7f3eff89dee",
+    "bytes": 209
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_fill_selected_hsl_15_75__60__-painted.png",
+    "sha256": "030c795ccdd952dd5b7c28de5131fcd1c9aaa54dce3db26d52010b564e913af2",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_ring_current_hsl_15_75__60__-control.png",
+    "sha256": "3b3f8c622eb9ff985414161a5c1bec4b0f08a854e906ad07b30cedca0260b6a5",
+    "bytes": 559
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_ring_current_hsl_15_75__60__-painted.png",
+    "sha256": "095947f9ee9e258b60975e364ae778693f5258c250a9585fca604c7d6f7dc73b",
+    "bytes": 1491
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_ring_rest_hsl_15_75__60__-control.png",
+    "sha256": "239ce79eb0c20284a71c5b39c0201fbad6aba29c6cb50db840d5ea25c0590fe5",
+    "bytes": 211
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_ring_rest_hsl_15_75__60__-painted.png",
+    "sha256": "f63b3c4a0a8d24e4ba99ac7591bc01332110b8f451d70d7c2c75c3502c426ecf",
+    "bytes": 484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_ring_selected_hsl_15_75__60__-control.png",
+    "sha256": "418ac26d7c81883b0e746ea09983b4a9136fe690b444d9db62780bd681339fe8",
+    "bytes": 539
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_hover_ring_selected_hsl_15_75__60__-painted.png",
+    "sha256": "49644296d0c89586c3591367d937a840cf0e8dbffb3396e086dfe2e543a2e2f0",
+    "bytes": 621
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_fill_current_hsl_15_75__60__-control.png",
+    "sha256": "e0ee5fbde49d2aa4d25745b7a24e653ae6918c5bc92b04b2522f864673b7d02b",
+    "bytes": 128
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_fill_current_hsl_15_75__60__-painted.png",
+    "sha256": "bc9af0752034d92a4b68d03cb5a7c6e85d4786654f76ed7a27652e8aa0339e43",
+    "bytes": 459
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_fill_hovered_hsl_15_75__60__-control.png",
+    "sha256": "e34200e818936bf24648cc0caaae533a338699a505f257b51f368a7d20c1d4ab",
+    "bytes": 418
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_fill_hovered_hsl_15_75__60__-painted.png",
+    "sha256": "2034fd2654e5c6528868b9763d3bbb7a7044527a0aa976692002b753ee4e5a05",
+    "bytes": 452
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_fill_rest_hsl_15_75__60__-control.png",
+    "sha256": "86a1e18ee1a9b9bb26225993e33a29d905cf66b8b0b9f7df4de32390347c7319",
+    "bytes": 210
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_fill_rest_hsl_15_75__60__-painted.png",
+    "sha256": "4127e7a4721f0416f4d27d3a35f1307ce0656b6f21e0909a9d29d14e59f45ae2",
+    "bytes": 489
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_fill_selected_hsl_15_75__60__-control.png",
+    "sha256": "de569350e9698668b7a0e792640c1e9d827d5ccf818e865472ace7f3eff89dee",
+    "bytes": 209
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_fill_selected_hsl_15_75__60__-painted.png",
+    "sha256": "030c795ccdd952dd5b7c28de5131fcd1c9aaa54dce3db26d52010b564e913af2",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_ring_current_hsl_15_75__60__-control.png",
+    "sha256": "8c5b1b058c2d6fb58d657fb39ff6d6ba92a3b60e8f5efa5ecf0ee469cac18892",
+    "bytes": 565
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_ring_current_hsl_15_75__60__-painted.png",
+    "sha256": "9f2ae02569d539683c61739d2469f9ebbbfc29634e35833324c9718c8a9b538d",
+    "bytes": 1497
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_ring_hovered_hsl_15_75__60__-control.png",
+    "sha256": "c59433f0a00c1c177f6ccb375bbfb503331235ac94717c6151cd53dfe59c7869",
+    "bytes": 710
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_ring_hovered_hsl_15_75__60__-painted.png",
+    "sha256": "b25c62f9d4efb873cb1f5ec0f670c89538a96566d311bc8f010f71d219ede36f",
+    "bytes": 1226
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_ring_rest_hsl_15_75__60__-control.png",
+    "sha256": "86a1e18ee1a9b9bb26225993e33a29d905cf66b8b0b9f7df4de32390347c7319",
+    "bytes": 210
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_ring_rest_hsl_15_75__60__-painted.png",
+    "sha256": "4127e7a4721f0416f4d27d3a35f1307ce0656b6f21e0909a9d29d14e59f45ae2",
+    "bytes": 489
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_ring_selected_hsl_15_75__60__-control.png",
+    "sha256": "418ac26d7c81883b0e746ea09983b4a9136fe690b444d9db62780bd681339fe8",
+    "bytes": 539
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_rest_ring_selected_hsl_15_75__60__-painted.png",
+    "sha256": "49644296d0c89586c3591367d937a840cf0e8dbffb3396e086dfe2e543a2e2f0",
+    "bytes": 621
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_fill_current_hsl_15_75__60__-control.png",
+    "sha256": "62631e681f7cc3a1a7bcb18266626b4e6750c162ffbb2c613569e3778ef880c0",
+    "bytes": 127
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_fill_current_hsl_15_75__60__-painted.png",
+    "sha256": "4aa024cf6347360f4e80c0485a61d1d2b74f5917c0d44d73c719f25635c382c2",
+    "bytes": 459
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_fill_hovered_hsl_15_75__60__-control.png",
+    "sha256": "e34200e818936bf24648cc0caaae533a338699a505f257b51f368a7d20c1d4ab",
+    "bytes": 418
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_fill_hovered_hsl_15_75__60__-painted.png",
+    "sha256": "2034fd2654e5c6528868b9763d3bbb7a7044527a0aa976692002b753ee4e5a05",
+    "bytes": 452
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_fill_rest_hsl_15_75__60__-control.png",
+    "sha256": "86a1e18ee1a9b9bb26225993e33a29d905cf66b8b0b9f7df4de32390347c7319",
+    "bytes": 210
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_fill_rest_hsl_15_75__60__-painted.png",
+    "sha256": "4127e7a4721f0416f4d27d3a35f1307ce0656b6f21e0909a9d29d14e59f45ae2",
+    "bytes": 489
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_fill_selected_hsl_15_75__60__-control.png",
+    "sha256": "de569350e9698668b7a0e792640c1e9d827d5ccf818e865472ace7f3eff89dee",
+    "bytes": 209
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_fill_selected_hsl_15_75__60__-painted.png",
+    "sha256": "030c795ccdd952dd5b7c28de5131fcd1c9aaa54dce3db26d52010b564e913af2",
+    "bytes": 134
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_ring_current_hsl_15_75__60__-control.png",
+    "sha256": "b6ae81dd5044b1ebc5da5e5141d69e8130c9ef945a822c18aa69c79607c968ee",
+    "bytes": 571
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_ring_current_hsl_15_75__60__-painted.png",
+    "sha256": "b6e37e42e1707a5101f42e84c3c58cdf361ad28cffd431b3e5cacee391936506",
+    "bytes": 1497
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_ring_hovered_hsl_15_75__60__-control.png",
+    "sha256": "c59433f0a00c1c177f6ccb375bbfb503331235ac94717c6151cd53dfe59c7869",
+    "bytes": 710
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_ring_hovered_hsl_15_75__60__-painted.png",
+    "sha256": "b25c62f9d4efb873cb1f5ec0f670c89538a96566d311bc8f010f71d219ede36f",
+    "bytes": 1226
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_ring_rest_hsl_15_75__60__-control.png",
+    "sha256": "86a1e18ee1a9b9bb26225993e33a29d905cf66b8b0b9f7df4de32390347c7319",
+    "bytes": 210
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_ring_rest_hsl_15_75__60__-painted.png",
+    "sha256": "4127e7a4721f0416f4d27d3a35f1307ce0656b6f21e0909a9d29d14e59f45ae2",
+    "bytes": 489
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_ring_selected_hsl_15_75__60__-control.png",
+    "sha256": "418ac26d7c81883b0e746ea09983b4a9136fe690b444d9db62780bd681339fe8",
+    "bytes": 539
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_map_sidebar_selected-current_ring_selected_hsl_15_75__60__-painted.png",
+    "sha256": "49644296d0c89586c3591367d937a840cf0e8dbffb3396e086dfe2e543a2e2f0",
+    "bytes": 621
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_memory_fill_normal__b83d7a-control.png",
+    "sha256": "1ebe7ab8938f3eb20a88dfd8760841bd85639c1f4d0eb740f64168976264ac74",
+    "bytes": 202
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_memory_fill_normal__b83d7a-painted.png",
+    "sha256": "b64eb4ea8b3bf284c575471712b5a402d6e9bdf4fa4859847f7fa97ba85955db",
+    "bytes": 234
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_memory_fill_over__b83d7a-control.png",
+    "sha256": "f6097151ab6f7ed736b42e1a9531757340bb5c0b4f8da610bef16d44de86f9e9",
+    "bytes": 255
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Veil_calibration_memory_fill_over__b83d7a-painted.png",
+    "sha256": "33d4deabd91989aa7476406f1cb4265621a985a85f34946decf2ad49397e08f2",
+    "bytes": 294
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration-maxima.md",
+    "sha256": "111589923bc1f17a2085acdf0c9c656adf2b12e2211f22f099dab20a0f053a70",
+    "bytes": 856
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/group-comparison.json",
+    "sha256": "48035c799cb47d125bb5a6f0754c43b67317506ebae1cbfe8ce14d44b1f88dfc",
+    "bytes": 2511
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/receipt-proof.json",
+    "sha256": "51e02629f2750b06722183f762849ec523b16c1875f58be8e5a1afe3858f6ad9",
+    "bytes": 2464
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/regeneration-import-error.log",
+    "sha256": "037bfba08fae4806677de8fc57ef489311ec8174276c1b6e8382d9b8f12a950d",
+    "bytes": 2146
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/regeneration.log",
+    "sha256": "6ab752c19f11e84d770f048c9af95c0bcc67e48fa49554619e89b8401537bd96",
+    "bytes": 13996
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/search-export.json",
+    "sha256": "9c53648f20403c3c22acd3d497fc5c3a2acbe09ee420054ed9c0cfa3c40d9723",
+    "bytes": 286
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/search-export.log",
+    "sha256": "ae2735c71c475ad6180b4478bdee2857ae31c17699c5dc0c667b1b853ff7ef41",
+    "bytes": 19502
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/unit.json",
+    "sha256": "e08e33156465c66b68db25a0443dde2ed6493643da89824e9fcbe31ac8ba4a0b",
+    "bytes": 198
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/unit.log",
+    "sha256": "c54562f4204620aba26aafc6eb5b67d88d7fd532d72829a1f4f67cf78f9e4802",
+    "bytes": 540
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/focused-before-refresh.json",
@@ -3050,6 +5155,46 @@
     "bytes": 19514
   },
   {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/settled-stop/incomplete-probe.json",
+    "sha256": "4cf2e5202a155c315507d25c5173d81964eee6bbd22174e92a5d4ef058b2e019",
+    "bytes": 536104
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/settled-stop/regeneration.log",
+    "sha256": "531c566083853d4b5e7ab16a6dd02c498689b25daeaf74a9f1d6f7c74a850a7c",
+    "bytes": 2309
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/settled-stop/settle-failure-w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__-control.png",
+    "sha256": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036",
+    "bytes": 141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/settled-stop/settle-failure-w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__-painted.png",
+    "sha256": "db96873ffb46a965235b8c29989496819c7b19cadae1007f444a066be43a539d",
+    "bytes": 821
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/settled-stop/settle-failure-w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__.json",
+    "sha256": "40806a007c4b6c787aee9508b300801c30795913e872960ad4105559ddbd806f",
+    "bytes": 2027
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/settled-stop/stop-report.md",
+    "sha256": "85bdde93e0a6b8f87c428095b3554da731e5c4cfd1d73ebe3606b9ef36164b69",
+    "bytes": 3623
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/settled-stop/summary.json",
+    "sha256": "4d6e4014f60bf8dc38cc1adc2acecd5cce06f5b2956facf6a44bcc7286e50aab",
+    "bytes": 2061
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/settled-stop/unit.log",
+    "sha256": "61ce1a6c84f12ca809fe098e19d069bb791c55db8b6b877ab55bae6cfa7a8a3e",
+    "bytes": 540
+  },
+  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/stop-report.md",
     "sha256": "279671d05a030d0f9d79aeb18fbfc41ea984a25aa14b76c972c8dc6b07553190",
     "bytes": 2802
@@ -3058,5 +5203,165 @@
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/unit.log",
     "sha256": "e73f577803ce2cc04546c45e680201263ff77ec990c6af505a8dfaba7669638f",
     "bytes": 540
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/swatch-inputs.json",
+    "sha256": "c57b8c8353f3bb82b701aabe1cd7ad4c81e2dc2d302752164f17ecc7f2d13c05",
+    "bytes": 20292
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/tiebreak-deltas.json",
+    "sha256": "4f9b86db5c5d89fa406bf9a5d9f946c748d05588b66ea05dfca59efa91d5bf2c",
+    "bytes": 1085
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/token-changes.json",
+    "sha256": "09c09db7b941fced6d1882db2252e7336536686c81e924bf8d110f83691291ff",
+    "bytes": 4772
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/token-changes.md",
+    "sha256": "ace2077bbff05f8b8019275767646c0daad9f09821e337accbd5c224e8b4e717",
+    "bytes": 3095
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/backdrop-correction.json",
+    "sha256": "af95e7f98455f869a408aaa676240a5e726568d33d6e6751c9d6dc321282b6b4",
+    "bytes": 7972
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/browser-proof.json",
+    "sha256": "75b1743aaf77d03552208473e40f0c8a0caf2cb5b8df9e67a66d890a6ff5b55a",
+    "bytes": 8969
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/commands.md",
+    "sha256": "7b7757ee256203ca19c532a2bace5a18eae28c123e4aa3d0269176c1dd136794",
+    "bytes": 27537
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/exceptions.md",
+    "sha256": "85726f0a47f9ff3d0023d631d848a31388ba47f519c3f5be691c76ea128a07d7",
+    "bytes": 1911
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-joint.json",
+    "sha256": "1210892c65cd14b7472dd43b99fc21b30eab81ceee8a299bce8e8246bb958fe2",
+    "bytes": 3126738
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-pairs.md",
+    "sha256": "9b1672635d74b6f0c62c686b0c9cc0cbe28a2e2fe13496f482bc9b3257e8b1ad",
+    "bytes": 15651
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/global-proof.json",
+    "sha256": "c1e364b3507fe29de2a4b09646f0d888649bc7117d08eb114c41020aa2f48058",
+    "bytes": 100807
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/global-swatches.png",
+    "sha256": "b3a0a30131537a815afaee7d5e06a91cc08025c8d1abcf720f225280cc86c7b6",
+    "bytes": 271872
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/global-swatches.svg",
+    "sha256": "83ddc388f5a5f8a8d9ace029094e1313fd6f565b096c3a08ceb1b73707f59c8e",
+    "bytes": 76699
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/global-tokens.md",
+    "sha256": "c07cc3af843ee639abd2e6fcddd08628fb8ad7898045074d48f39719d7a50bc2",
+    "bytes": 33397
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/globals-after.png",
+    "sha256": "e05c0a10fa77ccec4dbfc5ee7a8c131abe50a051e959f6702b4622f06cd9337c",
+    "bytes": 154591
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/globals-before.png",
+    "sha256": "54fa1fb6e152ca60da5a2a69c597cc7df7e0307452a6157f7624a3b52c8d3341",
+    "bytes": 154592
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/glyphs-monochrome-reduced-motion.png",
+    "sha256": "a718dfe9e5cd65fcfb640052d7d814c7da24b42fed967225a8af43b27d4f53e7",
+    "bytes": 20656
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/glyphs-reduced-motion.png",
+    "sha256": "20d5c381e4d59495d7955a5f8dbf453a4d156235559b765c21257fa7aa143faf",
+    "bytes": 26215
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.csv",
+    "sha256": "451c4fd74cbd779c773be44ec572c08264bc58538d31bff12b55176800be3686",
+    "bytes": 3159220
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.md",
+    "sha256": "b44d26f6c89c6ab90b0e483f33fb27c880042d04dce49fef8ec4505f0fe36d53",
+    "bytes": 403
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/production-panes-reduced-motion.png",
+    "sha256": "49dc2cbd90b4607bbf175cd3d8a0fd409dda03ad65a355b8dd816c9e4f43b3e5",
+    "bytes": 247128
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.json",
+    "sha256": "53687cdaed94be51d7e96967cadaf952fd6866a423d130c9692a53f2053d9556",
+    "bytes": 5157
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.md",
+    "sha256": "b1973b33869dd34f2cc147cdf601f105d5d6098b258ec97d08900f2b18660617",
+    "bytes": 3297
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.png",
+    "sha256": "d0e96bb373cfd9b2deabb9f5c22b64aeb2889d2e0b8a22d2e87b6e141b597a28",
+    "bytes": 80042
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.svg",
+    "sha256": "e99ac1faaa549bf7a8c70ce8ba1b27f802c4b345fad72b11b8bb82c7f49846b7",
+    "bytes": 13285
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json",
+    "sha256": "db23b7d03dffdee9a09cd8163cc71eb2ca5c7a4627fe1561394960ff2c525d58",
+    "bytes": 146737
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/vector-joint.json",
+    "sha256": "f058bee6476b06f028707c04acea97ad414feac422cf28748803c5d9aa93b27b",
+    "bytes": 3103667
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/vector-pairs.md",
+    "sha256": "9e15ebece7f09a1c43937359257ea1471fbbee269c8cbc1f91bf558291e4bf9f",
+    "bytes": 15644
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/veil-joint.json",
+    "sha256": "796119b00f2e7ac6891957b749bc8cf18c974461e45c153121299d0b7c71d751",
+    "bytes": 3172823
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/veil-pairs.md",
+    "sha256": "65c3eeac2567ae00406a4aa0e74e654fef38fabe3a3019db50d4107039d98ee3",
+    "bytes": 15683
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/verification.md",
+    "sha256": "5867bad8657695316dd6a30cf4d4cc68ee73d4b112eece5edd399ac013356850",
+    "bytes": 107985
+  },
+  {
+    "path": "ui/client/src/state-surfaces.resolved.json",
+    "sha256": "35d765c89b8b7210241d5e48fad184e3cc40a623daa3716f2ea1a20d636118cb",
+    "bytes": 444572528
   }
 ]

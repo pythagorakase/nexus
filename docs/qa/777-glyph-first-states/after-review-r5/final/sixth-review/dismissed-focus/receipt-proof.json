@@ -1,0 +1,90 @@
+{
+  "baseline": "198e4e03",
+  "fingerprint": "7c7cda7c5a1124025888de538122b3efb555de17e1a2dd30ea48cb84fc3ab7f9",
+  "conditionCount": 27,
+  "renders": 101742,
+  "wallSeconds": 1986.518538375,
+  "acceptanceComplete": true,
+  "samples": 101742,
+  "focusSamples": 2760,
+  "escapedSamples": 294,
+  "maxSettleWaitMs": 847.6999999880791,
+  "allTooltipExpectationsMatched": true,
+  "allDismissalSignaturesMatched": true,
+  "calibrationMaximaIdentical": true,
+  "calibration": {
+    "Veil": {
+      "memory": {
+        "opaqueMaximum": 0.00026414815709771805,
+        "translucentMaximum": 0,
+        "skippedPairs": 0
+      },
+      "delete": {
+        "opaqueMaximum": 0.006002891112468775,
+        "translucentMaximum": 0.012334576619474699,
+        "skippedPairs": 0
+      },
+      "key": {
+        "opaqueMaximum": 0.030457571214044847,
+        "translucentMaximum": 0.013459005795140349,
+        "skippedPairs": 0
+      },
+      "map": {
+        "opaqueMaximum": 0.07468917510215183,
+        "translucentMaximum": 0.4165404892186375,
+        "skippedPairs": 20
+      }
+    },
+    "Gilded": {
+      "memory": {
+        "opaqueMaximum": 0.0002619007277823465,
+        "translucentMaximum": 0,
+        "skippedPairs": 0
+      },
+      "delete": {
+        "opaqueMaximum": 0.008785869899490675,
+        "translucentMaximum": 0.0079023496576129,
+        "skippedPairs": 0
+      },
+      "key": {
+        "opaqueMaximum": 0.04713082389726427,
+        "translucentMaximum": 0.02240636952243324,
+        "skippedPairs": 0
+      },
+      "map": {
+        "opaqueMaximum": 0.07196338979953294,
+        "translucentMaximum": 0.4249545915725878,
+        "skippedPairs": 19
+      }
+    },
+    "Vector": {
+      "memory": {
+        "opaqueMaximum": 0.0003181767847390889,
+        "translucentMaximum": 0,
+        "skippedPairs": 0
+      },
+      "delete": {
+        "opaqueMaximum": 0.029118582412838427,
+        "translucentMaximum": 0.02152663851962112,
+        "skippedPairs": 0
+      },
+      "key": {
+        "opaqueMaximum": 0.011120218162869937,
+        "translucentMaximum": 0.003968024121739456,
+        "skippedPairs": 0
+      },
+      "map": {
+        "opaqueMaximum": 0.08088889823513667,
+        "translucentMaximum": 0.500656347153232,
+        "skippedPairs": 19
+      }
+    }
+  },
+  "paletteInputsIdentical": true,
+  "baselineSamplesTrigger": 114,
+  "priorVectorDeleteMaximum": [
+    23.288,
+    23.243
+  ],
+  "unmeasuredOpenTooltipMaximumLinearEuclidean": 0.0097
+}
