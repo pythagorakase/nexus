@@ -44,6 +44,12 @@ Every slot has a NULL `genesis_weird`, so each resolves `no_genesis_record` at `
 
 ## Red Run
 
+The runs in this section and the two that follow ran on the tree at
+`1e3c0a6e` (the implementation commit `c476d53c` plus the re-stamp commit;
+`6a00e9b4` added only this file). The review fix that guards the level's type
+reran `tests/test_orrery/test_retrograde_maturation.py` on its own commit; its
+tail is at the end of Offline Suites.
+
 Plant A (`_resolve_maturation_weird` always uses `default_level`; reverted before commit):
 
 ```
@@ -129,6 +135,18 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 ```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 96 passed, 5 warnings in 18.59s
+```
+
+### Rerun After the Review Type Guard
+
+At the type-guard commit (the one that follows `6a00e9b4`), with the two new
+malformed cases (`list-level`, `object-level`):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_orrery/test_retrograde_maturation.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+32 passed, 5 skipped, 5 warnings in 0.55s
 ```
 
 ## Config, Lint, Types

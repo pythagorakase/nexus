@@ -1338,7 +1338,7 @@ def _genesis_level(genesis_weird: Mapping[str, Any]) -> tuple[str, str]:
     from nexus.agents.orrery.retrograde_packet import WEIRD_LEVELS
 
     level = genesis_weird.get("level")
-    if level not in WEIRD_LEVELS:
+    if not isinstance(level, str) or level not in WEIRD_LEVELS:
         raise ValueError(
             "global_variables.genesis_weird.level must be low, medium, or high; "
             f"got {level!r}"

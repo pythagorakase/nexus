@@ -596,6 +596,8 @@ def test_maturation_weird_resolves_band_from_current_tables() -> None:
     "mutation",
     [
         pytest.param({"level": "extreme"}, id="unknown-level"),
+        pytest.param({"level": [], "selected_level": None}, id="list-level"),
+        pytest.param({"level": {"x": 1}, "selected_level": None}, id="object-level"),
         pytest.param({"selected_level": ...}, id="selected-level-absent"),
         pytest.param(
             {"level": "low", "selected_level": "high"}, id="selection-mismatch"
