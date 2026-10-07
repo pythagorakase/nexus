@@ -113,6 +113,22 @@ export function mediaConditions(css) {
     const prelude = source.slice(1).split(/[{};]/, 1)[0].trim();
     remember(prelude); unsupported.push(prelude); root = postcss.root();
   }
+  const declarationGuards = { functions: ['if(', 'light-dark('], declarationsScanned: 0 };
+  // Walk all declarations, even under excluded or refused wrappers. Remove
+  // string tokens before normalization so quoted function names are inert.
+  root.walkDecls(declaration => {
+    declarationGuards.declarationsScanned++;
+    const value = normalize((declaration.raws.value?.raw ?? declaration.value)
+      .replace(/\/\*[\s\S]*?\*\/|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'/g, ''));
+    for (const fn of declarationGuards.functions) {
+      const name = fn.slice(0, -1);
+      if (!new RegExp(`(?:^|[^\\w-])${name}\\(`).test(value)) continue;
+      let owner = declaration.parent;
+      while (owner && owner.type !== 'rule' && owner.type !== 'atrule') owner = owner.parent;
+      const selector = owner?.selector ?? (owner?.type === 'atrule' ? `@${owner.name} ${owner.params}`.trim() : '<root>');
+      unsupported.push(`${selector} { ${declaration.prop} }: ${fn}`);
+    }
+  });
   // Audit every at-rule, including children of excluded media parents. They
   // cannot silently bypass the evaluator through an unrecognised wrapper.
   const refused = new Set();
@@ -205,5 +221,5 @@ export function mediaConditions(css) {
     return reducedMotion === 'reduce' ? [{ ...common, id: `${prefix}/reduce` }] :
       [0, .5].map(animationPhase => ({ ...common, animationPhase, id: `${prefix}/motion/${animationPhase ? 'trough' : 'start'}` }));
   });
-  return { preludes, excluded, stripped, unsupported: [...new Set(unsupported)], representatives, variants };
+  return { preludes, excluded, stripped, declarationGuards, unsupported: [...new Set(unsupported)], representatives, variants };
 }

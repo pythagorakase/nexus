@@ -78,8 +78,20 @@ non-media wrappers; nested media is still evaluated. All other at-rule names,
 and any name or prelude containing a backslash, refuse by name. CSS escapes
 are never decoded. This audit also checks at-rules inside excluded parents;
 media conditions under those parents retain Round 7's skipped-child rule.
-Everything outside the modelled grammar refuses; no unknown at-rule is silently
-ignored.
+Every declaration in the emitted CSS, nested or otherwise, is also scanned.
+After removing comments and string tokens and lowercasing the value, `if(`
+(including media(), supports() and style() tests) and `light-dark(` refuse by
+selector, property and function. `media.declarationGuards` records the searched
+functions and the declaration count. Quoted strings such as `content: "if("`
+are inert. Everything outside the modelled prelude grammar refuses; no unknown
+at-rule is silently ignored.
+
+Coverage is scoped to the emitted CSS's declared conditions: at-rule preludes
+and the inline conditional functions refused above. Paint can also depend on
+viewport-relative math in paint-affecting properties (for example,
+`opacity: calc(100vw / 2000px)`), `env()`, scripts that read `matchMedia`, and
+user-agent or extension stylesheets. These are residuals: the generator does
+not inventory or refuse them.
 The shipped CSS has **9 width
 bands × 2 motion values = 18 vectors**, expanded into **27 condition renders**
 by motion start/trough phases. IDs name band and motion, for example

@@ -219,4 +219,35 @@ describe("normalized media grammar and exhaustive at-rule dispatch", () => {
   });
 });
 
+describe("declaration-level condition guards", () => {
+  it.each([
+    ["opacity", "if(media((min-width: 640px) and (max-width: 759px)): .35; else: .5)", "if("],
+    ["color", "light-dark(#000, #fff)", "light-dark("],
+    ["opacity", "IF(supports(display: grid): .35; else: .5)", "if("],
+    ["opacity", "if(style(--x: y): .35; else: .5)", "if("],
+    ["color", "LIGHT-DARK/* note */(#000, #fff)", "light-dark("],
+  ])("refuses %s: %s by declaration and function", (property, value, fn) => {
+    const media = mediaConditions(`.key-row.optional { ${property}: ${value}; }`);
+    expect(media.unsupported).toEqual([`.key-row.optional { ${property} }: ${fn}`]);
+    expect(media.declarationGuards).toEqual({ functions: ["if(", "light-dark("], declarationsScanned: 1 });
+  });
+
+  it.each([
+    'content: "if(x)"', "content: 'light-dark(x)'", String.raw`content: "escaped\" if(x)"`,
+    'content: "/* if(x) */"', 'opacity: .5', 'opacity: .5 /* if(x) */',
+    '--x: motif(x)',
+  ])("accepts inert declaration %s", declaration => {
+    expect(mediaConditions(`.key-row.optional { ${declaration}; }`).unsupported).toEqual([]);
+  });
+
+  it("scans nested declarations even under excluded and refused wrappers", () => {
+    const media = mediaConditions(`@media print { .outer { opacity: .5;
+      .key-row.optional { opacity: if(media(width > 0px): .35; else: .5); }
+    } } @frobnicate x { .other { color: light-dark(#000, #fff); } }`);
+    expect(media.unsupported).toContain(".key-row.optional { opacity }: if(");
+    expect(media.unsupported).toContain(".other { color }: light-dark(");
+    expect(media.declarationGuards.declarationsScanned).toBe(3);
+  });
+});
+
 // Codex, GPT-6.
