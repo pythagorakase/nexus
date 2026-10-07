@@ -29,7 +29,7 @@ import pytest
 
 from nexus.api.db_pool import close_all_pools
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
-from nexus.presence.roster import PresenceRoster, RosterEntry, write_roster
+from nexus.presence.roster import Kind, PresenceRoster, RosterEntry, write_roster
 from scripts import entity_reference_parity as parity
 from scripts import migrate
 from tests.pg_fixtures import (
@@ -50,7 +50,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 UNIFIED_TABLE = "chunk_entity_references"
 CLONE_PREFIX = "qa640_836s3"
 FLEET_SOURCES = ("save_01", "save_02", "save_03", "save_04")
-KINDS = ("character", "place", "faction")
+KINDS: tuple[Kind, ...] = ("character", "place", "faction")
 # Every object migration 148 creates, dropped one by one to rerun it.
 MIGRATION_148_DROPS = (
     "DROP TRIGGER trg_chunk_character_references_mirror "
@@ -77,7 +77,7 @@ MIGRATION_148_DROPS = (
 class Ref(NamedTuple):
     """One seeded subtype row: its kind, subtype ID, entity ID, and name."""
 
-    kind: str
+    kind: Kind
     id: int
     entity_id: int
     name: str
@@ -125,7 +125,7 @@ def _faction(dbname: str, name: str) -> Ref:
     return Ref("faction", faction_id, entity_id, name)
 
 
-def _seed_kind(dbname: str, kind: str, name: str) -> Ref:
+def _seed_kind(dbname: str, kind: Kind, name: str) -> Ref:
     return {"character": _character, "place": _place, "faction": _faction}[kind](
         dbname, name
     )
@@ -319,7 +319,7 @@ def test_writer_rows_mirror_with_parity(story: tuple[str, Ref]) -> None:
 
 @pytest.mark.parametrize("kind", KINDS)
 def test_subtype_delete_forgets_rows_and_keeps_entity(
-    story: tuple[str, Ref], kind: str
+    story: tuple[str, Ref], kind: Kind
 ) -> None:
     """Deleting a subtype row deletes every unified row of its entity.
 
