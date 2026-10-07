@@ -82,7 +82,12 @@ ERROR tests/test_pg_fixtures_corpus_clone.py::test_reference_corpus_clones_with_
 1 error in 1.58s
 ```
 
-## Green After
+## Green After (Tree at acbdbe47; Historical)
+
+These tails ran on the tree at `acbdbe47` (the reorder commit plus the first
+version of the clone test, `740ee07b`), before the review rounds; the guard
+and the committed guard tests came later, and their own tails are under the
+round-2 section (`f4ea3b90`).
 
 Same command:
 
@@ -325,7 +330,11 @@ shrink-only baseline verified.`). No `qa640_1083%` database remained
 (`psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_1083%'"`
 printed nothing).
 
-## Offline Gates
+## Offline Gates (Tree at acbdbe47; Historical)
+
+These offline runs also ran on the tree at `acbdbe47`. The round-2 section
+above holds the runs on `f4ea3b90`, the last commit that changed code or tests;
+`011efaed` changed only this file.
 
 Offline suites (no PostgreSQL flags), split by directory:
 
