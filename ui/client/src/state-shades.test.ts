@@ -144,6 +144,9 @@ type Sample = {
   action: string; animationsRunning: number; settleWaitMs: number;
   settleCriteria: { tooltipExpected: string; tooltipState: string | null;
     tooltipPresent: boolean; scope: string; animations: string; pseudoClasses: string;
+    tooltipDismissal?: { escapePressed: boolean;
+      before: { signature: string; focusVisible: boolean; expanded: boolean; armed: string };
+      after: { signature: string; focusVisible: boolean; expanded: boolean; armed: string } };
     captures: Record<"painted" | "control", { tooltipPresent: boolean;
       tooltipState: string | null; matched: boolean; settleWaitMs: number }> };
   pseudos: { pinHover: boolean; hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean; rowFocusVisible: boolean; controls: { hover: boolean; focusVisible: boolean }[] };
@@ -474,7 +477,16 @@ describe("777-S2 state shades", () => {
         if (sample.settleCriteria.tooltipExpected === 'open')
           expect(['delayed-open', 'instant-open']).toContain(capture.tooltipState);
       }
-      if (context === 'delete/ready-exceeds/focus-visible') expect(sample.settleCriteria.tooltipExpected).toBe('open');
+      if (context === 'delete/ready-exceeds/focus-visible') {
+        expect(sample.settleCriteria.tooltipExpected).toBe('closed');
+        const dismissal = sample.settleCriteria.tooltipDismissal!;
+        expect(typeof dismissal.escapePressed).toBe('boolean');
+        expect(dismissal.before.signature).toMatch(/^[a-f0-9]{64}$/);
+        expect(dismissal.before.focusVisible).toBe(true);
+        expect(dismissal.before.expanded).toBe(true);
+        expect(dismissal.before.armed).toBe(state === 'armed' ? 'true' : 'false');
+        expect(dismissal.after).toEqual(dismissal.before);
+      }
       if (sample.settleCriteria.tooltipExpected === 'open')
         expect(['delayed-open', 'instant-open']).toContain(sample.settleCriteria.tooltipState);
       const declared = contextInventory.find(c => c.name === context)!.pseudoState;

@@ -58,22 +58,33 @@ bands × 2 motion values = 18 vectors**, expanded into **27 condition renders**
 by motion start/trough phases. IDs name band and motion, for example
 `w1101-1279/reduce` and `w1101-1279/motion/{start,trough}`. Pair scoring takes
 the minimum over all four independent phase pairs within each motion band. Mouse hover
-and keyboard Tab produce the recorded contexts. Delayed tooltips triggered by hover/Tab are awaited in their final open state;
-click/leave contexts await closure. Every capture records these settle criteria
+and keyboard Tab produce the recorded contexts. Hover tooltips await their expected final state; click/leave contexts await
+closure. Exceeds-RAM delete focus-visible contexts measure the trash button
+with the tooltip dismissed for both unarmed and armed states: after Tab, press
+Escape once if a tooltip is present. A DOM signature (excluding only the
+trigger's tooltip state/description), form values and dialog markup must agree
+before/after, with focus-visible on the button and the family still expanded. Every capture records these settle criteria
 and pseudo-class readbacks. All finite document animations/transitions finish,
 including overlapping siblings and portalled tooltips, before both captures; infinite animations pause at declared start/trough phases.
 Sixth Review Clarification 1 enforces tooltip settledness before each painted
 and control capture: poll until presence and open-state readback match the
 context expectation, within the existing 30-second Playwright settle bound
 (capped by the command bound). Every sample records `settleWaitMs` and both
-capture readbacks. Exceeds-RAM delete focus contexts expect an open tooltip;
-the expectation is independent of the observed state. A timeout writes the
+capture readbacks. Exceeds-RAM delete focus contexts expect a closed tooltip;
+unarmed hover expects open and armed hover expects closed. The expectation
+is independent of the observed state. A timeout writes the
 named context/condition PNGs and readback and stops regeneration. It cannot
 enter an acceptance receipt or redefine the expected state at a narrow width.
 
 The inventory holds reachable states only. Hovered glyphs in sidebar row-hover contexts, absent
 keys in required rows, missing keys in optional rows, and the absent/missing
 pair without a shared context are excluded and documented in the evidence.
+The focus-visible-with-tooltip-open delete variant is unmeasured: Radix row
+focus/blur makes it nondeterministic as Tab moves to the nested trash button.
+Across the 114 varying samples in the two regenerations compared at `61fb421c`,
+its painted-core effect was at most 0.0097 Euclidean in linear sRGB (well under
+1 deutan ΔE). The coordinator owns the component issue; this oracle change
+leaves the production component intact.
 
 Freshness hashes every esbuild metafile input, recursive CSS imports, tooling,
 configs, lockfile, browser versions, production font files and the full

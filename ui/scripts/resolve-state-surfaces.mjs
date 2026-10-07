@@ -140,7 +140,37 @@ async function renderInventory(condition, theme, calibrating = false) {
       }
       throw new Error(`Measurement failure ${selector}: Tab did not reach target`);
     }
-    async function sample(selector, action, label, tooltipExpected) {
+    async function dismissFocusTooltip(label) {
+      const readback = async () => {
+        const state = await page.evaluate(() => {
+          const button = document.querySelector('.lm-trash');
+          const tree = document.querySelector('#root').cloneNode(true);
+          // Only the tooltip's own presence/state/description may change.
+          tree.querySelectorAll('.lm-quant').forEach(n => {
+            n.removeAttribute('data-state'); n.removeAttribute('aria-describedby');
+          });
+          return { signature: JSON.stringify({ dom: tree.outerHTML,
+            dialogs: [...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].map(n => n.outerHTML),
+            inputs: [...document.querySelectorAll('input,select,textarea')].map(n => [n.value, n.checked]),
+          }), focusVisible: button === document.activeElement && button.matches(':focus-visible'),
+          expanded: button.closest('.lm-group').querySelector('[aria-expanded]')?.getAttribute('aria-expanded') === 'true',
+          armed: button.getAttribute('aria-pressed') };
+        });
+        return { ...state, signature: createHash('sha256').update(state.signature).digest('hex') };
+      };
+      const before = await readback();
+      const escapePressed = await page.locator('[role="tooltip"]').count() > 0;
+      if (escapePressed) await page.keyboard.press('Escape');
+      const after = await readback();
+      if (!before.focusVisible || !before.expanded || JSON.stringify(before) !== JSON.stringify(after)) {
+        const prefix = resolve(scratch, `dismissal-failure-${label.replace(/[^a-zA-Z0-9-]/g, '_')}`);
+        await page.screenshot({ path: `${prefix}.png` });
+        writeFileSync(`${prefix}.json`, JSON.stringify({ label, condition, escapePressed, before, after }, null, 2));
+        throw new Error(`Measurement failure ${label}: tooltip dismissal changed focus/expansion/DOM state; PNG/readback: ${prefix}`);
+      }
+      return { escapePressed, before, after };
+    }
+    async function sample(selector, action, label, tooltipExpected, tooltipDismissal) {
       const el = page.locator(selector);
       await el.scrollIntoViewIfNeeded();
       const paintedSettle = await settled(tooltipExpected);
@@ -152,6 +182,7 @@ async function renderInventory(condition, theme, calibrating = false) {
         scope: 'entire document, including surface, ancestors and overlapping/portalled siblings',
         animationPhase: condition.animationPhase ?? null,
         pseudoClasses: 'matched hover/focus-visible read back after the driving action',
+        ...(tooltipDismissal ? { tooltipDismissal } : {}),
       };
       const box = await el.boundingBox();
       if (!box || !box.width || !box.height) throw new Error(`Measurement failure ${label}: empty clip`);
@@ -273,7 +304,10 @@ async function renderInventory(condition, theme, calibrating = false) {
         result.candidates[prop] ??= {};
         await settled();
         const tooltipExpected = context.startsWith('delete/ready-exceeds/') &&
-          (state === 'unarmed' && context.endsWith('hover') || context.endsWith('focus-visible')) ? 'open' : 'closed';
+          state === 'unarmed' && context.endsWith('hover') ? 'open' : 'closed';
+        const tooltipDismissal = context === 'delete/ready-exceeds/focus-visible' ?
+          await dismissFocusTooltip(`${condition.id}/${theme}/${context}/${state}`) : undefined;
+        if (tooltipDismissal) action += tooltipDismissal.escapePressed ? '; keyboard Escape dismisses tooltip' : '; tooltip already dismissed';
         const restState = { memory: 'normal', delete: 'unarmed', map: 'rest', key: 'present' }[group];
         const pigment = now[token(group, restState)];
         if (calibrating) {
@@ -293,7 +327,7 @@ async function renderInventory(condition, theme, calibrating = false) {
           } else if (!calibrating) {
             await page.evaluate(({ prop, value }) => document.documentElement.style.setProperty(prop, value), { prop, value: roots[group][state] === '--destructive' && phase === 'before' ? `hsl(${value})` : value });
           }
-          const measured = await sample(selector, action, `${condition.id}/${theme}/${phase}/${context}/${state}/${value}`, tooltipExpected);
+          const measured = await sample(selector, action, `${condition.id}/${theme}/${phase}/${context}/${state}/${value}`, tooltipExpected, tooltipDismissal);
           if (calibrating) { calibration.samples[context] ??= {}; calibration.samples[context][state] = measured; }
           else if (phase === 'candidate') { result.candidates[prop][value] ??= {}; result.candidates[prop][value][context] = measured; }
           else { result[phase][context] ??= {}; result[phase][context][state] = measured; }
