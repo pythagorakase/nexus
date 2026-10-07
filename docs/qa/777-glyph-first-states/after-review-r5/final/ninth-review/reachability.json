@@ -1,0 +1,12 @@
+{
+  "args": [
+    "/Users/pythagor/nexus/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_reachability.py"
+  ],
+  "code": 0,
+  "wallSeconds": 11.228535833011847,
+  "boundSeconds": 589
+}
