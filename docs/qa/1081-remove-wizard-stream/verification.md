@@ -111,24 +111,39 @@ non-streaming endpoint; `WizardConversationMoveError` remains raised by
     covers the one remaining endpoint; expected call counts move from
     `query_wizard_cache` 2, `generate_set_design` 2, `_record_set_design` 4 to
     1, 1, 2. The module docstring's "streaming live proof is deferred to #1081"
-    sentence is removed.
+    sentence is removed. Review fix `1415c23e`: the check binds
+    `new_story_chat_endpoint` directly instead of looping over a one-item tuple,
+    and the inner-Try assertion is reduced to `ancestor is outer_boundary` (its
+    endpoint-name half was always true); counts and rule are unchanged.
 
 - `tests/test_api/test_route_capabilities.py`: added
   `test_retired_wizard_stream_route_is_not_served` beside the #807 precedent
-  (`test_retired_chunk_state_route_is_not_served`). It posts
-  `{"slot": 4, "message": "Begin"}` to `/api/story/new/chat/stream` and asserts
-  405, and asserts `("POST", "/api/story/new/chat/stream")` is absent from the
+  (`test_retired_chunk_state_route_is_not_served`). It posts an empty JSON
+  body (`{}`, since review fix `1415c23e`; it first posted a slot-4 body) to
+  `/api/story/new/chat/stream` and asserts 405, and asserts `("POST", "/api/story/new/chat/stream")` is absent from the
   gateway's route keys and from `ROUTE_CAPABILITIES`. The status is 405, not
   404: the only route that still matches the path is the GET shell catch-all
   (`static_ui.py:107` `/{full_path:path}` when the UI build is missing; the
   `SpaStaticFiles` mount at `/` when it exists, which also answers 405 to
   POST), so Starlette reports a method mismatch. Restoring the endpoint makes
-  this test fail (red run below).
+  this test fail (red run below) with a 422 from request validation, which runs
+  before the handler body, so the red case never opens a slot database.
 
 ## Remaining-Reference Grep
 
+Rerun at `1415c23e`. The only hits are the four lines of the intentional removal
+pin, which assert the route is absent; with that one test file excluded, the
+same pattern finds nothing, so no live code, configuration, documentation or
+other test still references the route. (The first version of this section,
+recorded before the pin existed, read "no output".)
+
 ```
 $ rg -n "chat/stream|chat_stream|new_story_chat_stream_endpoint|x-ndjson|run_stream|get_wizard_streaming_enabled|enable_streaming|non-streaming wizard route" -g '!temp/**' -g '!docs/qa/**' .
+./tests/test_api/test_route_capabilities.py:436:    Its handler iterated ``agent.run_stream(...)``, an async context manager,
+./tests/test_api/test_route_capabilities.py:442:    response = TestClient(narrative.app).post("/api/story/new/chat/stream", json={})
+./tests/test_api/test_route_capabilities.py:444:    assert ("POST", "/api/story/new/chat/stream") not in _keys(narrative.app)
+./tests/test_api/test_route_capabilities.py:445:    assert ("POST", "/api/story/new/chat/stream") not in ROUTE_CAPABILITIES
+$ rg -n "chat/stream|chat_stream|new_story_chat_stream_endpoint|x-ndjson|run_stream|get_wizard_streaming_enabled|enable_streaming|non-streaming wizard route" -g '!temp/**' -g '!docs/qa/**' -g '!tests/test_api/test_route_capabilities.py' .
 (no output; exit 1)
 $ rg -n "chat/stream" ui/client/src
 (no output; exit 1)
@@ -204,62 +219,69 @@ with the stream handler); none new.
 
 ## Removal Pin (Review Fix)
 
-Tails below ran on the tree of `57835814` (the commit that adds the pin; parent `c84a5d9d`).
+The pin was added in `57835814`; review fix `1415c23e` changed its request body
+from `{"slot": 4, "message": "Begin"}` to `{}`. The tails below ran on the tree
+of `1415c23e`.
 
-Red run: `git archive origin/main` (`364fef4b`) into a scratch tree, with only
-the branch's `tests/test_api/test_route_capabilities.py` copied in, so the
-stream handler and its capability row are both present:
+Red run: `git archive origin/main` (`364fef4b`) into the scratch tree
+`scratchpad/1081/red_main/`, with only the branch's
+`tests/test_api/test_route_capabilities.py` copied in, so the stream handler
+and its capability row are both present. On main the empty body fails request
+validation before the handler body runs, so the test fails on its own 405
+assertion and opens no database, offline or under `NEXUS_RUN_POSTGRES=1`:
 
 ```
 $ PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider tests/test_api/test_route_capabilities.py::test_retired_wizard_stream_route_is_not_served
-F                                                                        [100%]
-________________ test_retired_wizard_stream_route_is_not_served ________________
-Unit test attempted psycopg2.connect; mark it requires_postgres and run with NEXUS_RUN_POSTGRES=1.
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
 FAILED tests/test_api/test_route_capabilities.py::test_retired_wizard_stream_route_is_not_served
-1 failed, 7 warnings in 0.63s
+1 failed, 7 warnings in 0.86s
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit -W ignore::DeprecationWarning tests/test_api/test_route_capabilities.py::test_retired_wizard_stream_route_is_not_served
+>       assert response.status_code == 405, response.text
+E       AssertionError: {"detail":[{"type":"missing","loc":["body","slot"],"msg":"Field required"},{"type":"missing","loc":["body","message"],"msg":"Field required"}]}
+E       assert 422 == 405
+E        +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+tests/test_api/test_route_capabilities.py:443: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+FAILED tests/test_api/test_route_capabilities.py::test_retired_wizard_stream_route_is_not_served
+1 failed in 0.76s
 ```
 
-On main the POST reaches the stream handler, which opens a connection to the
-slot database; the session's unit-test guard fails that connection. The red run
-was not repeated under `NEXUS_RUN_POSTGRES=1` because that would let the old
-handler touch `save_04`. A probe in the same tree that needs no database shows
-the other assertions would fail as well:
-
-```
-$ PYTHONPATH=$PWD $PY probe_main.py
-registered: True
-classified: True
-POST {} -> 422
-```
-
-(`registered` is `("POST", "/api/story/new/chat/stream") in _keys(narrative.app)`,
-`classified` is the same key in `ROUTE_CAPABILITIES`, and an empty body gets a
-422 from request validation, which proves the route is still served.)
+(The PostgreSQL tail is filtered to the assertion, guard and summary lines.)
+`dbname audit: 0 targets` shows the red case connects to no database at all.
+The earlier scratch probe that checked the route key and capability row
+separately is no longer needed: the committed test itself fails on its first
+assertion, and the two key assertions follow it.
 
 Green, on the branch:
 
 ```
-$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_route_capabilities.py
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_route_capabilities.py tests/test_api/test_set_designer_failure.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-31 passed, 1 skipped, 7 warnings in 2.94s
-$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_route_capabilities.py
+32 passed, 3 skipped, 7 warnings in 3.12s
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_route_capabilities.py tests/test_api/test_set_designer_failure.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-dbname audit: 2 targets: postgres, qa640_offline_gate_*
+dbname audit: 6 targets: postgres, qa640_840s3a_slot_* x2, qa640_840s3a_source_* x2, qa640_offline_gate_*
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-32 passed, 7 warnings in 4.07s
+35 passed, 7 warnings in 15.31s
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_wizard_model_switch.py tests/test_api/test_wizard_confirmation.py tests/test_api/test_wizard_resume.py tests/test_api/test_slot_mutation_guard.py tests/test_api/test_route_capabilities.py tests/test_reachability.py tests/test_api/test_wizard_chat*.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-dbname audit: 6 targets: postgres, qa640_offline_gate_* x4, test_slot_guard_7b16f14464224a37815bb723619efe8d
+dbname audit: 6 targets: postgres, qa640_offline_gate_* x4, test_slot_guard_e591467f03e4484d9853852951219789
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-236 passed, 7 warnings in 20.26s
-$ $PY -m black --check tests/test_api/test_route_capabilities.py
-1 file would be left unchanged.
-$ $PY -m flake8 tests/test_api/test_route_capabilities.py
+236 passed, 7 warnings in 21.97s
+$ $PY -m black --check tests/test_api/test_route_capabilities.py tests/test_api/test_set_designer_failure.py
+1 file would be left unchanged. (each file)
+$ $PY -m flake8 tests/test_api/test_route_capabilities.py tests/test_api/test_set_designer_failure.py
 (no output; exit 0)
 $ $PY -m mypy --explicit-package-bases tests/test_api/test_route_capabilities.py
+Success: no issues found in 1 source file
+$ $PY -m mypy --explicit-package-bases tests/test_api/test_set_designer_failure.py
 Success: no issues found in 1 source file
 ```
