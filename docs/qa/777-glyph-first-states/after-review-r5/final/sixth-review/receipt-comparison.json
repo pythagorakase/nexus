@@ -1,0 +1,396 @@
+{
+  "baseline": "198e4e03ec2992e64818b7a6d836a3d5d5722289",
+  "fingerprint": "ec243bc1af731d6015b72d5dd0e318cfdc34756c48d6a44c20c6a497ca4ea03a",
+  "priorFingerprint": "58840ffef265ffd34ab449b5c03db066158fe248ed1cf2dc63e73948b998f77e",
+  "conditionCount": 27,
+  "conditionsIdentical": true,
+  "calibrationMaximaIdentical": true,
+  "calibration": {
+    "Veil": {
+      "memory": {
+        "opaqueMaximum": 0.00026414815709771805,
+        "translucentMaximum": 0,
+        "skippedPairs": 0
+      },
+      "delete": {
+        "opaqueMaximum": 0.006002891112468775,
+        "translucentMaximum": 0.012334576619474699,
+        "skippedPairs": 0
+      },
+      "key": {
+        "opaqueMaximum": 0.030457571214044847,
+        "translucentMaximum": 0.013459005795140349,
+        "skippedPairs": 0
+      },
+      "map": {
+        "opaqueMaximum": 0.07468917510215183,
+        "translucentMaximum": 0.4165404892186375,
+        "skippedPairs": 20
+      }
+    },
+    "Gilded": {
+      "memory": {
+        "opaqueMaximum": 0.0002619007277823465,
+        "translucentMaximum": 0,
+        "skippedPairs": 0
+      },
+      "delete": {
+        "opaqueMaximum": 0.008785869899490675,
+        "translucentMaximum": 0.0079023496576129,
+        "skippedPairs": 0
+      },
+      "key": {
+        "opaqueMaximum": 0.04713082389726427,
+        "translucentMaximum": 0.02240636952243324,
+        "skippedPairs": 0
+      },
+      "map": {
+        "opaqueMaximum": 0.07196338979953294,
+        "translucentMaximum": 0.4249545915725878,
+        "skippedPairs": 19
+      }
+    },
+    "Vector": {
+      "memory": {
+        "opaqueMaximum": 0.0003181767847390889,
+        "translucentMaximum": 0,
+        "skippedPairs": 0
+      },
+      "delete": {
+        "opaqueMaximum": 0.029118582412838427,
+        "translucentMaximum": 0.02152663851962112,
+        "skippedPairs": 0
+      },
+      "key": {
+        "opaqueMaximum": 0.011120218162869937,
+        "translucentMaximum": 0.003968024121739456,
+        "skippedPairs": 0
+      },
+      "map": {
+        "opaqueMaximum": 0.08088889823513667,
+        "translucentMaximum": 0.500656347153232,
+        "skippedPairs": 19
+      }
+    }
+  },
+  "samplesCompared": 101520,
+  "changedSamples": 114,
+  "missingSamples": [],
+  "additionalSamples": [],
+  "meanSamplesSha256": "0aff0074dd6536f3023fcc2b8becbb56c3eabc3c7727af70931dc09ddb189a3e",
+  "priorMeanSamplesSha256": "358b9184ecf63f89e43e7ad918cacde6d3286e59c0ffc1c4f1ca9978fc889200",
+  "examples": [
+    {
+      "path": "/w640-760/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "meanLinear": [
+          0.07224686877064215,
+          0.06842938734089114,
+          0.05779071712138278
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.00972121732023781
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      },
+      "after": {
+        "meanLinear": [
+          0.06938996260551526,
+          0.06566231369580504,
+          0.055429565463306865
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.0050973818730583095,
+          0.009499084303244632
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "meanLinear": [
+          0.06654380134700612,
+          0.059452270305285666,
+          0.04813902607964231
+        ],
+        "controlMeanLinear": [
+          0.00334653576389915,
+          0.0051815167023383955,
+          0.009721217320237813
+        ],
+        "coreSize": 456,
+        "maskSize": 727
+      },
+      "after": {
+        "meanLinear": [
+          0.06388282257384637,
+          0.05709430916670905,
+          0.046429814462757256
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.0050973818730583095,
+          0.009499084303244632
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "meanLinear": [
+          0.06654380134700612,
+          0.059452270305285666,
+          0.04813902607964231
+        ],
+        "controlMeanLinear": [
+          0.00334653576389915,
+          0.0051815167023383955,
+          0.009721217320237813
+        ],
+        "coreSize": 456,
+        "maskSize": 727
+      },
+      "after": {
+        "meanLinear": [
+          0.06388282257384637,
+          0.05709430916670905,
+          0.046429814462757256
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.0050973818730583095,
+          0.009499084303244632
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "meanLinear": [
+          0.02121284847322649,
+          0.019357151066440967,
+          0.014443843596092522
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.009721217320237811
+        ],
+        "coreSize": 453,
+        "maskSize": 728
+      },
+      "after": {
+        "meanLinear": [
+          0.02053085685953033,
+          0.01874328934041196,
+          0.01392411780136591
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005097195321330415,
+          0.009498591768838882
+        ],
+        "coreSize": 451,
+        "maskSize": 728
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "meanLinear": [
+          0.03432362287665746,
+          0.02952466607635033,
+          0.01937846629544096
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.009721217320237811
+        ],
+        "coreSize": 453,
+        "maskSize": 728
+      },
+      "after": {
+        "meanLinear": [
+          0.03300871400367221,
+          0.02832859688308569,
+          0.018760994807016387
+        ],
+        "controlMeanLinear": [
+          0.003346535763899151,
+          0.005097007940483731,
+          0.009498097045391327
+        ],
+        "coreSize": 450,
+        "maskSize": 728
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "meanLinear": [
+          0.05124908504644569,
+          0.04227755255292058,
+          0.026208564656476262
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.00972121732023781
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      },
+      "after": {
+        "meanLinear": [
+          0.049066442907198936,
+          0.040681542807909796,
+          0.025162819221893937
+        ],
+        "controlMeanLinear": [
+          0.003346535763899151,
+          0.005097007940483731,
+          0.009498097045391327
+        ],
+        "coreSize": 450,
+        "maskSize": 727
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "meanLinear": [
+          0.06122341014231634,
+          0.054437654324229964,
+          0.03954029782681502
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.00972121732023781
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      },
+      "after": {
+        "meanLinear": [
+          0.058780567656247625,
+          0.052158145663446134,
+          0.037998312736455445
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.0050973818730583095,
+          0.009499084303244632
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "meanLinear": [
+          0.07224686877064215,
+          0.06842938734089114,
+          0.05779071712138278
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.00972121732023781
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      },
+      "after": {
+        "meanLinear": [
+          0.06938996260551526,
+          0.06566231369580504,
+          0.055429565463306865
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.0050973818730583095,
+          0.009499084303244632
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "meanLinear": [
+          0.07223043697797606,
+          0.06295997435057892,
+          0.0437163548705486
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.009721217320237811
+        ],
+        "coreSize": 453,
+        "maskSize": 727
+      },
+      "after": {
+        "meanLinear": [
+          0.06938996260551526,
+          0.060336695854011614,
+          0.04208337479839941
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.0050973818730583095,
+          0.009499084303244632
+        ],
+        "coreSize": 452,
+        "maskSize": 727
+      }
+    },
+    {
+      "path": "/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "meanLinear": [
+          0.024153233894945836,
+          0.020262441931827024,
+          0.012958321247352281
+        ],
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338393,
+          0.00972121732023781
+        ],
+        "coreSize": 451,
+        "maskSize": 728
+      },
+      "after": {
+        "meanLinear": [
+          0.023156505596962248,
+          0.019599279354693615,
+          0.012607443720998384
+        ],
+        "controlMeanLinear": [
+          0.003346535763899151,
+          0.005097007940483731,
+          0.009498097045391327
+        ],
+        "coreSize": 450,
+        "maskSize": 728
+      }
+    }
+  ],
+  "renders": 101742,
+  "acceptanceComplete": true
+}

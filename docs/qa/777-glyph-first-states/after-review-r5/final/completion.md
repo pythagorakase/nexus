@@ -56,4 +56,8 @@ dbname audit: owner targets: none
 GATE-1099 EXIT=0
 ```
 
+### Sixth Review
+
+The single P2 in media-list exclusion is fixed, with five passing unit regressions and per-alternative parent-list/reason receipts. The one full regeneration retains the same 27 variants and calibration maxima, but exact equality with `198e4e03` fails: 114 delete focus/tooltip samples change, and Vector/delete's search maximum/feasible count changes from 23.288018/153 to 23.242569/152. All palette assignments and shipped minima remain unchanged. The table and exception assertions are red; the checked-in plant's required unplanted control therefore blocks its execution. The [Sixth Review stop report](sixth-review/stop-report.md) preserves the regenerated receipt comparison, actual group values and command logs. No plant, completed green tree or unchanged per-group table is claimed for Round 6 while the evidence-refresh decision is pending. The diff remains within `ui/` and `docs/`, preserving the coordinator's whole-tree Python gate scope on `198e4e03`.
+
 Codex, GPT-6.
