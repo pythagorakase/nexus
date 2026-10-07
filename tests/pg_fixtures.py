@@ -647,10 +647,10 @@ def seed_protagonist(
     Sets ``global_variables.base_timestamp`` before the character insert, which
     satisfies the need-clock anchor (migration 100); ``seed_story_clock`` can
     then add a head chunk after it. Refuses to move a clock that is already
-    set (for example by ``seed_story_clock``): resetting ``base_timestamp``
-    under stored chunks would desynchronize their ``world_time`` from the
-    summed primary-layer deltas until the next ``chunk_metadata`` write
-    re-stamps them.
+    set (for example by ``seed_story_clock``): once ``chunk_metadata`` holds a
+    row, ``trg_global_variables_base_timestamp_fixed`` (migration 144) refuses
+    any change to ``base_timestamp``, and before the first chunk a second,
+    different base would contradict the clock a caller already seeded.
     """
 
     require_disposable_target(dbname)
