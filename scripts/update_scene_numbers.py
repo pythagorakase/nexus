@@ -57,50 +57,24 @@ def extract_scene_from_raw_text(raw_text: str) -> Optional[int]:
     return None
 
 
-def add_scene_column_if_not_exists(conn: psycopg2.extensions.connection) -> bool:
-    """Add the scene column to the chunk_metadata table if it doesn't exist"""
-    try:
-        with conn.cursor() as cur:
-            # Check if the column exists
-            cur.execute(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_name = 'chunk_metadata' AND column_name = 'scene'
+def require_scene_column(conn: psycopg2.extensions.connection) -> None:
+    """Raise unless chunk_metadata.scene exists; migration 138 owns it."""
+    with conn.cursor() as cur:
+        cur.execute(
             """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'chunk_metadata'
+              AND column_name = 'scene'
+        """
+        )
+        if not cur.fetchone():
+            raise RuntimeError(
+                "Missing chunk_metadata.scene; migration 138 "
+                "(migrations/138_adopt_unowned_fleet_indexes.sql) owns it. "
+                "Apply migrations with scripts/migrate.py."
             )
-            if not cur.fetchone():
-                logger.info("Adding scene column to chunk_metadata table")
-
-                # Add the column
-                cur.execute(
-                    """
-                    ALTER TABLE chunk_metadata ADD COLUMN scene int4;
-                    COMMENT ON COLUMN chunk_metadata.scene IS 'Scene number extracted from the raw_text (e.g. 37 from S02E07_037)';
-                """
-                )
-
-                # Add indexes
-                cur.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_chunk_metadata_scene 
-                    ON chunk_metadata (scene);
-                    
-                    CREATE INDEX IF NOT EXISTS idx_chunk_metadata_season_episode_scene 
-                    ON chunk_metadata (season, episode, scene);
-                """
-                )
-
-                conn.commit()
-                logger.info("Added scene column and indexes successfully")
-                return True
-            else:
-                logger.info("Scene column already exists")
-                return True
-    except psycopg2.Error as e:
-        logger.error(f"Error adding scene column: {e}")
-        conn.rollback()
-        return False
 
 
 def get_chunks_without_scene(
@@ -160,9 +134,7 @@ def main():
 
     try:
         # Ensure scene column exists
-        if not add_scene_column_if_not_exists(conn):
-            logger.error("Failed to add scene column")
-            sys.exit(1)
+        require_scene_column(conn)
 
         # Get chunks without scene numbers
         chunks = get_chunks_without_scene(conn)

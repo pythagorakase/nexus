@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """
-Migrate provider enum values to use proper casing.
+Rewrite apex_audition.conditions provider values to use proper casing.
 
 Changes:
 - openai -> OpenAI
 - anthropic -> Anthropic
 - openrouter -> DeepSeek
+
+The values OpenAI, Anthropic and DeepSeek must already exist in
+apex_audition.provider_enum: no migration owns that type, and this script
+does not alter it.
 """
 
 from nexus.database import url_connection_kwargs
@@ -22,18 +26,19 @@ def migrate():
     try:
         print("Starting provider enum migration...")
 
-        # Step 1: Add new enum values
-        print("Adding new enum values...")
         cur.execute(
-            "ALTER TYPE apex_audition.provider_enum ADD VALUE IF NOT EXISTS 'OpenAI'"
+            "SELECT enumlabel FROM pg_enum "
+            "WHERE enumtypid = to_regtype('apex_audition.provider_enum')"
         )
-        cur.execute(
-            "ALTER TYPE apex_audition.provider_enum ADD VALUE IF NOT EXISTS 'Anthropic'"
-        )
-        cur.execute(
-            "ALTER TYPE apex_audition.provider_enum ADD VALUE IF NOT EXISTS 'DeepSeek'"
-        )
-        conn.commit()
+        labels = {row[0] for row in cur.fetchall()}
+        missing = {"OpenAI", "Anthropic", "DeepSeek"} - labels
+        if missing:
+            raise RuntimeError(
+                f"Missing apex_audition.provider_enum values {sorted(missing)}; "
+                "no migration owns apex_audition.provider_enum, and this script "
+                "no longer alters it. scripts/migrate.py is the only migration "
+                "runner."
+            )
 
         # Step 2: Update records to use new values
         print("Updating conditions records...")
@@ -83,39 +88,6 @@ def migrate():
         print("Current provider distribution:")
         for provider, count in results:
             print(f"  {provider}: {count}")
-
-        # Step 4: Remove old enum values by recreating the type
-        # This is complex in PostgreSQL - we need to:
-        # 1. Create a new enum type
-        # 2. Alter the column to use the new type
-        # 3. Drop the old type
-        # 4. Rename the new type
-
-        print("\nRecreating enum type with only new values...")
-
-        # Create new temporary enum
-        cur.execute(
-            """
-            CREATE TYPE apex_audition.provider_enum_new AS ENUM ('OpenAI', 'Anthropic', 'DeepSeek')
-        """
-        )
-
-        # Change column to use new type
-        cur.execute(
-            """
-            ALTER TABLE apex_audition.conditions
-            ALTER COLUMN provider TYPE apex_audition.provider_enum_new
-            USING provider::text::apex_audition.provider_enum_new
-        """
-        )
-
-        # Drop old type and rename new one
-        cur.execute("DROP TYPE apex_audition.provider_enum")
-        cur.execute(
-            "ALTER TYPE apex_audition.provider_enum_new RENAME TO provider_enum"
-        )
-
-        conn.commit()
 
         print("\n✓ Migration completed successfully!")
 

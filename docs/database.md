@@ -83,10 +83,21 @@ catalog contract before modifying existing objects, write full table, column,
 primary-key index and model-index comments, and fail loudly on incompatibility
 or database errors. Transactions belong to their callers. ANN creation remains
 behind the explicit 2560d candidate gate; #812 owns legacy 1024d/1536d tables
-and L2 HNSW indexes on `save_01`/`save_02`. The legacy scripts
-`scripts/extract_scene_numbers.py`, `scripts/update_scene_numbers.py`, and
-`scripts/import_narratives.py` still carry their own DDL; moving those into
-migrations is later work on #810.
+and L2 HNSW indexes on `save_01`/`save_02`. Legacy scripts create no object that
+a migration owns. `scripts/update_scene_numbers.py` and
+`scripts/extract_scene_numbers.py` require `chunk_metadata.scene` (migration
+138), `scripts/new_story_setup.py --create-assets` requires
+`assets.new_story_creator` (migration 007), `scripts/import_narratives.py` and
+`scripts/regenerate_embeddings.py` require the `vector` extension (migration
+022), `scripts/extract_season_episode.py` requires the baseline `chunk_metadata`
+table, and `scripts/create_vector_index.py` and
+`scripts/regenerate_embeddings.py --only-indexes` build no ANN index; each
+raises, naming the owner, when an object it needs is missing.
+`scripts/update_raw_text.py` still copies `narrative_chunks` into
+`narrative_chunks_backup` before it rewrites rows.
+`tests/test_schema_ownership.py` scans the Python under `nexus/` and `scripts/`
+for CREATE, ALTER and DROP of a table, index, type, function or extension and
+fails on any site outside its reasoned allowlist.
 
 ## IDF Rebuild After a PostgreSQL Update
 

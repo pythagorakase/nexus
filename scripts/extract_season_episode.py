@@ -140,7 +140,7 @@ class SeasonEpisodeExtractor:
         self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
-        # Initialize the database schema if needed
+        # Check that the baseline chunk_metadata table exists
         self.initialize_database()
 
         # Statistics
@@ -153,13 +153,16 @@ class SeasonEpisodeExtractor:
         }
 
     def initialize_database(self):
-        """Initialize database tables if they don't exist."""
-        # Create chunk_metadata table if it doesn't exist
+        """Check that the baseline chunk_metadata table exists."""
         inspector = inspect(self.engine)
+        table = "chunk_metadata"
 
-        if "chunk_metadata" not in inspector.get_table_names():
-            ChunkMetadata.__table__.create(self.engine)
-            logger.info("Created chunk_metadata table")
+        if table not in inspector.get_table_names():
+            raise RuntimeError(
+                f"Missing public.{table}; it is baseline schema "
+                "(migrations/001_baseline.sql), copied from NEXUS_template by "
+                "scripts/new_story_setup.py."
+            )
 
     def extract_season_episode(self, raw_text: str) -> Tuple[int, int, str]:
         """

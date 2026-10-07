@@ -8,13 +8,13 @@ with different dimensions, creating appropriate tables based on vector size.
 
 USAGE EXAMPLES:
 ---------------
-# Generate embeddings for a specific model with indexes:
+# Generate embeddings for a specific model, then check for an ANN index:
 python scripts/regenerate_embeddings.py --model infly/inf-retriever-v1-1.5b --create-indexes
 
 # Generate embeddings for all active models defined in settings.json:
 python scripts/regenerate_embeddings.py --all-models --create-indexes
 
-# Only create vector indexes for an existing embedding table:
+# Only check for an ANN index on an existing embedding table:
 python scripts/regenerate_embeddings.py --model infly/inf-retriever-v1-1.5b --only-indexes
 
 # Resume embedding generation from a missing chunks file:
@@ -33,8 +33,8 @@ ARGUMENTS:
 --batch-size SIZE         Number of chunks to process in each batch (default: 10)
 --db-url URL              PostgreSQL database URL (default: from settings.json)
 --dry-run                 Perform a dry run without making changes
---create-indexes          Create vector indexes after data loading
---only-indexes            Only create indexes, skip embedding generation
+--create-indexes          Check for an ANN index after data loading
+--only-indexes            Only check for an ANN index, skip embedding generation
 --resume-from FILE        Resume from a file of missing chunk IDs
 --chunk ID                Generate or update embeddings for one chunk ID
 --database DBNAME         Slot database name (save_01 through save_05)
@@ -297,8 +297,7 @@ class EmbeddingRegenerator:
             batch_size: Number of chunks to process at once
             db_url: PostgreSQL database URL
             dry_run: If True, don't actually write to the database
-            create_indexes: If True, create vector indexes after data is loaded
-                           If False, only create basic indexes (faster for data loading)
+            create_indexes: If True, check for an ANN index after data is loaded
             truncate_table: If True, completely truncate the table before starting (clean slate)
             preserve_existing: If True, keep existing rows for this model
             ensure_table: If True, create the embedding table during initialization
@@ -351,7 +350,15 @@ class EmbeddingRegenerator:
         # the dimension-specific table exists.
         with self.engine.connect() as connection:
             if ensure_table and not self.dry_run:
-                connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+                has_vector = connection.execute(
+                    text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+                ).first()
+                if has_vector is None:
+                    raise RuntimeError(
+                        "Missing vector extension; migration 022 "
+                        "(migrations/022_compound_embedding_pk_lazy_tables.sql) "
+                        "owns it. Apply migrations with scripts/migrate.py."
+                    )
                 self._ensure_dimension_table_exists(
                     connection,
                     create_vector_indexes=False,
@@ -428,28 +435,22 @@ class EmbeddingRegenerator:
         self,
         connection,
         create_vector_indexes: bool = False,
-        force_recreate: bool = False,
     ):
         """
         Ensure the dimension-specific embedding table exists
 
         Args:
             connection: SQLAlchemy connection object
-            create_vector_indexes: If True, create vector-specific indexes. If False, only create basic indexes.
-            force_recreate: If True, force recreate the table even if it exists
+            create_vector_indexes: If True, check for an ANN index
+                (create_vector_indexes)
         """
         dimensions = self.dimensions
         table_name = self.get_table_name()
 
         try:
-            if force_recreate:
-                connection.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE;"))
-
             ensure_embedding_table(connection, dimensions)
             logger.info(f"Verified dimension-specific table: {table_name}")
 
-            # Only create vector indexes if specifically requested. These are
-            # expensive to build and maintain during data loading.
             if create_vector_indexes:
                 self.create_vector_indexes()
 
@@ -713,17 +714,19 @@ class EmbeddingRegenerator:
 
     def create_vector_indexes(self) -> bool:
         """
-        Create vector indexes for the current model's table.
-        This should be called after all data is loaded to avoid index maintenance overhead.
+        Check that an ANN index exists on this model's embedding table.
 
         Returns:
-            True if at least one index was created successfully, False otherwise
+            True when an ANN index exists or the table is over 2000 dimensions;
+            False when the table is missing.
+
+        Raises:
+            RuntimeError: When no ANN index exists.
         """
         table_name = self.get_table_name()
         dimensions = self.dimensions
-        success = False
 
-        logger.info(f"Creating vector indexes for {table_name} table ({dimensions}D)")
+        logger.info(f"Checking ANN indexes for {table_name} table ({dimensions}D)")
 
         with self.engine.connect() as conn:
             if not embedding_table_exists(conn, table_name):
@@ -739,56 +742,25 @@ class EmbeddingRegenerator:
             )
             return True
 
-        # Now create specialized vector indexes in a separate transaction
-        with self.engine.begin() as idx_conn:
-            # First try HNSW index (preferred for performance)
-            try:
-                logger.info(f"Creating HNSW index for {table_name}...")
-                start_time = time.time()
+        with self.engine.connect() as conn:
+            ann_indexes = conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' "
+                    "AND tablename = :table AND indexdef ~ 'USING (hnsw|ivfflat)'"
+                ),
+                {"table": table_name},
+            ).fetchall()
 
-                # HNSW index with optimized parameters
-                hnsw_sql = f"""
-                CREATE INDEX IF NOT EXISTS {table_name}_hnsw_idx
-                ON {table_name} USING hnsw (embedding vector_cosine_ops)
-                WITH (ef_construction=64, m=16);
-                """
-                idx_conn.execute(text(hnsw_sql))
-
-                elapsed_time = time.time() - start_time
-                logger.info(
-                    f"✅ Successfully created HNSW index for {dimensions}D vectors in {elapsed_time:.2f}s"
-                )
-                success = True
-            except Exception as e:
-                logger.warning(f"⚠️ Could not create HNSW index: {e}")
-
-                # If HNSW fails, try IVFFLAT as backup
-                try:
-                    logger.info(
-                        f"Creating IVFFLAT index for {table_name} as fallback..."
-                    )
-                    start_time = time.time()
-
-                    # IVFFLAT index with optimized parameters
-                    ivf_sql = f"""
-                    CREATE INDEX IF NOT EXISTS {table_name}_ivf_idx
-                    ON {table_name} USING ivfflat (embedding vector_cosine_ops)
-                    WITH (lists=100);
-                    """
-                    idx_conn.execute(text(ivf_sql))
-
-                    elapsed_time = time.time() - start_time
-                    logger.info(
-                        f"✅ Created IVFFLAT index for {dimensions}D vectors in {elapsed_time:.2f}s"
-                    )
-                    success = True
-                except Exception as e2:
-                    logger.warning(f"⚠️ Could not create IVFFLAT index: {e2}")
-                    logger.warning(
-                        f"Table will remain without specialized vector index, searches will be slower"
-                    )
-
-        return success
+        if ann_indexes:
+            for row in ann_indexes:
+                logger.info(f"ANN index present: {row[0]}")
+            return True
+        raise RuntimeError(
+            f"No ANN index exists on {table_name}, and this script no longer "
+            "creates one: the only ANN path is the explicit 2560d candidate gate "
+            "(build_candidate_ann_index, run by scripts/qa_shift/ann_gate.py), and "
+            f"#812 owns the legacy {dimensions}d tables and their indexes."
+        )
 
     def regenerate_all_embeddings(self) -> Dict[str, int]:
         """
@@ -957,24 +929,14 @@ class EmbeddingRegenerator:
 
         # Create vector indexes if requested
         if self.create_indexes and success > 0:
-            logger.info("Creating vector indexes now that data is loaded...")
+            logger.info("Checking for an ANN index now that data is loaded...")
             index_success = self.create_vector_indexes()
             if index_success:
-                logger.info("✅ Vector index setup completed")
+                logger.info("✅ ANN index present")
             else:
-                logger.warning("⚠️ Failed to create vector indexes")
-                logger.info(
-                    "You can create indexes later with: python scripts/create_vector_index.py --model "
-                    + self.model_name
-                )
+                logger.warning("⚠️ ANN index check failed; see the log")
         elif success > 0:
-            logger.info(
-                "Skipping vector index creation (use --create-indexes flag to create them)"
-            )
-            logger.info(
-                "You can create indexes later with: python scripts/create_vector_index.py --model "
-                + self.model_name
-            )
+            logger.info("Skipping the ANN index check (use --create-indexes to run it)")
 
         return {"total": total, "success": success, "failed": failed}
 
@@ -993,7 +955,7 @@ def regenerate_all_models(
         db_url: Database URL
         batch_size: Number of chunks to process in each batch
         dry_run: If True, don't make actual changes
-        create_indexes: If True, create vector indexes after data is loaded
+        create_indexes: If True, check for an ANN index after data is loaded
         truncate_table: If True, completely truncate the table before starting (clean slate)
     """
     # Get active models from settings
@@ -1087,7 +1049,7 @@ def regenerate_missing_chunks(
         batch_size: Batch size for processing
         db_url: Database URL
         dry_run: If True, don't make actual changes
-        create_indexes: If True, create vector indexes after data loading
+        create_indexes: If True, check for an ANN index after data is loaded
         truncate_table: If True, completely truncate the table before starting (clean slate)
 
     Returns:
@@ -1306,7 +1268,7 @@ def regenerate_specific_chunk(
         batch_size: Batch size for processing
         db_url: Database URL
         dry_run: If True, don't make actual changes
-        create_indexes: If True, create vector indexes after data loading
+        create_indexes: If True, check for an ANN index after data is loaded
 
     Returns:
         Dict with results
@@ -1387,12 +1349,12 @@ def main():
     parser.add_argument(
         "--create-indexes",
         action="store_true",
-        help="Create vector indexes after data loading (can be slow but improves query performance)",
+        help="Check for an ANN index after data loading",
     )
     parser.add_argument(
         "--only-indexes",
         action="store_true",
-        help="Only create indexes, skip embedding generation (use after running without indexes)",
+        help="Only check for an ANN index, skip embedding generation",
     )
     parser.add_argument("--resume-from", help="Resume from a file of missing chunk IDs")
     parser.add_argument(
@@ -1516,9 +1478,9 @@ def main():
                 print("Error: --model must be specified when using --only-indexes")
                 sys.exit(1)
 
-            logger.info(f"Creating vector indexes for model: {args.model}")
+            logger.info(f"Checking ANN indexes for model: {args.model}")
 
-            # Initialize the regenerator just for index creation
+            # Initialize the regenerator just for the index check
             regenerator = EmbeddingRegenerator(
                 model_name=args.model,
                 batch_size=args.batch_size,
@@ -1530,18 +1492,13 @@ def main():
                 load_model=False,
             )
 
-            # Create indexes
+            # Check for an ANN index
             success = regenerator.create_vector_indexes()
 
             if success:
-                print(
-                    f"\nSuccessfully created vector indexes for {regenerator.get_table_name()}"
-                )
-                print(f"Vector similarity queries should now be much faster")
+                print(f"\nANN index present on {regenerator.get_table_name()}")
             else:
-                print(
-                    f"\nFailed to create vector indexes for {regenerator.get_table_name()}"
-                )
+                print(f"\nANN index check failed for {regenerator.get_table_name()}")
                 print(f"Check the log for details")
                 sys.exit(1)
 
