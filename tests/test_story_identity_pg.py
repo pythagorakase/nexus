@@ -247,7 +247,8 @@ def test_identity_constraints() -> None:
         with pytest.raises(errors.CheckViolation):
             _execute(
                 dbname,
-                "INSERT INTO public.story_identity (id, origin) VALUES (false, 'wizard')",
+                "INSERT INTO public.story_identity (id, origin) "
+                "VALUES (false, 'wizard')",
             )
         with pytest.raises(errors.CheckViolation):
             _execute(dbname, "UPDATE public.story_identity SET origin = 'other'")
