@@ -58,7 +58,9 @@ connect to anything; see Transports below.
 `nexus/cli_contract.py` declares every command's transport, the exit codes,
 and the JSON envelopes. A test walks the parser and fails when a command is
 added without a declared transport, or when the registry names a command that
-no longer exists.
+no longer exists. `docs/cli_reference.md` is generated from the parser and
+these tables by `scripts/render_cli_reference.py`;
+`tests/test_cli_reference_doc.py` fails when it is stale.
 
 ### Exit Codes
 
@@ -136,13 +138,9 @@ generation session is described in Waiting on a Generation below.
 
 ### Transports
 
-Each command declares the most privileged resource its handler opens:
-
-| Transport | Opens | Commands |
-| --- | --- | --- |
-| `http` | The NEXUS API only | `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, every `inspect` verb, `model --set`, `model --clear` |
-| `database` | A slot database directly | `model` (reading seat identities), `jobs`, `inspect-turn`, `prune-manifests`, `trait-audit`, `retrograde-packet`, `retrograde-seed-candidates --slot`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, `tags audit` (which also reads `NEXUS_template`), and the faction, character, and place manifest and apply commands |
-| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `window-replay`, `models lock`, `models verify`, `model --list`, `retrograde-seed-candidates --packet`, `retrograde-expand-seeds`, `backfill-review-packet` |
+Each command declares the most privileged resource its handler opens; the
+[Transports](cli_reference.md#transports) table of the generated reference
+lists each transport and its commands.
 
 The runtime is remote when the active `nexus.toml` sets `[runtime] profile =
 "remote"`, or when `NEXUS_API_URL` names a host other than `localhost` or a
@@ -223,6 +221,9 @@ Every failed wait keeps the scheduled work in `partial`: `session_id`,
 (`nexus load --slot N`), plus the saved seed when the opening turn failed.
 
 ## Commands
+
+Every command's arguments are in the generated [CLI reference](cli_reference.md).
+The sections below describe the commands that need more than their arguments.
 
 ### `inspect` — Read Story Records as JSON
 

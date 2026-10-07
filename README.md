@@ -133,7 +133,7 @@ nexus load --slot 5
 nexus continue --slot 5 --choice 1
 ```
 
-CLI reference: `docs/cli.md`.
+CLI guide: `docs/cli.md`; generated command reference: `docs/cli_reference.md`.
 
 ## Configuration
 

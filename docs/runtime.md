@@ -350,7 +350,7 @@ describes the config that actually launched them. Story commands use
 URL. Access credentials are attached only when that override has the same
 origin as `remote.base_url`. A remote profile, or an override naming a
 non-loopback host, refuses the CLI's direct-database and local-operator
-commands; `docs/cli.md` lists each command's transport.
+commands; `docs/cli_reference.md` lists each command's transport.
 
 `nexus logs SERVICE --mark` prints a mark of the capture's current end
 (`<inode>:<size>:<crc32 of the first 256 bytes>`, or `0:0:0` before the
