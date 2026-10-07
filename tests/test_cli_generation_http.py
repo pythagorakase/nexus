@@ -65,8 +65,12 @@ class GenerationScenario:
     stage_poll_seconds: float = 0.02
     # The stage each status read served ("502" for a failed read).
     stages_read: list[str] = field(default_factory=list)
-    # Status reads answered before the transition was posted.
+    # Status reads answered before the transition was posted: the CLI's
+    # snapshot, plus any interval read its stage poller takes before the
+    # transition POST is sent (the poller starts first).
     snapshot_reads: int = 0
+    # The record each of those reads served.
+    snapshot_served: list[dict[str, Any]] = field(default_factory=list)
     scripted_reads: int = 0
     # Ordinals (from 0) of the status reads answered with a 502.
     failed_reads: set[int] = field(default_factory=set)
@@ -215,6 +219,7 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                 if not scenario.transition_posted:
                     scenario.snapshot_reads += 1
                     payload = scenario.stage_before
+                    scenario.snapshot_served.append(payload)
                 elif scenario.outcome_recorded and scenario.stage_outcome:
                     payload = scenario.stage_outcome
                 elif script:
@@ -745,8 +750,15 @@ def test_cli_prints_each_genesis_stage_once_while_transition_runs(
         "Genesis stage: done",
     ]
     scripted = [payload["stage"] for payload in GENESIS_SCRIPT]
-    assert scenario.snapshot_reads == 1
-    assert scenario.stages_read[: len(scripted) + 1] == ["idle", *scripted]
+    # The stage poller starts before the transition is posted, so an interval
+    # read can precede the post; each such read serves the previous record.
+    before = scenario.snapshot_reads
+    assert before >= 1
+    assert scenario.snapshot_served == [scenario.stage_before] * before
+    assert scenario.stages_read[: before + len(scripted)] == [
+        *(["idle"] * before),
+        *scripted,
+    ]
     # "done" is terminal: it is read once, and no read follows it.
     assert scenario.stages_read.count("done") == 1
     assert scenario.stages_read[-1] == "done"
@@ -837,7 +849,8 @@ def test_cli_prints_a_terminal_stage_recorded_before_its_first_interval_read(
     assert code == 1, (stdout, stderr)
     assert _stage_lines(stdout) == ["Genesis stage: failed (persistence)"]
     # One read before the post, one after the answer; no interval read.
-    assert scenario.snapshot_reads == 1
+    assert scenario.snapshot_reads >= 1
+    assert scenario.snapshot_served == [before] * scenario.snapshot_reads
     assert scenario.stages_read == [before["stage"], "failed"]
     assert "the narrative transition failed" in stderr
 
