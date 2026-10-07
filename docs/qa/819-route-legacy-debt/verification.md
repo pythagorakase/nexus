@@ -174,6 +174,21 @@ FAILED tests/test_schema_docs_baseline_routing.py::test_every_baseline_object_is
 ## Gate Tails
 
 `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset for every run.
+The tails that follow ran on the tree at `f9350b7d` (the two slice commits;
+`eec1d9eb` added only this file). The review-round commit `747e9117` changed
+one line of `tests/test_schema_docs_baseline_routing.py` so that an empty
+baseline passes; the rerun at that head (with the ratchet and the freshness
+test), under `nice -n 15`:
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_schema_docs_baseline_routing.py tests/test_schema_documentation_pg.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_docs_refresh_*, qa640_schema_docs_* x3
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+77 passed in 11.70s
+```
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_schema_documentation_pg.py
