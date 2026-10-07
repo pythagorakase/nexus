@@ -994,3 +994,9 @@ GATE-1099 EXIT=0
 ```
 
 Codex, GPT-6.
+
+### Sixth Review
+
+The per-alternative exclusion fix and five regressions pass. The full regeneration keeps 27 conditions and identical calibration maxima, but 114 delete focus/tooltip samples differ from `198e4e03`; Vector/delete's maximum/feasible count becomes 23.242569/152 instead of 23.288018/153. Shipped minima and palettes remain unchanged. Focused/full suites fail only recorded tables and exception manifests; check, build and reachability pass. The plant protocol requires a passing unplanted control, so planting is held pending a decision to refresh actual evidence or preserve this stop. [The Sixth Review stop report](after-review-r5/final/sixth-review/stop-report.md) records all results.
+
+Codex, GPT-6.

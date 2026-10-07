@@ -2231,8 +2231,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/completion.md",
-    "sha256": "87815b46b59df06824763c239080904e4496c532db8175ccde0dfbeca11e3ccf",
-    "bytes": 8484
+    "sha256": "4d01a1d457b7f7ba0355a8120ed2c91e07e0549f71c9138919d5b2a2dd1d16c7",
+    "bytes": 9470
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/focused.json",
@@ -2961,12 +2961,102 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/verification.md",
-    "sha256": "8ffbb483873f7c3e2cd2d7f3c52863b050d95faf92233389be267a8202b36c40",
-    "bytes": 104357
+    "sha256": "de911381a6384cff6b5053bef85a67bd5ce8a83df0de673e220cb13549a8d0e1",
+    "bytes": 105078
   },
   {
     "path": "ui/client/src/state-surfaces.resolved.json",
-    "sha256": "f35086dda98bdb2ff75bd63b74f2a12bc50754627069495e3e7dac046c9754b8",
-    "bytes": 383758958
+    "sha256": "8564787141402230bfe5e24e94753964ebe1f0cba84aefb4d7411276179179d3",
+    "bytes": 383759346
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/build.json",
+    "sha256": "572001ea54c504f2c3da053e744583eb34fcd14643c774a98d3b485383e274e8",
+    "bytes": 152
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/build.log",
+    "sha256": "57d843dc16741e0275a067858d1b343722a2ef165ef5378c85dfe992075301c8",
+    "bytes": 6529
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/calibration-maxima.md",
+    "sha256": "3a445cdae9204503406a3adaf6195111c2bf329a9990efb72e2e9890b97d2719",
+    "bytes": 843
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/changed-samples.json",
+    "sha256": "f39c00622ef55680862233deeebbfabe6462385336e397b7939e777cf29da1b6",
+    "bytes": 618893
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/check.json",
+    "sha256": "928821a78f8738fe9cfa9dfd870f13b4bcffb62f468352fe7c0285e01874af19",
+    "bytes": 153
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/check.log",
+    "sha256": "c051bf7d3581c47d3811c3cb8bece2c43aa8194ad48e4e87d1fc54bb95f2c60d",
+    "bytes": 142
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/focused-before-refresh.json",
+    "sha256": "5eba6bd6dd166cf648cddebcef485a8376ae0e35531b6c9fb70b15dd8afbdeea",
+    "bytes": 216
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/focused-before-refresh.log",
+    "sha256": "6f55c9202a36f5ac9e28ceed4865661d786536dd03b387fb63fbd6a002a4bad8",
+    "bytes": 1390758
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/full.json",
+    "sha256": "49892ff3093a52b983fde520a0d854573888dd29301090e7b30b39aa57d3d235",
+    "bytes": 140
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/full.log",
+    "sha256": "fd32e29f8aa1bf77fffe603fbc30c089266e56db0aa2363b493b9581b5602ba2",
+    "bytes": 1429562
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/group-comparison.json",
+    "sha256": "507be39cab222ad3302770f79606f78c1daef5e7290168402a1f3ef121f7046a",
+    "bytes": 5436
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/mixed-list-band-witness.json",
+    "sha256": "200698c0ee1d9592085ce0ac28d87a2d951aa98fdca27e084389135709f7d5ba",
+    "bytes": 2574
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/reachability.log",
+    "sha256": "9c66e71248bb18338c77268287885901435661cf1aa43e674cdc4e29b441adc0",
+    "bytes": 1447
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/receipt-comparison.json",
+    "sha256": "c6c791a20423627e1919fadc9208f92ad540d98a8b891a5a51450fa4a7fbb189",
+    "bytes": 10640
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/regeneration.log",
+    "sha256": "e7db5985ac4b1717d83098924d749808541e015996e8a87e5b59f4bb82fec9f4",
+    "bytes": 13995
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/search-export.log",
+    "sha256": "9a9893e84b0b86ada929d62931e3a893c91ea5b9d7985512d69c9f998a695ec7",
+    "bytes": 19514
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/stop-report.md",
+    "sha256": "279671d05a030d0f9d79aeb18fbfc41ea984a25aa14b76c972c8dc6b07553190",
+    "bytes": 2802
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/unit.log",
+    "sha256": "e73f577803ce2cc04546c45e680201263ff77ec990c6af505a8dfaba7669638f",
+    "bytes": 540
   }
 ]

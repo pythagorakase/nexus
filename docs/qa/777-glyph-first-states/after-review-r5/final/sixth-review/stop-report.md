@@ -10,4 +10,6 @@ All palette assignments and shipped minima remain identical. Eleven group rows a
 
 The plant cannot start through the checked-in protocol until its required unplanted shade control is green. The exact width rule lies outside the 1200px default, so the prepared plant uses 759×900/dark/reduce against the existing 760px band reference; this exception is documented in the README. No plant result is claimed. A decision is pending on refreshing the affected measurement evidence to the actual receipt or holding at this stop report. No additional parser, product, palette or Python fix is part of this stage.
 
+Independent checks: the full UI suite has the same two table/exception failures; TypeScript/design-sync check and production build pass. Reachability passes all 54 tests with the secret-store guard active. `git fetch origin` followed by `git merge origin/main` reports already up to date. The scoped diff contains only `ui/` and `docs/`. Plant execution and push remain pending the evidence-refresh decision.
+
 Codex, GPT-6.
