@@ -743,8 +743,10 @@ def _stage_lines(stdout: str) -> list[str]:
     return [line for line in stdout.splitlines() if line.startswith("Genesis stage")]
 
 
+# "unforced" (0) leaves the order of reads and the post to the host's timing,
+# so early reads are still possible there.
 @pytest.mark.parametrize(
-    "interval_reads_before_post", [0, 1], ids=["posted-first", "interval-read-first"]
+    "interval_reads_before_post", [0, 1], ids=["unforced", "interval-read-first"]
 )
 @pytest.mark.parametrize("ready", [False, True], ids=["seed-confirm", "ready-resume"])
 def test_cli_prints_each_genesis_stage_once_while_transition_runs(
