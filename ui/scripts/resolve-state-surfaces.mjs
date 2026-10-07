@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
