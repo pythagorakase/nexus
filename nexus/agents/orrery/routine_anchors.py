@@ -67,9 +67,10 @@ _IMAGE_KEYS = ("mobility_policy", "place_id", "zone_id", "schedule")
 class RoutineAnchorCustodyError(ValueError):
     """Custody refuses a routine-anchor change.
 
-    Every refusal except the final works_from_home home check comes before any
-    write. That check raises after the writes, so the caller must roll back its
-    transaction.
+    Every refusal comes before any write except two that raise after a write:
+    an upsert that a concurrent custody transaction turned from an insert into
+    an overwrite, and the final works_from_home home check. The caller must
+    roll back its transaction.
     """
 
 
@@ -225,7 +226,7 @@ class RoutineAnchorDelta(BaseModel):
         default=None,
         description="Authored timing; null when the timing is unknown.",
     )
-    clear: bool = Field(default=False, description="True removes this anchor.")
+    clear: StrictBool = Field(default=False, description="True removes this anchor.")
 
     @model_validator(mode="after")
     def _check_shape(self) -> RoutineAnchorDelta:
@@ -259,7 +260,7 @@ class RoutineAnchorChange(BaseModel):
     schedule: Optional[RoutineSchedule] = Field(
         description="Authored timing; null when the timing is unknown.",
     )
-    clear: bool = Field(description="True removes this anchor.")
+    clear: StrictBool = Field(description="True removes this anchor.")
 
     @model_validator(mode="after")
     def _check_shape(self) -> RoutineAnchorChange:
@@ -490,6 +491,27 @@ def _refuse_homeless_works_from_home(
         )
 
 
+def _refuse_unplanned_overwrite(write: _PlannedWrite, inserted: bool) -> None:
+    """Refuse an upsert whose insert-or-update path disagrees with its plan.
+
+    ``SELECT ... FOR UPDATE`` locks only rows that exist. When two custody
+    transactions both plan a first insert of one anchor, the second one's
+    ``ON CONFLICT`` waits for the first to commit and then updates that row,
+    although its ledger row says no anchor existed.
+    """
+
+    if inserted != (write.before_image is None):
+        change = write.change
+        found = "inserted a new" if inserted else "overwrote an existing"
+        planned = "NULL" if write.before_image is None else "the locked anchor"
+        raise RoutineAnchorCustodyError(
+            f"Routine anchor upsert of (character_entity_id="
+            f"{change.character_entity_id}, anchor_type={change.anchor_type}) "
+            f"{found} row, but its ledger before_image is {planned}; a concurrent "
+            "custody transaction changed this anchor"
+        )
+
+
 def _image_text(image: Optional[dict[str, Any]]) -> Optional[str]:
     if image is None:
         return None
@@ -554,6 +576,7 @@ _SYNC_UPSERT_SQL = """
         source = EXCLUDED.source,
         last_log_id = EXCLUDED.last_log_id,
         updated_at = now()
+    RETURNING (xmax = 0) AS inserted
 """
 _SYNC_DELETE_SQL = """
     DELETE FROM character_routine_anchors
@@ -578,8 +601,9 @@ def apply_routine_anchor_changes_sync(
 
     Runs in the caller's transaction on its own plain cursor and never commits
     or rolls back. Every refusal raises ``RoutineAnchorCustodyError`` before
-    any write, except the final works_from_home home check, which raises after
-    the writes so the caller's rollback discards them.
+    any write, except a concurrent overwrite of a planned first insert and the
+    final works_from_home home check, which raise after a write so the
+    caller's rollback discards it.
     """
 
     conn = cur.connection
@@ -655,16 +679,20 @@ def apply_routine_anchor_changes_sync(
                         log_id,
                     ),
                 )
+                touched = own.rowcount
+                if touched == 1:
+                    _refuse_unplanned_overwrite(write, bool(own.fetchone()[0]))
             else:
                 own.execute(
                     _SYNC_DELETE_SQL,
                     (change.character_entity_id, change.anchor_type),
                 )
-            if own.rowcount != 1:
+                touched = own.rowcount
+            if touched != 1:
                 raise RoutineAnchorCustodyError(
                     f"Routine anchor {write.operation} of "
                     f"(character_entity_id={change.character_entity_id}, "
-                    f"anchor_type={change.anchor_type}) touched {own.rowcount} rows"
+                    f"anchor_type={change.anchor_type}) touched {touched} rows"
                 )
             log_ids.append(log_id)
 
@@ -728,6 +756,7 @@ _ASYNC_UPSERT_SQL = """
         source = EXCLUDED.source,
         last_log_id = EXCLUDED.last_log_id,
         updated_at = now()
+    RETURNING (xmax = 0) AS inserted
 """
 _ASYNC_DELETE_SQL = """
     DELETE FROM character_routine_anchors
@@ -759,8 +788,9 @@ async def apply_routine_anchor_changes_async(
 
     Requires an open ``conn.transaction()``; never commits or rolls back.
     Every refusal raises ``RoutineAnchorCustodyError`` before any write, except
-    the final works_from_home home check, which raises after the writes, so
-    the caller must roll back its transaction.
+    a concurrent overwrite of a planned first insert and the final
+    works_from_home home check, which raise after a write, so the caller must
+    roll back its transaction.
     """
 
     if not conn.is_in_transaction():
@@ -824,7 +854,7 @@ async def apply_routine_anchor_changes_async(
             )
         )
         if write.operation == "upsert":
-            status = await conn.execute(
+            upserted = await conn.fetch(
                 _ASYNC_UPSERT_SQL,
                 change.character_entity_id,
                 change.anchor_type,
@@ -835,11 +865,14 @@ async def apply_routine_anchor_changes_async(
                 writer_kind,
                 log_id,
             )
+            touched = len(upserted)
+            if touched == 1:
+                _refuse_unplanned_overwrite(write, bool(upserted[0]["inserted"]))
         else:
             status = await conn.execute(
                 _ASYNC_DELETE_SQL, change.character_entity_id, change.anchor_type
             )
-        touched = _command_rowcount(status)
+            touched = _command_rowcount(status)
         if touched != 1:
             raise RoutineAnchorCustodyError(
                 f"Routine anchor {write.operation} of "

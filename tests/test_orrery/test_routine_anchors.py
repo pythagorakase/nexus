@@ -283,6 +283,22 @@ def test_resolved_change_refuses_wrong_typed_ids(field: str, value: Any) -> None
 
 
 @pytest.mark.parametrize(
+    "value",
+    [pytest.param("yes", id="string_yes"), pytest.param(1, id="integer_one")],
+)
+@pytest.mark.parametrize("model", ["wire", "resolved"])
+def test_clear_is_a_strict_boolean(model: str, value: Any) -> None:
+    """A clear deletes the anchor, so only a real boolean can ask for one."""
+
+    fields: dict[str, Any] = {"anchor_type": "home", "clear": value}
+    with pytest.raises(ValidationError, match="Input should be a valid boolean"):
+        if model == "wire":
+            RoutineAnchorDelta.model_validate(_wire(fields))
+        else:
+            RoutineAnchorChange.model_validate(_resolved(fields))
+
+
+@pytest.mark.parametrize(
     ("fields", "stored"),
     [
         pytest.param({"weekdays": [5, 6]}, {"weekdays": [5, 6]}, id="weekdays_only"),

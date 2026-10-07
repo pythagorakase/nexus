@@ -9,6 +9,8 @@ is read or written.
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from dataclasses import dataclass
@@ -763,3 +765,74 @@ def test_identical_upsert_still_writes_a_ledger_row(seeded: Seeded) -> None:
     assert second["before_image"] == second["after_image"] == first["after_image"]
     [anchor] = _anchors(seeded.dbname)
     assert anchor["last_log_id"] == second_id
+
+
+def _wait_for_lock_waiter(dbname: str, *, holder_pid: int) -> None:
+    """Return once another backend on ``dbname`` waits on a lock."""
+
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        waiting = _fetch(
+            dbname,
+            "SELECT pid FROM pg_stat_activity WHERE datname = %s AND pid <> %s "
+            "AND wait_event_type = 'Lock'",
+            (dbname, holder_pid),
+        )
+        if waiting:
+            return
+        time.sleep(0.05)
+    raise AssertionError("the second custody transaction never waited on the first")
+
+
+@pytest.mark.parametrize("twin", list(TWINS))
+def test_concurrent_first_insert_fails_instead_of_logging_no_before_image(
+    seeded: Seeded, twin: str
+) -> None:
+    """A racing first upsert that turns into an overwrite raises and rolls back.
+
+    Both transactions lock no row, because none exists yet, so both plan
+    ``before_image`` NULL. The second one's upsert waits for the first to
+    commit, then overwrites the committed anchor. Custody refuses it rather
+    than record "no anchor existed" for an overwrite.
+    """
+
+    first_change = [_change(seeded.mara, "home", "nomadic")]
+    second_change = [
+        _change(seeded.mara, "home", "fixed_place", place_id=seeded.home_place)
+    ]
+    outcome: dict[str, BaseException] = {}
+
+    with closing(connect(seeded.dbname)) as holder:
+        with holder.cursor() as cur:
+            [first_id] = apply_routine_anchor_changes_sync(
+                cur, first_change, writer_kind=WRITER, source_chunk_id=seeded.chunk_1
+            )
+            cur.execute("SELECT pg_backend_pid()")
+            holder_pid = int(cur.fetchone()[0])
+
+        def second_writer() -> None:
+            try:
+                TWINS[twin](
+                    seeded.dbname,
+                    second_change,
+                    writer_kind=WRITER,
+                    source_chunk_id=seeded.chunk_2,
+                )
+            except BaseException as exc:  # handed to the main thread to assert on
+                outcome["error"] = exc
+
+        racer = threading.Thread(target=second_writer)
+        racer.start()
+        try:
+            _wait_for_lock_waiter(seeded.dbname, holder_pid=holder_pid)
+        finally:
+            holder.commit()
+            racer.join(timeout=60)
+    assert not racer.is_alive()
+
+    error = outcome.get("error")
+    assert isinstance(error, RoutineAnchorCustodyError), error
+    assert "before_image" in str(error)
+    [anchor] = _anchors(seeded.dbname)
+    assert (anchor["mobility_policy"], anchor["last_log_id"]) == ("nomadic", first_id)
+    assert [row["id"] for row in _ledger(seeded.dbname)] == [first_id]
