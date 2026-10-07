@@ -197,7 +197,7 @@ class RoutineAnchorDelta(BaseModel):
     mobility_policy: Optional[RoutineMobilityPolicy] = Field(
         default=None,
         description=(
-            "How the routine moves the character; none records an authored " "absence."
+            "How the routine moves the character; none records an authored absence."
         ),
     )
     place: Optional[str] = Field(
@@ -238,7 +238,7 @@ class RoutineAnchorChange(BaseModel):
     anchor_type: RoutineAnchorType = Field(description="Which routine anchor changes.")
     mobility_policy: Optional[RoutineMobilityPolicy] = Field(
         description=(
-            "How the routine moves the character; none records an authored " "absence."
+            "How the routine moves the character; none records an authored absence."
         ),
     )
     place_id: Optional[int]
