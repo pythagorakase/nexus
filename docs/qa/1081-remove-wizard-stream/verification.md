@@ -151,6 +151,12 @@ $ rg -n "chat/stream" ui/client/src
 
 ## Proof Tails
 
+The tails in this section ran on the tree at `60108ce4` (the removal commit
+`abd8835b` plus the re-stamp commit `60108ce4`; `c84a5d9d` added only this
+file). The removal-pin section below records the later runs at `1415c23e`,
+and the independent review's exact-message fix reran
+`tests/test_api/test_wizard_chat_conflicts.py` on its own commit (named there).
+
 All runs from the worktree root with `PYTHONPATH=$PWD` and the shared
 interpreter, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset.
 

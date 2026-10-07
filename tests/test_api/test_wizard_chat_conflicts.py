@@ -20,8 +20,16 @@ from nexus.api.slot_state import SlotState, WizardState
     ("changed_at", "detail"),
     [
         ("session", "The wizard session changed."),
-        ("artifact", "This artifact changed before its response arrived."),
-        ("write_lock", "The wizard changed while this response was being generated."),
+        (
+            "artifact",
+            "This artifact changed before its response arrived. "
+            "Resume to review the current draft.",
+        ),
+        (
+            "write_lock",
+            "The wizard changed while this response was being generated. "
+            "Resume before retrying.",
+        ),
     ],
 )
 def test_generated_artifact_ends_with_conflict(
@@ -96,6 +104,6 @@ def test_generated_artifact_ends_with_conflict(
     )
 
     assert response.status_code == 409, response.text
-    assert response.json()["detail"].startswith(detail)
+    assert response.json()["detail"] == detail
     assert cache.choices == ["Current choice"]
     write_choices.assert_not_called()
