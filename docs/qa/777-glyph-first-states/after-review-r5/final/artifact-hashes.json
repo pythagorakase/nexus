@@ -2231,8 +2231,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/completion.md",
-    "sha256": "8def9e9402552253d5694f7f3e6117ce79e264a5ab82dc6d1d5aaf1215692f90",
-    "bytes": 11808
+    "sha256": "146c20e16d9aed37b27e521281680a4debcd280ab97457b9b3a825b105b95bc9",
+    "bytes": 12599
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/focused.json",
@@ -2756,8 +2756,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/plants.md",
-    "sha256": "e469e2d350d61c975bf1cea48dda9f1fbacd4c9754c11f73c321d7daf8bf1a72",
-    "bytes": 4244
+    "sha256": "085bfcb6771ff050d904392ed5b0d873bbf70f7c68055796ca6ad68f0eea5d3e",
+    "bytes": 5315
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/regeneration-after-protocol.json",
@@ -2838,6 +2838,16 @@
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/check.log",
     "sha256": "c051bf7d3581c47d3811c3cb8bece2c43aa8194ad48e4e87d1fc54bb95f2c60d",
     "bytes": 142
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/build.json",
+    "sha256": "0df5cf8ca0b0255793fc3c3d337603f2d630b99f7594a343f12666dab62e6ce4",
+    "bytes": 174
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/build.log",
+    "sha256": "69d9427df5a8ab8df3a608933101b7d685ca12a3779d3f1d835c27fcb9d3e0b2",
+    "bytes": 6529
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_armed_hsl_43_40__70__-control.png",
@@ -5065,9 +5075,94 @@
     "bytes": 856
   },
   {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/check.json",
+    "sha256": "2e82dc701857238bae1d066257db1d51c755d82ec93eccd3ce4fac3d6cb65eac",
+    "bytes": 173
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/check.log",
+    "sha256": "c051bf7d3581c47d3811c3cb8bece2c43aa8194ad48e4e87d1fc54bb95f2c60d",
+    "bytes": 142
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/commands.md",
+    "sha256": "f4f6826cdc43035c10f801834e497b6f692915ba9a2cb9af90d146d0804a4ec6",
+    "bytes": 27792
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/focused.json",
+    "sha256": "9238ae8a521e634407a5b8136a79df238533b129ad913f5577e5db0ee140cf6a",
+    "bytes": 238
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/focused.log",
+    "sha256": "ac51e9e3882a814d498f0db169466404ac65f7c4cc11b67c4c11f6f820ea6036",
+    "bytes": 6678
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/full.json",
+    "sha256": "98c0740a86787f6b0eb25df7de627576174d9751812f7df005985c765f4fbd8b",
+    "bytes": 160
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/full.log",
+    "sha256": "0f36d079cb3045a2e76dc9b91b76d735bc238dfe844523fe09da0db4af9e3df0",
+    "bytes": 45479
+  },
+  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/group-comparison.json",
     "sha256": "48035c799cb47d125bb5a6f0754c43b67317506ebae1cbfe8ce14d44b1f88dfc",
     "bytes": 2511
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/plants/before-plants.json",
+    "sha256": "1bcbadd427d57070bf4daeae2811310ef19c53b346188710ec869ab9e0523818",
+    "bytes": 430
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/plants/control.log",
+    "sha256": "8df1bb2ff7ad71f8f738e94705ed69a2dfde69d79a177b2287520c9f3fb5bb40",
+    "bytes": 6596
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/plants/mixed-print-width-fresh-default.log",
+    "sha256": "7f3c259b91b24218893595dd940086b6ebaa5d630ed599cf7db2d34d999ec772",
+    "bytes": 54958
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/plants/mixed-print-width-regenerate-default.log",
+    "sha256": "80f37960ee04cdbc0ed1b894d90a5c1c1af313fb155d3099d22c2650061c0efb",
+    "bytes": 3608
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/plants/mixed-print-width-stale.log",
+    "sha256": "67b617b4269586263177c29d0353a44ce57096fc0fd5228c3cf1c0012274836d",
+    "bytes": 1429
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/plants/optional-key-means.json",
+    "sha256": "c1111dcc4127ded65823b50ef001defc2299e35c1c7659565d4943d1eab98957",
+    "bytes": 3626
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/plants/partial-receipt.json",
+    "sha256": "1f52858a3581b0ef21288a8d1e6a857e78e7960f49918ad83ed548f98cc3653a",
+    "bytes": 18149341
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/plants/plants-proof.json",
+    "sha256": "02e7b7f484c2728fbe8717af5ab7857305bbc4be10a1754bc9fec8db42bfd804",
+    "bytes": 18445
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/reachability.json",
+    "sha256": "eec8af81435163691b1f2f3fb85b1fe6308e61b0960d61d2f81743f653e05147",
+    "bytes": 225
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/reachability.log",
+    "sha256": "1e9a225a9900cb2b56ada66df44de629c03bd7ee3d071b752f7abd74ead8f2c5",
+    "bytes": 1447
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/receipt-proof.json",
@@ -5083,6 +5178,16 @@
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/regeneration.log",
     "sha256": "6ab752c19f11e84d770f048c9af95c0bcc67e48fa49554619e89b8401537bd96",
     "bytes": 13996
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/restored.json",
+    "sha256": "b49c58ba002fc076bc122dff3a3457ce0100e8d96a3cd431d4e8b3a70cebf94c",
+    "bytes": 191
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/restored.log",
+    "sha256": "cecab062a2f4b2b30cb948ab941ec4041d1e9cb9c7da4f3a706345d1fa7a5239",
+    "bytes": 6528
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/search-export.json",
@@ -5356,8 +5461,8 @@
   },
   {
     "path": "docs/qa/777-glyph-first-states/verification.md",
-    "sha256": "5867bad8657695316dd6a30cf4d4cc68ee73d4b112eece5edd399ac013356850",
-    "bytes": 107985
+    "sha256": "8ad35a7996da629388d306023f6d668b7739be24cc1308d025fc0722cbc42e46",
+    "bytes": 108752
   },
   {
     "path": "ui/client/src/state-surfaces.resolved.json",

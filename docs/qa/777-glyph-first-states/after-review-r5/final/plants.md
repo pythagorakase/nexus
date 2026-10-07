@@ -17,9 +17,15 @@ Each fresh capture is default only: 1200×900, dark, reduced motion, scale 4, fi
 | key-overpainting-shadow | 1 | 1 / 112.406 | named measurement/calibration rejection | True |
 | gradient-state-surface | 1 | 0 / 370.576 | 777-S2 state shades > browser_measurements_match_recorded_tables, 777-S2 state shades > state_surfaces_read_only_state_tokens | True |
 | element-state-redeclaration | 1 | 0 / 364.368 | 777-S2 state shades > global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values, 777-S2 state shades > state_surfaces_read_only_state_tokens | True |
+| mixed-print-width (Sixth Review; 759px) | 1 | 0 / 358.837 | browser_measurements_match_recorded_tables | True |
 
 The gradient plant must and did paint through its linear-gradient background; regeneration is successful rather than an empty-mask refusal. The element-scoped state redeclaration is rejected by the declaration-root assertion, including the global freeze. The historical key-overpainting record is corrected to name recorded-table/freshness guards rather than the 16-pixel floor. This Round-5 planted shadow is rejected earlier by calibration (Vector required-missing/present opaque ΔE 1.1084665796847142 > 1.0); the two painted captures and controls are archived, and no fresh table diagnostic is claimed for it. All restoration proofs retain the original source and shipping receipt hashes. Only after the final restore proof was committed was the shipping receipt refreshed from the complete post-protocol regeneration.
 
 Full command output, capture receipts or named refusal diagnostics, and immutable before-hashes are in the plants/ subdirectory. `plants-proof.json` contains the exact invocation, wall time and tail for each stage; `summary.json` selects each last completed result.
+
+
+### Sixth Review
+
+The twelfth plant uses Astra's exact mixed `print, (min-width: 640px) and (max-width: 759px)` rule in `nexus-layout.css`, with `.key-row.optional { opacity: .35 }`. The approved sole viewport exception captures the newly discovered 759×900/dark/reduce representative against the shipped 760px band, since the 1200px default does not satisfy the rule. All nine optional-key rest means change from .5 to .35 effective opacity and the fresh recorded-table shade assertion is red. The partial receipt retains `acceptanceComplete=false`. The protocol's unplanted control passes; stale rejection, capture, fresh rejection and before/HEAD/live/scratch restoration checks all succeed; the restored full shade suite is green. [Plant ledger and logs](sixth-review/dismissed-focus/plants/plants-proof.json) and [changed optional means](sixth-review/dismissed-focus/plants/optional-key-means.json) record it alongside the eleven historical plants.
 
 Codex, GPT-6.

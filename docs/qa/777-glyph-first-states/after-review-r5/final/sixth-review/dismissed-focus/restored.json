@@ -1,0 +1,14 @@
+{
+  "args": [
+    "npm",
+    "--prefix",
+    "ui",
+    "test",
+    "--",
+    "state-shades"
+  ],
+  "exit": 0,
+  "wallSeconds": 50.54586591699626,
+  "boundSeconds": 589,
+  "timedOut": false
+}

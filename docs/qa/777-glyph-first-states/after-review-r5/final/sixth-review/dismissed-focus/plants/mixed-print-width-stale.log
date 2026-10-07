@@ -1,0 +1,30 @@
+
+> nexus-ui@1.0.0 test
+> vitest run state-shades
+
+
+ RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r6/clarification-2/plants/plant-copy/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ media-state-shades.test.ts (5 tests) 4ms
+ ❯ src/state-shades.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ ❯ src/state-shades.test.ts:183:9
+    181|   [resolve(import.meta.dirname, "../../scripts/state-surfaces/inputs.m…
+    182| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))
+    183|   throw new Error("Stale browser-resolved state surfaces: run npm --pr…
+       |         ^
+    184| if (receipt.proof.acceptanceComplete !== true)
+    185|   throw new Error("Incomplete painted state surfaces: filtered/probe c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  5 passed (5)
+   Start at  20:21:45
+   Duration  1.67s (transform 54ms, setup 58ms, collect 33ms, tests 4ms, environment 354ms, prepare 99ms)
+

@@ -1006,4 +1006,7 @@ The completed regeneration at `89cc64a4` captures all 27 conditions and 101,742 
 
 The renewed closed-tooltip receipt returns Vector/delete maximum 23.288018 with 156 feasible assignments (153 at `198e4e03`), while every shipped minimum and every other group maximum/count remains unchanged. The actual below-15 manifest now contains Veil 229, Gilded 766 and Vector 1,187 comparisons. The export step wrote the new joint records and correctly rejected the old Veil exception manifest; the manifest and tables were then refreshed from the receipt. This bootstrap rejection is archived separately from the subsequent acceptance gates.
 
+
+The Sixth Review proof is complete: 31 focused tests, 509 full UI tests, TypeScript/design-sync check and production build pass. Five media regressions also pass separately. The exact mixed-list plant changes all nine optional-key rest means at 759×900/dark/reduce and turns the fresh recorded-table shade assertion red; restoration hashes agree with the pre-plant snapshot, live tree, scratch and HEAD, and all 11 restored shade assertions pass. Separate reachability passes all 54 tests with the secret-store guard active and `nexus-api` denied. The new plant is recorded [alongside the eleven](after-review-r5/final/plants.md); [command tails](after-review-r5/final/sixth-review/dismissed-focus/commands.md) retain the results. Scope remains `ui/` and `docs/`.
+
 Codex, GPT-6.
