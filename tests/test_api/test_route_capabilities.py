@@ -430,6 +430,21 @@ def test_retired_chunk_state_route_is_not_served() -> None:
     assert ("GET", "/api/chunks/states") not in ROUTE_CAPABILITIES
 
 
+def test_retired_wizard_stream_route_is_not_served() -> None:
+    """The wizard's NDJSON stream route is removed rather than repaired (#1081).
+
+    Its handler iterated ``agent.run_stream(...)``, an async context manager,
+    so it raised before reaching the agent. POST now meets only the GET shell
+    catch-all (built or missing UI), which answers 405.
+    """
+    response = TestClient(narrative.app).post(
+        "/api/story/new/chat/stream", json={"slot": 4, "message": "Begin"}
+    )
+    assert response.status_code == 405, response.text
+    assert ("POST", "/api/story/new/chat/stream") not in _keys(narrative.app)
+    assert ("POST", "/api/story/new/chat/stream") not in ROUTE_CAPABILITIES
+
+
 @pytest.mark.parametrize(
     "key",
     [

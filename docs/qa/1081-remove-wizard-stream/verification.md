@@ -113,6 +113,18 @@ non-streaming endpoint; `WizardConversationMoveError` remains raised by
     1, 1, 2. The module docstring's "streaming live proof is deferred to #1081"
     sentence is removed.
 
+- `tests/test_api/test_route_capabilities.py`: added
+  `test_retired_wizard_stream_route_is_not_served` beside the #807 precedent
+  (`test_retired_chunk_state_route_is_not_served`). It posts
+  `{"slot": 4, "message": "Begin"}` to `/api/story/new/chat/stream` and asserts
+  405, and asserts `("POST", "/api/story/new/chat/stream")` is absent from the
+  gateway's route keys and from `ROUTE_CAPABILITIES`. The status is 405, not
+  404: the only route that still matches the path is the GET shell catch-all
+  (`static_ui.py:107` `/{full_path:path}` when the UI build is missing; the
+  `SpaStaticFiles` mount at `/` when it exists, which also answers 405 to
+  POST), so Starlette reports a method mismatch. Restoring the endpoint makes
+  this test fail (red run below).
+
 ## Remaining-Reference Grep
 
 ```
@@ -189,3 +201,65 @@ with the stream handler); none new.
 ```
 
 `npm --prefix ui run build` is not needed: no client file changed.
+
+## Removal Pin (Review Fix)
+
+Tails below ran on the commit that adds the pin, whose parent is `c84a5d9d`.
+
+Red run: `git archive origin/main` (`364fef4b`) into a scratch tree, with only
+the branch's `tests/test_api/test_route_capabilities.py` copied in, so the
+stream handler and its capability row are both present:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider tests/test_api/test_route_capabilities.py::test_retired_wizard_stream_route_is_not_served
+F                                                                        [100%]
+________________ test_retired_wizard_stream_route_is_not_served ________________
+Unit test attempted psycopg2.connect; mark it requires_postgres and run with NEXUS_RUN_POSTGRES=1.
+FAILED tests/test_api/test_route_capabilities.py::test_retired_wizard_stream_route_is_not_served
+1 failed, 7 warnings in 0.63s
+```
+
+On main the POST reaches the stream handler, which opens a connection to the
+slot database; the session's unit-test guard fails that connection. The red run
+was not repeated under `NEXUS_RUN_POSTGRES=1` because that would let the old
+handler touch `save_04`. A probe in the same tree that needs no database shows
+the other assertions would fail as well:
+
+```
+$ PYTHONPATH=$PWD $PY probe_main.py
+registered: True
+classified: True
+POST {} -> 422
+```
+
+(`registered` is `("POST", "/api/story/new/chat/stream") in _keys(narrative.app)`,
+`classified` is the same key in `ROUTE_CAPABILITIES`, and an empty body gets a
+422 from request validation, which proves the route is still served.)
+
+Green, on the branch:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_route_capabilities.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+31 passed, 1 skipped, 7 warnings in 2.94s
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_route_capabilities.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_offline_gate_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+32 passed, 7 warnings in 4.07s
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_wizard_model_switch.py tests/test_api/test_wizard_confirmation.py tests/test_api/test_wizard_resume.py tests/test_api/test_slot_mutation_guard.py tests/test_api/test_route_capabilities.py tests/test_reachability.py tests/test_api/test_wizard_chat*.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 6 targets: postgres, qa640_offline_gate_* x4, test_slot_guard_7b16f14464224a37815bb723619efe8d
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+236 passed, 7 warnings in 20.26s
+$ $PY -m black --check tests/test_api/test_route_capabilities.py
+1 file would be left unchanged.
+$ $PY -m flake8 tests/test_api/test_route_capabilities.py
+(no output; exit 0)
+$ $PY -m mypy --explicit-package-bases tests/test_api/test_route_capabilities.py
+Success: no issues found in 1 source file
+```
