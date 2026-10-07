@@ -57,7 +57,9 @@ Every pre-POST read is answered with `stage_before`, a record of the previous
 run (or of no run), and `_RetrogradeStageEcho.read` skips any record whose
 `run` equals `_previous_run` (`nexus/cli.py:1770-1771`), so an early read
 cannot print or duplicate a stage line. This is the reason the user-visible
-invariant holds whatever the pre-POST read count is.
+invariant holds whatever the pre-POST read count is. This is a reading of the
+code; "What Changed" says which parts of it the tests exercise and which they
+do not.
 
 ### Request Traces (Scratch Probe, Not Committed)
 
@@ -68,6 +70,8 @@ session scratchpad and `$PY` the shared interpreter:
 - `probe_trace.py`: the request traces below.
 - `probe_new_assertions.py`: the eight-run 1 ms tally below.
 - `probe_siblings.py`: the sibling-test results under "Out of Scope".
+- `probe_siblings_forced.py`: three more siblings run with one forced
+  pre-POST read (`interval_reads_before_post=1`), also under "Out of Scope".
 - `probe_race.py <interval> <runs>`: pre-POST read counts at a given poll.
 - `contended.sh <label> <iterations> <k-expr>`: the loop driver for the
   contended runs (starts eight hogs, records their pids, kills them by pid,
@@ -104,19 +108,33 @@ too, not only the `== 1` count.
   served; the fake gateway appends `stage_before` in the pre-POST branch. The
   order requires the assertion on it, so it stays, but it is true by
   construction: it is a structural guard on the fake gateway, not a check of
-  CLI behavior. What detects a stage line printed by an early read is the
-  exact six-line `_stage_lines(stdout)` assertion together with the
-  `stages_read` prefix, run with a forced early read (next item).
+  CLI behavior.
 - `GenerationScenario.interval_reads_before_post` and `pre_post_reads_seen`
   (new, commit `854190c8`): when the field is non-zero, the fake gateway's
   transition POST handler waits on the Event before it sets
   `transition_posted`; the status handler sets the Event once
   `snapshot_reads >= 1 + interval_reads_before_post`. The wait is bounded at
   10 seconds and fails the test with `interval read never arrived`. No sleep.
+  What the forced early read proves: the loosened count and the shifted
+  `stages_read` prefix hold with two pre-POST reads, and an early read of an
+  idle record prints nothing (the six stage lines stay single and in order).
+  What it does not prove: that the CLI's run-identity filter keeps an early
+  read silent. Every pre-POST read in this test serves `NO_RUN` (stage
+  `idle`, run `None`), which cannot produce a stage line whether or not the
+  CLI skips the previous run's records, so no assertion in this test
+  exercises the filter at `nexus/cli.py:1770-1771` for early reads. Only
+  `test_cli_reads_past_the_previous_runs_failure_record` (out of scope, see
+  below) reads a non-idle previous-run record. Covering the filter for early
+  reads belongs to #1107, for example a forced-read case whose `stage_before`
+  is a non-idle `PREVIOUS_RUN` record such as `PREVIOUS_RUN_FAILED`.
 - `test_cli_prints_each_genesis_stage_once_while_transition_runs`: now
   parametrized over `interval_reads_before_post` in `[0, 1]`
-  (`posted-first`, `interval-read-first`), four items in all; `snapshot_reads
-  == 1` became `>= 1 + interval_reads_before_post`; a new assertion requires every pre-POST read to have
+  (`unforced`, `interval-read-first`; renamed from `posted-first` at
+  `d48f91bb`, since with 0 the fake gateway forces no order and early reads
+  stay possible), four items in all:
+  `[seed-confirm-unforced]`, `[seed-confirm-interval-read-first]`,
+  `[ready-resume-unforced]`, `[ready-resume-interval-read-first]`;
+  `snapshot_reads == 1` became `>= 1 + interval_reads_before_post`; a new assertion requires every pre-POST read to have
   served `stage_before`; the stage-sequence assertion now starts after
   `snapshot_reads` pre-POST "idle" reads rather than exactly one. With one
   pre-POST read it states exactly what the old assertion stated. The six-line
@@ -291,6 +309,47 @@ dbname audit: owner targets: none
   adds above them), plus two `import-untyped` notes that come only from
   checking the copy outside the repository. No new diagnostics.
 
+### Rerun after the Id Rename (`d48f91bb`)
+
+The rename touches only the parametrize id and a comment above it. Loop
+selection, collected ids, the full file, flake8, Black and the front-matter
+test ran at `d48f91bb`:
+
+```
+tests/test_cli_generation_http.py::test_cli_prints_each_genesis_stage_once_while_transition_runs[seed-confirm-unforced]
+tests/test_cli_generation_http.py::test_cli_prints_each_genesis_stage_once_while_transition_runs[seed-confirm-interval-read-first]
+tests/test_cli_generation_http.py::test_cli_prints_each_genesis_stage_once_while_transition_runs[ready-resume-unforced]
+tests/test_cli_generation_http.py::test_cli_prints_each_genesis_stage_once_while_transition_runs[ready-resume-interval-read-first]
+```
+
+`-k "genesis_stage_once or finished_stage_read or before_its_first_interval_read"`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+====================== 7 passed, 49 deselected in 14.65s =======================
+```
+
+Full file:
+
+```
+........................................................                 [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+56 passed in 109.65s (0:01:49)
+```
+
+Black: `1 file left unchanged.` flake8: no output. mypy
+(`--explicit-package-bases`): the same two diagnostics at `:350` and `:474`
+(both above the edit), `Found 2 errors in 1 file`. `tests/test_doc_front_matter.py`:
+`42 passed, 5 warnings in 6.21s`.
+
 ## Pre-Existing Diagnostics
 
 `tests/test_cli_generation_http.py:350` (`str-bytes-safe`) and `:474`
@@ -314,12 +373,50 @@ previous_runs_failure (795): code=0 snapshot_reads=2 stages_read=['failed', 'fai
 at the default 20 ms interval and can fail the same way under heavy load.
 
 (The numbers in the probe's labels are the probe script's own stale line
-references; at `854190c8` the two tests start at lines 792 and 830, with the
-exact assertions at lines 801 and 845.)
+references; at `d48f91bb` the two tests start at lines 794 and 832, with the
+exact assertions at lines 803 and 847.)
 
-Follow-up: https://github.com/pythagorakase/nexus/issues/1107 tracks both
-tests, with the same pattern this branch applies (a `before`-aware prefix and
-the `interval_reads_before_post` parametrization). Until it lands, both test
-ids are known flakes under heavy load. Adding them to the known-flake
-exemption in the session's common rules is the coordinator's step; this
-branch does not edit that file.
+Three more tests in this file have the same construction: the reader starts
+before the yield (`nexus/cli.py:1819-1821`), and each test asserts an exact
+`stages_read` with one pre-POST read. The scratch probe
+`probe_siblings_forced.py` ran each scenario through the real `_run_cli` with
+one forced pre-POST read (`interval_reads_before_post=1`):
+
+```
+unreadable[while-in-flight] (20 ms): code=4 elapsed=11.3s snapshot_reads=2 stages_read=['idle', '502']
+failed_genesis_stage_and_transition_error (0.25 s): code=1 elapsed=2.1s snapshot_reads=2 stages_read=['idle', 'idle', 'packet', 'expansion', 'failed']
+names_no_stage_when_refused (0.25 s): code=1 elapsed=1.7s snapshot_reads=2 stages_read=['failed', 'failed', 'failed', 'failed']
+```
+
+- `test_cli_reports_an_unreadable_genesis_stage_and_keeps_the_transition[while-in-flight]`
+  (line 909; default 20 ms poll; `failed_reads={1}`; exact assertion at line
+  923, `stages_read == ["idle", "502"]`). It is **as exposed as the two tests
+  above, with a worse failure mode**. The early read takes read ordinal 1, so
+  it gets the 502 and settles the reader. No scripted read follows, so the
+  transition POST waits on `stages_served` (line 165) for 10 s, the fake
+  gateway's handler fails with `stages unread`, and the CLI exits 4 (the test
+  expects 0). For this case the #1107 pattern needs a `failed_reads` ordinal
+  relative to the pre-POST read count, not only a `before`-aware prefix.
+- `test_cli_prints_the_failed_genesis_stage_and_the_transition_error`
+  (line 806; 0.25 s poll; exact assertion at line 824,
+  `["idle", "packet", "expansion", "failed"]`). A forced early read gives
+  `['idle', 'idle', 'packet', 'expansion', 'failed']`. The exit code (1) and
+  the stage lines are unaffected; only the list assertion fails.
+- `test_cli_names_no_stage_when_the_transition_is_refused_before_it_runs`
+  (line 885; 0.25 s poll; exact assertion at line 900,
+  `["failed", "failed", "failed"]`). A forced early read gives four `failed`
+  reads. The exit code (1) and the empty stage output are unaffected; only
+  the list assertion fails.
+
+The two 0.25 s cases need a host that delays the transition POST by more
+than 250 ms after `reader.start()`, so they are far less exposed than the
+20 ms cases, but the race is the same.
+
+Follow-up: https://github.com/pythagorakase/nexus/issues/1107 tracks all five
+tests (a comment there adds the three above). It proposes the pattern this
+branch applies (a `before`-aware prefix and the `interval_reads_before_post`
+parametrization), plus a `failed_reads` ordinal relative to the pre-POST read
+count for `while-in-flight`. Until it lands, all five test ids are known
+flakes under heavy load. Adding them to the known-flake exemption in the
+session's common rules is the coordinator's step; this branch does not edit
+that file.
