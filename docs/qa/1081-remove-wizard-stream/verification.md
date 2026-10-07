@@ -204,7 +204,7 @@ with the stream handler); none new.
 
 ## Removal Pin (Review Fix)
 
-Tails below ran on the commit that adds the pin, whose parent is `c84a5d9d`.
+Tails below ran on the tree of `57835814` (the commit that adds the pin; parent `c84a5d9d`).
 
 Red run: `git archive origin/main` (`364fef4b`) into a scratch tree, with only
 the branch's `tests/test_api/test_route_capabilities.py` copied in, so the
