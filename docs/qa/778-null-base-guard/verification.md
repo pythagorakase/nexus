@@ -366,9 +366,11 @@ three-piece split, these focused sets ran, one session at a time, under
 2. Every test file the order's static list names, every file that writes
    `chunk_metadata` directly (40 more files found by
    `grep -E "INSERT INTO chunk_metadata|insert_chunk_metadata_sync\(|seed_committed_chunk\("`),
-   every test module importing a helper from one of those files (14 files),
-   and every not-yet-run file with a raw `base_timestamp` write (5 files).
-   After the fixes, all of these passed (tails below).
+   every test module importing a helper from one of those files (14 files,
+   plus a fifteenth run later on `517544f8`), and every not-yet-run file with
+   a raw `base_timestamp` write (5 files). After the fixes, all of these
+   passed. The survey commands were not saved; the file lists under Tails are
+   reconstructed and checked against each log's test count.
 
 The coordinator's whole-tree gate at landing covers the remaining PostgreSQL
 files, which write chunks only through `seed_protagonist`,
@@ -384,21 +386,37 @@ loop ran and found 14.65 (no wait).
 
 The `seed_protagonist` docstring now gives migration 144's guard as the reason
 it refuses to move a set base, in place of the pre-144 desynchronization
-sentence. Black left `tests/pg_fixtures.py` unchanged. Rerun on `00dba586`:
+sentence. Black left `tests/pg_fixtures.py` unchanged. Rerun on `517544f8`
+(the branch head at the time; it differs from `00dba586` only in this file),
+after `uptime` read a one-minute load of 10.15:
 
 ```text
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_world_clock_contract_pg.py tests/test_pg_disposable_target.py
-{block}
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 14 targets: postgres, qa640_clock_* x12, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+74 passed in 17.97s
 ```
 
 ## Tails
 
-Final run A (the order's proof set, the known fixes and `tests/test_lore`):
+Final run A (the order's proof set, the known fixes and `tests/test_lore`;
+it ran at 14:27 on `58cef582`, with only this file uncommitted; the later
+commits change no code but the `seed_protagonist` docstring), verbatim from
+`scratchpad/778-S1b-resume/final-a.log`:
 
 ```text
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_world_clock_contract_pg.py tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py tests/test_orrery/test_need_clock_anchor_pg.py tests/test_qa_shift.py tests/test_new_story_setup.py tests/test_pg_accepted_turn_factory.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py tests/test_interactions_pg.py tests/test_orrery/test_retrograde_retrieval_pg.py tests/test_lore
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 145 targets: mock, nexus_m10_fresh_test_2053, nexus_m10_template_test_2053, nexus_test_813_*, nexus_test_i685_* x3, nexus_test_interactions_* x14, nexus_test_pass2_* x7, postgres, qa640_* x18, qa640_742_seat_test_*, qa640_756s1_distinct_*, qa640_756s1_generation_* x2, qa640_759_measure_*, qa640_778s4a_tests_* x6, qa640_778s6a_family_* x9, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_816_factory_*, qa640_816_free_text_*, qa640_816_pending_*, qa640_816_preconditions_*, qa640_816_staging_failure_*, qa640_818_estimate_*, qa640_818_pin_* x2, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_885_remembered_*, qa640_885_remembered_opening_*, qa640_885_ren_replay_* x4, qa640_908_aliases_*, qa640_908_cast_*, qa640_908_fingerprint_*, qa640_910_dossier_* x7, qa640_clock_* x12, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_historical_coverage_* x3, qa640_retrieval_* x2, qa640_scene_clock_*, qa640_scene_null_clock_*, qa640_scene_parent_*, qa640_schema_docs_* x3, qa640_settings_stamp_*, qa640_vocab_migration_* x6, qa640_window_coverage_*, qa885_intertitle_*, qa885_retrieval_coverage_*, qa885_transaction_writer_*, qa_lazy_logon_*, qa_lore_infra_*, qa_runtime_config_* x5
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:61980 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:61981 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:61980 (psycopg2), save_04@local:61981 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
+=========================== short test summary info ============================
 SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
 SKIPPED [1] tests/test_lore/test_infrastructure.py:219: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
 SKIPPED [1] tests/test_lore/test_pass2_chunk1369.py: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
@@ -409,33 +427,277 @@ SKIPPED [2] tests/test_lore/test_window_coverage_pg.py:488: Set NEXUS_RUN_CORPUS
 `test_migration_sequence_has_only_known_gaps` passed (every number below 144
 is on `main`).
 
-Final run B (the other changed test files):
+Final run B (the other changed test files; 14:32, same tree), verbatim from
+`final-b.log`:
 
 ```text
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_api/test_narrative_jobs_pg.py tests/test_api/test_narrative_retry_pg.py tests/test_api/test_scheduler_pg.py tests/test_embedding_table_ownership_pg.py tests/test_idf_dictionary_pg.py tests/test_jobs_cli_pg.py tests/test_memnon/test_ann_gate.py tests/test_orrery/test_bleed_proximity_live.py tests/test_orrery/test_narration_job_fencing_pg.py tests/test_orrery/test_recall_disclosure_pg.py tests/test_regenerate_embeddings_truncate_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 130 targets: nexus_test_retry_* x17, postgres, qa640_766_schema_*, qa640_800_operator_*, qa640_810s2_contract_* x52, qa640_acceptance_* x3, qa640_bleed_proximity_* x4, qa640_offline_gate_* x17, qa640_regen_truncate_* x2, qa653_* x2, qa676_* x7, qa762_corpus_copy_*, qa762_fresh_*, qa762_idf_* x19, qa762_other_*, qa_wt724_recall_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
+=========================== short test summary info ============================
 SKIPPED [1] tests/test_memnon/test_ann_gate.py:120: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
 160 passed, 1 skipped, 7 warnings in 279.05s (0:04:39)
 ```
 
-Survey runs (same environment), in order:
+Survey runs (same environment), in order. They ran between 13:42 and 14:09
+on the uncommitted working tree that became `1b5473d9`..`58cef582`. The
+logs in `scratchpad/778-S1b-resume/` hold the output but not the commands.
+The file lists below are reconstructed from the order's static list and the
+saved grep lists (`done.txt`, `risky1.txt`, `risky2.txt`). Each list was
+checked on `517544f8` with `pytest -q --collect-only`: it collects exactly
+the number of tests its log reports (passed + failed + skipped + errors).
+The flags are those of runs A and B; the short summaries in the logs match
+`-rfEs`. Each tail is verbatim from the log, from the `secret-store guard`
+line through the count line.
+
+proof1: the order's proof set and the known fixes, with the `tests/test_connection_lifecycle.py` edit present.
 
 ```text
-proof1  (order set + known fixes, lifecycle edit present): 1 failed, 412 passed, 3 skipped in 142.59s   FAILED test_connection_two_clusters_story_lifecycle (is fixed once ...)
-proof1b (tests/test_connection_lifecycle.py, edit discarded): 1 passed in 27.69s
-proof2  (static list + tests/test_lore, before fixes): 51 failed, 513 passed, 5 skipped, 8 errors in 205.84s   (all "Story clock has no base")
-proof2b (the ten failing files, after fixes): 101 passed, 1 skipped in 125.13s
-proof3a (20 direct chunk writers): 16 failed, 265 passed in 279.54s   (tests/test_embedding_table_ownership_pg.py, "Story clock has no base")
-proof3a2 (tests/test_embedding_table_ownership_pg.py, after fix): 52 passed in 77.89s
-proof3b (20 more direct chunk writers): 180 passed in 135.65s
-proof4  (14 importers of changed helpers): 2 failed, 153 passed, 17 errors in 302.98s
-proof4b (the three failing files, after fixes): 34 passed in 122.78s
-proof5  (5 files with raw base writes): 28 passed in 70.82s
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_world_clock_contract_pg.py tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py tests/test_orrery/test_need_clock_anchor_pg.py tests/test_qa_shift.py tests/test_new_story_setup.py tests/test_pg_accepted_turn_factory.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py tests/test_interactions_pg.py tests/test_orrery/test_retrograde_retrieval_pg.py tests/test_lore/test_infrastructure.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 101 targets: mock, nexus_m10_fresh_test_17029, nexus_m10_template_test_17029, nexus_test_interactions_* x14, postgres, qa640_* x18, qa640_759_measure_*, qa640_778s4a_tests_* x6, qa640_778s6a_family_* x9, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_816_factory_*, qa640_816_free_text_*, qa640_816_pending_*, qa640_816_preconditions_*, qa640_816_staging_failure_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_885_remembered_*, qa640_885_remembered_opening_*, qa640_885_ren_replay_* x4, qa640_clock_* x12, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_retrieval_* x2, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa885_transaction_writer_*, qa_lore_infra_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:50944 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:50971 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:50944 (psycopg2), save_04@local:50971 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+1 failed, 412 passed, 3 skipped, 13 warnings in 142.59s (0:02:22)
 ```
 
-Every survey tail showed `secret-store guard: active; nexus-api: denied` and
-`dbname audit: owner targets: none`. In proof4,
+proof1b: `tests/test_connection_lifecycle.py` with that edit discarded.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_connection_lifecycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: mock, postgres
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:52096 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:52097 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:52096 (psycopg2), save_04@local:52097 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 passed in 27.69s
+```
+
+proof2: the order's static list and `tests/test_lore`, before the fixes; every failure and error is `Story clock has no base`.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_memnon/test_ann_gate.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_api/test_narrative_jobs_pg.py tests/test_jobs_cli_pg.py tests/test_orrery/test_bleed_proximity_live.py tests/test_orrery/test_recall_disclosure_pg.py tests/test_idf_dictionary_pg.py tests/test_orrery/test_narration_job_fencing_pg.py tests/test_orrery/test_claim_accounts_live.py tests/test_orrery/test_boundary_enumeration_pg.py tests/test_orrery/test_reveal_live.py tests/test_lore
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 101 targets: nexus_test_813_*, nexus_test_i685_* x3, nexus_test_pass2_* x7, postgres, qa640_742_seat_test_*, qa640_756s1_distinct_*, qa640_756s1_generation_* x2, qa640_766_schema_*, qa640_780_boundaries_*, qa640_780_storm_*, qa640_800_operator_*, qa640_818_estimate_*, qa640_818_pin_* x2, qa640_908_aliases_*, qa640_908_cast_*, qa640_908_fingerprint_*, qa640_910_dossier_* x7, qa640_acceptance_* x3, qa640_bleed_proximity_* x4, qa640_claim_accounts_*, qa640_historical_coverage_* x3, qa640_offline_gate_* x10, qa640_regen_truncate_* x2, qa640_scene_clock_*, qa640_scene_null_clock_*, qa640_scene_parent_*, qa640_settings_stamp_*, qa640_window_coverage_*, qa653_* x2, qa676_* x7, qa762_idf_* x19, qa762_other_*, qa885_intertitle_*, qa885_retrieval_coverage_*, qa885_reveal_*, qa_lazy_logon_*, qa_lore_infra_*, qa_runtime_config_* x5, qa_wt724_recall_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_api/test_narrative_jobs_pg.py::test_embedding_job_names_the_embedder_restore_command[missing]
+FAILED tests/test_api/test_narrative_jobs_pg.py::test_embedding_job_names_the_embedder_restore_command[incomplete]
+FAILED tests/test_jobs_cli_pg.py::test_jobs_cli_reports_counts_and_non_terminal_rows
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_cognition_trace_endpoint_rejects_invalid_identifiers
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_cognition_trace_deep_reads_reject_post_validation_mutations
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_cognition_trace_endpoint_keeps_canonical_truth_guarded
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_distorted_account_never_leaks_canonical_event_adjacency
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_cognition_trace_rolls_awareness_and_secret_status_back_to_anchor
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_ownership_and_anchor_validity_are_hard_boundaries
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_experience_recall_index_preserves_all_eligibility_boundaries
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_experience_recall_large_shape_uses_eligibility_index
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_critical_current_scene_account_bypasses_ranking
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_world_clock_decay_lowers_rank_without_mutating_possession
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_claim_rank_is_invariant_to_unpossessed_sibling_secret
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_turn_inputs_change_experience_ranking_via_shared_query_embedding
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_disclosure_suppression_is_logged_and_not_surfaced
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_role_obligation_suppresses_unauthorized_audience
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_trust_and_shared_status_can_disclose_private_claim
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_per_character_cap_preserves_shared_budget_for_other_actors
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_trace_retention_prunes_oldest_rows_per_character
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_empty_candidate_set_executes_no_trace_statements
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_batched_trace_rows_match_across_database_surfaces
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_same_turn_batched_trace_rerun_updates_without_duplicates
+FAILED tests/test_orrery/test_recall_disclosure_pg.py::test_trace_round_trips_are_bounded_by_configured_batch_size
+FAILED tests/test_idf_dictionary_pg.py::test_slot_and_corpus_isolation - psyc...
+FAILED tests/test_idf_dictionary_pg.py::test_edits_deletes_rollback_and_membership
+FAILED tests/test_idf_dictionary_pg.py::test_reader_snapshot_and_next_commit
+FAILED tests/test_idf_dictionary_pg.py::test_postgres_lexemes_and_query_quoting
+FAILED tests/test_idf_dictionary_pg.py::test_mismatched_state_fails_through_production_search
+FAILED tests/test_idf_dictionary_pg.py::test_truncation_clears_counts - psyco...
+FAILED tests/test_idf_dictionary_pg.py::test_summary_counts_and_production_search
+FAILED tests/test_idf_dictionary_pg.py::test_concurrent_writers_preserve_document_frequencies
+FAILED tests/test_idf_dictionary_pg.py::test_query_reads_stay_bounded_when_unrelated_vocabulary_grows[narrative]
+FAILED tests/test_idf_dictionary_pg.py::test_query_reads_stay_bounded_when_unrelated_vocabulary_grows[retrograde_summary]
+FAILED tests/test_idf_dictionary_pg.py::test_fresh_slot_from_migrated_source_has_empty_own_state
+FAILED tests/test_idf_dictionary_pg.py::test_shared_reader_scores_its_own_snapshot[query]
+FAILED tests/test_idf_dictionary_pg.py::test_shared_reader_scores_its_own_snapshot[batch]
+FAILED tests/test_idf_dictionary_pg.py::test_shared_reader_scores_its_own_snapshot[single]
+FAILED tests/test_idf_dictionary_pg.py::test_shared_reader_scores_its_own_snapshot[high_terms]
+FAILED tests/test_idf_dictionary_pg.py::test_source_lock_precedes_world_time_refresh
+FAILED tests/test_idf_dictionary_pg.py::test_data_clone_migrates_without_unlocking_source
+FAILED tests/test_orrery/test_narration_job_fencing_pg.py::test_duplicate_enqueue_collapses_to_one_effective_job
+FAILED tests/test_orrery/test_narration_job_fencing_pg.py::test_expired_lease_reclaimed_and_original_completion_fenced
+FAILED tests/test_orrery/test_narration_job_fencing_pg.py::test_stale_anchor_completion_is_terminally_rejected
+FAILED tests/test_orrery/test_narration_job_fencing_pg.py::test_completion_locks_world_layer_before_comparing_anchor
+FAILED tests/test_orrery/test_narration_job_fencing_pg.py::test_completion_clock_counts_time_blocked_on_job_lock
+FAILED tests/test_orrery/test_narration_job_fencing_pg.py::test_normal_narration_path_succeeds_once_end_to_end
+FAILED tests/test_orrery/test_narration_job_fencing_pg.py::test_descriptor_retirement_preserves_canon_legacy_jobs_and_bleed
+FAILED tests/test_lore/test_pass2_baseline_pg.py::test_evaluation_database_baseline_stamp_uses_story_settings
+FAILED tests/test_lore/test_scene_order_render.py::test_recalled_render_clocks_come_from_narrative_view
+FAILED tests/test_lore/test_scene_order_render.py::test_assembly_hydrates_only_selected_recalled_entries_with_null_clocks
+ERROR tests/test_memnon/test_ann_gate.py::test_ann_candidate_index_build_drop
+ERROR tests/test_memnon/test_ann_gate.py::test_ann_alias_candidates_and_database_errors
+ERROR tests/test_regenerate_embeddings_truncate_pg.py::test_truncate_table_keeps_rows_when_the_model_artifact_is_missing
+ERROR tests/test_regenerate_embeddings_truncate_pg.py::test_chunk_keeps_its_row_when_the_model_artifact_is_missing
+ERROR tests/test_orrery/test_bleed_proximity_live.py::test_live_boundary_reservation_and_configured_starvation
+ERROR tests/test_orrery/test_bleed_proximity_live.py::test_live_faction_reference_is_not_a_physical_anchor
+ERROR tests/test_orrery/test_bleed_proximity_live.py::test_live_backfill_and_determinism
+ERROR tests/test_orrery/test_bleed_proximity_live.py::test_live_phase_state_reports_distance_class_counts
+SKIPPED [1] tests/test_memnon/test_ann_gate.py:115: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [1] tests/test_lore/test_infrastructure.py:219: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [1] tests/test_lore/test_pass2_chunk1369.py: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [2] tests/test_lore/test_window_coverage_pg.py:488: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+51 failed, 513 passed, 5 skipped, 9 warnings, 8 errors in 205.84s (0:03:25)
+```
+
+proof2b: the ten failing files, after the fixes.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_api/test_narrative_jobs_pg.py tests/test_jobs_cli_pg.py tests/test_orrery/test_recall_disclosure_pg.py tests/test_idf_dictionary_pg.py tests/test_orrery/test_narration_job_fencing_pg.py tests/test_lore/test_pass2_baseline_pg.py tests/test_lore/test_scene_order_render.py tests/test_memnon/test_ann_gate.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_orrery/test_bleed_proximity_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 65 targets: nexus_test_pass2_* x7, postgres, qa640_766_schema_*, qa640_800_operator_*, qa640_acceptance_* x3, qa640_bleed_proximity_* x4, qa640_offline_gate_* x10, qa640_regen_truncate_* x2, qa640_scene_clock_*, qa640_scene_null_clock_*, qa640_scene_parent_*, qa640_settings_stamp_*, qa653_* x2, qa676_* x7, qa762_corpus_copy_*, qa762_fresh_*, qa762_idf_* x19, qa762_other_*, qa_wt724_recall_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_memnon/test_ann_gate.py:120: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+101 passed, 1 skipped, 9 warnings in 125.13s (0:02:05)
+```
+
+proof3a: 20 direct `chunk_metadata` writers (`risky1.txt`); the 16 failures are `Story clock has no base`.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_api/test_acceptance_staging_pg.py tests/test_api/test_backstage_endpoints_pg.py tests/test_api/test_correspondence_pg.py tests/test_api/test_frontier_clock_pg.py tests/test_api/test_narrative_continue_validation.py tests/test_api/test_orrery_config_reuse_pg.py tests/test_api/test_reader_feed_pg.py tests/test_api/test_return_recap_pg.py tests/test_api/test_seat_policy_backfill_pg.py tests/test_commit_choice_presence_pg.py tests/test_commit_handler_sync.py tests/test_embedding_table_ownership_pg.py tests/test_measure_place_coordinate_costs_pg.py tests/test_memnon_model_failures_pg.py tests/test_orrery_tag_validation_pg.py tests/test_orrery/test_acquisition_scan_pg.py tests/test_orrery/test_build_venture_replay.py tests/test_orrery/test_character_experiences_pg.py tests/test_orrery/test_claim_awareness_replay_live.py tests/test_orrery/test_claim_birth_coverage_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 154 targets: nexus_test_continue_* x10, nexus_test_correspondence_* x2, postgres, qa640_767s1_feed_* x3, qa640_778s6a_backstage_*, qa640_778s6a_empty_*, qa640_810s2_contract_* x52, qa640_814_backfill_*, qa640_840_cost_*, qa640_acceptance_* x19, qa640_compaction_retry_*, qa640_offline_gate_*, qa640_wizard_drain_* x3, qa649_*, qa654_*, qa679_*, qa832_recap_* x10, qa885_build_venture_replay_*, qa885_claim_awareness_replay_*, qa_model_failures_* x15, qa_wt715_*, qa_wt723_*, qa_wt724_experience_* x26
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[sqlalchemy-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[tuple-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_creates_commented_corpus_contract[dict-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_is_idempotent_and_never_builds_ann[chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[dimension-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[source_type-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[nullable_model-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[primary-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_target-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[fk_delete-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[timestamp-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[view-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_refuses_malformed_objects_before_writing[index-chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_ensure_and_upsert_roll_back_with_the_caller[chunk_id]
+FAILED tests/test_embedding_table_ownership_pg.py::test_embedding_job_source_path_propagates_ensure_failure
+FAILED tests/test_embedding_table_ownership_pg.py::test_content_processor_embedding_method_propagates_ensure_failure
+16 failed, 265 passed, 17 warnings in 279.54s (0:04:39)
+```
+
+proof3a2: `tests/test_embedding_table_ownership_pg.py`, after its fix.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_embedding_table_ownership_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 53 targets: postgres, qa640_810s2_contract_* x52
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+52 passed in 77.89s (0:01:17)
+```
+
+proof3b: 20 more direct `chunk_metadata` writers (`risky2.txt`).
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_orrery/test_claim_propagation_live.py tests/test_orrery/test_drift_live.py tests/test_orrery/test_experience_enqueue_gin_pg.py tests/test_orrery/test_generation_model_provenance_live.py tests/test_orrery/test_knowledge_surfacing_live.py tests/test_orrery/test_mood_live.py tests/test_orrery/test_need_absence_pg.py tests/test_orrery/test_pursue_romance_replay.py tests/test_orrery/test_recruit_ally_replay.py tests/test_orrery/test_replay.py tests/test_orrery/test_retrograde_projects_live.py tests/test_orrery/test_retrograde_summary_migration_pg.py tests/test_orrery/test_stage2a_epistemics_live.py tests/test_orrery/test_weather_live.py tests/test_orrery/test_weather_migration_pg.py tests/test_orrery/test_world_event_time_pg.py tests/test_player_identity_consumers_pg.py tests/test_presence_boost_pg.py tests/test_rebuild_memory_idf_pg.py tests/test_runtime/test_readiness_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 86 targets: postgres, qa640_1013_absent_*, qa640_1013_idf_* x7, qa640_1013_readiness_* x2, qa640_778s2a_time_* x14, qa640_778s6a_played_*, qa640_778s6a_replay_* x7, qa640_drift_*, qa640_need_absence_* x7, qa640_projects799_*, qa640_provenance_* x3, qa640_replay_*, qa640_retro078_* x13, qa640_weather_migration_*, qa683_presence_* x2, qa735_mood_*, qa735_weather_*, qa885_claim_propagation_*, qa885_knowledge_surfacing_*, qa885_pursue_romance_replay_*, qa885_recruit_ally_replay_*, qa885_stage2a_epistemics_*, qa_identity_surface_04d22ac099, qa_identity_surface_198c15305d, qa_identity_surface_4057466219, qa_identity_surface_692117310f, qa_identity_surface_6a3d525a8e, qa_identity_surface_a127d15dee, qa_identity_surface_f2589c1815, qa_player_identity_6a61d9fd1a, qa_wt720_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+180 passed, 2 warnings in 135.65s (0:02:15)
+```
+
+proof4: 14 modules that import helpers from the files above.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_api/test_narrative_retry_pg.py tests/test_api/test_reentry_wire_pg.py tests/test_api/test_scheduler_pg.py tests/test_api/test_scheduler_recovery_pg.py tests/test_bootstrap_episode_pg.py tests/test_memnon/test_source_embeddings.py tests/test_name_reveal_staged_bindings_pg.py tests/test_orrery/test_court_patron_replay.py tests/test_orrery/test_experiences.py tests/test_orrery/test_relationship_provenance_pg.py tests/test_orrery/test_retrograde_persistence.py tests/test_orrery/test_seek_redemption_replay.py tests/test_presence_roster_pg.py tests/test_retrograde_summary_retrieval.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 97 targets: nexus_test_retry_* x17, postgres, qa640_800_kill_*, qa640_800_renew_* x4, qa640_807_latest_playable_*, qa640_807_maturation_boundary_*, qa640_807_reapply_*, qa640_810s2_experience_ids_*, qa640_810s2_source_* x5, qa640_810s2_summary384_*, qa640_acceptance_* x19, qa640_drift_*, qa640_offline_gate_* x12, qa640_roster798_* x29, qa885_court_patron_*, qa885_seek_redemption_*, qa947_episode_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt[False-character_experience_jobs]
+FAILED tests/test_api/test_scheduler_pg.py::test_scheduler_embeds_rendered_experiences_and_skips_the_rest
+ERROR tests/test_api/test_narrative_retry_pg.py::test_concurrent_retry_has_one_owner_and_never_recommits_action
+ERROR tests/test_api/test_narrative_retry_pg.py::test_retry_rejects_changed_durable_state_before_session_creation[pending]
+ERROR tests/test_api/test_narrative_retry_pg.py::test_retry_rejects_changed_durable_state_before_session_creation[newer_attempt]
+ERROR tests/test_api/test_narrative_retry_pg.py::test_retry_rejects_changed_durable_state_before_session_creation[newer_chunk]
+ERROR tests/test_api/test_narrative_retry_pg.py::test_retry_rejects_changed_durable_state_before_session_creation[missing_action]
+ERROR tests/test_api/test_narrative_retry_pg.py::test_retry_rejects_changed_durable_state_before_session_creation[discarded]
+ERROR tests/test_api/test_narrative_retry_pg.py::test_retry_rejects_changed_durable_state_before_session_creation[missing_parent]
+ERROR tests/test_api/test_narrative_retry_pg.py::test_staging_failure_resumes_as_recovery_and_retries_once
+ERROR tests/test_api/test_narrative_retry_pg.py::test_dead_worker_is_advertised_exactly_as_retry_accepts_it
+ERROR tests/test_api/test_narrative_retry_pg.py::test_restart_reopens_the_menu_when_no_retry_can_resume
+ERROR tests/test_api/test_narrative_retry_pg.py::test_retry_bootstrap_without_a_playable_parent
+ERROR tests/test_api/test_narrative_retry_pg.py::test_failure_between_acceptance_and_bind_stays_retryable
+ERROR tests/test_api/test_narrative_retry_pg.py::test_explicit_frontier_chunk_bind_failure_stays_retryable
+ERROR tests/test_api/test_narrative_retry_pg.py::test_pending_approval_failure_after_commit_stays_retryable
+ERROR tests/test_api/test_narrative_retry_pg.py::test_abandon_before_worker_commit_still_binds_the_approved_action
+ERROR tests/test_api/test_narrative_retry_pg.py::test_cancelled_route_leaves_a_retryable_failure_after_the_worker_commits
+ERROR tests/test_api/test_narrative_retry_pg.py::test_worker_binding_and_cancelled_abandon_overlap_without_deadlock
+2 failed, 153 passed, 7 warnings, 17 errors in 302.98s (0:05:02)
+```
+
+proof4b: the three failing files, after the fixes.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_api/test_scheduler_recovery_pg.py tests/test_api/test_scheduler_pg.py tests/test_api/test_narrative_retry_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 35 targets: nexus_test_retry_* x17, postgres, qa640_800_kill_*, qa640_800_renew_* x4, qa640_offline_gate_* x12
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+34 passed, 7 warnings in 122.78s (0:02:02)
+```
+
+proof5: 5 not-yet-run files with raw `base_timestamp` writes.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_api/test_reader_draft_identity_pg.py tests/test_gis_scripts_live.py tests/test_orrery/test_gis_stub_paths_live.py tests/test_orrery/test_pair_tag_writer.py tests/test_wizard_opening_presence_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 30 targets: postgres, qa655_wizard_1a13b523ed, qa655_wizard_22bc968275, qa655_wizard_76ba6bd743, qa655_wizard_a653517aea, qa655_wizard_d8953f4c28, qa655_wizard_f2abe60da3, qa735_gis_scripts_* x3, qa735_gis_stubs_* x5, qa735_pair_tags_* x10, qa951_identity_* x4, qa951_overwrite_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+28 passed, 9 warnings in 70.82s (0:01:10)
+```
+
+The import scan found a fifteenth importer that proof4 did not run,
+`tests/test_api/test_place_reference_validation_pg.py` (3 tests; proof4
+collected 172 = the other 14 files). It ran on `517544f8` after `uptime`
+read 12.75:
+
+```text
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rfEs tests/test_api/test_place_reference_validation_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 4 targets: postgres, qa640_acceptance_* x3
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+3 passed, 7 warnings in 4.77s
+```
+
+In proof4,
 `tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt[False-character_experience_jobs]`
 failed on a timing bound (`assert (2492.553798708 - 2491.374662458) < 1`)
 at a one-minute load near 10, with no clock or base error; the same file
