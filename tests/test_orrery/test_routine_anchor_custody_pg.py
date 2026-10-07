@@ -669,3 +669,28 @@ def test_schedule_column_is_nullable(seeded: Seeded) -> None:
         """,
     )
     assert column == {"is_nullable": "YES", "column_default": None}
+
+
+def test_identical_upsert_still_writes_a_ledger_row(seeded: Seeded) -> None:
+    """Re-asserting the same anchor records a second ledger row."""
+
+    change = [
+        _change(
+            seeded.dex,
+            "work",
+            "fixed_place",
+            place_id=seeded.work_place,
+            schedule={"start": "09:00", "end": "17:00"},
+        )
+    ]
+    [first_id] = _apply_sync(
+        seeded.dbname, change, writer_kind=WRITER, source_chunk_id=seeded.chunk_1
+    )
+    [second_id] = _apply_sync(
+        seeded.dbname, change, writer_kind=WRITER, source_chunk_id=seeded.chunk_2
+    )
+    first, second = _ledger(seeded.dbname)
+    assert (first["id"], second["id"]) == (first_id, second_id)
+    assert second["before_image"] == second["after_image"] == first["after_image"]
+    [anchor] = _anchors(seeded.dbname)
+    assert anchor["last_log_id"] == second_id
