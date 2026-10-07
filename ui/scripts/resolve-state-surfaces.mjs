@@ -65,7 +65,7 @@ deadline.unref();
 const { transformSync } = createRequire(require.resolve('vite'))('esbuild');
 const math = transformSync(readFileSync(resolve(ui, 'client/src/state-shades-measurement.ts'), 'utf8'), { loader: 'ts', format: 'esm' }).code;
 const { ciede2000, deutanLinearLab } = await import('data:text/javascript;base64,' + Buffer.from(math).toString('base64'));
-if (media.unsupported.length) throw new Error(`Unemulatable media/container preludes: ${media.unsupported.join('; ')}`);
+if (media.unsupported.length) throw new Error(`Unemulatable at-rule/media preludes: ${media.unsupported.join('; ')}`);
 const html = resolve(scratch, 'fixture.html');
 writeFileSync(html, `<!doctype html><meta charset="utf-8"><style>${css}</style><div id="root"></div><script src="fixture.js"></script>`);
 const base = execFileSync('git', ['show', `${START}:ui/client/src/index.css`], { cwd: root, encoding: 'utf8' });

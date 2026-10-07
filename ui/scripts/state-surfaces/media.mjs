@@ -1,6 +1,18 @@
 import postcss from 'postcss';
 import { conditions } from './inputs.mjs';
 
+const ignoredAtRules = new Set([
+  'supports', 'layer', 'font-face', 'keyframes', 'property', 'scope', 'page',
+  'starting-style', 'charset', 'namespace', 'font-feature-values',
+  'counter-style', 'view-transition',
+]);
+/** Normalize the undecoded media grammar before matching any term. */
+const stripComments = raw => raw.replace(/\/\*[\s\S]*?\*\//g, '');
+const normalize = raw => stripComments(raw).toLowerCase()
+  .replace(/\s+/g, ' ').replace(/\s*([():,])\s*/g, '$1').trim();
+// Keep the receipt's established human-readable feature spelling.
+const display = term => term.replaceAll(':', ': ').replace(/^not\(/, 'not (');
+
 const discrete = {
   'prefers-reduced-motion': ['reduce', 'no-preference'],
   'prefers-color-scheme': ['dark', 'light'],
@@ -31,20 +43,21 @@ export function mediaConditions(css) {
   // Evaluate only this allowlist in screen / forced-colors:none. Parse the
   // entire alternative before exclusion so an unknown term never disappears.
   function evaluate(raw, parentList) {
-    const prelude = `media ${raw}`, terms = raw.toLowerCase().trim().split(/\s*\band\b\s*/);
+    const prelude = `media ${raw}`, normalized = normalize(raw);
+    const terms = normalized.split(/\s*\band\b\s*/);
     remember(prelude);
     const tests = [], kept = [], always = [];
     let reason;
     const refuse = () => { unsupported.push(prelude); return undefined; };
-    if (/\bor\b/.test(raw.toLowerCase())) return refuse();
+    if (/\bor\b/.test(normalized)) return refuse();
     if (/^not\b/.test(terms[0])) {
       if (terms.length !== 1) return refuse();
       const term = terms[0];
-      if (term === 'not print' || /^not\s+\(\s*forced-colors\s*:\s*active\s*\)$/.test(term))
-        always.push(term);
+      if (term === 'not print' || /^not\(forced-colors:active\)$/.test(term))
+        always.push(display(term));
       else if (term === 'not screen' || term === 'not all')
         reason = `${term} is false in the screen environment`;
-      else if (/^not\s+\(\s*forced-colors\s*:\s*none\s*\)$/.test(term))
+      else if (/^not\(forced-colors:none\)$/.test(term))
         reason = 'not (forced-colors: none) is false with forced-colors: none';
       else return refuse();
     } else {
@@ -52,22 +65,23 @@ export function mediaConditions(css) {
         if (i === 0 && /^(?:only\s+)?(?:screen|all|print)$/.test(term)) {
           if (term.replace(/^only\s+/, '') === 'print')
             reason = 'print media type is false in the screen environment';
-          else always.push(term);
+          else always.push(display(term));
           continue;
         }
         const feature = term.match(/^\(\s*([^()]*)\s*\)$/)?.[1].trim();
         if (!feature) return refuse();
-        let m = feature.match(/^(?:(min|max)-)?(width|height)\s*:\s*(\d+(?:\.\d+)?|\.\d+)px$/);
+        let m = feature.match(/^(?:(min|max)-)?(width|height):(\d+)px$/);
         if (m) {
+          if (!Number.isSafeInteger(Number(m[3]))) return refuse();
           const axis = m[2], op = m[1] === 'min' ? '>=' : m[1] === 'max' ? '<=' : '=';
-          tests.push({ axis, op, value: Number(m[3]) }); kept.push(term); continue;
+          tests.push({ axis, op, value: Number(m[3]) }); kept.push(display(term)); continue;
         }
         m = feature.match(/^([a-z-]+)\s*:\s*([a-z-]+)$/);
         if (m?.[1] === 'forced-colors' && ['active', 'none'].includes(m[2])) {
           if (m[2] === 'active') reason = 'forced-colors: active is false with forced-colors: none';
-          else always.push(term);
+          else always.push(display(term));
         } else if (m && discrete[m[1]]?.includes(m[2])) {
-          tests.push({ feature: m[1], value: m[2] }); kept.push(term);
+          tests.push({ feature: m[1], value: m[2] }); kept.push(display(term));
         } else return refuse();
       }
     }
@@ -88,22 +102,44 @@ export function mediaConditions(css) {
     return { terms: kept, test: v => tests.every(t => t.axis ?
       compare(v.viewport[t.axis], t.op, t.value) : v.features[t.feature] === t.value) };
   }
+  let root;
+  try { root = postcss.parse(css); }
+  catch (error) {
+    // PostCSS cannot tokenize an at-keyword beginning with a CSS escape.
+    // Refuse that exact header by name; unrelated syntax errors still surface.
+    const source = error.source?.split('\n').slice(error.line - 1).join('\n')
+      .slice(error.column - 1);
+    if (error.reason !== 'At-rule without name' || !source?.startsWith('@\\')) throw error;
+    const prelude = source.slice(1).split(/[{};]/, 1)[0].trim();
+    remember(prelude); unsupported.push(prelude); root = postcss.root();
+  }
+  // Audit every at-rule, including children of excluded media parents. They
+  // cannot silently bypass the evaluator through an unrecognised wrapper.
+  const refused = new Set();
+  root.walkAtRules(rule => {
+    const name = rule.name.toLowerCase();
+    const params = rule.raws.params?.raw ?? rule.params;
+    const afterName = rule.raws.afterName ?? '';
+    if (rule.name.includes('\\') || afterName.includes('\\') || params.includes('\\') ||
+        (!ignoredAtRules.has(name) && name !== 'media')) {
+      const prelude = `${name} ${afterName.includes('\\') ? afterName.trim() + ' ' : ''}${params}`.trim();
+      remember(prelude); unsupported.push(prelude); refused.add(rule);
+    }
+  });
   function visit(node, parents = [{ terms: [], test: () => true }]) {
     for (const rule of node.nodes ?? []) {
-      if (rule.type !== 'atrule' || !['media', 'container'].includes(rule.name)) {
+      if (refused.has(rule)) continue;
+      if (rule.type !== 'atrule' || rule.name.toLowerCase() !== 'media') {
         visit(rule, parents); continue;
       }
-      if (rule.name === 'container') {
-        const prelude = `container ${rule.params}`; remember(prelude);
-        unsupported.push(prelude); continue;
-      }
-      const own = mediaAlternatives(rule.params).map(raw => evaluate(raw, `media ${rule.params}`));
+      const own = mediaAlternatives(stripComments(rule.params)).map(raw => evaluate(raw, `media ${rule.params}`));
       // Refused parents fail before their children are inspected.
       if (own.some(alternative => !alternative)) continue;
       for (const alternative of own.filter(a => a.excluded)) {
         const skipped = [];
         rule.walkAtRules(child => {
-          if (['media', 'container'].includes(child.name)) skipped.push(`${child.name} ${child.params}`);
+          if (['media', 'container'].includes(child.name.toLowerCase()))
+            skipped.push(`${child.name.toLowerCase()} ${child.params}`);
         });
         if (skipped.length) alternative.excluded.skipped = [...new Set(skipped)];
       }
@@ -119,7 +155,7 @@ export function mediaConditions(css) {
       if (effective.length) visit(rule, effective);
     }
   }
-  visit(postcss.parse(css));
+  visit(root);
   function bands(axis) {
     if (!ranges[axis].length) return [{ name: '', value: conditions.viewport[axis] }];
     // Playwright viewports use integer CSS pixels. Preserve inclusive/exclusive

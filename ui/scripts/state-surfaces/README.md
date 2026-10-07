@@ -50,7 +50,7 @@ is retained, and every included prelude must be satisfied. Sixth Review:
 every media list is split at depth-zero commas (parentheses may nest); each
 kept alternative is its own prelude for bands, features and satisfied sets.
 The evaluator's measured environment is screen, `forced-colors: none`.
-Its allowlist is colon-form width/height in px (including min-/max- prefixes),
+Its allowlist is colon-form width/height in unsigned integer px (including min-/max- prefixes),
 `prefers-reduced-motion` (reduce/no-preference), `prefers-color-scheme`
 (dark/light), hover/any-hover (hover/none), pointer/any-pointer
 (fine/coarse/none), and forced-colors (active/none). Media types screen/all
@@ -65,7 +65,21 @@ is the conjunction of its kept parent and child. Unknown terms refuse before
 exclusion; refused parents are not traversed. Negation combined with any other
 term, any `or`, Level-4 range syntax, unknown types/feature values, every
 feature outside this allowlist, and container preludes fail naming the prelude.
-A mixed list retains its kept alternatives.
+A mixed list retains its kept alternatives. Eighth Review normalizes each prelude by
+stripping `/* … */` comments, lowercasing, collapsing whitespace and removing
+space around `(`, `)`, `:` and `,` before grammar evaluation. Numeric values
+must be safe unsigned integers in `px`; fractions, signs, exponents and other
+units refuse by prelude. Every term must match completely; any residue refuses.
+At-rule dispatch lowercases every name: `media` is evaluated; `container` and
+`import` refuse by name. Only `supports`, `layer`, `font-face`, `keyframes`,
+`property`, `scope`, `page`, `starting-style`, `charset`, `namespace`,
+`font-feature-values`, `counter-style` and `view-transition` are ignored as
+non-media wrappers; nested media is still evaluated. All other at-rule names,
+and any name or prelude containing a backslash, refuse by name. CSS escapes
+are never decoded. This audit also checks at-rules inside excluded parents;
+media conditions under those parents retain Round 7's skipped-child rule.
+Everything outside the modelled grammar refuses; no unknown at-rule is silently
+ignored.
 The shipped CSS has **9 width
 bands × 2 motion values = 18 vectors**, expanded into **27 condition renders**
 by motion start/trough phases. IDs name band and motion, for example
@@ -157,7 +171,8 @@ The Sixth Review mixed-print/width plant uses Astra's exact 640–759px rule;
 its capture is the new 759×900/dark/reduce representative, compared with the
 prior 760px band receipt. The 1200px default lies outside the planted rule.
 The Seventh Review nested `not print` plant uses Astra's exact nested rule
-at the same approved 759×900 representative. These viewport exceptions keep
+at the same approved 759×900 representative. The Eighth Review uppercase
+`@MEDIA` plant uses Astra's exact rule at that representative too. These viewport exceptions keep
 partial receipts uncertified.
 Gradient paint must regenerate successfully; element-scoped state declarations
 must fail. The gradient and redeclaration regressions are included.

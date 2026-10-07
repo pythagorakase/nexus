@@ -151,4 +151,72 @@ describe("screen / forced-colors none evaluator", () => {
   });
 });
 
+describe("normalized media grammar and exhaustive at-rule dispatch", () => {
+  it.each([
+    "@MEDIA (min-width: 640px) and (max-width: 759px)",
+    "@Media SCREEN AND (MIN-WIDTH: 640PX) AND (MAX-WIDTH: 759PX)",
+    "@media /* note */ (min-width:640px)and(max-width:759px)",
+    "@media (min-width:/* note, (and) */640px)and(max-width:759px)",
+    "@media \n  screen  AND  ( MIN-WIDTH : 640PX ) AND ( MAX-WIDTH : 759PX )",
+  ])("measures the 759 band through PostCSS for %s", header => {
+    const media = mediaConditions(shipped + `${header} { .key-row.optional { opacity: .35 } }`);
+    expect(media.unsupported).toEqual([]);
+    expect(media.variants).toHaveLength(30);
+    expect(media.representatives.find(v => v.band === "w640-759")?.viewport.width).toBe(759);
+  });
+
+  it("parses an at-rule without whitespace before its feature", () => {
+    const media = mediaConditions("@media(min-width:640px) { .key-row.optional { opacity: .35 } }");
+    expect(media.unsupported).toEqual([]);
+    expect(media.representatives.find(v => v.band === "w640+")?.satisfied).toEqual(["media (min-width: 640px)"]);
+  });
+
+  it.each(["759.5px", "6.4e2px", "48em", "+759px", "-759px", ".5px", "9007199254740993px"])(
+    "refuses the numeric grammar outside unsigned integer px: %s", value => {
+      expect(mediaConditions(rule(`(max-width: ${value})`)).unsupported).toEqual([`media (max-width: ${value})`]);
+    },
+  );
+
+  it.each([
+    [String.raw`@\6d edia (max-width: 759px)`, String.raw`\6d edia (max-width: 759px)`],
+    [String.raw`@med\69 a (max-width: 759px)`, String.raw`med \69 a (max-width: 759px)`],
+    [String.raw`@media (max-width: 759p\78)`, String.raw`media (max-width: 759p\78)`],
+    [String.raw`@supports (display: g\72 id)`, String.raw`supports (display: g\72 id)`],
+    ["@CONTAINER (min-width: 400px)", "container (min-width: 400px)"],
+    ["@frobnicate (max-width: 759px)", "frobnicate (max-width: 759px)"],
+  ])("refuses %s by name", (header, name) => {
+    expect(mediaConditions(`${header} { .key-row.optional { opacity: .35 } }`).unsupported).toEqual([name]);
+  });
+
+  it("refuses surviving imports by name", () => {
+    expect(mediaConditions("@import url(extra.css) screen and (max-width: 759px);").unsupported)
+      .toEqual(["import url(extra.css) screen and (max-width: 759px)"]);
+  });
+
+  it.each(["supports (display: grid)", "layer base"])("walks media nested inside @%s", parent => {
+    const media = mediaConditions(shipped + `@${parent} { ${rule("(max-width: 759px)")} }`);
+    expect(media.unsupported).toEqual([]);
+    expect(media.variants).toHaveLength(30);
+    expect(media.variants.some(v => v.viewport.width === 759)).toBe(true);
+  });
+
+  it.each([
+    '@font-face { font-family: x; src: url(x.woff2); }',
+    '@keyframes x { from { opacity: 0; } to { opacity: 1; } }',
+    '@property --x { syntax: "<color>"; inherits: false; initial-value: red; }',
+    '@scope (.x) {}', '@page {}', '@starting-style {}', '@charset "utf-8";',
+    '@namespace svg url(http://www.w3.org/2000/svg);', '@font-feature-values x {}',
+    '@counter-style x {}', '@view-transition {}', '@SUPPORTS (display: grid) {}', '@LAYER base {}',
+  ])("ignores the non-media at-rule %s", css => {
+    const media = mediaConditions(shipped + css);
+    expect(media.unsupported).toEqual([]);
+    expect(media.variants).toHaveLength(27);
+  });
+
+  it("names unknown children even inside excluded media", () => {
+    const media = mediaConditions("@media print { @frobnicate x { } }");
+    expect(media.unsupported).toEqual(["frobnicate x"]);
+  });
+});
+
 // Codex, GPT-6.
