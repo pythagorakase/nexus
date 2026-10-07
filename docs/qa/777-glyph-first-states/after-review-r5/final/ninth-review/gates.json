@@ -37,5 +37,87 @@
     "code": 0,
     "wallSeconds": 52.04345054196892,
     "boundSeconds": 589
+  },
+  {
+    "name": "plant-control",
+    "args": [
+      "node",
+      "ui/scripts/state-surfaces/plants.mjs",
+      "--stage",
+      "control"
+    ],
+    "code": 0,
+    "wallSeconds": 60.64507141604554,
+    "boundSeconds": 650
+  },
+  {
+    "name": "plant-stale",
+    "args": [
+      "node",
+      "ui/scripts/state-surfaces/plants.mjs",
+      "--stage",
+      "stale",
+      "--plant",
+      "inline-if-media"
+    ],
+    "code": 0,
+    "wallSeconds": 3.5504152909852564,
+    "boundSeconds": 650
+  },
+  {
+    "name": "plant-capture",
+    "args": [
+      "node",
+      "ui/scripts/state-surfaces/plants.mjs",
+      "--stage",
+      "capture",
+      "--plant",
+      "inline-if-media"
+    ],
+    "code": 0,
+    "wallSeconds": 5.294428875029553,
+    "boundSeconds": 650
+  },
+  {
+    "name": "plant-fresh",
+    "args": [
+      "node",
+      "ui/scripts/state-surfaces/plants.mjs",
+      "--stage",
+      "fresh",
+      "--plant",
+      "inline-if-media"
+    ],
+    "code": 0,
+    "wallSeconds": 1.5375579170067795,
+    "boundSeconds": 650
+  },
+  {
+    "name": "plant-restore",
+    "args": [
+      "node",
+      "ui/scripts/state-surfaces/plants.mjs",
+      "--stage",
+      "restore",
+      "--plant",
+      "inline-if-media"
+    ],
+    "code": 0,
+    "wallSeconds": 1.5721815000288188,
+    "boundSeconds": 650
+  },
+  {
+    "name": "restored",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 0,
+    "wallSeconds": 51.10353495896561,
+    "boundSeconds": 589
   }
 ]

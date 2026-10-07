@@ -1,0 +1,1 @@
+.key-row.optional{opacity:if(media((min-width: 640px) and (max-width: 759px)): .35; else: .5)}
