@@ -79,9 +79,13 @@ No live turn mixes providers today; the flag is for the turn that does.
 ## Red Run
 
 With the new tests written, `"comparable": True` was planted in `_sum_totals`
-and `_overall_totals` (reverted before the commit):
+and `_overall_totals` (reverted before the commit). The run below was repeated
+at `d94681d8` with the plant reapplied and then reverted, so the command that
+produced the tail is on record:
 
 ```
+$ PYTHONPATH=$PWD $PY -m pytest -q --tb=line -p no:warnings tests/test_turn_observation.py -k "comparab"
+FF                                                                       [100%]
 =================================== FAILURES ===================================
 /Users/pythagor/nexus/.claude/worktrees/802-cache-and-tag-report/tests/test_turn_observation.py:907: assert True is False
 /Users/pythagor/nexus/.claude/worktrees/802-cache-and-tag-report/tests/test_turn_observation.py:990: AssertionError: assert {'background'...enai'], True)} == {'background'...nai'], False)}
@@ -89,7 +93,7 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 =========================== short test summary info ============================
 FAILED tests/test_turn_observation.py::test_usage_totals_mark_sums_across_providers_not_comparable
 FAILED tests/test_turn_observation.py::test_background_and_overall_comparability_follow_their_own_providers
-2 failed, 41 deselected in 0.60s
+2 failed, 41 deselected in 1.32s
 ```
 
 Line 907 is `assert critical_path["comparable"] is False`; line 990 is the
@@ -118,12 +122,29 @@ dbname audit: owner targets: none
 The two skips are `tests/test_lore/test_window_coverage_pg.py:488` ("Set
 NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.").
 
-Offline:
+Offline. The non-api, non-orrery piece (`tests --ignore=tests/test_api
+--ignore=tests/test_orrery`) ran at `d94681d8` as four sequential pieces that
+together collect the same files: `tests/test_lore`, the other subdirectories,
+the top-level files `a` to `m` plus the two `*_test.py` files, and the
+top-level files `n` to `z`. Their sums (2945 passed, 559 skipped) equal the
+single run they replace:
 
 ```
-$ $PY -m pytest -q -p no:warnings tests --ignore=tests/test_api --ignore=tests/test_orrery
+$ PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_lore
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2945 passed, 559 skipped in 639.92s (0:10:39)
+414 passed, 55 skipped in 37.28s
+
+$ PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/config tests/test_config tests/test_ir_eval_v2 tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+544 passed, 26 skipped in 152.00s (0:02:32)
+
+$ PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_[a-m]*.py tests/*_test.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+748 passed, 199 skipped in 305.72s (0:05:05)
+
+$ PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_[n-z]*.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1239 passed, 279 skipped in 90.87s (0:01:30)
 
 $ $PY -m pytest -q -p no:warnings tests/test_api
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
