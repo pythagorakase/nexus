@@ -155,9 +155,13 @@ def disposable_slot_database(
     ``include_data`` snapshots a source corpus with pg_dump, restores it into
     the disposable target, and migrates only that clone. It never disconnects,
     unlocks, or changes the source database. Default cloning copies seed data
-    only, suitable for tests that create their own stories. Clones are pinned
-    to TEST before corpus migrations so backfilled work is also safe. Preserving
-    the source pin requires the explicit live-LLM opt-in.
+    only, suitable for tests that create their own stories. A data clone is
+    brought to the current migration stamp before the TEST pin is written,
+    because the pin names columns that a source behind the current stamp may
+    lack (``global_variables.gaia_model`` arrives in migration 117; issue
+    #1083). Migrations call no provider, and the fixture yields only after the
+    pin, so test code never sees the source's pin. Preserving the source pin
+    requires the explicit live-LLM opt-in.
 
     Fails loudly when the admin connection is unavailable; opting into the
     PostgreSQL gate means PostgreSQL is required.
@@ -230,12 +234,15 @@ def disposable_slot_database(
                     text=True,
                     env=subprocess_env(),
                 )
-            pin_clone()
+            # Migrate before pinning: the pin's UPDATE names columns (such as
+            # global_variables.gaia_model) that a source behind the current
+            # stamp does not have yet.
             _, failed = migrate.migrate_database(dbname, skip_locked=False)
             if failed:
                 raise RuntimeError(
                     f"Corpus clone {dbname} has {failed} failed migrations"
                 )
+            pin_clone()
         else:
             new_story_setup.initialize_slot_database(dbname, source_db=source_db)
             pin_clone()
