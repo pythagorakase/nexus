@@ -319,7 +319,7 @@ def main() -> None:
     group.add_argument(
         "--write",
         action="store_true",
-        help="Write the rendered reference to docs/cli_reference.md",
+        help="Replace docs/cli_reference.md with a fresh render",
     )
     group.add_argument(
         "--check",
