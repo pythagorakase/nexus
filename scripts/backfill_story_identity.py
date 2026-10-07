@@ -199,7 +199,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--write-locked-slot",
         action="store_true",
-        help="write a locked slot for this session; the lock stays",
+        help="Override read-only policy only for this maintenance session",
     )
     parser.add_argument(
         "--fork",
