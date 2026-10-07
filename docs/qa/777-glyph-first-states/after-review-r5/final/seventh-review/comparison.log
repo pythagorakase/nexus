@@ -1,0 +1,25 @@
+{
+  "baseline": "bc1af7ba2bd02939449eabfd5ea46f5b3a24dd39",
+  "baselineReceiptSha256": "35d765c89b8b7210241d5e48fad184e3cc40a623daa3716f2ea1a20d636118cb",
+  "baselineMatchesLfsOid": true,
+  "priorFingerprint": "7c7cda7c5a1124025888de538122b3efb555de17e1a2dd30ea48cb84fc3ab7f9",
+  "fingerprint": "70f2d64239c57d51435eadfd558bf0dd5f34f4af5266507c09e99efb5122337b",
+  "conditionCount": 27,
+  "conditionsIdentical": true,
+  "samplesCompared": 101742,
+  "changedSamples": 0,
+  "missing": [],
+  "additional": [],
+  "excludedRuntimeFields": [
+    "settleWaitMs",
+    "escapePressed",
+    "action: exact trailing tooltip dismissal branch only"
+  ],
+  "runtimeActionDifferences": 415,
+  "priorSamplesSha256": "1d57b4ebf342ac17f64427645e9c110b0dffc05fe8b27abc10d30fdcb0e45f97",
+  "samplesSha256": "1d57b4ebf342ac17f64427645e9c110b0dffc05fe8b27abc10d30fdcb0e45f97",
+  "renders": 101742,
+  "wallSeconds": 1981.920074792,
+  "acceptanceComplete": true,
+  "differences": []
+}
