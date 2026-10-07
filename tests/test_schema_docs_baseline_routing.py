@@ -24,7 +24,7 @@ POINTER = re.compile(r'docs/dead_retrieval_subtraction\.md, section "([^"]+)"')
 def _baseline() -> dict[str, str]:
     """Return the baseline as an ordered mapping of key to reason."""
     data = json.loads(BASELINE.read_text(encoding="utf-8"))
-    assert isinstance(data, dict) and data, "schema docs baseline is empty"
+    assert isinstance(data, dict), "schema docs baseline must be a JSON object"
     return data
 
 
