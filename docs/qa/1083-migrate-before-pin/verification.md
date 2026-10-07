@@ -38,7 +38,9 @@ is_active
 
 No `gaia_model` column. Its model-bearing job tables hold no active work, so
 migration 126's backfill (which freezes queued or leased jobs' models from the
-pin it finds) has nothing to resolve on this source:
+pin it finds, for a data clone the source's pin) has nothing to resolve on this
+source. That is a fact about this corpus, not a property of the pin order; the
+fixture guard below enforces it for every source:
 
 ```
 character_experience_jobs: (no rows)
@@ -122,6 +124,77 @@ dbname audit: owner targets: none
 No `qa640_` database remained after the runs
 (`psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640%'"`
 printed nothing).
+
+## Review Fix: Migration 126 Backfill Guard (Commit 423a4107)
+
+Review found that migrate-first lets `migrations/126_seat_policies.py` freeze
+`resolved_model` on queued or leased jobs under the source's pin (the pin is
+written only afterward, and the column is immutable across repins), while the
+docstring claimed test code never sees the source's pin. Of the two fixes
+offered, this branch takes the fixture guard (keep migrate-first, fail loudly),
+not the two-phase migrate:
+
+- `tests/pg_fixtures.py`: before migrating a data clone, the fixture records
+  whether `schema_migrations` already holds `126`. If it did not and
+  `story_pin` is set, `_refuse_source_pin_backfill` runs after migrating and
+  before `pin_clone()`; it counts rows with `state IN ('queued', 'leased') AND
+  resolved_source = 'migration_backfill'` in the four tables of 126's
+  `JOB_SEATS` and raises `RuntimeError` naming the table and the clone. The
+  docstring now states the guarantee that holds: `global_variables` reads TEST,
+  migration 126 is the exception the pin cannot reach and is refused, and jobs
+  the source resolved before the clone keep their models.
+- `tests/test_pg_fixtures_corpus_clone.py`: the comment over the backfill loop
+  now says the loop records this corpus's precondition (no active jobs) and
+  points at the fixture guard; the table list is imported from the fixture.
+
+The guard fires. Scratch proof
+(`scratchpad/1083/guard_fires_proof.py`, run with `NEXUS_TEST_PROVIDER_ONLY=1`
+and `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT` unset): restore the
+reference corpus's `pg_dump` into a disposable `qa640_1083_src_*` database, set
+its first (succeeded) `orrery_maturation_jobs` row to `queued`, then clone that
+source with data:
+
+```
+source qa640_1083_src_e95492828245 queued job id 1
+RuntimeError: Data clone qa640_1083_guard_2302de379586: migration 126 froze 1 active orrery_maturation_jobs rows under the source's story pin, which the TEST pin cannot replace
+```
+
+Both disposable databases were dropped (the `qa640%` query afterward printed
+nothing). The reference corpus itself was read only through `pg_dump`.
+
+Tails on 423a4107:
+
+`NEXUS_RUN_CORPUS=1 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_pg_fixtures_corpus_clone.py`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_1083_ref_corpus_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 passed in 3.45s
+```
+
+`NEXUS_RUN_CORPUS=1 NEXUS_RUN_POSTGRES=1 ... -p tests.dbname_audit tests/test_connection_lifecycle.py
+tests/test_orrery/test_card_identity.py tests/test_scheduler_helpers_routing.py
+tests/test_owner_target_guard.py tests/test_lore/test_infrastructure.py` (the
+`save_04` and `save_01` data clones are past 126, so the guard does not run for
+them):
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 11 targets: mock, postgres, qa640_781_cards_* x2, qa640_885_ren_replay_* x4, qa640_lane_close_*, qa_lore_corpus_*, qa_lore_infra_*
+dbname audit: owner server: local:5432
+dbname audit: owner targets: none
+112 passed, 7 warnings in 63.71s (0:01:03)
+```
+
+Offline: `tests/test_pg_target_contract.py tests/test_doc_front_matter.py
+tests/test_reachability.py`: `204 passed, 1 skipped, 5 warnings in 18.61s`
+(guard line present). `black --check` (2 files unchanged), `flake8` (no
+output), `mypy --explicit-package-bases` (`Success: no issues found in 2 source
+files`), `check_exception_dispositions.py --baseline-base-ref origin/main`
+(`OK`). No `qa640_` database remained.
 
 ## Offline Gates
 
