@@ -53,7 +53,31 @@ dbname audit: owner targets: none
 282 passed in 134.13s (0:02:14)
 ```
 
+That run (12:56 CDT) did not use `nice -n 15`. The rerun below ran under `nice -n 15` at commit `bdb2ddd6`, the last commit that changes code or generated output; the fix commit after it changes only this file. `uptime` read just before it:
+
+```
+$ uptime
+13:04  up 5 days, 22:44, 5 users, load averages: 18.47 30.62 43.43
+```
+
+The one-minute load was below 24, so no wait was needed.
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_cli_reference_doc.py tests/test_cli_contract.py tests/test_doc_front_matter.py tests/test_reachability.py tests/test_orrery/test_catalog.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+282 passed in 132.51s (0:02:12)
+exit=0
+$ PYTHONPATH=$PWD nice -n 15 $PY scripts/render_cli_reference.py --check
+exit=0
+```
+
 ## Offline Suites
+
+None of the offline runs below used `nice -n 15`: they ran between 12:27 and 12:54 CDT, before the machine-load gate was added at 12:55, and they were not rerun under `nice` because the fix that records this changes no code. The commands as pasted are shortened. Each piece actually ran as `env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_POSTGRES PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider <files>`, with the shell expanding each glob to its file list. The pieces ran one after another from a scratch script (`scratchpad/817-S1/run_offline.sh`). The first full run, below, ran as one command for 10:59. That is longer than the ten-minute command limit. The run was not split until it had finished. Any later offline proof for this branch runs each piece as `nice -n 15 ...` and splits a piece before it can reach ten minutes.
 
 The first full run of `$PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery` took 10:59 and found one failure in this branch's own new file:
 
