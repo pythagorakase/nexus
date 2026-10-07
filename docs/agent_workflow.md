@@ -16,6 +16,12 @@ more specific instructions.
   `NEXUS_RUN_POSTGRES=1 poetry run pytest` with `NEXUS_GATEWAY_PORT` and
   `NEXUS_API_URL` unset. The PostgreSQL-gated tests are where fixture debt
   accumulates; a run that skips them is not the gate.
+- The gate includes the document freshness check in
+  `tests/test_doc_front_matter.py`: a branch that changes a source declared by
+  a canonical document must re-stamp that document's `verified_commit` (see
+  `docs/decisions/README.md`). It needs `origin/main` and full history; fetch
+  before you run the gate. Before a branch merges, it merges `origin/main` and
+  passes the check again.
 - The secret-store guard is a mandatory part of the gate. `tests/conftest.py`
   installs `tests/secret_store_guard.py` before collection and stops the
   session (exit 4) if collection removes it or if CPython's private
