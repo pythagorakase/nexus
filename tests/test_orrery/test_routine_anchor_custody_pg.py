@@ -18,6 +18,7 @@ from typing import Any, Optional
 import asyncpg  # type: ignore[import-untyped]
 import psycopg2
 import psycopg2.errors
+import psycopg2.extensions
 import pytest
 from psycopg2.extras import RealDictCursor
 
@@ -34,6 +35,7 @@ from nexus.agents.orrery.routine_anchors import (
 from tests.pg_fixtures import (
     asyncpg_kwargs,
     connect,
+    connection_parameters,
     disposable_slot_database,
     seed_character,
     seed_committed_chunk,
@@ -312,14 +314,10 @@ SCENARIOS: dict[str, Callable[[Seeded], list[RoutineAnchorChange]]] = {
 }
 
 
-@pytest.mark.parametrize("scenario", list(SCENARIOS))
-def test_scenario_writes_row_and_ledger(seeded: Seeded, scenario: str) -> None:
-    """After commit, every anchor row and its ledger row agree."""
-
-    changes = SCENARIOS[scenario](seeded)
-    log_ids = _apply_sync(
-        seeded.dbname, changes, writer_kind=WRITER, source_chunk_id=seeded.chunk_1
-    )
+def _assert_rows_and_ledger_agree(
+    seeded: Seeded, changes: list[RoutineAnchorChange], log_ids: list[int]
+) -> None:
+    """Every committed anchor row and its ledger row agree with ``changes``."""
 
     anchors = {
         (row["character_entity_id"], row["anchor_type"]): row
@@ -353,6 +351,61 @@ def test_scenario_writes_row_and_ledger(seeded: Seeded, scenario: str) -> None:
             "zone_id": row["zone_id"],
             "schedule": row["schedule"],
         }
+
+
+@pytest.mark.parametrize("scenario", list(SCENARIOS))
+def test_scenario_writes_row_and_ledger(seeded: Seeded, scenario: str) -> None:
+    """After commit, every anchor row and its ledger row agree."""
+
+    changes = SCENARIOS[scenario](seeded)
+    log_ids = _apply_sync(
+        seeded.dbname, changes, writer_kind=WRITER, source_chunk_id=seeded.chunk_1
+    )
+    _assert_rows_and_ledger_agree(seeded, changes, log_ids)
+
+
+class _CursorTrackingConnection(psycopg2.extensions.connection):
+    """A real psycopg2 connection that keeps every cursor it opens."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.opened: list[Any] = []
+
+    def cursor(self, *args: Any, **kwargs: Any) -> Any:
+        opened = super().cursor(*args, **kwargs)
+        self.opened.append(opened)
+        return opened
+
+
+def test_sync_twin_runs_on_its_own_plain_cursor(seeded: Seeded) -> None:
+    """A RealDictCursor caller works: the twin opens and closes a plain cursor."""
+
+    changes = SCENARIOS["works_from_home_with_fixed_home"](seeded)
+    with closing(
+        psycopg2.connect(
+            **connection_parameters(seeded.dbname),
+            connection_factory=_CursorTrackingConnection,
+            cursor_factory=RealDictCursor,
+        )
+    ) as conn:
+        with conn:
+            cur = conn.cursor()
+            assert isinstance(cur, RealDictCursor)
+            log_ids = apply_routine_anchor_changes_sync(
+                cur, changes, writer_kind=WRITER, source_chunk_id=seeded.chunk_1
+            )
+            [own] = [opened for opened in conn.opened if opened is not cur]
+            assert type(own) is psycopg2.extensions.cursor
+            assert own.closed
+            assert not cur.closed
+            cur.execute(
+                "SELECT count(*) AS ledger FROM character_routine_anchor_log "
+                "WHERE id = ANY(%s)",
+                (log_ids,),
+            )
+            assert cur.fetchone() == {"ledger": len(changes)}
+            cur.close()
+    _assert_rows_and_ledger_agree(seeded, changes, log_ids)
 
 
 def test_revise_and_clear(seeded: Seeded) -> None:
@@ -482,6 +535,22 @@ REFUSALS: dict[str, RefusalCase] = {
     "works_from_home_without_home": RefusalCase(
         lambda s: [_change(s.mara, "work", "works_from_home")],
         "a works_from_home work anchor needs a home anchor",
+    ),
+    "works_from_home_over_nomadic_home": RefusalCase(
+        lambda s: [
+            _change(s.mara, "home", "nomadic"),
+            _change(s.mara, "work", "works_from_home"),
+        ],
+        "a works_from_home work anchor needs a home anchor with fixed_place or "
+        "zone_resolved; the home anchor is 'nomadic'",
+    ),
+    "works_from_home_over_none_home": RefusalCase(
+        lambda s: [
+            _change(s.mara, "home", "none"),
+            _change(s.mara, "work", "works_from_home"),
+        ],
+        "a works_from_home work anchor needs a home anchor with fixed_place or "
+        "zone_resolved; the home anchor is 'none'",
     ),
     "clear_home_under_works_from_home": RefusalCase(
         lambda s: [_change(s.mara, "home", clear=True)],

@@ -152,6 +152,12 @@ SCHEDULE_REFUSALS: list[tuple[str, dict[str, Any], str]] = [
     ),
     ("weekdays_empty", {"weekdays": []}, "weekdays is empty"),
     ("weekdays_bool", {"weekdays": [True, 2]}, "weekdays holds a bool"),
+    ("weekdays_numeric_string", {"weekdays": ["2"]}, "Input should be a valid integer"),
+    ("weekdays_other_string", {"weekdays": ["3"]}, "Input should be a valid integer"),
+    ("weekdays_float", {"weekdays": [2.0]}, "Input should be a valid integer"),
+    ("always_string_true", {"always": "true"}, "Input should be a valid boolean"),
+    ("always_string_yes", {"always": "yes"}, "Input should be a valid boolean"),
+    ("always_integer_one", {"always": 1}, "Input should be a valid boolean"),
     ("weekdays_above_six", {"weekdays": [7]}, "outside 0-6"),
     ("weekdays_negative", {"weekdays": [-1]}, "outside 0-6"),
     ("weekdays_duplicate", {"weekdays": [2, 2]}, "repeat a day"),
@@ -239,6 +245,41 @@ def test_schedule_refuses_each_malformed_value(
 
     with pytest.raises(ValidationError, match=message):
         RoutineSchedule.model_validate(fields)
+
+
+def test_schedule_refuses_a_bool_in_a_weekday_set() -> None:
+    """A non-list iterable holding a bool still fails; strict ints refuse it."""
+
+    with pytest.raises(ValidationError, match="Input should be a valid integer"):
+        RoutineSchedule(weekdays={True, 2})  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param("character_entity_id", True, id="entity_bool"),
+        pytest.param("character_entity_id", "41", id="entity_string"),
+        pytest.param("place_id", True, id="place_bool"),
+        pytest.param("place_id", 7.0, id="place_float"),
+        pytest.param("zone_id", "3", id="zone_string"),
+    ],
+)
+def test_resolved_change_refuses_wrong_typed_ids(field: str, value: Any) -> None:
+    """A resolved id is a strict integer: a bool, string or float fails."""
+
+    fields: dict[str, Any] = {
+        "anchor_type": "home",
+        "mobility_policy": "fixed_place",
+        "place": "Flat 4",
+    }
+    if field == "zone_id":
+        fields = {
+            "anchor_type": "work",
+            "mobility_policy": "zone_resolved",
+            "zone": "H",
+        }
+    with pytest.raises(ValidationError, match="Input should be a valid integer"):
+        RoutineAnchorChange.model_validate({**_resolved(fields), field: value})
 
 
 @pytest.mark.parametrize(

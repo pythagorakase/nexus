@@ -24,7 +24,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Optional, Sequence, TypeAlias
 
 import psycopg2.extensions
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 ROUTINE_ANCHOR_TYPES: tuple[str, ...] = ("home", "work")
 ROUTINE_MOBILITY_POLICIES: tuple[str, ...] = (
@@ -57,7 +65,12 @@ _IMAGE_KEYS = ("mobility_policy", "place_id", "zone_id", "schedule")
 
 
 class RoutineAnchorCustodyError(ValueError):
-    """The database state refuses a routine-anchor change; nothing was kept."""
+    """Custody refuses a routine-anchor change.
+
+    Every refusal except the final works_from_home home check comes before any
+    write. That check raises after the writes, so the caller must roll back its
+    transaction.
+    """
 
 
 class RoutineSchedule(BaseModel):
@@ -65,11 +78,11 @@ class RoutineSchedule(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    always: bool = Field(
+    always: StrictBool = Field(
         default=False,
         description="True when the routine is due at every hour.",
     )
-    weekdays: Optional[list[int]] = Field(
+    weekdays: Optional[list[StrictInt]] = Field(
         default=None,
         description="Days the routine applies, 0=Monday through 6=Sunday.",
     )
@@ -87,7 +100,7 @@ class RoutineSchedule(BaseModel):
     @field_validator("weekdays", mode="before")
     @classmethod
     def _refuse_boolean_weekdays(cls, value: Any) -> Any:
-        """Refuse a bool before lax validation turns it into 0 or 1."""
+        """Name a bool weekday in the refusal; ``StrictInt`` refuses it anyway."""
 
         if isinstance(value, (list, tuple)) and any(
             isinstance(day, bool) for day in value
@@ -234,15 +247,15 @@ class RoutineAnchorChange(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    character_entity_id: int
+    character_entity_id: StrictInt
     anchor_type: RoutineAnchorType = Field(description="Which routine anchor changes.")
     mobility_policy: Optional[RoutineMobilityPolicy] = Field(
         description=(
             "How the routine moves the character; none records an authored absence."
         ),
     )
-    place_id: Optional[int]
-    zone_id: Optional[int]
+    place_id: Optional[StrictInt]
+    zone_id: Optional[StrictInt]
     schedule: Optional[RoutineSchedule] = Field(
         description="Authored timing; null when the timing is unknown.",
     )
@@ -745,6 +758,9 @@ async def apply_routine_anchor_changes_async(
     """Async twin of :func:`apply_routine_anchor_changes_sync` on asyncpg.
 
     Requires an open ``conn.transaction()``; never commits or rolls back.
+    Every refusal raises ``RoutineAnchorCustodyError`` before any write, except
+    the final works_from_home home check, which raises after the writes, so
+    the caller must roll back its transaction.
     """
 
     if not conn.is_in_transaction():
