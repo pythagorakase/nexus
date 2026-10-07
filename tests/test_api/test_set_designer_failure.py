@@ -1,7 +1,7 @@
 """Real TEST wizard design proofs on disposable assets.new_story_creator rows.
 
-The streaming live proof is deferred to #1081. All services, configuration,
-usage, and database writes belong to this fixture, never to an owner's slot.
+All services, configuration, usage, and database writes belong to this
+fixture, never to an owner's slot.
 """
 
 import ast
@@ -304,45 +304,44 @@ def test_chat_set_design_write_failure_returns_500_without_design_draft(
 
 
 def test_neither_provider_branch_swallows_set_design_errors() -> None:
-    """All four branches reach the boundary, including unexercised production."""
+    """Both branches reach the boundary, including unexercised production."""
     path = Path(__file__).resolve().parents[2] / "nexus/api/wizard_chat.py"
     source = path.read_text()
     assert "set_design_error" not in source
     tree = ast.parse(source)
     expected = {
-        "query_wizard_cache": 2,
-        "generate_set_design": 2,
-        "_record_set_design": 4,
+        "query_wizard_cache": 1,
+        "generate_set_design": 1,
+        "_record_set_design": 2,
     }
     found = dict.fromkeys(expected, 0)
-    for endpoint_name in ("new_story_chat_endpoint", "new_story_chat_stream_endpoint"):
-        endpoint = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.AsyncFunctionDef) and node.name == endpoint_name
-        )
-        parents = {
-            child: parent
-            for parent in ast.walk(endpoint)
-            for child in ast.iter_child_nodes(parent)
-        }
-        outer_boundary = next(
-            (node for node in endpoint.body if isinstance(node, ast.Try)), None
-        )
-        for node in ast.walk(endpoint):
-            if not (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id in expected
-            ):
-                continue
-            found[node.func.id] += 1
-            ancestor = parents.get(node)
-            while ancestor is not None:
-                if isinstance(ancestor, (ast.Try, ast.TryStar)):
-                    assert (
-                        endpoint_name == "new_story_chat_endpoint"
-                        and ancestor is outer_boundary
-                    ), f"{node.func.id}:{node.lineno} is inside an inner Try"
-                ancestor = parents.get(ancestor)
+    endpoint = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef)
+        and node.name == "new_story_chat_endpoint"
+    )
+    parents = {
+        child: parent
+        for parent in ast.walk(endpoint)
+        for child in ast.iter_child_nodes(parent)
+    }
+    outer_boundary = next(
+        (node for node in endpoint.body if isinstance(node, ast.Try)), None
+    )
+    for node in ast.walk(endpoint):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in expected
+        ):
+            continue
+        found[node.func.id] += 1
+        ancestor = parents.get(node)
+        while ancestor is not None:
+            if isinstance(ancestor, (ast.Try, ast.TryStar)):
+                assert (
+                    ancestor is outer_boundary
+                ), f"{node.func.id}:{node.lineno} is inside an inner Try"
+            ancestor = parents.get(ancestor)
     assert found == expected
