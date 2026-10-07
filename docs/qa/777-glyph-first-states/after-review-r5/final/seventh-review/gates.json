@@ -26,5 +26,19 @@
     "code": 0,
     "wallSeconds": 51.819200167024974,
     "boundSeconds": 589
+  },
+  {
+    "name": "restored",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 0,
+    "wallSeconds": 50.46526970801642,
+    "boundSeconds": 589
   }
 ]

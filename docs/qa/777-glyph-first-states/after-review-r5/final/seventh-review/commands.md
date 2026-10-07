@@ -195,4 +195,45 @@ Wrote /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/
 
 `node --max-old-space-size=8192 scratchpad/777-S2/after-review-r7/compare.mjs` exits 0. [Comparison](receipt-comparison.json): 27 identical conditions, 101,742 compared samples, zero measured differences, no missing/additional samples. The baseline content hash agrees with `bc1af7ba`'s LFS OID. Every paint, mask, geometry, opacity and settled-state field agrees. Runtime settle times, Escape-needed flags and the exact action-description suffix for that same branch are excluded. [Runtime observation diff](runtime-observation-comparison.json) records all 415 action-description changes; all other compared sample fields agree. [Initial strict comparison log](runtime-observation-comparison.log) and [measurement comparison log](comparison.log) preserve both checks. The shipping receipt was replaced only after the measurement comparison passed.
 
+## Restored
+
+```sh
+npm --prefix ui test -- state-shades
+```
+
+Exit 0; bounded at 589 seconds. [Complete output](restored.log).
+
+```text
+stdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures
+{"theme":"Veil","sizes":[15,15,18,15,15,15,18,18,18,15,18,12],"count":"258280326000000","feasible":"0","best":5.9942603943504995,"changes":7,"assignment":{"--state-mem-normal":"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)","--state-mem-over":"hsl(15 75% 60%)","--state-delete-unarmed":"hsl(42 30% 70%)","--state-delete-armed":"hsl(0 100% 50%)","--state-map-rest":"hsl(15 75% 60%)","--state-map-current":"hsl(330.2439024390244 60% 70%)","--state-map-selected":"hsl(330.2439024390244 50.20408163265306% 30%)","--state-map-hovered":"hsl(330.2439024390244 80% 50%)","--state-key-absent":"hsl(42 40% 70%)","--state-key-missing":"hsl(15 75% 60%)","--state-key-present":"hsl(42 50% 30%)","--state-key-verified":"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)"},"coverage":[{"surface":"memory","roots":["--state-mem-normal","--state-mem-over"],"visited":270,"unique":270,"expected":270},{"surface":"delete","roots":["--state-delete-unarmed","--state-delete-armed"],"visited":216,"unique":216,"expected":216},{"surface":"map","roots":["--state-map-rest","--state-map-current","--state-map-selected","--state-map-hovered"],"visited":60750,"unique":60750,"expected":60750},{"surface":"key","roots":["--state-key-absent","--state-key-missing","--state-key-present","--state-key-verified"],"visited":72900,"unique":72900,"expected":72900}],"factorMaxima":[{"surface":"memory","best":48.282053187753654,"threshold":15,"feasible":270,"shippedMinimum":28.723129322326244,"changes":0},{"surface":"delete","best":14.631357904466427,"threshold":14.631357904466427,"feasible":0,"shippedMinimum":14.631357904466427,"changes":2},{"surface":"map","best":5.9942603943504995,"threshold":5.9942603943504995,"feasible":0,"shippedMinimum":5.9942603943504995,"changes":3},{"surface":"key","best":18.445796640599227,"threshold":15,"feasible":1930,"shippedMinimum":17.266563526815094,"changes":2}]}
+{"theme":"Gilded","sizes":[18,15,18,15,15,18,18,18,18,18,18,12],"count":"446308403328000","feasible":"0","best":7.4977986569476665,"changes":10,"assignment":{"--state-mem-normal":"hsl(43 74% 47%)","--state-mem-over":"hsl(30 50% 30%)","--state-delete-unarmed":"hsl(43 40% 70%)","--state-delete-armed":"hsl(0 100% 50%)","--state-map-rest":"hsl(30 60% 60%)","--state-map-current":"hsl(45 55% 70%)","--state-map-selected":"hsl(43 74% 30%)","--state-map-hovered":"hsl(45 75% 50%)","--state-key-absent":"hsl(43 30% 70%)","--state-key-missing":"hsl(30 50% 45%)","--state-key-present":"hsl(43 40% 30%)","--state-key-verified":"hsl(43 94% 50%)"},"coverage":[{"surface":"memory","roots":["--state-mem-normal","--state-mem-over"],"visited":324,"unique":324,"expected":324},{"surface":"delete","roots":["--state-delete-unarmed","--state-delete-armed"],"visited":216,"unique":216,"expected":216},{"surface":"map","roots":["--state-map-rest","--state-map-current","--state-map-selected","--state-map-hovered"],"visited":72900,"unique":72900,"expected":72900},{"surface":"key","roots":["--state-key-absent","--state-key-missing","--state-key-present","--state-key-verified"],"visited":87480,"unique":87480,"expected":87480}],"factorMaxima":[{"surface":"memory","best":43.175673440597784,"threshold":15,"feasible":150,"shippedMinimum":33.21169132170665,"changes":1},{"surface":"delete","best":12.156103621093418,"threshold":12.156103621093418,"feasible":0,"shippedMinimum":12.156103621093418,"changes":2},{"surface":"map","best":7.4977986569476665,"threshold":7.4977986569476665,"feasible":0,"shippedMinimum":7.4977986569476665,"changes":4},{"surface":"key","best":16.25619391235776,"threshold":15,"feasible":22,"shippedMinimum":16.15062592576154,"changes":3}]}
+{"theme":"Vector","sizes":[12,15,5,15,15,12,18,5,5,12,18,12],"count":"2834352000000","feasible":"0","best":5.900185376139648,"changes":7,"assignment":{"--state-mem-normal":"hsl(185 100% 50%)","--state-mem-over":"hsl(200 90% 30%)","--state-delete-unarmed":"hsl(185 40% 55%)","--state-delete-armed":"hsl(350 80% 55%)","--state-map-rest":"hsl(200 90% 55%)","--state-map-current":"hsl(190 100% 50%)","--state-map-selected":"hsl(185 100% 70%)","--state-map-hovered":"hsl(190 90% 40%)","--state-key-absent":"hsl(185 30% 30%)","--state-key-missing":"hsl(200 90% 55%)","--state-key-present":"hsl(185 40% 50%)","--state-key-verified":"hsl(185 100% 70%)"},"coverage":[{"surface":"memory","roots":["--state-mem-normal","--state-mem-over"],"visited":60,"unique":60,"expected":60},{"surface":"delete","roots":["--state-delete-unarmed","--state-delete-armed"],"visited":216,"unique":216,"expected":216},{"surface":"map","roots":["--state-map-rest","--state-map-current","--state-map-selected","--state-map-hovered"],"visited":13500,"unique":13500,"expected":13500},{"surface":"key","roots":["--state-key-absent","--state-key-missing","--state-key-present","--state-key-verified"],"visited":16200,"unique":16200,"expected":16200}],"factorMaxima":[{"surface":"memory","best":41.81562267183395,"threshold":15,"feasible":36,"shippedMinimum":39.07275879212985,"changes":1},{"surface":"delete","best":23.28801782847145,"threshold":15,"feasible":156,"shippedMinimum":15.764553113030438,"changes":0},{"surface":"map","best":5.900185376139648,"threshold":5.900185376139648,"feasible":0,"shippedMinimum":5.900185376139648,"changes":3},{"surface":"key","best":11.468145729494452,"threshold":11.468145729494452,"feasible":0,"shippedMinimum":11.468145729494452,"changes":3}]}
+
+ ✓ src/state-shades.test.ts (11 tests) 48606ms
+   ✓ 777-S2 state shades > every_state_pair_is_measured_under_every_declared_media_condition 1254ms
+   ✓ 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled 13078ms
+   ✓ 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean 32116ms
+   ✓ 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures 1865ms
+
+ Test Files  2 passed (2)
+      Tests  57 passed (57)
+   Start at  21:31:43
+   Duration  50.20s (transform 61ms, setup 55ms, collect 1.22s, tests 48.62s, environment 332ms, prepare 134ms)
+
+```
+
+## Plant
+
+```sh
+STATE_SURFACES_SCRATCH="$PWD/scratchpad/777-S2/after-review-r7/plants" node ui/scripts/state-surfaces/plants.mjs --stage control
+# Then use --plant nested-not-print-width with each stage in order:
+# --stage stale, --stage capture, --stage fresh, --stage restore
+```
+
+The checked-in protocol bounds each child at 589 seconds. Every protocol stage exits 0; the stale and fresh Vitest children exit 1 as required. [Ledger](plants/plants-proof.json) retains exact invocations, exits and tails; [before hashes](plants/before-plants.json), [changed means](plants/optional-key-means.json), and the [uncertified partial receipt](plants/partial-receipt.json) retain the proof. The fresh recorded-table assertion fails, four other diagnostics pass and six full-inventory assertions are intentionally skipped. Restoration compares the saved snapshot with live worktree, scratch and HEAD before writing.
+
+## Main Integration
+
+`git fetch origin` and `git merge origin/main` both exit 0; merge reports `Already up to date.` No rebase or stash was used.
+
 Codex, GPT-6.
