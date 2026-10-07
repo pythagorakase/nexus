@@ -46,7 +46,12 @@ from sqlalchemy.engine import URL, make_url
 from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.api import db_pool
 from nexus.api.slot_utils import all_slots, slot_dbname
-from nexus.config.story_model import StorySettings, write_story_settings
+from nexus.config import load_settings
+from nexus.config.story_model import (
+    StorySettings,
+    resolve_seat,
+    write_story_settings,
+)
 from nexus.database import (
     asyncpg_kwargs as contract_asyncpg_kwargs,
     connection_kwargs,
@@ -143,15 +148,30 @@ def assert_one_target(dbname: str) -> None:
 
 
 # Migration 126 freezes queued and leased jobs' models from the story pin it
-# finds; these are the job tables it backfills (migrations/126_seat_policies.py
-# JOB_SEATS).
+# finds. Its JOB_SEATS maps each job table it backfills to the seat that
+# resolves that table's model.
 SEAT_BACKFILL_MIGRATION = "126"
-SEAT_BACKFILL_JOB_TABLES = (
-    "character_experience_jobs",
-    "orrery_maturation_jobs",
-    "correspondence_compaction_jobs",
-    "narrative_summary_jobs",
-)
+
+
+def seat_backfill_job_seats() -> dict[str, str]:
+    """Return migration 126's ``JOB_SEATS`` (job table to model seat).
+
+    The mapping is read from the migration module itself, loaded through
+    ``scripts.migrate``'s importlib loader, so the guard below cannot drift
+    from the tables the migration backfills.
+    """
+
+    paths = [
+        path
+        for version, _, path in migrate.discover_migrations()
+        if version == SEAT_BACKFILL_MIGRATION
+    ]
+    if len(paths) != 1:
+        raise RuntimeError(
+            f"Expected one migration {SEAT_BACKFILL_MIGRATION}, found {paths!r}"
+        )
+    module = migrate._load_python_migration(paths[0])
+    return dict(module.JOB_SEATS)
 
 
 def _has_migration_stamp(dbname: str, version: str) -> bool:
@@ -165,29 +185,40 @@ def _has_migration_stamp(dbname: str, version: str) -> bool:
         return cur.fetchone() is not None
 
 
-def _refuse_source_pin_backfill(dbname: str) -> None:
-    """Raise when migration 126 froze active jobs under the source's pin.
+def _refuse_source_pin_backfill(dbname: str, story_pin: str) -> None:
+    """Raise when migration 126 froze a job to a model the clone's pin would not pick.
 
     A data clone migrates before it is pinned, so migration 126 resolves its
-    queued and leased jobs under the source's story pin. That resolution is
-    immutable across repins, so the TEST pin written afterward cannot replace
-    it, and a worker would route those jobs to the source's model.
+    queued and leased jobs under the source's story pin, and that resolution
+    is immutable across repins. Only a seat whose policy follows the story can
+    resolve differently under the clone's pin; a fixed seat resolves to its
+    configured default under any pin. The guard therefore refuses only
+    backfilled rows whose frozen model differs from what ``story_pin`` resolves
+    for the table's seat: a worker would route those jobs to the source's
+    model.
     """
 
+    settings = load_settings()
+    story = StorySettings(skald_model=story_pin, gaia_model=None)
     with closing(_connect(dbname)) as conn, conn.cursor() as cur:
-        for table in SEAT_BACKFILL_JOB_TABLES:
+        for table, seat in seat_backfill_job_seats().items():
+            expected = resolve_seat(seat, settings=settings, story=story).model
             cur.execute(
                 sql.SQL(
-                    "SELECT count(*) FROM {} WHERE state IN ('queued', 'leased') "
-                    "AND resolved_source = 'migration_backfill'"
-                ).format(sql.Identifier(table))
+                    "SELECT count(*), array_agg(DISTINCT resolved_model) FROM {} "
+                    "WHERE state IN ('queued', 'leased') "
+                    "AND resolved_source = 'migration_backfill' "
+                    "AND resolved_model IS DISTINCT FROM %s"
+                ).format(sql.Identifier(table)),
+                (expected,),
             )
-            frozen = cur.fetchone()[0]
+            frozen, models = cur.fetchone()
             if frozen:
                 raise RuntimeError(
                     f"Data clone {dbname}: migration 126 froze {frozen} active "
-                    f"{table} rows under the source's story pin, which the TEST "
-                    "pin cannot replace"
+                    f"{table} rows to {models!r} under the source's story pin; "
+                    f"the {story_pin!r} pin resolves seat {seat} to {expected!r} "
+                    "and cannot replace the frozen model"
                 )
 
 
@@ -212,11 +243,14 @@ def disposable_slot_database(
     pin, so ``global_variables`` reads the TEST pin. Migration 126 is the one
     exception the pin cannot reach: it freezes ``resolved_model`` on queued and
     leased jobs from the pin it finds, which for a data clone is the source's
-    pin, and a later repin does not change it. When the clone crosses 126 under
-    a TEST pin, the fixture fails loudly if any such job was backfilled
-    (``resolved_source = 'migration_backfill'``) instead of yielding it. Jobs
-    the source already resolved before the clone keep their models. Preserving
-    the source pin requires the explicit live-LLM opt-in.
+    pin, and a later repin does not change it. That matters only for seats
+    whose policy follows the story; a fixed seat resolves to its configured
+    default under any pin. When the clone crosses 126 under a TEST pin, the
+    fixture fails loudly instead of yielding if any backfilled job
+    (``resolved_source = 'migration_backfill'``) carries a model other than
+    the one the TEST pin resolves for its seat. Jobs the source already
+    resolved before the clone keep their models. Preserving the source pin
+    requires the explicit live-LLM opt-in.
 
     Fails loudly when the admin connection is unavailable; opting into the
     PostgreSQL gate means PostgreSQL is required.
@@ -289,7 +323,7 @@ def disposable_slot_database(
                     text=True,
                     env=subprocess_env(),
                 )
-            crosses_seat_backfill = story_pin is not None and not _has_migration_stamp(
+            crosses_seat_backfill = not _has_migration_stamp(
                 dbname, SEAT_BACKFILL_MIGRATION
             )
             # Migrate before pinning: the pin's UPDATE names columns (such as
@@ -300,8 +334,8 @@ def disposable_slot_database(
                 raise RuntimeError(
                     f"Corpus clone {dbname} has {failed} failed migrations"
                 )
-            if crosses_seat_backfill:
-                _refuse_source_pin_backfill(dbname)
+            if story_pin is not None and crosses_seat_backfill:
+                _refuse_source_pin_backfill(dbname, story_pin)
             pin_clone()
         else:
             new_story_setup.initialize_slot_database(dbname, source_db=source_db)
