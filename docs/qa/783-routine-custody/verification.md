@@ -28,8 +28,7 @@ This session added one commit, 22d110c2, which writes the `mobility_policy` desc
 - `nexus/agents/orrery/replay.py:1234` `result.state["character_routine_anchors"] = sorted(`; `:1240-1241` `"checkpoint pass-through; the table has no runtime writer, but "` / `"offline seed/backfill scripts are invisible between checkpoints",`.
 - `nexus/agents/orrery/reconstruction.py:139-142` `"character_routine_anchors": (` / `"SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "` / `"FROM character_routine_anchors t"`.
 - `nexus/api/new_story_db_mapper.py:569` `# Delete in reverse dependency order (children before parents)`; `:583-584` `DELETE FROM places;` / `DELETE FROM zones;` (the range :569-586 holds the whole delete statement).
-- `nexus/agents/orrery/retrograde_maturation.py:387` `def _require_accepting_world_time(`; `nexus/api/commit_handler_sync.py:144` `def _require_chunk_world_time_sync(`; `:1050` and `:1089` `writer="skald_state_update"`.
-- `nexus/agents/orrery/retrograde_maturation.py:387` `def _require_accepting_world_time(cur: Any, chunk_id: int) -> datetime:`; `nexus/api/commit_handler_sync.py:144` `def _require_chunk_world_time_sync(cur: Any, chunk_id: int) -> datetime:`.
+- `nexus/agents/orrery/retrograde_maturation.py:387` `def _require_accepting_world_time(cur: Any, chunk_id: int) -> datetime:`; `nexus/api/commit_handler_sync.py:144` `def _require_chunk_world_time_sync(cur: Any, chunk_id: int) -> datetime:`; `:1050` and `:1089` `writer="skald_state_update"`.
 - `migrations/139_character_relationship_bigint_ids.sql:82` `-- Locks: ALTER TABLE ... TYPE rewrites character_relationships under an` (the lock paragraph 145 models).
 - Inserts outside custody: `tests/pg_fixtures.py:1331` and `tests/test_orrery/test_claim_birth_coverage_pg.py:234` (`INSERT INTO character_routine_anchors (`); `scripts/backfill_routine_anchors.py:235` `INSERT INTO character_routine_anchors (` with `:240` `:mobility_policy, '{}'::jsonb, 'compiler_backfill'`; `scripts/seed_slot2_routine_anchors.py:87` `INSERT INTO character_routine_anchors (` with `:92` `'fixed_place', %s::jsonb, 'slot2_reference_seed'`.
 - `tests/test_connection_lifecycle.py:128-129`: the `world_events` insert the custody tests copy.
@@ -81,17 +80,32 @@ COLUMN character_routine_anchors.last_log_id | character_routine_anchor_log row 
 
 Plant (reverted before commit): both twins' final `_refuse_homeless_works_from_home(batch, policies)` replaced with `pass`.
 
+The first run of this plant was on the tree before a2b90a74 (4 failed: the two `works_from_home_without_home` and the two `clear_home_under_works_from_home` cases). a2b90a74 added the `works_from_home_over_nomadic_home` and `works_from_home_over_none_home` cases, so the plant was rerun on 18556d95 (2026-10-07 14:20 CDT, one-minute load 8.91, no wait):
+
 `env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery/test_routine_anchor_custody_pg.py -k works_from_home`
 
+Lines copied verbatim from the log (tracebacks and the other `dbname audit` lines left out):
+
 ```
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
 E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 dbname audit: owner targets: none
 FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_without_home-sync]
 FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_without_home-async]
+FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_over_nomadic_home-sync]
+FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_over_nomadic_home-async]
+FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_over_none_home-sync]
+FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_over_none_home-async]
 FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[clear_home_under_works_from_home-sync]
 FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[clear_home_under_works_from_home-async]
-4 failed, 1 passed, 30 deselected in 8.22s
+8 failed, 1 passed, 33 deselected in 14.17s
 ```
 
 (The one pass is the `works_from_home_with_fixed_home` scenario.)
@@ -189,17 +203,24 @@ dbname audit: owner targets: none
 40 passed in 93.77s (0:01:33)
 ```
 
-Red run, home policy (mutant reverted before commit): in `_refuse_homeless_works_from_home`, `if home_policy in _HOME_DESTINATION_POLICIES:` replaced with `if home_policy is not None:`, so any existing home passes. Same command with `-k works_from_home`:
+Red run, home policy (mutant reverted before commit): in `_refuse_homeless_works_from_home`, `if home_policy in _HOME_DESTINATION_POLICIES:` replaced with `if home_policy is not None:`, so any existing home passes. The first tail of this mutant (on a2b90a74) was condensed by hand, so the mutant was rerun on 18556d95 (2026-10-07 14:21 CDT, one-minute load 8.79, no wait) without `-rs`, which hides the FAILED lines:
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery/test_routine_anchor_custody_pg.py -k works_from_home`
+
+Lines copied verbatim from the log (tracebacks and the other `dbname audit` lines left out):
 
 ```
-E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>   (x4)
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
+E       Failed: DID NOT RAISE <class 'nexus.agents.orrery.routine_anchors.RoutineAnchorCustodyError'>
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 dbname audit: owner targets: none
 FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_over_nomadic_home-sync]
 FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_over_nomadic_home-async]
 FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_over_none_home-sync]
 FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_refusals_change_nothing[works_from_home_over_none_home-async]
-4 failed, 5 passed, 31 deselected in 16.89s
+4 failed, 5 passed, 33 deselected in 14.57s
 ```
 
 Red run, own cursor (mutant reverted before commit): the sync twin's `conn.cursor(cursor_factory=psycopg2.extensions.cursor)` replaced with a bare `conn.cursor()`. Same command with `-k own_plain_cursor`:
@@ -224,4 +245,106 @@ $PY -m flake8 <same 4 files>                          (no output, rc=0)
 $PY -m mypy --explicit-package-bases <3 changed files>   Success: no issues found in 3 source files
 $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
                                       OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+## Review Fixes (Commit 18556d95)
+
+Confirmed round-2 findings applied:
+
+- `clear` is `StrictBool` on `RoutineAnchorDelta` and `RoutineAnchorChange` (descriptions unchanged; the JSON schema stays `boolean`). A string or an integer `clear` no longer becomes a DELETE. New offline test `test_clear_is_a_strict_boolean` (both models, `"yes"` and `1`).
+- A racing first insert now fails loudly. `SELECT ... FOR UPDATE` locks only rows that exist, so two custody transactions could both plan `before_image` NULL for one anchor; the second one's `ON CONFLICT` then waited for the first commit and overwrote the row. Of the finding's two options this takes the first: both upserts end in `RETURNING (xmax = 0) AS inserted`, and `_refuse_unplanned_overwrite` raises `RoutineAnchorCustodyError` when `inserted` disagrees with `before_image is None`. It keeps the order's write sequence unchanged, adds no lock namespace, and surfaces the conflict as an error (repository doctrine) instead of serializing it silently. The caller's rollback discards the ledger row; the error class and both twins' docstrings now name this second post-write refusal. New PostgreSQL test `test_concurrent_first_insert_fails_instead_of_logging_no_before_image[sync|async]`: a psycopg2 transaction writes the first anchor and holds; the twin under test runs in a thread until `pg_stat_activity` shows it waiting on a lock; the holder commits; the twin must raise, and the committed anchor and ledger hold only the first change.
+- This file: the duplicate clock-refusal cite merged into one bullet; both plant tails above rerun on 18556d95 and pasted verbatim.
+
+Red runs, on b29d667b with the new tests added and the fixes not yet applied (2026-10-07 14:16-14:17 CDT, one-minute load 6.87, no wait):
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings tests/test_orrery/test_routine_anchors.py -k clear_is_a_strict`
+
+```
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_orrery/test_routine_anchors.py::test_clear_is_a_strict_boolean[wire-string_yes]
+FAILED tests/test_orrery/test_routine_anchors.py::test_clear_is_a_strict_boolean[wire-integer_one]
+FAILED tests/test_orrery/test_routine_anchors.py::test_clear_is_a_strict_boolean[resolved-string_yes]
+FAILED tests/test_orrery/test_routine_anchors.py::test_clear_is_a_strict_boolean[resolved-integer_one]
+4 failed, 82 deselected in 0.29s
+```
+
+The race test ran with the `clear` fix in place and the `RETURNING` check not yet written; the second transaction committed its overwrite with no error:
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings -p tests.dbname_audit tests/test_orrery/test_routine_anchor_custody_pg.py -k concurrent_first_insert`
+
+```
+E       AssertionError: None
+E       assert False
+E        +  where False = isinstance(None, RoutineAnchorCustodyError)
+E       AssertionError: None
+E       assert False
+E        +  where False = isinstance(None, RoutineAnchorCustodyError)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_concurrent_first_insert_fails_instead_of_logging_no_before_image[sync]
+FAILED tests/test_orrery/test_routine_anchor_custody_pg.py::test_concurrent_first_insert_fails_instead_of_logging_no_before_image[async]
+2 failed, 40 deselected in 3.55s
+```
+
+Green runs, on the working tree equal to 18556d95 before commit (2026-10-07 14:17-14:19 CDT, one-minute load 6.73-6.80, no wait), one pytest session at a time:
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings tests/test_orrery/test_routine_anchors.py`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+86 passed in 0.37s
+```
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings -p tests.dbname_audit tests/test_orrery/test_routine_anchor_custody_pg.py`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 44 targets: postgres, qa640_783s1a_* x43
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+42 passed in 70.46s (0:01:10)
+```
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings -p tests.dbname_audit tests/test_orrery/test_card_identity.py`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_885_ren_replay_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+9 passed, 2 skipped in 7.30s
+```
+
+(The two skips are the `NEXUS_RUN_CORPUS=1` probes named above.)
+
+`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings -p tests.dbname_audit tests/test_connection_lifecycle.py`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: mock, postgres
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:61217 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:61222 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:61217 (psycopg2), save_04@local:61222 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 passed in 27.41s
+```
+
+Other checks on the same tree:
+
+```
+$PY -m pytest -q -p no:warnings tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+42 passed in 4.53s
+
+$PY -m black <3 changed files>                          3 files left unchanged.
+$PY -m flake8 <3 changed files>                         (no output, rc=0)
+$PY -m mypy --explicit-package-bases <3 changed files>  Success: no issues found in 3 source files
+$PY -S scripts/check_exception_dispositions.py          OK: exception disposition coverage and shrink-only baseline verified.
 ```
