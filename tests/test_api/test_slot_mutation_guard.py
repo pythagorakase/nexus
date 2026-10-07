@@ -29,7 +29,6 @@ BODY_MUTATIONS = [
     ("/api/story/new/setup/record", {}),
     ("/api/story/new/setup/reset", {}),
     ("/api/story/new/chat", {"message": "Begin"}),
-    ("/api/story/new/chat/stream", {"message": "Begin"}),
     ("/api/story/new/transition", {}),
 ]
 

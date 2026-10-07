@@ -230,21 +230,10 @@ def mount_wizard(
 
     output = WizardResponse(message=REPLY, choices=["North pier", "South pier"])
 
-    class Turn:
-        async def stream_output(self) -> Any:
-            yield output
-
-        async def get_output(self) -> WizardResponse:
-            return output
-
     class Agent:
         async def run(self, *args: Any, **kwargs: Any) -> Any:
             history_text(kwargs)
             return SimpleNamespace(output=output)
-
-        async def run_stream(self, *args: Any, **kwargs: Any) -> Any:
-            history_text(kwargs)
-            yield Turn()
 
     class DebugAgent:
         async def run(self, *args: Any, **kwargs: Any) -> Any:
@@ -261,7 +250,6 @@ def mount_wizard(
     monkeypatch.setattr(wizard_chat, "write_wizard_choices", write_choices)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
     monkeypatch.setattr(wizard_chat, "wizard_debug_agent", DebugAgent())
-    monkeypatch.setattr(wizard_chat, "get_wizard_streaming_enabled", lambda: True)
     monkeypatch.setattr(
         wizard_chat,
         "build_pydantic_ai_model_with_provider",
@@ -297,26 +285,14 @@ def thread_files(thread_dir: Path) -> list[str]:
     )
 
 
-def chat(
-    client: TestClient, streaming: bool, model: str, *, dev: bool = False
-) -> httpx.Response:
+def chat(client: TestClient, model: str, *, dev: bool = False) -> httpx.Response:
     """Send the first player message with an explicit model override."""
-    endpoint = "/api/story/new/chat/stream" if streaming else "/api/story/new/chat"
     return client.post(
-        endpoint, json={"slot": 4, "message": PLAYER, "model": model, "dev": dev}
+        "/api/story/new/chat",
+        json={"slot": 4, "message": PLAYER, "model": model, "dev": dev},
     )
 
 
-def returned_thread_id(response: httpx.Response, streaming: bool) -> Any:
-    """Read the thread ID a successful turn tells the client to continue in."""
-    if not streaming:
-        return response.json()["thread_id"]
-    records = [json.loads(line) for line in response.text.splitlines()]
-    assert records[-1]["type"] in {"final", "message"}, records
-    return records[-1]["thread_id"]
-
-
-@pytest.mark.parametrize("streaming", [False, True])
 @pytest.mark.parametrize(
     "source,target",
     [
@@ -331,7 +307,6 @@ def test_cross_store_switch_moves_the_opening_to_the_new_store(
     hosted: HostedConversations,
     source: str,
     target: str,
-    streaming: bool,
 ) -> None:
     """The new model reads the copied opening under a new, persisted thread ID."""
     source_model, target_model = registry_model(source), registry_model(target)
@@ -339,12 +314,12 @@ def test_cross_store_switch_moves_the_opening_to_the_new_store(
     record = SlotRecord(model=source_model, thread_id=old_thread)
     seen: list[str] = []
 
-    response = chat(mount_wizard(monkeypatch, record, seen), streaming, target_model)
+    response = chat(mount_wizard(monkeypatch, record, seen), target_model)
 
     assert response.status_code == 200, response.text
     assert record.model == target_model
     assert record.thread_id != old_thread
-    assert returned_thread_id(response, streaming) == record.thread_id
+    assert response.json()["thread_id"] == record.thread_id
     assert record.choice_threads == [record.thread_id]
     assert transcript(target_model, record.thread_id) == [
         *OPENING,
@@ -356,22 +331,19 @@ def test_cross_store_switch_moves_the_opening_to_the_new_store(
     assert transcript(source_model, old_thread) == OPENING
 
 
-@pytest.mark.parametrize("streaming", [False, True])
 def test_dev_turn_returns_the_moved_thread(
-    monkeypatch: pytest.MonkeyPatch, hosted: HostedConversations, streaming: bool
+    monkeypatch: pytest.MonkeyPatch, hosted: HostedConversations
 ) -> None:
     """A debug turn after a cross-store switch also names the new thread."""
     source_model, target_model = registry_model("local"), registry_model("openai")
     old_thread = opened_thread(source_model)
     record = SlotRecord(model=source_model, thread_id=old_thread)
 
-    response = chat(
-        mount_wizard(monkeypatch, record, []), streaming, target_model, dev=True
-    )
+    response = chat(mount_wizard(monkeypatch, record, []), target_model, dev=True)
 
     assert response.status_code == 200, response.text
     assert record.thread_id != old_thread
-    assert returned_thread_id(response, streaming) == record.thread_id
+    assert response.json()["thread_id"] == record.thread_id
     assert transcript(target_model, record.thread_id) == [
         *OPENING,
         ("user", PLAYER),
@@ -379,23 +351,21 @@ def test_dev_turn_returns_the_moved_thread(
     ]
 
 
-@pytest.mark.parametrize("streaming", [False, True])
 def test_same_store_switch_keeps_the_thread(
     monkeypatch: pytest.MonkeyPatch,
     hosted: HostedConversations,
     offline_registry: Path,
-    streaming: bool,
 ) -> None:
     """Providers sharing the file store keep one thread and only change model."""
     source_model, target_model = registry_model("local"), registry_model("openrouter")
     thread_id = opened_thread(source_model)
     record = SlotRecord(model=source_model, thread_id=thread_id)
 
-    response = chat(mount_wizard(monkeypatch, record, []), streaming, target_model)
+    response = chat(mount_wizard(monkeypatch, record, []), target_model)
 
     assert response.status_code == 200, response.text
     assert (record.model, record.thread_id) == (target_model, thread_id)
-    assert returned_thread_id(response, streaming) == thread_id
+    assert response.json()["thread_id"] == thread_id
     assert transcript(target_model, thread_id) == [
         *OPENING,
         ("user", PLAYER),
@@ -404,7 +374,6 @@ def test_same_store_switch_keeps_the_thread(
     assert thread_files(offline_registry) == [f"{thread_id}.json"]
 
 
-@pytest.mark.parametrize("streaming", [False, True])
 @pytest.mark.parametrize(
     "failure", ["source_unreadable", "target_write_rejected", "concurrent_change"]
 )
@@ -413,7 +382,6 @@ def test_failed_cross_store_switch_changes_nothing(
     hosted: HostedConversations,
     offline_registry: Path,
     failure: str,
-    streaming: bool,
 ) -> None:
     """A failed move keeps the slot model, thread ID, and both stores as they were."""
     hosted_model, file_model = registry_model("openai"), registry_model("local")
@@ -440,7 +408,7 @@ def test_failed_cross_store_switch_changes_nothing(
 
         record.before_repoint = concurrent_setup
 
-    response = chat(mount_wizard(monkeypatch, record, []), streaming, target_model)
+    response = chat(mount_wizard(monkeypatch, record, []), target_model)
 
     expected_status = 409 if failure == "concurrent_change" else 500
     assert response.status_code == expected_status, response.text
@@ -460,12 +428,10 @@ def test_failed_cross_store_switch_changes_nothing(
     assert transcript(source_model, old_thread) == OPENING
 
 
-@pytest.mark.parametrize("streaming", [False, True])
 def test_ambiguous_save_keeps_the_copied_thread(
     monkeypatch: pytest.MonkeyPatch,
     hosted: HostedConversations,
     offline_registry: Path,
-    streaming: bool,
 ) -> None:
     """A save with an unknown outcome fails the request but keeps the new thread."""
     source_model, target_model = registry_model("local"), registry_model("openai")
@@ -478,7 +444,7 @@ def test_ambiguous_save_keeps_the_copied_thread(
 
     record.before_repoint = connection_lost
 
-    response = chat(mount_wizard(monkeypatch, record, []), streaming, target_model)
+    response = chat(mount_wizard(monkeypatch, record, []), target_model)
 
     assert response.status_code == 500, response.text
     assert (record.model, record.thread_id) == (source_model, old_thread)

@@ -185,7 +185,6 @@ display = "Sixtyfour"
 message_history_limit = 20
 max_retries = 2
 max_tokens = 4096
-enable_streaming = true
 
 [wizard.trait_inputs]
 # Transition-time derivation of typed trait-compiler inputs (M9). The wizard
