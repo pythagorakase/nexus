@@ -1,0 +1,15 @@
+
+> nexus-ui@1.0.0 test
+> vitest run media-state-shades
+
+
+ RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ media-state-shades.test.ts (82 tests) 14ms
+
+ Test Files  1 passed (1)
+      Tests  82 passed (82)
+   Start at  21:47:04
+   Duration  358ms (transform 25ms, setup 23ms, collect 24ms, tests 14ms, environment 142ms, prepare 26ms)
+

@@ -1,0 +1,281 @@
+{
+  "accepted": false,
+  "reason": "hidden control changes background and selects background modes",
+  "renderCount": 64008,
+  "wallSeconds": 1269.9872512910001,
+  "shards": [
+    {
+      "path": "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-1.json",
+      "sha256": "629e9bde5fdc140d4e9e44d904784abcd20b46f1fa1d7de6cc86b7c0713dc69f",
+      "inputsSha256": "f8ebb445ed2a41072d3d9661fb41c41c1fbb899486029837609ed33c569325bb",
+      "conditions": [
+        "default",
+        "motion-start",
+        "motion-trough",
+        "width-639",
+        "width-640",
+        "width-760"
+      ],
+      "proof": {
+        "minimumModeFraction": 0.02,
+        "measurement": "painted/control visibility:hidden foreground mask; RGB mode over changed device pixels",
+        "stylesheet": "production Vite build emitted CSS, production order",
+        "pageErrors": [],
+        "networkRequests": [],
+        "matchedMedia": {
+          "default": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "motion-start": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": false,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "motion-trough": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": false,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-639": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": true,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": false,
+            "media (min-width: 768px)": false,
+            "media (min-width: 1024px)": false,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-640": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": true,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": false,
+            "media (min-width: 1024px)": false,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-760": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": true,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": false,
+            "media (min-width: 1024px)": false,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          }
+        },
+        "renderCount": 21336,
+        "wallSeconds": 423.45679566600006,
+        "acceptanceComplete": false
+      }
+    },
+    {
+      "path": "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-2.json",
+      "sha256": "23e671d4f38737a54905b46648f289fd714f1322fd57e64e3bbee3c44e510bbc",
+      "inputsSha256": "f8ebb445ed2a41072d3d9661fb41c41c1fbb899486029837609ed33c569325bb",
+      "conditions": [
+        "width-761",
+        "width-767",
+        "width-768",
+        "width-1023",
+        "width-1024",
+        "width-1100"
+      ],
+      "proof": {
+        "minimumModeFraction": 0.02,
+        "measurement": "painted/control visibility:hidden foreground mask; RGB mode over changed device pixels",
+        "stylesheet": "production Vite build emitted CSS, production order",
+        "pageErrors": [],
+        "networkRequests": [],
+        "matchedMedia": {
+          "width-761": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": false,
+            "media (min-width: 1024px)": false,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-767": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": false,
+            "media (min-width: 1024px)": false,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-768": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": false,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-1023": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": false,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-1024": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-1100": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": true,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          }
+        },
+        "renderCount": 21336,
+        "wallSeconds": 421.748333125,
+        "acceptanceComplete": false
+      }
+    },
+    {
+      "path": "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-3.json",
+      "sha256": "cd14f748885bf16c39d72c8ee97806da919b2728514999ed1319aeb8f6f52604",
+      "inputsSha256": "f8ebb445ed2a41072d3d9661fb41c41c1fbb899486029837609ed33c569325bb",
+      "conditions": [
+        "width-1101",
+        "width-1279",
+        "width-1280",
+        "width-1281",
+        "width-1535",
+        "width-1536"
+      ],
+      "proof": {
+        "minimumModeFraction": 0.02,
+        "measurement": "painted/control visibility:hidden foreground mask; RGB mode over changed device pixels",
+        "stylesheet": "production Vite build emitted CSS, production order",
+        "pageErrors": [],
+        "networkRequests": [],
+        "matchedMedia": {
+          "width-1279": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-1101": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": false,
+            "media (min-width: 1536px)": false
+          },
+          "width-1281": {
+            "media (max-width: 1280px)": false,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": true,
+            "media (min-width: 1536px)": false
+          },
+          "width-1280": {
+            "media (max-width: 1280px)": true,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": true,
+            "media (min-width: 1536px)": false
+          },
+          "width-1535": {
+            "media (max-width: 1280px)": false,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": true,
+            "media (min-width: 1536px)": false
+          },
+          "width-1536": {
+            "media (max-width: 1280px)": false,
+            "media (max-width: 1100px)": false,
+            "media (max-width: 760px)": false,
+            "media (prefers-reduced-motion: reduce)": true,
+            "media (min-width: 640px)": true,
+            "media (min-width: 768px)": true,
+            "media (min-width: 1024px)": true,
+            "media (min-width: 1280px)": true,
+            "media (min-width: 1536px)": true
+          }
+        },
+        "renderCount": 21336,
+        "wallSeconds": 424.7821225,
+        "acceptanceComplete": false
+      }
+    }
+  ]
+}

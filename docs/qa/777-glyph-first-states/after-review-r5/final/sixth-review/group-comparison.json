@@ -1,0 +1,227 @@
+[
+  {
+    "theme": "veil",
+    "assignmentEqual": true,
+    "factorsEqual": true,
+    "before": [
+      {
+        "surface": "memory",
+        "best": 48.282053187753654,
+        "threshold": 15,
+        "feasible": 270,
+        "shippedMinimum": 28.723129322326244,
+        "changes": 0
+      },
+      {
+        "surface": "delete",
+        "best": 14.631357904466427,
+        "threshold": 14.631357904466427,
+        "feasible": 0,
+        "shippedMinimum": 14.631357904466427,
+        "changes": 2
+      },
+      {
+        "surface": "map",
+        "best": 5.9942603943504995,
+        "threshold": 5.9942603943504995,
+        "feasible": 0,
+        "shippedMinimum": 5.9942603943504995,
+        "changes": 3
+      },
+      {
+        "surface": "key",
+        "best": 18.445796640599227,
+        "threshold": 15,
+        "feasible": 1930,
+        "shippedMinimum": 17.266563526815094,
+        "changes": 2
+      }
+    ],
+    "after": [
+      {
+        "surface": "memory",
+        "best": 48.282053187753654,
+        "threshold": 15,
+        "feasible": 270,
+        "shippedMinimum": 28.723129322326244,
+        "changes": 0
+      },
+      {
+        "surface": "delete",
+        "best": 14.631357904466427,
+        "threshold": 14.631357904466427,
+        "feasible": 0,
+        "shippedMinimum": 14.631357904466427,
+        "changes": 2
+      },
+      {
+        "surface": "map",
+        "best": 5.9942603943504995,
+        "threshold": 5.9942603943504995,
+        "feasible": 0,
+        "shippedMinimum": 5.9942603943504995,
+        "changes": 3
+      },
+      {
+        "surface": "key",
+        "best": 18.445796640599227,
+        "threshold": 15,
+        "feasible": 1930,
+        "shippedMinimum": 17.266563526815094,
+        "changes": 2
+      }
+    ],
+    "oldShortfalls": 230,
+    "newShortfalls": 230
+  },
+  {
+    "theme": "gilded",
+    "assignmentEqual": true,
+    "factorsEqual": true,
+    "before": [
+      {
+        "surface": "memory",
+        "best": 43.175673440597784,
+        "threshold": 15,
+        "feasible": 150,
+        "shippedMinimum": 33.21169132170665,
+        "changes": 1
+      },
+      {
+        "surface": "delete",
+        "best": 12.156103621093418,
+        "threshold": 12.156103621093418,
+        "feasible": 0,
+        "shippedMinimum": 12.156103621093418,
+        "changes": 2
+      },
+      {
+        "surface": "map",
+        "best": 7.4977986569476665,
+        "threshold": 7.4977986569476665,
+        "feasible": 0,
+        "shippedMinimum": 7.4977986569476665,
+        "changes": 4
+      },
+      {
+        "surface": "key",
+        "best": 16.25619391235776,
+        "threshold": 15,
+        "feasible": 22,
+        "shippedMinimum": 16.15062592576154,
+        "changes": 3
+      }
+    ],
+    "after": [
+      {
+        "surface": "memory",
+        "best": 43.175673440597784,
+        "threshold": 15,
+        "feasible": 150,
+        "shippedMinimum": 33.21169132170665,
+        "changes": 1
+      },
+      {
+        "surface": "delete",
+        "best": 12.156103621093418,
+        "threshold": 12.156103621093418,
+        "feasible": 0,
+        "shippedMinimum": 12.156103621093418,
+        "changes": 2
+      },
+      {
+        "surface": "map",
+        "best": 7.4977986569476665,
+        "threshold": 7.4977986569476665,
+        "feasible": 0,
+        "shippedMinimum": 7.4977986569476665,
+        "changes": 4
+      },
+      {
+        "surface": "key",
+        "best": 16.25619391235776,
+        "threshold": 15,
+        "feasible": 22,
+        "shippedMinimum": 16.15062592576154,
+        "changes": 3
+      }
+    ],
+    "oldShortfalls": 766,
+    "newShortfalls": 766
+  },
+  {
+    "theme": "vector",
+    "assignmentEqual": true,
+    "factorsEqual": false,
+    "before": [
+      {
+        "surface": "memory",
+        "best": 41.81562267183395,
+        "threshold": 15,
+        "feasible": 36,
+        "shippedMinimum": 39.07275879212985,
+        "changes": 1
+      },
+      {
+        "surface": "delete",
+        "best": 23.28801782847145,
+        "threshold": 15,
+        "feasible": 153,
+        "shippedMinimum": 15.764553113030438,
+        "changes": 0
+      },
+      {
+        "surface": "map",
+        "best": 5.900185376139648,
+        "threshold": 5.900185376139648,
+        "feasible": 0,
+        "shippedMinimum": 5.900185376139648,
+        "changes": 3
+      },
+      {
+        "surface": "key",
+        "best": 11.468145729494452,
+        "threshold": 11.468145729494452,
+        "feasible": 0,
+        "shippedMinimum": 11.468145729494452,
+        "changes": 3
+      }
+    ],
+    "after": [
+      {
+        "surface": "memory",
+        "best": 41.81562267183395,
+        "threshold": 15,
+        "feasible": 36,
+        "shippedMinimum": 39.07275879212985,
+        "changes": 1
+      },
+      {
+        "surface": "delete",
+        "best": 23.242568773617457,
+        "threshold": 15,
+        "feasible": 152,
+        "shippedMinimum": 15.764553113030438,
+        "changes": 0
+      },
+      {
+        "surface": "map",
+        "best": 5.900185376139648,
+        "threshold": 5.900185376139648,
+        "feasible": 0,
+        "shippedMinimum": 5.900185376139648,
+        "changes": 3
+      },
+      {
+        "surface": "key",
+        "best": 11.468145729494452,
+        "threshold": 11.468145729494452,
+        "feasible": 0,
+        "shippedMinimum": 11.468145729494452,
+        "changes": 3
+      }
+    ],
+    "oldShortfalls": 1187,
+    "newShortfalls": 1187
+  }
+]

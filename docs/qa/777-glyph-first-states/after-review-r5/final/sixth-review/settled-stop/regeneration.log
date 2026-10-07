@@ -1,0 +1,24 @@
+
+> nexus-ui@1.0.0 resolve-state-surfaces
+> node scripts/resolve-state-surfaces.mjs
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in "node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+Resolving w1101-1279/reduce/Veil…
+Painted capture progress: renders=16; wall=48.513s
+Incomplete painted probe: renders=16; wall=81.715s; acceptanceComplete=false
+file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:190
+        throw new Error(`Measurement failure ${label}: tooltip did not settle ${tooltipExpected} within ${settleBoundMs}ms before both captures; PNGs/readback: ${prefix}`);
+              ^
+
+Error: Measurement failure w1101-1279/reduce/Veil/calibration/delete/ready-exceeds/focus-visible/unarmed/hsl(42 30% 70%): tooltip did not settle open within 30000ms before both captures; PNGs/readback: /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r6/settled/capture/settle-failure-w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__
+    at sample (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:190:15)
+    at async captureValues (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:296:28)
+    at async renderInventory (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:329:13)
+    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:414:53
+
+Node.js v24.3.0

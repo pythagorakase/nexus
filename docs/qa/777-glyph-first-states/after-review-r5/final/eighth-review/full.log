@@ -1,0 +1,478 @@
+
+> nexus-ui@1.0.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ src/lib/map-geometry.test.ts (55 tests) 8ms
+ ✓ media-state-shades.test.ts (82 tests) 15ms
+ ✓ src/shell-accessibility.test.ts (9 tests) 85ms
+ ✓ src/components/nexus/ProseMarkdown.test.tsx (23 tests) 46ms
+ ✓ src/components/nexus/TopBar.test.tsx (16 tests) 113ms
+ ✓ src/components/nexus/LocalModelRows.test.tsx (19 tests) 136ms
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > resuming a saved wizard > renders the transcript and choices, then continues the same session with its drafts
+Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?
+
+Check the render method of `InteractiveWizard`.
+    at ResizablePanelGroup (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/components/ui/resizable.tsx:10:3)
+    at InteractiveWizard (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx:145:3)
+    at div
+    at div
+    at div
+    at NewStoryWizard (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/components/NewStoryWizard/WizardShell.tsx:77:27)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/ReturnRecapCard.test.tsx (16 tests) 344ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > resuming a saved wizard > keeps the saved slot available for retry when history cannot be loaded
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/hooks/useNarrativeEngine.recovery.test.tsx (13 tests) 385ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > automatic wizard resume > restores trait selection and sends the saved concept when confirming
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/NarrativePane.regenerate.test.tsx (10 tests) 457ms
+ ✓ src/components/nexus/StateGlyphs.test.tsx (6 tests) 446ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > automatic wizard resume > keeps confirmed traits in context while resuming the wildcard subphase
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > automatic wizard resume > restores the ready seed as a pending artifact and waits for Confirm to transition
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/NarrativePane.drafts.test.tsx (36 tests) 524ms
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > tracks each stage while the transition is in flight, then glows bootstrap until the session returns
+Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?
+
+Check the render method of `InteractiveWizard`.
+    at ResizablePanelGroup (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/components/ui/resizable.tsx:10:3)
+    at InteractiveWizard (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx:145:3)
+    at ThemeProvider (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/contexts/ThemeContext.tsx:13:26)
+    at QueryClientProvider (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > confirming wizard phases > tags artifact continuation without changing the player's submitted choice
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/NexusLayout.test.tsx (3 tests) 84ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > confirming wizard phases > keeps 'setting' confirmation retryable until the next prompt arrives
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/CharactersPane.test.tsx (12 tests) 81ms
+ ✓ src/components/nexus/MapPane.test.tsx (3 tests) 163ms
+ ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 882ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > confirming wizard phases > keeps 'character' confirmation retryable until the next prompt arrives
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stdout | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > tracks each stage while the transition is in flight, then glows bootstrap until the session returns
+[Wizard] Bootstrap triggered, session: opening-session
+
+ ✓ src/components/NewStoryWizard/SlotSelector.test.tsx (14 tests) 329ms
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard initialization > keeps the server error visible and retries into usable choices
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > confirming wizard phases > retains the artifact when the next phase returns 'Bad Gateway'
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard initialization > shows an actionable error when the server returns a non-JSON failure
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard initialization > ignores a late initialization response from a previous slot
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > stops reading once the transition settles
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > restores exact unsent input on resume but isolates a new wizard in the same slot
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > restores exact unsent input on resume but isolates a new wizard in the same slot
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > restores exact unsent input on resume but isolates a new wizard in the same slot
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > retains the draft after an unsuccessful or empty response (503)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > confirming wizard phases > retains the artifact when the next phase returns '{}'
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > retains the draft after an unsuccessful or empty response (503)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > retains the draft after an unsuccessful or empty response (200)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > retains the draft after an unsuccessful or empty response (200)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > clears acknowledged input after the loading screen remounts the composer
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/NexusLayout.announcer.test.tsx (3 tests) 315ms
+ ✓ src/hooks/useWizardDraft.test.tsx (11 tests) 26ms
+stderr | src/components/NewStoryWizard/InteractiveWizard.test.tsx > wizard composer recovery > clears acknowledged input after the loading screen remounts the composer
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/NewStoryWizard/InteractiveWizard.test.tsx (7 tests) 265ms
+ ✓ src/lib/narrative-nav.test.ts (20 tests) 3ms
+ ✓ src/components/NewStoryWizard/slotVisualState.test.ts (21 tests) 5ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > persisted character confirmation and revision > restores the unconfirmed character without introducing the next phase
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > marks the stage the gateway recorded as failed and keeps the error with Retry and Cancel
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/lib/narrative-api.retrograde.test.ts (24 tests) 7ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > persisted character confirmation and revision > begins durable revision, submits player text, and confirms the replacement token
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > persisted character confirmation and revision > clears acknowledged revision text when the revised concept still needs traits
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/NewStoryWizard/WizardChoices.test.tsx (17 tests) 177ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > persisted character confirmation and revision > reloads active revision with the composer enabled and selections preserved
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > persisted character confirmation and revision > a stale confirmation resumes the saved character before any model request
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/veil/veil-spiral.test.tsx (12 tests) 44ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > persisted character confirmation and revision > a stale confirmation resumes the saved character before any model request
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > stops reading when the run reports failed while the response is still in flight
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > uses the concept token when setting confirmation produces character traits
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/NewStoryWizard/WaitScreen.test.tsx (12 tests) 82ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > uses the concept token when accept fate produces character traits
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > accepted artifacts whose next phase was never introduced > restores the accepted 'setting' and Confirm only requests the 'character' introduction
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/NarrativePane.test.tsx (3 tests) 59ms
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > reads past the previous run's failed record until this run reports
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > accepted artifacts whose next phase was never introduced > restores the accepted 'character' and Confirm only requests the 'seed' introduction
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > accepted artifacts whose next phase was never introduced > continues after a lost 'setting' confirmation acknowledgement
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/lib/themeIcons.test.ts (3 tests) 7ms
+ ✓ src/lib/fading-scrollbars.test.ts (7 tests) 25ms
+ ✓ src/components/veil/crescent-frame.test.ts (5 tests) 2ms
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > reads past the previous run's done record until this run reports
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > accepted artifacts whose next phase was never introduced > continues after a lost 'character' confirmation acknowledgement
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/Intertitle.test.tsx (4 tests) 25ms
+ ✓ src/components/nexus/RightLedger.test.tsx (4 tests) 26ms
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'character' card (accepted: false)
+Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?
+
+Check the render method of `InteractiveWizard`.
+    at ResizablePanelGroup (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/components/ui/resizable.tsx:10:3)
+    at InteractiveWizard (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx:145:3)
+    at div
+    at div
+    at div
+    at NewStoryWizard (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/components/NewStoryWizard/WizardShell.tsx:77:27)
+    at ContinuePage (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client/src/pages/ContinuePage.tsx:17:72)
+    at Route (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/node_modules/wouter/esm/index.js:227:18)
+    at Switch (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/node_modules/wouter/esm/index.js:314:19)
+    at Router (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/node_modules/wouter/esm/index.js:159:19)
+    at QueryClientProvider (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > accepted artifacts whose next phase was never introduced > resumes in place when a restored introduction already arrived
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > accepted artifacts whose next phase was never introduced > resumes in place when a restored introduction already arrived
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/nexus/MapPlaceDialog.test.tsx (6 tests) 91ms
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > accepted artifacts whose next phase was never introduced > resumes in place when Retry finds the lost introduction already saved
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > marks the failed stage when this run's failure is the first record read after the post (before it: no run)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/WizardShell.test.tsx > accepted artifacts whose next phase was never introduced > resumes in place when Retry finds the lost introduction already saved
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/NewStoryWizard/WizardShell.test.tsx (24 tests) 1661ms
+ ✓ src/pages/splash/veil-splash-locked-values.test.ts (1 test) 1ms
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > marks the failed stage when this run's failure is the first record read after the post (before it: the previous run's failure)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > marks the failed stage from the final read after the first stage read failed
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > marks no stage failed when the transition is refused before its run starts
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > leaves a skipped Retrograde run's pips dim while bootstrap glows
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > reports a transition response that names no Retrograde outcome
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > leaves every pip dim when the transition fails before the first stage
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > keeps the transition error and adds the stage-read error when the failure record is unreadable
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > fails the bootstrap stage when the opening narrative cannot be scheduled
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/pages/ContinuePage.test.tsx (8 tests) 827ms
+   ✓ CONTINUE > checks the most recently used slot and resumes its wizard directly 793ms
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > stops reading when the player cancels
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'character' card (accepted: false)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'character' card (accepted: false)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > stops reading when the wizard unmounts
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'setting' card (accepted: false)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > reports a failed stage read loudly and stops reading while the transition continues
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stdout | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > reports a failed stage read loudly and stops reading while the transition continues
+[Wizard] Bootstrap triggered, session: opening-session
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > posts no transition when the read before it fails
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis stage waiter > reports a missing poll interval instead of guessing one
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > disables Confirm during the mount read and aborts it on unmount
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > stops the reattached running poll on unmount
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > reattaches the wait screen to a running run on mount
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stdout | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > reattaches the wait screen to a running run on mount
+[Wizard] Bootstrap triggered, session: reattached-opening
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > shows a reattached run's failure with Retry
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > shows a stage read error during reattach with Retry and Cancel
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'setting' card (accepted: false)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'setting' card (accepted: false)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'character' card (accepted: true)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > waits through derivation with no pip lit
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > does not reattach to a done run
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > does not reattach to a failed run
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > keeps skipped pips dim when a reattached run finishes without Retrograde
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > shows a reattached bootstrap failure and releases Confirm after Cancel
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > ends reattached polling on unmount and never completes an aborted bootstrap
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis reattach > shows a mount-read error and releases the artifact review
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > offers three distinctly shaped, unlabeled glyphs and presses only the saved level
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > presses a glyph only after the gateway saves its level
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > posts the level chosen after the introduction was offered with the transition
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'character' card (accepted: true)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'character' card (accepted: true)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'setting' card (accepted: true)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > posts the resumed level (low) when the player keeps it
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > posts the resumed level (null) when the player keeps it
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > keeps the saved level and reports a refused save
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > holds Confirm, label unchanged, while a strangeness save is in flight
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > posts a level still being saved at Confirm only once the gateway has saved it
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > starts no transition when a save in flight at Confirm is refused
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx > genesis strangeness > appears only on the Introduction
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx (42 tests) 4475ms
+   ✓ genesis stage waiter > tracks each stage while the transition is in flight, then glows bootstrap until the session returns 469ms
+   ✓ genesis stage waiter > marks the stage the gateway recorded as failed and keeps the error with Retry and Cancel 309ms
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'setting' card (accepted: true)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+stderr | src/pages/ContinuePage.resume.test.tsx > resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'setting' card (accepted: true)
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering
+
+ ✓ src/pages/ContinuePage.resume.test.tsx (4 tests) 3505ms
+   ✓ resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'character' card (accepted: false) 983ms
+   ✓ resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'setting' card (accepted: false) 846ms
+   ✓ resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'character' card (accepted: true) 843ms
+   ✓ resuming a wizard at a confirmation boundary (#955) > reload, Home → Continue and history keep the 'setting' card (accepted: true) 833ms
+stdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures
+{"theme":"Veil","sizes":[15,15,18,15,15,15,18,18,18,15,18,12],"count":"258280326000000","feasible":"0","best":5.9942603943504995,"changes":7,"assignment":{"--state-mem-normal":"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)","--state-mem-over":"hsl(15 75% 60%)","--state-delete-unarmed":"hsl(42 30% 70%)","--state-delete-armed":"hsl(0 100% 50%)","--state-map-rest":"hsl(15 75% 60%)","--state-map-current":"hsl(330.2439024390244 60% 70%)","--state-map-selected":"hsl(330.2439024390244 50.20408163265306% 30%)","--state-map-hovered":"hsl(330.2439024390244 80% 50%)","--state-key-absent":"hsl(42 40% 70%)","--state-key-missing":"hsl(15 75% 60%)","--state-key-present":"hsl(42 50% 30%)","--state-key-verified":"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)"},"coverage":[{"surface":"memory","roots":["--state-mem-normal","--state-mem-over"],"visited":270,"unique":270,"expected":270},{"surface":"delete","roots":["--state-delete-unarmed","--state-delete-armed"],"visited":216,"unique":216,"expected":216},{"surface":"map","roots":["--state-map-rest","--state-map-current","--state-map-selected","--state-map-hovered"],"visited":60750,"unique":60750,"expected":60750},{"surface":"key","roots":["--state-key-absent","--state-key-missing","--state-key-present","--state-key-verified"],"visited":72900,"unique":72900,"expected":72900}],"factorMaxima":[{"surface":"memory","best":48.282053187753654,"threshold":15,"feasible":270,"shippedMinimum":28.723129322326244,"changes":0},{"surface":"delete","best":14.631357904466427,"threshold":14.631357904466427,"feasible":0,"shippedMinimum":14.631357904466427,"changes":2},{"surface":"map","best":5.9942603943504995,"threshold":5.9942603943504995,"feasible":0,"shippedMinimum":5.9942603943504995,"changes":3},{"surface":"key","best":18.445796640599227,"threshold":15,"feasible":1930,"shippedMinimum":17.266563526815094,"changes":2}]}
+{"theme":"Gilded","sizes":[18,15,18,15,15,18,18,18,18,18,18,12],"count":"446308403328000","feasible":"0","best":7.4977986569476665,"changes":10,"assignment":{"--state-mem-normal":"hsl(43 74% 47%)","--state-mem-over":"hsl(30 50% 30%)","--state-delete-unarmed":"hsl(43 40% 70%)","--state-delete-armed":"hsl(0 100% 50%)","--state-map-rest":"hsl(30 60% 60%)","--state-map-current":"hsl(45 55% 70%)","--state-map-selected":"hsl(43 74% 30%)","--state-map-hovered":"hsl(45 75% 50%)","--state-key-absent":"hsl(43 30% 70%)","--state-key-missing":"hsl(30 50% 45%)","--state-key-present":"hsl(43 40% 30%)","--state-key-verified":"hsl(43 94% 50%)"},"coverage":[{"surface":"memory","roots":["--state-mem-normal","--state-mem-over"],"visited":324,"unique":324,"expected":324},{"surface":"delete","roots":["--state-delete-unarmed","--state-delete-armed"],"visited":216,"unique":216,"expected":216},{"surface":"map","roots":["--state-map-rest","--state-map-current","--state-map-selected","--state-map-hovered"],"visited":72900,"unique":72900,"expected":72900},{"surface":"key","roots":["--state-key-absent","--state-key-missing","--state-key-present","--state-key-verified"],"visited":87480,"unique":87480,"expected":87480}],"factorMaxima":[{"surface":"memory","best":43.175673440597784,"threshold":15,"feasible":150,"shippedMinimum":33.21169132170665,"changes":1},{"surface":"delete","best":12.156103621093418,"threshold":12.156103621093418,"feasible":0,"shippedMinimum":12.156103621093418,"changes":2},{"surface":"map","best":7.4977986569476665,"threshold":7.4977986569476665,"feasible":0,"shippedMinimum":7.4977986569476665,"changes":4},{"surface":"key","best":16.25619391235776,"threshold":15,"feasible":22,"shippedMinimum":16.15062592576154,"changes":3}]}
+{"theme":"Vector","sizes":[12,15,5,15,15,12,18,5,5,12,18,12],"count":"2834352000000","feasible":"0","best":5.900185376139648,"changes":7,"assignment":{"--state-mem-normal":"hsl(185 100% 50%)","--state-mem-over":"hsl(200 90% 30%)","--state-delete-unarmed":"hsl(185 40% 55%)","--state-delete-armed":"hsl(350 80% 55%)","--state-map-rest":"hsl(200 90% 55%)","--state-map-current":"hsl(190 100% 50%)","--state-map-selected":"hsl(185 100% 70%)","--state-map-hovered":"hsl(190 90% 40%)","--state-key-absent":"hsl(185 30% 30%)","--state-key-missing":"hsl(200 90% 55%)","--state-key-present":"hsl(185 40% 50%)","--state-key-verified":"hsl(185 100% 70%)"},"coverage":[{"surface":"memory","roots":["--state-mem-normal","--state-mem-over"],"visited":60,"unique":60,"expected":60},{"surface":"delete","roots":["--state-delete-unarmed","--state-delete-armed"],"visited":216,"unique":216,"expected":216},{"surface":"map","roots":["--state-map-rest","--state-map-current","--state-map-selected","--state-map-hovered"],"visited":13500,"unique":13500,"expected":13500},{"surface":"key","roots":["--state-key-absent","--state-key-missing","--state-key-present","--state-key-verified"],"visited":16200,"unique":16200,"expected":16200}],"factorMaxima":[{"surface":"memory","best":41.81562267183395,"threshold":15,"feasible":36,"shippedMinimum":39.07275879212985,"changes":1},{"surface":"delete","best":23.28801782847145,"threshold":15,"feasible":156,"shippedMinimum":15.764553113030438,"changes":0},{"surface":"map","best":5.900185376139648,"threshold":5.900185376139648,"feasible":0,"shippedMinimum":5.900185376139648,"changes":3},{"surface":"key","best":11.468145729494452,"threshold":11.468145729494452,"feasible":0,"shippedMinimum":11.468145729494452,"changes":3}]}
+
+ ✓ src/state-shades.test.ts (11 tests) 46659ms
+   ✓ 777-S2 state shades > every_state_pair_is_measured_under_every_declared_media_condition 1325ms
+   ✓ 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled 13324ms
+   ✓ 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean 29860ms
+   ✓ 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures 1859ms
+
+ Test Files  38 passed (38)
+      Tests  586 passed (586)
+   Start at  22:21:36
+   Duration  49.17s (transform 1.76s, setup 2.09s, collect 11.39s, tests 62.38s, environment 13.40s, prepare 1.71s)
+

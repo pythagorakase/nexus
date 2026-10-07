@@ -1,0 +1,950 @@
+{
+  "baseline": "bc1af7ba2bd02939449eabfd5ea46f5b3a24dd39",
+  "baselineReceiptSha256": "35d765c89b8b7210241d5e48fad184e3cc40a623daa3716f2ea1a20d636118cb",
+  "baselineMatchesLfsOid": true,
+  "priorFingerprint": "7c7cda7c5a1124025888de538122b3efb555de17e1a2dd30ea48cb84fc3ab7f9",
+  "fingerprint": "70f2d64239c57d51435eadfd558bf0dd5f34f4af5266507c09e99efb5122337b",
+  "conditionCount": 27,
+  "conditionsIdentical": true,
+  "samplesCompared": 101742,
+  "changedSamples": 415,
+  "missing": [],
+  "additional": [],
+  "excludedRuntimeFields": [
+    "settleWaitMs",
+    "escapePressed"
+  ],
+  "priorSamplesSha256": "ce07766819eed6fc0861d5d0ee04dbfa0360d236ae98d009a01d2d6ed8accecd",
+  "samplesSha256": "84877ec330d2161efd0bc2cbffdd3e75b4ce09b239aced31684f21025e1b2039",
+  "renders": 101742,
+  "wallSeconds": 1981.920074792,
+  "acceptanceComplete": true,
+  "differences": [
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab ×24; tooltip already dismissed",
+        "animationsRunning": 0,
+        "box": {
+          "height": 11,
+          "width": 11,
+          "x": 1083,
+          "y": 880.6875
+        },
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.009721217320237811
+        ],
+        "coreSize": 453,
+        "effectiveOpacity": 0.35,
+        "height": 44,
+        "histogram": [
+          {
+            "count": 450,
+            "rgb": [
+              76,
+              74,
+              68
+            ]
+          },
+          {
+            "count": 47,
+            "rgb": [
+              44,
+              45,
+              47
+            ]
+          },
+          {
+            "count": 32,
+            "rgb": [
+              60,
+              59,
+              57
+            ]
+          },
+          {
+            "count": 26,
+            "rgb": [
+              54,
+              54,
+              53
+            ]
+          },
+          {
+            "count": 24,
+            "rgb": [
+              27,
+              30,
+              36
+            ]
+          },
+          {
+            "count": 23,
+            "rgb": [
+              22,
+              26,
+              32
+            ]
+          },
+          {
+            "count": 23,
+            "rgb": [
+              54,
+              54,
+              54
+            ]
+          },
+          {
+            "count": 4,
+            "rgb": [
+              25,
+              28,
+              34
+            ]
+          }
+        ],
+        "mapPart": null,
+        "maskSize": 727,
+        "meanLinear": [
+          0.07223043697797606,
+          0.06844195691598176,
+          0.0577798339644331
+        ],
+        "pseudos": {
+          "ancestorHover": false,
+          "controls": [
+            {
+              "focusVisible": true,
+              "hover": false
+            }
+          ],
+          "focusVisible": false,
+          "focusWithin": true,
+          "hover": false,
+          "pinHover": false,
+          "rowFocusVisible": false
+        },
+        "selector": ".lm-trash svg",
+        "settleCriteria": {
+          "animationPhase": null,
+          "animations": "all document animations finished; infinite effects paused at the declared condition phase",
+          "captures": {
+            "control": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            },
+            "painted": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            }
+          },
+          "pseudoClasses": "matched hover/focus-visible read back after the driving action",
+          "scope": "entire document, including surface, ancestors and overlapping/portalled siblings",
+          "tooltipDismissal": {
+            "after": {
+              "armed": "false",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1693784ca3071089155afc6d0517b70c61c24ed6748d988bb3290b1073d4bacf"
+            },
+            "before": {
+              "armed": "false",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1693784ca3071089155afc6d0517b70c61c24ed6748d988bb3290b1073d4bacf"
+            }
+          },
+          "tooltipExpected": "closed",
+          "tooltipPresent": false,
+          "tooltipState": "closed"
+        },
+        "stateAttributes": {
+          "armed": "false",
+          "keyNeed": null,
+          "mapState": null
+        },
+        "target": {
+          "focusVisible": true,
+          "hover": false
+        },
+        "width": 44
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab ×24; keyboard Escape dismisses tooltip",
+        "animationsRunning": 0,
+        "box": {
+          "height": 11,
+          "width": 11,
+          "x": 1083,
+          "y": 880.6875
+        },
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.009721217320237811
+        ],
+        "coreSize": 453,
+        "effectiveOpacity": 0.35,
+        "height": 44,
+        "histogram": [
+          {
+            "count": 450,
+            "rgb": [
+              76,
+              74,
+              68
+            ]
+          },
+          {
+            "count": 47,
+            "rgb": [
+              44,
+              45,
+              47
+            ]
+          },
+          {
+            "count": 32,
+            "rgb": [
+              60,
+              59,
+              57
+            ]
+          },
+          {
+            "count": 26,
+            "rgb": [
+              54,
+              54,
+              53
+            ]
+          },
+          {
+            "count": 24,
+            "rgb": [
+              27,
+              30,
+              36
+            ]
+          },
+          {
+            "count": 23,
+            "rgb": [
+              22,
+              26,
+              32
+            ]
+          },
+          {
+            "count": 23,
+            "rgb": [
+              54,
+              54,
+              54
+            ]
+          },
+          {
+            "count": 4,
+            "rgb": [
+              25,
+              28,
+              34
+            ]
+          }
+        ],
+        "mapPart": null,
+        "maskSize": 727,
+        "meanLinear": [
+          0.07223043697797606,
+          0.06844195691598176,
+          0.0577798339644331
+        ],
+        "pseudos": {
+          "ancestorHover": false,
+          "controls": [
+            {
+              "focusVisible": true,
+              "hover": false
+            }
+          ],
+          "focusVisible": false,
+          "focusWithin": true,
+          "hover": false,
+          "pinHover": false,
+          "rowFocusVisible": false
+        },
+        "selector": ".lm-trash svg",
+        "settleCriteria": {
+          "animationPhase": null,
+          "animations": "all document animations finished; infinite effects paused at the declared condition phase",
+          "captures": {
+            "control": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            },
+            "painted": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            }
+          },
+          "pseudoClasses": "matched hover/focus-visible read back after the driving action",
+          "scope": "entire document, including surface, ancestors and overlapping/portalled siblings",
+          "tooltipDismissal": {
+            "after": {
+              "armed": "false",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1693784ca3071089155afc6d0517b70c61c24ed6748d988bb3290b1073d4bacf"
+            },
+            "before": {
+              "armed": "false",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1693784ca3071089155afc6d0517b70c61c24ed6748d988bb3290b1073d4bacf"
+            }
+          },
+          "tooltipExpected": "closed",
+          "tooltipPresent": false,
+          "tooltipState": "closed"
+        },
+        "stateAttributes": {
+          "armed": "false",
+          "keyNeed": null,
+          "mapState": null
+        },
+        "target": {
+          "focusVisible": true,
+          "hover": false
+        },
+        "width": 44
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab ×24; first click arms; requested hover/Tab restored; tooltip already dismissed",
+        "animationsRunning": 0,
+        "box": {
+          "height": 11,
+          "width": 11,
+          "x": 1083,
+          "y": 880.6875
+        },
+        "controlMeanLinear": [
+          0.00334653576389917,
+          0.005181516702338363,
+          0.009721217320237802
+        ],
+        "coreSize": 336,
+        "effectiveOpacity": 0.35,
+        "height": 44,
+        "histogram": [
+          {
+            "count": 333,
+            "rgb": [
+              95,
+              8,
+              13
+            ]
+          },
+          {
+            "count": 61,
+            "rgb": [
+              32,
+              14,
+              22
+            ]
+          },
+          {
+            "count": 19,
+            "rgb": [
+              81,
+              9,
+              15
+            ]
+          },
+          {
+            "count": 8,
+            "rgb": [
+              14,
+              16,
+              24
+            ]
+          },
+          {
+            "count": 7,
+            "rgb": [
+              16,
+              15,
+              24
+            ]
+          },
+          {
+            "count": 7,
+            "rgb": [
+              89,
+              8,
+              14
+            ]
+          },
+          {
+            "count": 6,
+            "rgb": [
+              57,
+              11,
+              18
+            ]
+          },
+          {
+            "count": 5,
+            "rgb": [
+              25,
+              15,
+              23
+            ]
+          }
+        ],
+        "mapPart": null,
+        "maskSize": 593,
+        "meanLinear": [
+          0.11434770516861781,
+          0.002428215868390703,
+          0.004024717018496317
+        ],
+        "pseudos": {
+          "ancestorHover": false,
+          "controls": [
+            {
+              "focusVisible": true,
+              "hover": false
+            }
+          ],
+          "focusVisible": false,
+          "focusWithin": true,
+          "hover": false,
+          "pinHover": false,
+          "rowFocusVisible": false
+        },
+        "selector": ".lm-trash svg",
+        "settleCriteria": {
+          "animationPhase": null,
+          "animations": "all document animations finished; infinite effects paused at the declared condition phase",
+          "captures": {
+            "control": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            },
+            "painted": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            }
+          },
+          "pseudoClasses": "matched hover/focus-visible read back after the driving action",
+          "scope": "entire document, including surface, ancestors and overlapping/portalled siblings",
+          "tooltipDismissal": {
+            "after": {
+              "armed": "true",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1abc642fb451239bac8a0b71cf8ca1012e3fe044875c5ea78767304567c727fb"
+            },
+            "before": {
+              "armed": "true",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1abc642fb451239bac8a0b71cf8ca1012e3fe044875c5ea78767304567c727fb"
+            }
+          },
+          "tooltipExpected": "closed",
+          "tooltipPresent": false,
+          "tooltipState": "closed"
+        },
+        "stateAttributes": {
+          "armed": "true",
+          "keyNeed": null,
+          "mapState": null
+        },
+        "target": {
+          "focusVisible": true,
+          "hover": false
+        },
+        "width": 44
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab ×24; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip",
+        "animationsRunning": 0,
+        "box": {
+          "height": 11,
+          "width": 11,
+          "x": 1083,
+          "y": 880.6875
+        },
+        "controlMeanLinear": [
+          0.00334653576389917,
+          0.005181516702338363,
+          0.009721217320237802
+        ],
+        "coreSize": 336,
+        "effectiveOpacity": 0.35,
+        "height": 44,
+        "histogram": [
+          {
+            "count": 333,
+            "rgb": [
+              95,
+              8,
+              13
+            ]
+          },
+          {
+            "count": 61,
+            "rgb": [
+              32,
+              14,
+              22
+            ]
+          },
+          {
+            "count": 19,
+            "rgb": [
+              81,
+              9,
+              15
+            ]
+          },
+          {
+            "count": 8,
+            "rgb": [
+              14,
+              16,
+              24
+            ]
+          },
+          {
+            "count": 7,
+            "rgb": [
+              16,
+              15,
+              24
+            ]
+          },
+          {
+            "count": 7,
+            "rgb": [
+              89,
+              8,
+              14
+            ]
+          },
+          {
+            "count": 6,
+            "rgb": [
+              57,
+              11,
+              18
+            ]
+          },
+          {
+            "count": 5,
+            "rgb": [
+              25,
+              15,
+              23
+            ]
+          }
+        ],
+        "mapPart": null,
+        "maskSize": 593,
+        "meanLinear": [
+          0.11434770516861781,
+          0.002428215868390703,
+          0.004024717018496317
+        ],
+        "pseudos": {
+          "ancestorHover": false,
+          "controls": [
+            {
+              "focusVisible": true,
+              "hover": false
+            }
+          ],
+          "focusVisible": false,
+          "focusWithin": true,
+          "hover": false,
+          "pinHover": false,
+          "rowFocusVisible": false
+        },
+        "selector": ".lm-trash svg",
+        "settleCriteria": {
+          "animationPhase": null,
+          "animations": "all document animations finished; infinite effects paused at the declared condition phase",
+          "captures": {
+            "control": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            },
+            "painted": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            }
+          },
+          "pseudoClasses": "matched hover/focus-visible read back after the driving action",
+          "scope": "entire document, including surface, ancestors and overlapping/portalled siblings",
+          "tooltipDismissal": {
+            "after": {
+              "armed": "true",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1abc642fb451239bac8a0b71cf8ca1012e3fe044875c5ea78767304567c727fb"
+            },
+            "before": {
+              "armed": "true",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1abc642fb451239bac8a0b71cf8ca1012e3fe044875c5ea78767304567c727fb"
+            }
+          },
+          "tooltipExpected": "closed",
+          "tooltipPresent": false,
+          "tooltipState": "closed"
+        },
+        "stateAttributes": {
+          "armed": "true",
+          "keyNeed": null,
+          "mapState": null
+        },
+        "target": {
+          "focusVisible": true,
+          "hover": false
+        },
+        "width": 44
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab ×24; tooltip already dismissed",
+        "animationsRunning": 0,
+        "box": {
+          "height": 11,
+          "width": 11,
+          "x": 1083,
+          "y": 880.6875
+        },
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.009721217320237811
+        ],
+        "coreSize": 453,
+        "effectiveOpacity": 0.35,
+        "height": 44,
+        "histogram": [
+          {
+            "count": 445,
+            "rgb": [
+              73,
+              70,
+              62
+            ]
+          },
+          {
+            "count": 47,
+            "rgb": [
+              42,
+              43,
+              44
+            ]
+          },
+          {
+            "count": 32,
+            "rgb": [
+              58,
+              56,
+              52
+            ]
+          },
+          {
+            "count": 26,
+            "rgb": [
+              52,
+              51,
+              49
+            ]
+          },
+          {
+            "count": 24,
+            "rgb": [
+              22,
+              25,
+              31
+            ]
+          },
+          {
+            "count": 24,
+            "rgb": [
+              27,
+              29,
+              34
+            ]
+          },
+          {
+            "count": 23,
+            "rgb": [
+              52,
+              52,
+              49
+            ]
+          },
+          {
+            "count": 5,
+            "rgb": [
+              73,
+              69,
+              62
+            ]
+          }
+        ],
+        "mapPart": null,
+        "maskSize": 727,
+        "meanLinear": [
+          0.06658648065413753,
+          0.06119301499786623,
+          0.04815205191006061
+        ],
+        "pseudos": {
+          "ancestorHover": false,
+          "controls": [
+            {
+              "focusVisible": true,
+              "hover": false
+            }
+          ],
+          "focusVisible": false,
+          "focusWithin": true,
+          "hover": false,
+          "pinHover": false,
+          "rowFocusVisible": false
+        },
+        "selector": ".lm-trash svg",
+        "settleCriteria": {
+          "animationPhase": null,
+          "animations": "all document animations finished; infinite effects paused at the declared condition phase",
+          "captures": {
+            "control": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            },
+            "painted": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            }
+          },
+          "pseudoClasses": "matched hover/focus-visible read back after the driving action",
+          "scope": "entire document, including surface, ancestors and overlapping/portalled siblings",
+          "tooltipDismissal": {
+            "after": {
+              "armed": "false",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1693784ca3071089155afc6d0517b70c61c24ed6748d988bb3290b1073d4bacf"
+            },
+            "before": {
+              "armed": "false",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1693784ca3071089155afc6d0517b70c61c24ed6748d988bb3290b1073d4bacf"
+            }
+          },
+          "tooltipExpected": "closed",
+          "tooltipPresent": false,
+          "tooltipState": "closed"
+        },
+        "stateAttributes": {
+          "armed": "false",
+          "keyNeed": null,
+          "mapState": null
+        },
+        "target": {
+          "focusVisible": true,
+          "hover": false
+        },
+        "width": 44
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab ×24; keyboard Escape dismisses tooltip",
+        "animationsRunning": 0,
+        "box": {
+          "height": 11,
+          "width": 11,
+          "x": 1083,
+          "y": 880.6875
+        },
+        "controlMeanLinear": [
+          0.0033465357638991504,
+          0.005181516702338394,
+          0.009721217320237811
+        ],
+        "coreSize": 453,
+        "effectiveOpacity": 0.35,
+        "height": 44,
+        "histogram": [
+          {
+            "count": 445,
+            "rgb": [
+              73,
+              70,
+              62
+            ]
+          },
+          {
+            "count": 47,
+            "rgb": [
+              42,
+              43,
+              44
+            ]
+          },
+          {
+            "count": 32,
+            "rgb": [
+              58,
+              56,
+              52
+            ]
+          },
+          {
+            "count": 26,
+            "rgb": [
+              52,
+              51,
+              49
+            ]
+          },
+          {
+            "count": 24,
+            "rgb": [
+              22,
+              25,
+              31
+            ]
+          },
+          {
+            "count": 24,
+            "rgb": [
+              27,
+              29,
+              34
+            ]
+          },
+          {
+            "count": 23,
+            "rgb": [
+              52,
+              52,
+              49
+            ]
+          },
+          {
+            "count": 5,
+            "rgb": [
+              73,
+              69,
+              62
+            ]
+          }
+        ],
+        "mapPart": null,
+        "maskSize": 727,
+        "meanLinear": [
+          0.06658648065413753,
+          0.06119301499786623,
+          0.04815205191006061
+        ],
+        "pseudos": {
+          "ancestorHover": false,
+          "controls": [
+            {
+              "focusVisible": true,
+              "hover": false
+            }
+          ],
+          "focusVisible": false,
+          "focusWithin": true,
+          "hover": false,
+          "pinHover": false,
+          "rowFocusVisible": false
+        },
+        "selector": ".lm-trash svg",
+        "settleCriteria": {
+          "animationPhase": null,
+          "animations": "all document animations finished; infinite effects paused at the declared condition phase",
+          "captures": {
+            "control": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            },
+            "painted": {
+              "matched": true,
+              "tooltipPresent": false,
+              "tooltipState": "closed"
+            }
+          },
+          "pseudoClasses": "matched hover/focus-visible read back after the driving action",
+          "scope": "entire document, including surface, ancestors and overlapping/portalled siblings",
+          "tooltipDismissal": {
+            "after": {
+              "armed": "false",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1693784ca3071089155afc6d0517b70c61c24ed6748d988bb3290b1073d4bacf"
+            },
+            "before": {
+              "armed": "false",
+              "expanded": true,
+              "focusVisible": true,
+              "signature": "1693784ca3071089155afc6d0517b70c61c24ed6748d988bb3290b1073d4bacf"
+            }
+          },
+          "tooltipExpected": "closed",
+          "tooltipPresent": false,
+          "tooltipState": "closed"
+        },
+        "stateAttributes": {
+          "armed": "false",
+          "keyNeed": null,
+          "mapState": null
+        },
+        "target": {
+          "focusVisible": true,
+          "hover": false
+        },
+        "width": 44
+      }
+    }
+  ]
+}
+file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r7/compare.mjs:46
+  throw Error('STOP: regenerated measurements differ from bc1af7ba; shipping receipt untouched');
+        ^
+
+Error: STOP: regenerated measurements differ from bc1af7ba; shipping receipt untouched
+    at file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r7/compare.mjs:46:9
+    at ModuleJob.run (node:internal/modules/esm/module_job:365:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:99:5)
+
+Node.js v24.3.0

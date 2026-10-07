@@ -1,0 +1,76 @@
+[
+  {
+    "args": [
+      "env",
+      "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/paint-control/probe",
+      "STATE_SURFACES_OUTPUT=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/paint-control/probe.json",
+      "STATE_SURFACES_PROBE=1",
+      "STATE_SURFACES_CONDITION=default",
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 1,
+    "wallSeconds": 12.76588633301435,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving default/Gilded\u2026\nResolving default/Vector\u2026\nResolving default/Veil\u2026\nIncomplete painted probe: renders=105; wall=12.302s; acceptanceComplete=false\nfile:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/state-surfaces/png.mjs:75\n    throw new Error(`Measurement failure ${label}: weak foreground mask; mode=${modeFraction.toFixed(6)} < ${minimumModeFraction}; top8=${JSON.stringify(histogram.slice(0, 8))}`);\n          ^\n\nError: Measurement failure default/Vector/shipped/key/required/rest/verified/hsl(185 100% 70%): weak foreground mask; mode=0.126302 < 0.3; top8=[{\"rgb\":[102,242,255],\"count\":291},{\"rgb\":[17,40,42],\"count\":158},{\"rgb\":[17,39,41],\"count\":147},{\"rgb\":[97,230,242],\"count\":132},{\"rgb\":[14,31,32],\"count\":112},{\"rgb\":[18,42,44],\"count\":109},{\"rgb\":[14,30,31],\"count\":108},{\"rgb\":[16,38,40],\"count\":87}]\n    at foreground (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/state-surfaces/png.mjs:75:11)\n    at sample (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:141:24)\n    at runNextTicks (node:internal/process/task_queues:65:5)\n    at process.processImmediate (node:internal/timers:473:9)\n    at async captureValues (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:210:28)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:254:11\n    at async Promise.all (index 2)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:81:5\n    at async Promise.all (index 0)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:77:3\n\nNode.js v24.3.0\n"
+  },
+  {
+    "args": [
+      "env",
+      "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/paint-control/diagnostic",
+      "node",
+      "docs/qa/777-glyph-first-states/after-review-r4/paint-control/diagnostic.mjs"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 2.4117925419996027,
+    "tail": "veil-neutral-1: mask=0; mode=null; FAIL\nveil-prescribed-1: mask=2304; mode=0.18359375; FAIL\nveil-prescribed-2: mask=2304; mode=0.18359375; FAIL\nveil-prescribed-3: mask=2304; mode=0.18359375; FAIL\nveil-tag-status-same-clip-1: mask=2304; mode=0.18359375; FAIL\nveil-diagnostic-ancestor-filter-none-1: mask=723; mode=0.5822959889349931; PASS\ngilded-neutral-1: mask=0; mode=null; FAIL\ngilded-prescribed-1: mask=2304; mode=0.18359375; FAIL\ngilded-prescribed-2: mask=2304; mode=0.18359375; FAIL\ngilded-prescribed-3: mask=2304; mode=0.18359375; FAIL\ngilded-tag-status-same-clip-1: mask=2304; mode=0.18359375; FAIL\ngilded-diagnostic-ancestor-filter-none-1: mask=723; mode=0.5822959889349931; PASS\nvector-neutral-1: mask=0; mode=null; FAIL\nvector-prescribed-1: mask=2304; mode=0.12630208333333334; FAIL\nvector-prescribed-2: mask=2304; mode=0.12630208333333334; FAIL\nvector-prescribed-3: mask=2304; mode=0.12630208333333334; FAIL\nvector-tag-status-same-clip-1: mask=2304; mode=0.12630208333333334; FAIL\nvector-diagnostic-ancestor-filter-none-1: mask=726; mode=0.38980716253443526; PASS\nRepeated prescribed comparisons=9; errors=0; networkRequests=0\n"
+  },
+  {
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades",
+      "StateGlyphs",
+      "shell-accessibility"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 1,
+    "wallSeconds": 1.3727274579869118,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades StateGlyphs shell-accessibility\n\n\n RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n \u2713 src/shell-accessibility.test.ts (9 tests) 55ms\n \u276f src/state-shades.test.ts (0 test)\n \u2713 src/components/nexus/StateGlyphs.test.tsx (6 tests) 409ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af Failed Suites 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n \u276f src/state-shades.test.ts:161:9\n    159|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m\u2026\n    160| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    161|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    162| if (receipt.proof.acceptanceComplete !== true)\n    163|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed | 2 passed (3)\n      Tests  15 passed (15)\n   Start at  14:38:30\n   Duration  1.12s (transform 228ms, setup 85ms, collect 383ms, tests 464ms, environment 512ms, prepare 120ms)\n\n"
+  },
+  {
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "check"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 1.7790324579982553,
+    "tail": "\n> nexus-ui@1.0.0 check\n> tsc && npm run check:design-sync\n\n\n> nexus-ui@1.0.0 check:design-sync\n> tsc -p .design-sync/tsconfig.previews.json\n\n"
+  },
+  {
+    "args": [
+      "env",
+      "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/paint-control/full-attempt",
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 1,
+    "wallSeconds": 55.58333225001115,
+    "tail": "Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving default/Gilded\u2026\nResolving motion-start/Gilded\u2026\nResolving motion-trough/Veil\u2026\nResolving default/Veil\u2026\nResolving default/Vector\u2026\nResolving width-639/Veil\u2026\nResolving motion-start/Veil\u2026\nResolving motion-trough/Gilded\u2026\nResolving motion-start/Vector\u2026\nResolving width-639/Gilded\u2026\nResolving motion-trough/Vector\u2026\nResolving width-639/Vector\u2026\nPainted capture progress: renders=2041; wall=48.277s\nIncomplete painted probe: renders=2317; wall=55.086s; acceptanceComplete=false\nfile:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/state-surfaces/png.mjs:75\n    throw new Error(`Measurement failure ${label}: weak foreground mask; mode=${modeFraction.toFixed(6)} < ${minimumModeFraction}; top8=${JSON.stringify(histogram.slice(0, 8))}`);\n          ^\n\nError: Measurement failure width-639/Vector/candidate/delete/ready-exceeds/row-hover/unarmed/hsl(185 40% 40%): weak foreground mask; mode=0.131868 < 0.3; top8=[{\"rgb\":[21,47,49],\"count\":96},{\"rgb\":[21,46,48],\"count\":46},{\"rgb\":[23,51,53],\"count\":44},{\"rgb\":[23,52,54],\"count\":44},{\"rgb\":[22,49,51],\"count\":37},{\"rgb\":[22,48,50],\"count\":36},{\"rgb\":[22,50,52],\"count\":36},{\"rgb\":[21,48,49],\"count\":24}]\n    at foreground (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/state-surfaces/png.mjs:75:11)\n    at sample (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:141:24)\n    at runNextTicks (node:internal/process/task_queues:65:5)\n    at process.processImmediate (node:internal/timers:473:9)\n    at async captureValues (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:210:28)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:241:13\n    at async Promise.all (index 2)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:81:5\n    at async Promise.all (index 3)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:77:3\n\nNode.js v24.3.0\n"
+  }
+]

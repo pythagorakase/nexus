@@ -1,0 +1,72 @@
+
+> nexus-ui@1.0.0 test
+> vitest run plant-default-r5 -t browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled|global_tokens_are_unchanged|state_surfaces_read_only_state_tokens
+
+
+ RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ❯ plant-default-r5.test.ts (11 tests | 2 failed | 6 skipped) 1776ms
+   ✓ 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled 461ms
+   ✓ 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean 1259ms
+   × 777-S2 state shades > global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values 19ms
+     → /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client/src/components/nexus/nexus-layout.css: --state-delete-armed must be declared in an index.css theme root: expected false to be true // Object.is equality
+   × 777-S2 state shades > state_surfaces_read_only_state_tokens 13ms
+     → /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client/src/components/nexus/nexus-layout.css: --state-delete-armed must be declared in an index.css theme root: expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  plant-default-r5.test.ts > 777-S2 state shades > global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values
+AssertionError: /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client/src/components/nexus/nexus-layout.css: --state-delete-armed must be declared in an index.css theme root: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ../<input css Bwc1zs>:2411:63
+ ❯ assertStateDeclaration plant-default-r5.test.ts:342:74
+
+ ❯ plant-default-r5.test.ts:571:9
+ ❯ ../node_modules/postcss/lib/container.js:353:18
+ ❯ ../node_modules/postcss/lib/container.js:305:18
+ ❯ Rule.each ../node_modules/postcss/lib/container.js:53:16
+ ❯ Rule.walk ../node_modules/postcss/lib/container.js:302:17
+ ❯ ../node_modules/postcss/lib/container.js:310:24
+ ❯ Root.each ../node_modules/postcss/lib/container.js:53:16
+ ❯ Root.walk ../node_modules/postcss/lib/container.js:302:17
+ ❯ Root.walkDecls ../node_modules/postcss/lib/container.js:351:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  plant-default-r5.test.ts > 777-S2 state shades > state_surfaces_read_only_state_tokens
+AssertionError: /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/client/src/components/nexus/nexus-layout.css: --state-delete-armed must be declared in an index.css theme root: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ../<input css D_eKxe>:2411:1
+ ❯ ../<input css D_eKxe>:2411:63
+ ❯ assertStateDeclaration plant-default-r5.test.ts:342:74
+
+ ❯ plant-default-r5.test.ts:640:9
+ ❯ ../node_modules/postcss/lib/container.js:353:18
+ ❯ ../node_modules/postcss/lib/container.js:305:18
+ ❯ Rule.each ../node_modules/postcss/lib/container.js:53:16
+ ❯ Rule.walk ../node_modules/postcss/lib/container.js:302:17
+ ❯ Rule.walkDecls ../node_modules/postcss/lib/container.js:351:19
+ ❯ plant-default-r5.test.ts:639:12
+ ❯ ../node_modules/postcss/lib/container.js:377:18
+ ❯ ../node_modules/postcss/lib/container.js:305:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 passed | 6 skipped (11)
+   Start at  18:17:59
+   Duration  2.51s (transform 38ms, setup 29ms, collect 340ms, tests 1.78s, environment 169ms, prepare 43ms)
+

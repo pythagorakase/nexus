@@ -1,0 +1,67 @@
+ssssssssssssssssssssssssssssssssss...................................... [  2%]
+.......sss....ssssssssssssssssssssssss.................................. [  4%]
+................................ssss.................................... [  6%]
+................ssssssssss.......ssssssssssssss...s..................... [  8%]
+...........................sssssssssssssssss.......sssssssssss...sssssss [ 11%]
+sss...............ssssssssssssssssssss...............sss.....ssssssssss. [ 13%]
+...........ss..sssssssssssssssssss...................................... [ 15%]
+....ssssssssss......s...........................sss...ssssssssssssssssss [ 17%]
+ssssss........ss..............ssssssss.................................. [ 20%]
+.............................................................sssssss.... [ 22%]
+................ssss...ss.........................................ssssss [ 24%]
+sssssssssss.........s............................s...................... [ 26%]
+.....................................................sssssssssss........ [ 28%]
+...........ss..................sss.......................sssss.......... [ 31%]
+..........sssssss..........ss.........ssss.ss...ssss...................s [ 33%]
+ssssssssssssssssssssssssssssssssssssss.......sssssssssssssssssssssssssss [ 35%]
+ssssssssss.....ssssssss..............sssssssssssssssssss................ [ 37%]
+..sssssssssssssssss...............................................ss.... [ 40%]
+............ssss....sssssssssssss........ssssssssss..s................ss [ 42%]
+sssssssssss...s......................................................... [ 44%]
+........................................................................ [ 46%]
+..........................sssssssss.................................s... [ 48%]
+.......................ssssssssssssssssssssssssssssssssssssssssssss..... [ 51%]
+...................................................................sssss [ 53%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 55%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 57%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 60%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 62%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 64%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 66%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 69%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 71%]
+sssssssssssss....................s........................ssssssssssssss [ 73%]
+sssssssssssss..s.........sss...........ssss........................sss.. [ 75%]
+...ssssssssssssssssssssss......sssss..s...................ssssssssssssss [ 77%]
+ssssssssssssssssssssssssssssssss........................................ [ 80%]
+..................................................................ssssss [ 82%]
+ss...................................................................... [ 84%]
+...............s.................sssss...s.............................. [ 86%]
+................sssssssssssssssssssssssss............................... [ 89%]
+.........................sssssssssssss.s......s...................s....s [ 91%]
+ssssssssssssssssssss.......ss...............ssss........................ [ 93%]
+..............ss....sssssssssss......................................... [ 95%]
+............................................sssssssssss................. [ 97%]
+.......sssssssssssssss.............sssss..........s.ssssssssssssss       [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1865 passed, 1369 skipped, 7 warnings in 44.08s

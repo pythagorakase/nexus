@@ -108,34 +108,39 @@ Inside the `<svg>`, in order back-to-front:
 
 ## 3. Visual Layers
 
-### 3.1 Pin circle
+### 3.1 Static Pin Shapes
 
-```jsx
-<circle
-  cx={coords.x}
-  cy={coords.y}
-  r={PIN_RADIUS_PX / zoom}
-  fill={pinColor}
-  filter={`drop-shadow(0 0 ${8 / zoom}px ${pinColor})`}
-/>
-```
+Canvas and 9px sidebar SVGs share one `MapStateGlyph` contract. Precedence
+is **current > selected > hovered > rest**:
 
-Radius and glow blur both divide by `zoom` so the pin stays visually
-constant as the user zooms in or out.
+| State | Fill | Outline | Theme Token |
+|---|---|---|---|
+| Rest | Circle | None | `--state-map-rest` |
+| Current | Circle | Circular ring (bullseye) | `--state-map-current` |
+| Selected | Square | Square ring | `--state-map-selected` |
+| Hovered | Diamond | Diamond ring | `--state-map-hovered` |
 
-Color priority (`getPinColor` logic):
-- Place name matches `currentChunkLocation` prop → **yellow** (the
-  narrative is "here").
-- User has selected this place → **cyan**.
-- User is hovering this place → bright theme accent.
-- Otherwise → muted theme accent.
+Circle radius, square half-side and diamond vertex distance are
+`PIN_RADIUS_PX / zoom` on the canvas. The canvas fill glow blur also
+divides by zoom (`8 / zoom` pixels). The sidebar uses
+`viewBox="-4.5 -4.5 9 9"` with a 2.5px fill radius/half-side/vertex distance,
+4px outline radius/half-side/vertex distance and a 1px stroke. The box is
+centered in the existing row; its vertical rhythm is unchanged. Fill and ring
+use stable path elements, with an unchanged circular canvas hit target.
+Shape carries state when an in-family deutan pair stays below ΔE 15;
+color and motion are never the only distinctions. Leaders use the same
+theme-token mapping. True-coordinate centering and inverse-zoom fan-out
+remain unchanged.
 
-### 3.2 Pulse ring (selected/hovered only)
+### 3.2 Outline Rings
 
-A `<circle>` with `r={8/zoom}`, no fill, `stroke={pinColor}`,
-`strokeWidth={1/zoom}`, opacity `0.6`, plus Tailwind's `animate-pulse`
-class. Rendered only when `selectedLocation === place.id ||
-hoveredLocation === place.id`.
+Every non-rest state has its corresponding canvas outline at radius, half-side
+or vertex distance `8 / zoom`, no fill, `strokeWidth={1 / zoom}` and
+opacity `0.6`. Sidebar outlines use 4px and a 1px stroke in their 9px box.
+Current is static. Selected and hovered outlines pulse
+only without reduced motion; the app-wide reduced-motion guard disables
+the pulse with `animation: none !important`. Fill and outline dimensions
+divide by zoom to keep their screen size constant.
 
 ### 3.3 Label
 

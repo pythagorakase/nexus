@@ -1,0 +1,11 @@
+{
+  "label": "default/Veil/map/sidebar/hover/fill/hovered",
+  "selector": "[data-testid=\"map-place-row-3\"] [data-map-part=\"fill\"]",
+  "action": "select 1; close dialog; mouse hover row",
+  "expected": "hovered",
+  "actual": "rest",
+  "hovered": {
+    "pin": false,
+    "row": true
+  }
+}

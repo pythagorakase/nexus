@@ -1,0 +1,19 @@
+{
+  "label": "width-639/Vector/candidate/delete/ready-exceeds/row-hover/unarmed/hsl(185 40% 40%)",
+  "selector": ".lm-trash svg",
+  "box": {
+    "x": 522.03125,
+    "y": 395,
+    "width": 11,
+    "height": 11
+  },
+  "action": "expand model family by click; mouse hover row",
+  "pseudos": {
+    "hover": false,
+    "focusVisible": false,
+    "pinHover": false,
+    "ancestorHover": true,
+    "focusWithin": false
+  },
+  "error": "Measurement failure width-639/Vector/candidate/delete/ready-exceeds/row-hover/unarmed/hsl(185 40% 40%): weak foreground mask; mode=0.131868 < 0.3; top8=[{\"rgb\":[21,47,49],\"count\":96},{\"rgb\":[21,46,48],\"count\":46},{\"rgb\":[23,51,53],\"count\":44},{\"rgb\":[23,52,54],\"count\":44},{\"rgb\":[22,49,51],\"count\":37},{\"rgb\":[22,48,50],\"count\":36},{\"rgb\":[22,50,52],\"count\":36},{\"rgb\":[21,48,49],\"count\":24}]"
+}

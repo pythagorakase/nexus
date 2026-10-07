@@ -1,0 +1,16 @@
+{
+  "name": "offline-api-orrery",
+  "args": [
+    "/Users/pythagor/nexus/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_api",
+    "tests/test_orrery"
+  ],
+  "exit": 0,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 45.39178354101023,
+  "tail": "sssssssssssss....................s........................ssssssssssssss [ 73%]\nsssssssssssss..s.........sss...........ssss........................sss.. [ 75%]\n...ssssssssssssssssssssss......sssss..s...................ssssssssssssss [ 77%]\nssssssssssssssssssssssssssssssss........................................ [ 80%]\n..................................................................ssssss [ 82%]\nss...................................................................... [ 84%]\n...............s.................sssss...s.............................. [ 86%]\n................sssssssssssssssssssssssss............................... [ 89%]\n.........................sssssssssssss.s......s...................s....s [ 91%]\nssssssssssssssssssss.......ss...............ssss........................ [ 93%]\n..............ss....sssssssssss......................................... [ 95%]\n............................................sssssssssss................. [ 97%]\n.......sssssssssssssss.............sssss..........s.ssssssssssssss       [100%]\n=============================== warnings summary ===============================\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n1865 passed, 1369 skipped, 7 warnings in 44.08s"
+}

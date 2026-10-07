@@ -1,0 +1,280 @@
+{
+  "sourceHead": "afbb27568aeb4a19c13103720b9c7134b48393d1",
+  "chromium": "153.0.8010.12",
+  "conditions": {
+    "viewport": {
+      "width": 1200,
+      "height": 900
+    },
+    "deviceScaleFactor": 4,
+    "colorScheme": "dark",
+    "reducedMotion": "reduce",
+    "origin": "file://",
+    "network": "aborted"
+  },
+  "samples": [
+    {
+      "name": "normal-memory-fill",
+      "selector": ".mem-fill",
+      "computed": "rgb(184, 61, 122)",
+      "box": {
+        "x": 934.28125,
+        "y": 25.25,
+        "width": 41,
+        "height": 3
+      },
+      "width": 164,
+      "height": 12,
+      "histogram": [
+        {
+          "rgb": [
+            184,
+            61,
+            122
+          ],
+          "count": 1782
+        },
+        {
+          "rgb": [
+            8,
+            11,
+            18
+          ],
+          "count": 166
+        },
+        {
+          "rgb": [
+            55,
+            33,
+            58
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            53,
+            32,
+            58
+          ],
+          "count": 3
+        },
+        {
+          "rgb": [
+            54,
+            32,
+            58
+          ],
+          "count": 2
+        },
+        {
+          "rgb": [
+            34,
+            16,
+            33
+          ],
+          "count": 1
+        },
+        {
+          "rgb": [
+            39,
+            18,
+            38
+          ],
+          "count": 1
+        },
+        {
+          "rgb": [
+            82,
+            32,
+            64
+          ],
+          "count": 1
+        }
+      ],
+      "literalSelected": {
+        "rgb": [
+          8,
+          11,
+          18
+        ],
+        "count": 166
+      }
+    },
+    {
+      "name": "over-memory-fill",
+      "selector": ".mem-fill.over",
+      "computed": "rgb(230, 115, 77)",
+      "box": {
+        "x": 913.484375,
+        "y": 26.75,
+        "width": 88,
+        "height": 3
+      },
+      "width": 352,
+      "height": 12,
+      "histogram": [
+        {
+          "rgb": [
+            230,
+            115,
+            77
+          ],
+          "count": 3822
+        },
+        {
+          "rgb": [
+            8,
+            11,
+            18
+          ],
+          "count": 382
+        },
+        {
+          "rgb": [
+            92,
+            48,
+            41
+          ],
+          "count": 2
+        },
+        {
+          "rgb": [
+            162,
+            82,
+            59
+          ],
+          "count": 2
+        },
+        {
+          "rgb": [
+            171,
+            86,
+            61
+          ],
+          "count": 2
+        },
+        {
+          "rgb": [
+            172,
+            86,
+            61
+          ],
+          "count": 2
+        },
+        {
+          "rgb": [
+            208,
+            104,
+            71
+          ],
+          "count": 2
+        },
+        {
+          "rgb": [
+            211,
+            105,
+            72
+          ],
+          "count": 2
+        }
+      ],
+      "literalSelected": {
+        "rgb": [
+          8,
+          11,
+          18
+        ],
+        "count": 382
+      }
+    },
+    {
+      "name": "rest-map-fill",
+      "selector": "[data-testid=\"map-pin-2\"] .map-state-fill",
+      "computed": "rgb(230, 115, 77)",
+      "box": {
+        "x": 776,
+        "y": 643.75,
+        "width": 6,
+        "height": 6
+      },
+      "width": 24,
+      "height": 24,
+      "histogram": [
+        {
+          "rgb": [
+            230,
+            115,
+            77
+          ],
+          "count": 404
+        },
+        {
+          "rgb": [
+            21,
+            17,
+            22
+          ],
+          "count": 92
+        },
+        {
+          "rgb": [
+            220,
+            109,
+            74
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            172,
+            88,
+            61
+          ],
+          "count": 3
+        },
+        {
+          "rgb": [
+            221,
+            110,
+            74
+          ],
+          "count": 3
+        },
+        {
+          "rgb": [
+            41,
+            25,
+            27
+          ],
+          "count": 2
+        },
+        {
+          "rgb": [
+            45,
+            28,
+            28
+          ],
+          "count": 2
+        },
+        {
+          "rgb": [
+            53,
+            32,
+            30
+          ],
+          "count": 2
+        }
+      ],
+      "literalSelected": {
+        "rgb": [
+          21,
+          17,
+          22
+        ],
+        "count": 92
+      }
+    }
+  ],
+  "errors": [],
+  "requests": []
+}

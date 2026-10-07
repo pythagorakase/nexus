@@ -1,0 +1,50 @@
+
+> nexus-ui@1.0.0 resolve-state-surfaces
+> node scripts/resolve-state-surfaces.mjs
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in "node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+Resolving w1101-1279/reduce/Veil…
+Completed w1101-1279/reduce/Veil; renders=74; wall=28.127s
+Calibration Veil: {"memory":{"opaqueMaximum":0.0002655887508743018,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.006002891112468775,"translucentMaximum":0.012334576619474699,"skippedPairs":0},"key":{"opaqueMaximum":0.03958693576307006,"translucentMaximum":0.01110400212806681,"skippedPairs":0},"map":{"opaqueMaximum":0.07468917510215183,"translucentMaximum":0.4165404892186375,"skippedPairs":20}}; passed
+Resolving w1101-1279/reduce/Gilded…
+Painted capture progress: renders=130; wall=48.320s
+Completed w1101-1279/reduce/Gilded; renders=148; wall=52.396s
+Calibration Gilded: {"memory":{"opaqueMaximum":0.00026620144306678273,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.008785869899490675,"translucentMaximum":0.0079023496576129,"skippedPairs":0},"key":{"opaqueMaximum":0.03689614710862447,"translucentMaximum":0.013172053988944792,"skippedPairs":0},"map":{"opaqueMaximum":0.07115908857600602,"translucentMaximum":0.44470808450281596,"skippedPairs":19}}; passed
+Resolving w1101-1279/reduce/Vector…
+Completed w1101-1279/reduce/Vector; renders=222; wall=76.658s
+Calibration Vector: {"memory":{"opaqueMaximum":0.0003111490327129558,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.029118582412838427,"translucentMaximum":0.02152663851962112,"skippedPairs":0},"key":{"opaqueMaximum":0.04012440845926655,"translucentMaximum":0.014057713074969447,"skippedPairs":0},"map":{"opaqueMaximum":0.08053455545499347,"translucentMaximum":0.34320320374065233,"skippedPairs":19}}; passed
+Resolving w1101-1279/reduce/Veil…
+Resolving w1-639/reduce/Veil…
+Resolving w1-639/motion/start/Gilded…
+Resolving w1101-1279/reduce/Gilded…
+Resolving w1-639/reduce/Vector…
+Resolving w1-639/motion/start/Veil…
+Resolving w1-639/motion/trough/Gilded…
+Resolving w1101-1279/reduce/Vector…
+Resolving w1-639/motion/trough/Veil…
+Resolving w1-639/reduce/Gilded…
+Resolving w1-639/motion/trough/Vector…
+Resolving w1-639/motion/start/Vector…
+Incomplete painted probe: renders=477; wall=80.662s; acceptanceComplete=false
+file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/state-surfaces/png.mjs:77
+  if (!maskSize) throw new Error(`Measurement failure ${label}: empty foreground mask`);
+                       ^
+
+Error: Measurement failure w1-639/reduce/Vector/shipped/delete/ready/rest/unarmed/hsl(185 40% 55%): empty foreground mask
+    at foreground (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/state-surfaces/png.mjs:77:24)
+    at sample (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:174:24)
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processImmediate (node:internal/timers:473:9)
+    at async captureValues (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:273:28)
+    at async renderInventory (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:306:13)
+    at async Promise.all (index 2)
+    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:396:7
+    at async Promise.all (index 1)
+    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:392:3
+
+Node.js v24.3.0

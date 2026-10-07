@@ -1,0 +1,95 @@
+{
+  "rule": "@media print, (min-width: 640px) and (max-width: 759px) { .key-row.optional { opacity: .35 } }",
+  "unplantedConditions": 27,
+  "plantedConditions": 30,
+  "newBand": [
+    {
+      "viewport": {
+        "width": 759,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w640-759",
+      "features": {
+        "prefers-reduced-motion": "reduce"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 640px) and (max-width: 759px)"
+      ],
+      "id": "w640-759/reduce"
+    },
+    {
+      "viewport": {
+        "width": 759,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w640-759",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (min-width: 640px)",
+        "media (min-width: 640px) and (max-width: 759px)"
+      ],
+      "animationPhase": 0,
+      "id": "w640-759/motion/start"
+    },
+    {
+      "viewport": {
+        "width": 759,
+        "height": 900
+      },
+      "deviceScaleFactor": 4,
+      "colorScheme": "dark",
+      "reducedMotion": "no-preference",
+      "forcedColors": "none",
+      "hasTouch": false,
+      "isMobile": false,
+      "origin": "file://",
+      "network": "aborted",
+      "band": "w640-759",
+      "features": {
+        "prefers-reduced-motion": "no-preference"
+      },
+      "satisfied": [
+        "media (max-width: 1280px)",
+        "media (max-width: 1100px)",
+        "media (max-width: 760px)",
+        "media (min-width: 640px)",
+        "media (min-width: 640px) and (max-width: 759px)"
+      ],
+      "animationPhase": 0.5,
+      "id": "w640-759/motion/trough"
+    }
+  ],
+  "excluded": [
+    {
+      "prelude": "media print",
+      "parentList": "media print, (min-width: 640px) and (max-width: 759px)",
+      "reason": "print media type is outside the screen color objective"
+    }
+  ]
+}

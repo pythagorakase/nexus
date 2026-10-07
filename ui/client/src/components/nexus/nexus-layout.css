@@ -193,11 +193,12 @@
 }
 .topbar .mem-fill {
   display: block; height: 100%;
-  background: var(--brass);
+  background: var(--state-mem-normal);
   box-shadow: var(--glow-soft);
   transition: width .35s ease;
 }
-.topbar .mem-fill.over { background: var(--bronze); }
+.topbar .mem-over-glyph { color: var(--state-mem-over); flex-shrink: 0; }
+.topbar .mem-fill.over { background: var(--state-mem-over); }
 .topbar .mem-fill.loading { animation: nexus-pulse 1.8s ease-in-out infinite; }
 .topbar .mem-text { letter-spacing: .1em; white-space: nowrap; }
 
@@ -1176,9 +1177,8 @@
   text-shadow: var(--glow-soft);
 }
 .map-place-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  width: 9px;
+  height: 9px;
   flex-shrink: 0;
 }
 .map-place-name {
@@ -2082,10 +2082,12 @@
 .lm-trash,
 .lm-cancel {
   background: none; border: none; padding: 2px;
-  cursor: pointer; color: var(--fg-muted); display: inline-flex;
+  cursor: pointer; display: inline-flex;
   transition: color .2s;
 }
-.lm-trash.armed { color: var(--danger); }
+.lm-cancel { color: var(--fg-muted); }
+.lm-trash { color: var(--state-delete-unarmed); }
+.lm-trash.armed { color: var(--state-delete-armed); }
 .lm-trash:disabled { opacity: .3; cursor: default; }
 .lm-cancel:hover { color: var(--danger); }
 .lm-bar {
@@ -2142,7 +2144,7 @@
 .key-row.optional:hover,
 .key-row.optional:focus-within { opacity: 1; }
 .key-row.missing { border-color: var(--warning); }
-.key-row.missing .key-status { color: var(--warning); }
+.key-row.missing .key-status { color: var(--state-key-missing); }
 .key-provider-name {
   font-family: var(--font-body);
   font-size: 15px;
@@ -2151,11 +2153,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.key-status { display: inline-flex; color: var(--fg-dim); }
-.key-status.present { color: var(--fg-muted); }
+.key-status { display: inline-flex; color: var(--state-key-absent); }
+.key-status.present { color: var(--state-key-present); }
 .key-status.verified {
-  color: var(--brass);
-  filter: drop-shadow(0 0 5px var(--brass));
+  color: var(--state-key-verified);
+  filter: drop-shadow(0 0 5px var(--state-key-verified));
 }
 .key-input {
   width: 100%;

@@ -1,0 +1,377 @@
+[
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/acceptance.json",
+    "sha256": "9a4ad4d6d6acb1b97f05b3cc26514239ac5a604de9ab4747f47f970e8ec7944a",
+    "bytes": 7451
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/capture-manifest.json",
+    "sha256": "3f6497eb41bb7e590ff1603b6e7b4a90dd914e5ae53e85bf1ee5d61d982719d9",
+    "bytes": 11226
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/changed-files.md",
+    "sha256": "c533ce6bfc2277f4ecd5e3e26747a9bb09ff47363669cde59d0f964c2e15a35f",
+    "bytes": 54944
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/commands.json",
+    "sha256": "ce77b6f5dfe679006569016ce7c16dc9f6f469000b02ad9de2fb462cb9b985ec",
+    "bytes": 77612
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/commands.md",
+    "sha256": "44edd26b85a1b9897684c5345a7bcc4ab59d3046337ae7770ae2b9db4631ec62",
+    "bytes": 68292
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/completion.md",
+    "sha256": "4a3c0723b72693445a71cacecfce07628fb22a81cae31cb7b95f1df77806ba3f",
+    "bytes": 9135
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/gate-summary.json",
+    "sha256": "efbef355da162d747831666db92162fac4681556c6dd996654b6b236a24990e3",
+    "bytes": 311
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/gradient-proof.mjs",
+    "sha256": "e61a8f19e9af05442814ea130396bc66b656e740809282bb5b81d60a66ecb1dc",
+    "bytes": 3520
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/group-results.json",
+    "sha256": "39ef7dd98db1eaf5c7175140bc935bb3335aaed3e443c8c75a0e3858e3a03db7",
+    "bytes": 3162
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/offline-coverage.json",
+    "sha256": "2a0a1a9e9f0f368c876fde5f593d56632ff3e1a64db605890a55070bf64bea4d",
+    "bytes": 19920
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/offline-jobs.json",
+    "sha256": "dfff5030968f8bd0a3055a1d0c56f92530fe8b646eae3edfd78e738c8e0d9f40",
+    "bytes": 6374
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/palette-delta.json",
+    "sha256": "b97a1101a211a66888537b7ac2eba211b8957fd15d2eb238f3bd5d5f7b0b1d46",
+    "bytes": 4467
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/plants-default-proof.json",
+    "sha256": "49f2e79850710616401b0aef851d8dcd79d08212745cadbc6b8b56b50eb52b6a",
+    "bytes": 63310
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/plants-default.mjs",
+    "sha256": "13c899e43b699e538731bc6b04015173f9f7d034d50d95b65d97ea5a247eee72",
+    "bytes": 7995
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/plants-ineffective-media.json",
+    "sha256": "11f815daf5fa8a7b5b3509b8a84f43de605a8d4331b3a06064d0f6a2ae6e99ee",
+    "bytes": 19360
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/plants-summary.json",
+    "sha256": "f03fa738399d6561e96012b2a62e42d4581ae16fe5d656e05060cc94a18718f8",
+    "bytes": 9595
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/plants.md",
+    "sha256": "c0c6d98c9e6663ca68129c539784381bb5c412a38f731cb7dee4f8df3b4f91ab",
+    "bytes": 49138
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-current-label-after.png",
+    "sha256": "a86bea057f55971630863d5cb21a351633258158c238cd0dcc63b9a28d2fe047",
+    "bytes": 3652
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-current-label-before.png",
+    "sha256": "a86bea057f55971630863d5cb21a351633258158c238cd0dcc63b9a28d2fe047",
+    "bytes": 3652
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-hovered-label-after.png",
+    "sha256": "ce04b53e65ef04225b1eedf92d2b6a1d30355ba2cc0b9e0a6d04e4c36515baba",
+    "bytes": 3771
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-hovered-label-before.png",
+    "sha256": "ce04b53e65ef04225b1eedf92d2b6a1d30355ba2cc0b9e0a6d04e4c36515baba",
+    "bytes": 3771
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-map-monochrome.png",
+    "sha256": "e0490e84462c11655eaae0463e4af3f2086e96de2b62e05d5cc52c1168542984",
+    "bytes": 508959
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-map.png",
+    "sha256": "f97f58a04c3f22a2e408bac3343ddf09533881ac472d414d93ee71719c90ffcb",
+    "bytes": 520450
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-selected-label-after.png",
+    "sha256": "528bdc7fc4a13d262db0de57b876b98171bc1281d37ecffc1cb1e0567d667d10",
+    "bytes": 3361
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/gilded-selected-label-before.png",
+    "sha256": "528bdc7fc4a13d262db0de57b876b98171bc1281d37ecffc1cb1e0567d667d10",
+    "bytes": 3361
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/product-proof.json",
+    "sha256": "4c16e90efec0bcb8e42aa2186427115aa44515f31d64c02fd78be39f17ed2781",
+    "bytes": 435011
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-current-label-after.png",
+    "sha256": "cd5156d2976b9873d5ba3af0085d67cbfca1250ecde591d4a472f6d85d69cf72",
+    "bytes": 3109
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-current-label-before.png",
+    "sha256": "cd5156d2976b9873d5ba3af0085d67cbfca1250ecde591d4a472f6d85d69cf72",
+    "bytes": 3109
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-hovered-label-after.png",
+    "sha256": "b43988f91ceaf94df25620ec50ef354fb152b9c2abe12036ddf812507da8a5d3",
+    "bytes": 3383
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-hovered-label-before.png",
+    "sha256": "b43988f91ceaf94df25620ec50ef354fb152b9c2abe12036ddf812507da8a5d3",
+    "bytes": 3383
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-map-monochrome.png",
+    "sha256": "7b7f0c887a68764ef8cd29f028fea5fd906f8155dfab4c5c4a8563cecbe47eb3",
+    "bytes": 496765
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-map.png",
+    "sha256": "5a4b4eb0a87c05da155725628d8bde847d4daf0809d69f7f5a84e7c45b50c7ad",
+    "bytes": 508691
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-selected-label-after.png",
+    "sha256": "6e021aee7d1a62eb3dff47df6e8f012d3a6b27ce27695e2cbc9d84de519cba56",
+    "bytes": 2882
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/vector-selected-label-before.png",
+    "sha256": "6e021aee7d1a62eb3dff47df6e8f012d3a6b27ce27695e2cbc9d84de519cba56",
+    "bytes": 2882
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-current-label-after.png",
+    "sha256": "9810f8f1a492b325a82dd89f34a6a30877c339a491537dc0abbe319be80e6f50",
+    "bytes": 2813
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-current-label-before.png",
+    "sha256": "c40fccd218550e88e19cb11b17f6f10adb1a72f0e0d36e8d4bdf3bd408293d4c",
+    "bytes": 2816
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-hovered-label-after.png",
+    "sha256": "7f29b412978cb87341740e6581b7bdb874b442bdda6601cb1b2000caac8b0dd7",
+    "bytes": 2964
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-hovered-label-before.png",
+    "sha256": "2bb635d7ed6a4a7e793e92c3701682b1bccfe24f9ad877161370ee2624332beb",
+    "bytes": 2970
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-map-monochrome.png",
+    "sha256": "c17218122a5609fc6f5050f120f7b71fefc7858351ed6a0c37f2a7dec686c9fe",
+    "bytes": 466534
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-map.png",
+    "sha256": "dc2310fdec234f018961c9d79b6c58f3163da3fc278ddcf6c588d7a1cab541c8",
+    "bytes": 478395
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-selected-label-after.png",
+    "sha256": "16f5fd5797ce6af361d96e2699f59406f833d3153c9b9f95472bbb6b33788ce2",
+    "bytes": 2454
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/product-final/veil-selected-label-before.png",
+    "sha256": "ed28efef4154616bfb0b6f90d27f26dc5c66b735ee925c7ccf4d093b5e3ac568",
+    "bytes": 2476
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/regenerate-evidence.py",
+    "sha256": "c1a3d1c53f9ebb8953fe43e7b2b6b3b9b6cf4ab10886410339db4b97f68e5270",
+    "bytes": 9064
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/regeneration.json",
+    "sha256": "c4370eb97584f2667c0505be08a7f74b848cf329a43314e5ab6ad0e671334d28",
+    "bytes": 1205
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/shadow-measurement-failure-control.png",
+    "sha256": "4d306d23e88b540fdce4863f1e509f090a4a0d777306000b1fe0fe811999d87b",
+    "bytes": 188
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/shadow-measurement-failure-painted.png",
+    "sha256": "4d306d23e88b540fdce4863f1e509f090a4a0d777306000b1fe0fe811999d87b",
+    "bytes": 188
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/shadow-measurement-failure.json",
+    "sha256": "8943c0612e68cd99bd503b72525d04011089285b67e7843322de8f1a9d8e1a94",
+    "bytes": 568
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/swatch-inputs.json",
+    "sha256": "3580f1f5a3428ea40bab21fcd8481ff8577b7f0cca47350b1304843d2500e07c",
+    "bytes": 20447
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r4/settled/unreachable-contexts.md",
+    "sha256": "6ddb2430379d3ec856801004a313c3b54fe04edcf3f1745ba2dbb14e5907e052",
+    "bytes": 1141
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/backdrop-correction.json",
+    "sha256": "af95e7f98455f869a408aaa676240a5e726568d33d6e6751c9d6dc321282b6b4",
+    "bytes": 7972
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/browser-proof.json",
+    "sha256": "75b1743aaf77d03552208473e40f0c8a0caf2cb5b8df9e67a66d890a6ff5b55a",
+    "bytes": 8969
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/commands.md",
+    "sha256": "7b7757ee256203ca19c532a2bace5a18eae28c123e4aa3d0269176c1dd136794",
+    "bytes": 27537
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/exceptions.md",
+    "sha256": "85726f0a47f9ff3d0023d631d848a31388ba47f519c3f5be691c76ea128a07d7",
+    "bytes": 1911
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-joint.json",
+    "sha256": "1210892c65cd14b7472dd43b99fc21b30eab81ceee8a299bce8e8246bb958fe2",
+    "bytes": 3126738
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-pairs.md",
+    "sha256": "9b1672635d74b6f0c62c686b0c9cc0cbe28a2e2fe13496f482bc9b3257e8b1ad",
+    "bytes": 15651
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/global-proof.json",
+    "sha256": "c1e364b3507fe29de2a4b09646f0d888649bc7117d08eb114c41020aa2f48058",
+    "bytes": 100807
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/global-swatches.png",
+    "sha256": "b3a0a30131537a815afaee7d5e06a91cc08025c8d1abcf720f225280cc86c7b6",
+    "bytes": 271872
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/global-swatches.svg",
+    "sha256": "83ddc388f5a5f8a8d9ace029094e1313fd6f565b096c3a08ceb1b73707f59c8e",
+    "bytes": 76699
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/global-tokens.md",
+    "sha256": "c07cc3af843ee639abd2e6fcddd08628fb8ad7898045074d48f39719d7a50bc2",
+    "bytes": 33397
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/globals-after.png",
+    "sha256": "e05c0a10fa77ccec4dbfc5ee7a8c131abe50a051e959f6702b4622f06cd9337c",
+    "bytes": 154591
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/globals-before.png",
+    "sha256": "54fa1fb6e152ca60da5a2a69c597cc7df7e0307452a6157f7624a3b52c8d3341",
+    "bytes": 154592
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/glyphs-monochrome-reduced-motion.png",
+    "sha256": "a718dfe9e5cd65fcfb640052d7d814c7da24b42fed967225a8af43b27d4f53e7",
+    "bytes": 20656
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/glyphs-reduced-motion.png",
+    "sha256": "20d5c381e4d59495d7955a5f8dbf453a4d156235559b765c21257fa7aa143faf",
+    "bytes": 26215
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.csv",
+    "sha256": "451c4fd74cbd779c773be44ec572c08264bc58538d31bff12b55176800be3686",
+    "bytes": 3159220
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.md",
+    "sha256": "b44d26f6c89c6ab90b0e483f33fb27c880042d04dce49fef8ec4505f0fe36d53",
+    "bytes": 403
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/production-panes-reduced-motion.png",
+    "sha256": "49dc2cbd90b4607bbf175cd3d8a0fd409dda03ad65a355b8dd816c9e4f43b3e5",
+    "bytes": 247128
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.json",
+    "sha256": "53687cdaed94be51d7e96967cadaf952fd6866a423d130c9692a53f2053d9556",
+    "bytes": 5157
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.md",
+    "sha256": "b1973b33869dd34f2cc147cdf601f105d5d6098b258ec97d08900f2b18660617",
+    "bytes": 3297
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.png",
+    "sha256": "d0e96bb373cfd9b2deabb9f5c22b64aeb2889d2e0b8a22d2e87b6e141b597a28",
+    "bytes": 80042
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.svg",
+    "sha256": "e99ac1faaa549bf7a8c70ce8ba1b27f802c4b345fad72b11b8bb82c7f49846b7",
+    "bytes": 13285
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json",
+    "sha256": "db23b7d03dffdee9a09cd8163cc71eb2ca5c7a4627fe1561394960ff2c525d58",
+    "bytes": 146737
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/vector-joint.json",
+    "sha256": "f058bee6476b06f028707c04acea97ad414feac422cf28748803c5d9aa93b27b",
+    "bytes": 3103667
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/vector-pairs.md",
+    "sha256": "9e15ebece7f09a1c43937359257ea1471fbbee269c8cbc1f91bf558291e4bf9f",
+    "bytes": 15644
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/veil-joint.json",
+    "sha256": "796119b00f2e7ac6891957b749bc8cf18c974461e45c153121299d0b7c71d751",
+    "bytes": 3172823
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/amendment-2/veil-pairs.md",
+    "sha256": "65c3eeac2567ae00406a4aa0e74e654fef38fabe3a3019db50d4107039d98ee3",
+    "bytes": 15683
+  }
+]

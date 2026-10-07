@@ -1,0 +1,3763 @@
+{
+  "baseline": "bc1af7ba2bd02939449eabfd5ea46f5b3a24dd39",
+  "baselineReceiptSha256": "35d765c89b8b7210241d5e48fad184e3cc40a623daa3716f2ea1a20d636118cb",
+  "baselineMatchesLfsOid": true,
+  "priorFingerprint": "7c7cda7c5a1124025888de538122b3efb555de17e1a2dd30ea48cb84fc3ab7f9",
+  "fingerprint": "70f2d64239c57d51435eadfd558bf0dd5f34f4af5266507c09e99efb5122337b",
+  "conditionCount": 27,
+  "conditionsIdentical": true,
+  "samplesCompared": 101742,
+  "changedSamples": 415,
+  "missing": [],
+  "additional": [],
+  "excludedRuntimeFields": [
+    "settleWaitMs",
+    "escapePressed"
+  ],
+  "priorSamplesSha256": "ce07766819eed6fc0861d5d0ee04dbfa0360d236ae98d009a01d2d6ed8accecd",
+  "samplesSha256": "84877ec330d2161efd0bc2cbffdd3e75b4ce09b239aced31684f21025e1b2039",
+  "renders": 101742,
+  "wallSeconds": 1981.920074792,
+  "acceptanceComplete": true,
+  "differences": [
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1101-1279/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1-639/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Gilded/candidates/--state-delete-armed/hsl(0 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w640-760/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w761-767/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w768-1023/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1024-1100/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-unarmed/hsl(185 60% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1280/reduce/Vector/candidates/--state-delete-armed/hsl(350 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 52%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Gilded/candidates/--state-delete-unarmed/hsl(43 60% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d723; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d723; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/before/delete/ready-exceeds/focus-visible/armed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 80% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 90% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 55%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1281-1535/reduce/Veil/candidates/--state-delete-armed/hsl(0 100% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; first click arms; requested hover/Tab restored; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/shipped/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/before/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 30% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 40% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 65%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 30%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 40%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 50%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 60%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/conditions/w1536+/reduce/Veil/candidates/--state-delete-unarmed/hsl(42 50% 70%)/delete/ready-exceeds/focus-visible",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d724; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d724; keyboard Escape dismisses tooltip"
+      }
+    },
+    {
+      "path": "/calibration/Vector/samples/delete/ready-exceeds/focus-visible/unarmed",
+      "before": {
+        "action": "expand model family by click; keyboard Tab \u00d725; tooltip already dismissed"
+      },
+      "after": {
+        "action": "expand model family by click; keyboard Tab \u00d725; keyboard Escape dismisses tooltip"
+      }
+    }
+  ],
+  "differenceFields": [
+    "action"
+  ],
+  "allOtherComparedSampleFieldsIdentical": true
+}

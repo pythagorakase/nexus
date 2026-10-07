@@ -1,0 +1,19 @@
+{
+  "label": "default/Vector/shipped/key/required/rest/verified/hsl(185 100% 70%)",
+  "selector": "[data-testid=\"key-row-verified\"] .key-status svg",
+  "box": {
+    "x": 564.84375,
+    "y": 295.25,
+    "width": 12,
+    "height": 12
+  },
+  "action": "seed status; verified via fixture VERIFY click",
+  "pseudos": {
+    "hover": false,
+    "focusVisible": false,
+    "pinHover": false,
+    "ancestorHover": false,
+    "focusWithin": false
+  },
+  "error": "Measurement failure default/Vector/shipped/key/required/rest/verified/hsl(185 100% 70%): weak foreground mask; mode=0.126302 < 0.3; top8=[{\"rgb\":[102,242,255],\"count\":291},{\"rgb\":[17,40,42],\"count\":158},{\"rgb\":[17,39,41],\"count\":147},{\"rgb\":[97,230,242],\"count\":132},{\"rgb\":[14,31,32],\"count\":112},{\"rgb\":[18,42,44],\"count\":109},{\"rgb\":[14,30,31],\"count\":108},{\"rgb\":[16,38,40],\"count\":87}]"
+}

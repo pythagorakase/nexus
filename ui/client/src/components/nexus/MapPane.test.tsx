@@ -146,11 +146,11 @@ function viewCenterLngLat(width: number, height: number) {
 function pinCenter(placeId: number) {
   const dot = screen
     .getByTestId(`map-pin-${placeId}`)
-    .querySelector("circle")!;
-  return {
-    x: Number(dot.getAttribute("cx")),
-    y: Number(dot.getAttribute("cy")),
-  };
+    .querySelector('[data-map-part="fill"]')!;
+  const d = dot.getAttribute("d")!;
+  const v = d.match(/-?(?:\d*\.)?\d+(?:e[+-]?\d+)?/gi)!.map(Number);
+  if (d.includes("A")) return { x: (v[0] + v[7]) / 2, y: v[1] };
+  return { x: (v[0] + v[4]) / 2, y: (v[1] + v[5]) / 2 };
 }
 
 beforeEach(() => {

@@ -1,0 +1,19 @@
+{
+  "label": "w1-639/reduce/Vector/shipped/delete/ready/rest/unarmed/hsl(185 40% 55%)",
+  "selector": ".lm-trash svg",
+  "box": {
+    "x": 265.03125,
+    "y": 629,
+    "width": 11,
+    "height": 11
+  },
+  "action": "expand model family by click",
+  "pseudos": {
+    "hover": false,
+    "focusVisible": false,
+    "pinHover": false,
+    "ancestorHover": false,
+    "focusWithin": false
+  },
+  "error": "Measurement failure w1-639/reduce/Vector/shipped/delete/ready/rest/unarmed/hsl(185 40% 55%): empty foreground mask"
+}

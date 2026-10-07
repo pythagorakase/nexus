@@ -1,0 +1,15 @@
+{
+  "name": "ui-check",
+  "args": [
+    "npm",
+    "--prefix",
+    "ui",
+    "run",
+    "check"
+  ],
+  "exit": 0,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 1.7622741659870371,
+  "tail": "\n> nexus-ui@1.0.0 check\n> tsc && npm run check:design-sync\n\n\n> nexus-ui@1.0.0 check:design-sync\n> tsc -p .design-sync/tsconfig.previews.json\n"
+}

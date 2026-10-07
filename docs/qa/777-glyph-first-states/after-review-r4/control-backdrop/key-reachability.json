@@ -1,0 +1,44 @@
+{
+  "required": {
+    "capture": "default-Veil-key-required.png",
+    "rows": [
+      {
+        "id": "key-row-required-missing",
+        "need": "required"
+      },
+      {
+        "id": "key-row-present",
+        "need": "required"
+      },
+      {
+        "id": "key-row-verified",
+        "need": "required"
+      },
+      {
+        "id": "key-row-optional-absent",
+        "need": "optional"
+      }
+    ]
+  },
+  "optional": {
+    "capture": "default-Veil-key-optional.png",
+    "rows": [
+      {
+        "id": "key-row-required-missing",
+        "need": "required"
+      },
+      {
+        "id": "key-row-optional-absent",
+        "need": "optional"
+      },
+      {
+        "id": "key-row-present",
+        "need": "optional"
+      },
+      {
+        "id": "key-row-verified",
+        "need": "optional"
+      }
+    ]
+  }
+}

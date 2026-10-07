@@ -1,0 +1,131 @@
+{
+  "capture/batch-1": {
+    "minimumModePixels": 64,
+    "measurement": "painted/paint-suppressed control foreground mask; RGB mode over changed device pixels; visibility and layout retained",
+    "stylesheet": "production Vite build emitted CSS, production order",
+    "pageErrors": [],
+    "networkRequests": [],
+    "matchedMedia": {
+      "default": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "motion-start": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": false,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-639": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": true,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": false,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "motion-trough": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": false,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      }
+    },
+    "renderCount": 2346,
+    "wallSeconds": 56.323209208,
+    "acceptanceComplete": false,
+    "failure": "Measurement failure width-639/Vector/candidate/delete/ready-exceeds/row-hover/unarmed/hsl(185 40% 70%): weak foreground mask; mode=44 device pixels < 64; fraction=0.060523; top8=[{\"rgb\":[47,67,68],\"count\":44},{\"rgb\":[52,74,75],\"count\":44},{\"rgb\":[53,75,76],\"count\":44},{\"rgb\":[48,68,69],\"count\":43},{\"rgb\":[49,69,70],\"count\":42},{\"rgb\":[50,71,72],\"count\":36},{\"rgb\":[51,72,73],\"count\":36},{\"rgb\":[48,69,69],\"count\":32}]"
+  },
+  "isolated": {
+    "minimumModePixels": 64,
+    "measurement": "painted/paint-suppressed control foreground mask; RGB mode over changed device pixels; visibility and layout retained",
+    "stylesheet": "production Vite build emitted CSS, production order",
+    "pageErrors": [],
+    "networkRequests": [],
+    "matchedMedia": {
+      "width-639": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": true,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": false,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      }
+    },
+    "renderCount": 178,
+    "wallSeconds": 53.292943583,
+    "acceptanceComplete": false,
+    "failure": "Measurement failure width-639/Vector/candidate/delete/ready-exceeds/row-hover/unarmed/hsl(185 40% 70%): weak foreground mask; mode=44 device pixels < 64; fraction=0.060523; top8=[{\"rgb\":[47,67,68],\"count\":44},{\"rgb\":[52,74,75],\"count\":44},{\"rgb\":[53,75,76],\"count\":44},{\"rgb\":[48,68,69],\"count\":43},{\"rgb\":[49,69,70],\"count\":42},{\"rgb\":[50,71,72],\"count\":36},{\"rgb\":[51,72,73],\"count\":36},{\"rgb\":[48,69,69],\"count\":32}]"
+  },
+  "sequence": {
+    "minimumModePixels": 64,
+    "measurement": "painted/paint-suppressed control foreground mask; RGB mode over changed device pixels; visibility and layout retained",
+    "stylesheet": "production Vite build emitted CSS, production order",
+    "pageErrors": [],
+    "networkRequests": [],
+    "matchedMedia": {
+      "width-639": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": true,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": false,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      }
+    },
+    "renderCount": 178,
+    "wallSeconds": 53.096299667,
+    "acceptanceComplete": false,
+    "failure": "Measurement failure width-639/Vector/candidate/delete/ready-exceeds/row-hover/unarmed/hsl(185 40% 70%): weak foreground mask; mode=44 device pixels < 64; fraction=0.060523; top8=[{\"rgb\":[47,67,68],\"count\":44},{\"rgb\":[52,74,75],\"count\":44},{\"rgb\":[53,75,76],\"count\":44},{\"rgb\":[48,68,69],\"count\":43},{\"rgb\":[49,69,70],\"count\":42},{\"rgb\":[50,71,72],\"count\":36},{\"rgb\":[51,72,73],\"count\":36},{\"rgb\":[48,69,69],\"count\":32}]"
+  },
+  "frames": {
+    "minimumModePixels": 64,
+    "measurement": "painted/paint-suppressed control foreground mask; RGB mode over changed device pixels; visibility and layout retained",
+    "stylesheet": "production Vite build emitted CSS, production order",
+    "pageErrors": [],
+    "networkRequests": [],
+    "matchedMedia": {
+      "width-639": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": true,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": false,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      }
+    },
+    "renderCount": 178,
+    "wallSeconds": 59.583066708,
+    "acceptanceComplete": false,
+    "failure": "Measurement failure width-639/Vector/candidate/delete/ready-exceeds/row-hover/unarmed/hsl(185 40% 70%): weak foreground mask; mode=44 device pixels < 64; fraction=0.060523; top8=[{\"rgb\":[47,67,68],\"count\":44},{\"rgb\":[52,74,75],\"count\":44},{\"rgb\":[53,75,76],\"count\":44},{\"rgb\":[48,68,69],\"count\":43},{\"rgb\":[49,69,70],\"count\":42},{\"rgb\":[50,71,72],\"count\":36},{\"rgb\":[51,72,73],\"count\":36},{\"rgb\":[48,69,69],\"count\":32}]"
+  }
+}

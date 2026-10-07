@@ -1,0 +1,879 @@
+{
+  "date": "2026-10-05",
+  "frozen_head": "3a3790ef18fdedffcce5f0918d1260609f1cecba",
+  "inputs": {
+    "chromium": "153.0.8010.12",
+    "chromiumRevision": "1243",
+    "sha256": "8cb19022239c60472f8affc06fe1159a0aafed6446ae5d156e8d45b62e75dcc6",
+    "files": {
+      "client/src/index.css": "25ec52c3d90db9d2ecbdc3ac794c4a6680a18c1a7a2fdea5d6aad1f007f39dd4",
+      "client/src/components/nexus/nexus-layout.css": "b7ef2492e46e46459eaadfe3f95c37a2ca3843cbacdab7c4ab92a46e71d1e0db",
+      "client/src/components/nexus/TopBar.tsx": "35540ae9a28dcd329d497bc070e6208af873c0ec21052e410cb1c8d5edbbe6e0",
+      "client/src/components/nexus/LocalModelRows.tsx": "74aef32a62a5d71ee2eaa99cb5afcbc393742240c289e6cdbf7819ddcb6c3435",
+      "client/src/components/nexus/MapPane.tsx": "1b21eae3ea9bf1baac308808e62fd7a79037e9c45ffb33d5130944343838505a",
+      "client/src/components/nexus/SettingsPane.tsx": "1b578003fc945ab0b57a1f0c7f37359170986570dd6a01c4ed968b7d08a0e32b",
+      "scripts/state-surfaces/fixture.tsx": "782d09949c956a19faf0a0c0774ff747a9f412143e23094f9aa3bd839ad3cc43",
+      "scripts/state-surfaces/styles.css": "e923f1f53db8b9278758d7c5a06701ab5150dfb693896187a50332487ca2efa7",
+      "scripts/state-surfaces/inputs.mjs": "0ba409a36b36b7aec08d73fbac164a688c3372eff424c01812053a7b23ee6ee4",
+      "scripts/resolve-state-surfaces.mjs": "6e429442ce0b1ed3256670f2ebb2107857f5682de5a5617e075f713b07bfe06a",
+      "package.json": "b810f3ae36dca52ea650232a5fd43b06e5b786ed14700eaec87887d73fa24010",
+      "package-lock.json": "0f88785f3d0504d8a6ea5bdc9e82297b49aaf5932cbe4914b5ec3da368c1c4a2",
+      "postcss.config.js": "190c877db466995bf1482f4a16abd06e04a89ede3119341e2a86ff96e1737b27",
+      "tailwind.config.ts": "8378e3eea63286490207ca6b61ddb482a2c78e90eb32fdad9537f2e0409e6d73"
+    },
+    "conditions": {
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "colorScheme": "dark",
+      "reducedMotion": "reduce",
+      "origin": "file://",
+      "network": "aborted"
+    },
+    "playwright": "1.63.0"
+  },
+  "browser_proof": {
+    "pageErrors": [],
+    "apiRequests": [],
+    "stylesheet": "Vite/PostCSS production pipeline",
+    "samples": "opaque interiors; static strokes; no edge antialiasing/glow; sidebar radial wash endpoints"
+  },
+  "table_delta": [
+    {
+      "theme": "Veil",
+      "old_best": 9.913464335675082,
+      "best": 9.897315738632694,
+      "count": "258280326000000",
+      "feasible": "0",
+      "shortfalls": 30,
+      "measurements_changed": 139,
+      "assignment_delta": {
+        "--state-map-current": {
+          "before": "hsl(330.2439024390244 70% 50%)",
+          "after": "hsl(330.2439024390244 60% 50%)"
+        }
+      }
+    },
+    {
+      "theme": "Gilded",
+      "old_best": 11.515866170801722,
+      "best": 11.37227292852494,
+      "count": "446308403328000",
+      "feasible": "0",
+      "shortfalls": 45,
+      "measurements_changed": 139,
+      "assignment_delta": {}
+    },
+    {
+      "theme": "Vector",
+      "old_best": 10.191082279599211,
+      "best": 10.192991321299218,
+      "count": "2834352000000",
+      "feasible": "0",
+      "shortfalls": 58,
+      "measurements_changed": 131,
+      "assignment_delta": {}
+    }
+  ],
+  "plants": [
+    {
+      "plant": "@media (prefers-color-scheme: dark) { .dark.theme-vector { --state-key-verified: hsl(185 40% 55%); } }",
+      "commands": [
+        {
+          "name": "media-stale",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:37:19\n   Duration  666ms (transform 32ms, setup 50ms, collect 0ms, tests 0ms, environment 280ms, prepare 30ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+            "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+            "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+          ]
+        },
+        {
+          "name": "media-regenerate",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/ui run resolve-state-surfaces",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 f1114a71dbf610a9f9418eaf6fde83657f4b4c47d6a6e885b5a1011d5bfe3f10"
+        },
+        {
+          "name": "media-regenerated",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    383|       for (const root of ROOTS) expect(candidates(result.theme, root).\u2026\n    384|       const shipped = measures(result.theme, undefined, false);\n    385|       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(resul\u2026\n       |                                                      ^\n    386|       const shortfalls = shipped.filter(m => m.delta < 15);\n    387|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[2/2]\u23af\n\n Test Files  1 failed (1)\n      Tests  2 failed | 6 passed (8)\n   Start at  10:38:48\n   Duration  1.06s (transform 34ms, setup 28ms, collect 73ms, tests 606ms, environment 169ms, prepare 64ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables",
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures"
+          ]
+        },
+        {
+          "name": "media-restored",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/ui test -- state-shades",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 607ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:38:49\n   Duration  1.02s (transform 35ms, setup 28ms, collect 76ms, tests 607ms, environment 161ms, prepare 30ms)\n"
+        }
+      ],
+      "present_verified": {
+        "required/rest": 0,
+        "required/hover": 0,
+        "required/focus": 0,
+        "optional/rest": 0,
+        "optional/hover": 0,
+        "optional/focus": 0
+      },
+      "optional_chain": [
+        {
+          "tag": "svg",
+          "classes": "lucide lucide-circle-dot key-glyph-present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "span",
+          "classes": "key-status present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "li",
+          "classes": "key-row optional",
+          "opacity": "0.5",
+          "backgroundColor": "rgb(5, 10, 10)",
+          "backgroundImage": "none",
+          "stackingContext": true
+        },
+        {
+          "tag": "ul",
+          "classes": "key-list",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-body",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-frame",
+          "opacity": "1",
+          "backgroundColor": "rgb(9, 17, 17)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        }
+      ],
+      "name": "media"
+    },
+    {
+      "plant": ".dark.theme-vector .key-row.optional { opacity: 0.1; }",
+      "commands": [
+        {
+          "name": "opacity-stale",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:39:53\n   Duration  679ms (transform 33ms, setup 46ms, collect 0ms, tests 0ms, environment 304ms, prepare 100ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+            "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+            "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+          ]
+        },
+        {
+          "name": "opacity-regenerate",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/ui run resolve-state-surfaces",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 35cbb5c21da4e4ea9b719fb70fa3c5c2be1b3ac5005bef600d080052bc147cef"
+        },
+        {
+          "name": "opacity-regenerated",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    383|       for (const root of ROOTS) expect(candidates(result.theme, root).\u2026\n    384|       const shipped = measures(result.theme, undefined, false);\n    385|       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(resul\u2026\n       |                                                      ^\n    386|       const shortfalls = shipped.filter(m => m.delta < 15);\n    387|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[2/2]\u23af\n\n Test Files  1 failed (1)\n      Tests  2 failed | 6 passed (8)\n   Start at  10:41:21\n   Duration  1.04s (transform 33ms, setup 27ms, collect 72ms, tests 617ms, environment 163ms, prepare 26ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables",
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures"
+          ]
+        },
+        {
+          "name": "opacity-restored",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/ui test -- state-shades",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 628ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:41:23\n   Duration  1.06s (transform 36ms, setup 29ms, collect 76ms, tests 628ms, environment 167ms, prepare 29ms)\n"
+        }
+      ],
+      "present_verified": {
+        "required/rest": 14.765415415945133,
+        "required/hover": 14.765415415945133,
+        "required/focus": 14.765415415945133,
+        "optional/rest": 1.9255218435164916,
+        "optional/hover": 1.9255218435164916,
+        "optional/focus": 1.9255218435164916
+      },
+      "optional_chain": [
+        {
+          "tag": "svg",
+          "classes": "lucide lucide-circle-dot key-glyph-present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "span",
+          "classes": "key-status present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "li",
+          "classes": "key-row optional",
+          "opacity": "0.1",
+          "backgroundColor": "rgb(5, 10, 10)",
+          "backgroundImage": "none",
+          "stackingContext": true
+        },
+        {
+          "tag": "ul",
+          "classes": "key-list",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-body",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-frame",
+          "opacity": "1",
+          "backgroundColor": "rgb(9, 17, 17)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        }
+      ],
+      "name": "opacity"
+    },
+    {
+      "plant": ".dark.theme-vector .set-card-frame { background: var(--bg); }",
+      "commands": [
+        {
+          "name": "backdrop-stale",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:42:30\n   Duration  652ms (transform 32ms, setup 47ms, collect 0ms, tests 0ms, environment 274ms, prepare 29ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+            "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+            "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+          ]
+        },
+        {
+          "name": "backdrop-regenerate",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/ui run resolve-state-surfaces",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 fee84463ff9728b29e207de897040c15fbe1fd983f8858185b7efec7bc7f9c1d"
+        },
+        {
+          "name": "backdrop-regenerated",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    364|       const evidence = JSON.parse(readFileSync(resolve(import.meta.dir\u2026\n    365|         `../../../docs/qa/777-glyph-first-states/amendment-2/${theme.t\u2026\n    366|       expect(measures(theme, undefined, false)).toEqual(evidence.measu\u2026\n       |                                                 ^\n    367|       expect(measures(theme, undefined, true)).toEqual(evidence.before\u2026\n    368|     }\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  1 failed | 7 passed (8)\n   Start at  10:43:58\n   Duration  1.08s (transform 34ms, setup 28ms, collect 72ms, tests 632ms, environment 164ms, prepare 25ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+          ]
+        },
+        {
+          "name": "backdrop-restored",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/ui test -- state-shades",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 629ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:43:59\n   Duration  1.07s (transform 34ms, setup 27ms, collect 74ms, tests 629ms, environment 167ms, prepare 34ms)\n"
+        }
+      ],
+      "present_verified": {
+        "required/rest": 14.765415415945133,
+        "required/hover": 14.765415415945133,
+        "required/focus": 14.765415415945133,
+        "optional/rest": 10.401838316251673,
+        "optional/hover": 14.765415415945133,
+        "optional/focus": 14.765415415945133
+      },
+      "optional_chain": [
+        {
+          "tag": "svg",
+          "classes": "lucide lucide-circle-dot key-glyph-present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "span",
+          "classes": "key-status present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "li",
+          "classes": "key-row optional",
+          "opacity": "0.5",
+          "backgroundColor": "rgb(5, 10, 10)",
+          "backgroundImage": "none",
+          "stackingContext": true
+        },
+        {
+          "tag": "ul",
+          "classes": "key-list",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-body",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-frame",
+          "opacity": "1",
+          "backgroundColor": "rgb(5, 10, 10)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        }
+      ],
+      "name": "backdrop"
+    },
+    {
+      "plant": ".dark.theme-vector .key-status.verified { color: var(--state-key-present) !important; }",
+      "commands": [
+        {
+          "name": "important-stale",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:44:35\n   Duration  676ms (transform 34ms, setup 48ms, collect 0ms, tests 0ms, environment 301ms, prepare 121ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+            "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+            "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+          ]
+        },
+        {
+          "name": "important-regenerate",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/ui run resolve-state-surfaces",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 cc517b68156af02ba2ada664be52a5ebacacb60bb7779c2c0df1883e98e469e3"
+        },
+        {
+          "name": "important-regenerated",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    383|       for (const root of ROOTS) expect(candidates(result.theme, root).\u2026\n    384|       const shipped = measures(result.theme, undefined, false);\n    385|       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(resul\u2026\n       |                                                      ^\n    386|       const shortfalls = shipped.filter(m => m.delta < 15);\n    387|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[3/3]\u23af\n\n Test Files  1 failed (1)\n      Tests  3 failed | 5 passed (8)\n   Start at  10:46:04\n   Duration  1.00s (transform 34ms, setup 28ms, collect 80ms, tests 542ms, environment 168ms, prepare 55ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_cover_production_compositing_chains",
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables",
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures"
+          ]
+        },
+        {
+          "name": "important-restored",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/ui test -- state-shades",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 624ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:46:05\n   Duration  1.05s (transform 34ms, setup 27ms, collect 72ms, tests 624ms, environment 165ms, prepare 28ms)\n"
+        }
+      ],
+      "present_verified": {
+        "required/rest": 0,
+        "required/hover": 0,
+        "required/focus": 0,
+        "optional/rest": 0,
+        "optional/hover": 0,
+        "optional/focus": 0
+      },
+      "optional_chain": [
+        {
+          "tag": "svg",
+          "classes": "lucide lucide-circle-dot key-glyph-present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "span",
+          "classes": "key-status present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "li",
+          "classes": "key-row optional",
+          "opacity": "0.5",
+          "backgroundColor": "rgb(5, 10, 10)",
+          "backgroundImage": "none",
+          "stackingContext": true
+        },
+        {
+          "tag": "ul",
+          "classes": "key-list",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-body",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-frame",
+          "opacity": "1",
+          "backgroundColor": "rgb(9, 17, 17)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        }
+      ],
+      "name": "important"
+    },
+    {
+      "plant": ".dark.theme-vector .key-row:has(.key-glyph-verified) .key-status { color: var(--state-key-present); }",
+      "commands": [
+        {
+          "name": "has-stale",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:47:44\n   Duration  754ms (transform 39ms, setup 55ms, collect 0ms, tests 0ms, environment 338ms, prepare 127ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+            "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+            "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+          ]
+        },
+        {
+          "name": "has-regenerate",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/ui run resolve-state-surfaces",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 049f77151b43e01afc94ed021cb4c935b4aa2922dbf42429043177d39f307c11"
+        },
+        {
+          "name": "has-regenerated",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/ui test -- state-shades",
+          "exit": 1,
+          "tail": "    383|       for (const root of ROOTS) expect(candidates(result.theme, root).\u2026\n    384|       const shipped = measures(result.theme, undefined, false);\n    385|       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(resul\u2026\n       |                                                      ^\n    386|       const shortfalls = shipped.filter(m => m.delta < 15);\n    387|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[3/3]\u23af\n\n Test Files  1 failed (1)\n      Tests  3 failed | 5 passed (8)\n   Start at  10:49:13\n   Duration  962ms (transform 35ms, setup 29ms, collect 73ms, tests 535ms, environment 158ms, prepare 27ms)\n",
+          "failure_diagnostics": [
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_cover_production_compositing_chains",
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables",
+            "FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures"
+          ]
+        },
+        {
+          "name": "has-restored",
+          "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/ui test -- state-shades",
+          "exit": 0,
+          "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 607ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:49:14\n   Duration  1.04s (transform 34ms, setup 28ms, collect 73ms, tests 607ms, environment 160ms, prepare 24ms)\n"
+        }
+      ],
+      "present_verified": {
+        "required/rest": 0,
+        "required/hover": 0,
+        "required/focus": 0,
+        "optional/rest": 0,
+        "optional/hover": 0,
+        "optional/focus": 0
+      },
+      "optional_chain": [
+        {
+          "tag": "svg",
+          "classes": "lucide lucide-circle-dot key-glyph-present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "span",
+          "classes": "key-status present",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "li",
+          "classes": "key-row optional",
+          "opacity": "0.5",
+          "backgroundColor": "rgb(5, 10, 10)",
+          "backgroundImage": "none",
+          "stackingContext": true
+        },
+        {
+          "tag": "ul",
+          "classes": "key-list",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-body",
+          "opacity": "1",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        },
+        {
+          "tag": "div",
+          "classes": "set-card-frame",
+          "opacity": "1",
+          "backgroundColor": "rgb(9, 17, 17)",
+          "backgroundImage": "none",
+          "stackingContext": false
+        }
+      ],
+      "name": "has"
+    }
+  ],
+  "commands": [
+    {
+      "name": "resolve-final",
+      "command": "env STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/capture npm --prefix ui run resolve-state-surfaces",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 8cb19022239c60472f8affc06fe1159a0aafed6446ae5d156e8d45b62e75dcc6"
+    },
+    {
+      "name": "regenerate-tables",
+      "command": "env STATE_SHADES_EVIDENCE_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/docs/qa/777-glyph-first-states/amendment-2 npm --prefix ui test -- state-shades -t reachable_deutan_pairs",
+      "exit": 0,
+      "tail": "[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests | 7 skipped) 305ms\n   \u2713 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures 304ms\n\n Test Files  1 passed (1)\n      Tests  1 passed | 7 skipped (8)\n   Start at  10:35:43\n   Duration  730ms (transform 36ms, setup 28ms, collect 74ms, tests 305ms, environment 167ms, prepare 29ms)\n"
+    },
+    {
+      "name": "focused",
+      "command": "env PLAYWRIGHT_BROWSERS_PATH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/no-browser npm --prefix ui test -- state-shades StateGlyphs shell-accessibility",
+      "exit": 0,
+      "tail": " \u2713 src/shell-accessibility.test.ts (9 tests) 54ms\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 589ms\n \u2713 src/components/nexus/StateGlyphs.test.tsx (5 tests) 386ms\n\n Test Files  3 passed (3)\n      Tests  22 passed (22)\n   Start at  10:56:35\n   Duration  1.06s (transform 213ms, setup 90ms, collect 421ms, tests 1.03s, environment 525ms, prepare 120ms)\n"
+    },
+    {
+      "name": "ui-all",
+      "command": "npm --prefix ui test",
+      "exit": 0,
+      "tail": "WARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering\nWARNING: Panel defaultSize prop recommended to avoid layout shift after server rendering\n\n \u2713 src/pages/ContinuePage.resume.test.tsx (4 tests) 3493ms\n   \u2713 resuming a wizard at a confirmation boundary (#955) > reload, Home \u2192 Continue and history keep the 'character' card (accepted: false) 974ms\n   \u2713 resuming a wizard at a confirmation boundary (#955) > reload, Home \u2192 Continue and history keep the 'setting' card (accepted: false) 841ms\n   \u2713 resuming a wizard at a confirmation boundary (#955) > reload, Home \u2192 Continue and history keep the 'character' card (accepted: true) 847ms\n   \u2713 resuming a wizard at a confirmation boundary (#955) > reload, Home \u2192 Continue and history keep the 'setting' card (accepted: true) 831ms\n\n Test Files  37 passed (37)\n      Tests  500 passed (500)\n   Start at  10:56:43\n   Duration  6.28s (transform 2.41s, setup 2.12s, collect 10.52s, tests 15.98s, environment 13.39s, prepare 1.77s)\n"
+    },
+    {
+      "name": "check",
+      "command": "npm --prefix ui run check",
+      "exit": 0,
+      "tail": "\n> nexus-ui@1.0.0 check\n> tsc && npm run check:design-sync\n\n\n> nexus-ui@1.0.0 check:design-sync\n> tsc -p .design-sync/tsconfig.previews.json\n"
+    },
+    {
+      "name": "build",
+      "command": "npm --prefix ui run build",
+      "exit": 0,
+      "tail": "../dist/public/assets/index-Dr1sqBer.js                         1,767.52 kB \u2502 gzip: 527.71 kB\n\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n\u2713 built in 2.68s\n\nPWA v1.0.3\nmode      generateSW\nprecache  22 entries (2315.38 KiB)\nfiles generated\n  ../dist/public/sw.js\n  ../dist/public/workbox-40c80ae4.js"
+    },
+    {
+      "name": "owner-guard",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_owner_target_guard.py",
+      "exit": 0,
+      "tail": "<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n........................................................................ [ 90%]\n........                                                                 [100%]\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\ndbname audit: 0 targets: none\ndbname audit: owner server: local:5432\ndbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection\ndbname audit: owner targets: none\n80 passed in 2.90s"
+    },
+    {
+      "name": "api-orrery",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_orrery",
+      "exit": 0,
+      "tail": "\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n1865 passed, 821 skipped, 7 warnings in 42.24s"
+    },
+    {
+      "name": "root-1",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_backfill_review_packet.py tests/test_bootstrap_episode_pg.py tests/test_character_identity.py tests/test_character_name_reveals.py tests/test_character_name_reveals_pg.py tests/test_character_relationship_id_types_pg.py tests/test_character_tag_manifest.py tests/test_chunk_lifecycle_columns_migration_pg.py tests/test_cli.py tests/test_cli_choice_http.py tests/test_cli_contract.py tests/test_cli_generation_http.py tests/test_cli_inspect_pg.py tests/test_cli_model_selection.py tests/test_cli_session_wait.py tests/test_cli_wizard_confirmation.py tests/test_clock_face.py tests/test_commit_choice_presence_pg.py tests/test_commit_chronology.py tests/test_commit_handler_sync.py tests/test_connection_lifecycle.py tests/test_correspondence.py tests/test_correspondence_live.py tests/test_database_contract.py tests/test_db_converters.py",
+      "exit": 0,
+      "tail": "<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n490 passed, 28 skipped, 5 warnings in 245.28s (0:04:05)"
+    },
+    {
+      "name": "root-2",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_dbname_audit.py tests/test_doc_front_matter.py tests/test_embedding_artifacts.py tests/test_embedding_table_ownership_pg.py tests/test_entity_reference_parity_pg.py tests/test_entity_tag_manifest_apply.py tests/test_enum_column_comment_labels_pg.py tests/test_faction_table_audit.py tests/test_gis_scripts_live.py tests/test_golden_path_live.py tests/test_idf_dictionary_pg.py tests/test_inherited_slot_isolation_pg.py tests/test_intention_revision_weight.py tests/test_interaction_boundary.py tests/test_interactions_pg.py tests/test_issue_601_wizard_live.py tests/test_jobs_cli_pg.py tests/test_live_gate_clones_pg.py tests/test_local_skald_live.py tests/test_logon_mock_integration.py tests/test_lore_adapter_metadata.py tests/test_measure_place_coordinate_costs.py tests/test_measure_place_coordinate_costs_pg.py tests/test_measure_place_scale_grammar.py tests/test_measure_place_scale_grammar_pg.py",
+      "exit": 0,
+      "tail": "<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n120 passed, 145 skipped, 5 warnings in 13.71s"
+    },
+    {
+      "name": "root-3",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_memnon_cross_encoder.py tests/test_memnon_cross_encoder_artifact.py tests/test_memnon_cross_encoder_dependencies.py tests/test_memnon_db_access.py tests/test_memnon_embedding_cache.py tests/test_memnon_embedding_contract.py tests/test_memnon_model_failures_pg.py tests/test_memnon_runtime_config.py tests/test_memnon_script_model_loaders.py tests/test_migration_comment_lint.py tests/test_mock_openai.py tests/test_model_artifact_lock_committed.py tests/test_model_drift.py tests/test_model_registry_live.py tests/test_name_reveal_staged_bindings.py tests/test_name_reveal_staged_bindings_pg.py tests/test_name_reveal_tag_validation.py tests/test_name_reveal_tag_validation_pg.py tests/test_native_structured_output.py tests/test_new_story_cache.py tests/test_new_story_cli.py tests/test_new_story_integration.py tests/test_new_story_schemas.py tests/test_new_story_setup.py tests/test_new_story_setup_config.py",
+      "exit": 0,
+      "tail": "\ntests/test_memnon_cross_encoder_artifact.py::test_qwen3_loads_its_local_folder_and_scores\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/tokenization_utils_base.py:2718: UserWarning: `max_length` is ignored when `padding`=`True` and there is no truncation strategy. To pad to max length, use `padding='max_length'`.\n    warnings.warn(\n\ntests/test_memnon_cross_encoder_dependencies.py::test_sentencepiece_runtime_dependency_available\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\ntests/test_memnon_cross_encoder_dependencies.py::test_sentencepiece_runtime_dependency_available\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n360 passed, 53 skipped, 8 warnings in 31.52s"
+    },
+    {
+      "name": "root-4",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_openai_registry_capabilities.py tests/test_orrery_tag_validation.py tests/test_orrery_tag_validation_pg.py tests/test_owner_target_guard.py tests/test_pg_accepted_turn_factory.py tests/test_pg_adjudication_ledger_seed.py tests/test_pg_anchor_pair_tag_seeds.py tests/test_pg_character_pair_seed.py tests/test_pg_disposable_target.py tests/test_pg_legacy_faction_tag_seed.py tests/test_pg_target_contract.py tests/test_place_tag_manifest.py tests/test_player_identity_consumers_pg.py tests/test_postgres_tools.py tests/test_presence_audit.py tests/test_presence_boost.py tests/test_presence_boost_pg.py tests/test_presence_reconciliation.py tests/test_presence_roster.py tests/test_presence_roster_pg.py tests/test_prompt_lint.py tests/test_prompt_tag_vocabulary_pg.py tests/test_prose_metrics.py tests/test_prose_metrics_pg.py tests/test_qa_shift.py",
+      "exit": 0,
+      "tail": "\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n472 passed, 140 skipped, 7 warnings in 32.99s"
+    },
+    {
+      "name": "root-5",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_reachability.py tests/test_rebuild_memory_idf_pg.py tests/test_record_revelation_cli_pg.py tests/test_reentry_wire_ledger.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_register_drift_study.py tests/test_retrograde_summary_retrieval.py tests/test_routine_delta_grammar_probe_pg.py tests/test_runtime_home.py tests/test_scheduler_helpers_basetemp.py tests/test_scheduler_helpers_routing.py tests/test_schema_documentation_pg.py tests/test_secret_manager.py tests/test_secret_store_guard.py tests/test_secret_store_integration.py tests/test_skald_wire.py tests/test_slot_routed_entrypoints.py tests/test_slot_utils.py tests/test_summary_triggers.py tests/test_tags_audit_pg.py tests/test_trait_compiler.py tests/test_trait_compiler_integration.py tests/test_trait_input_derivation.py tests/test_trait_menu_docs.py tests/test_travel_reachability.py",
+      "exit": 0,
+      "tail": "../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n443 passed, 76 skipped, 7 warnings in 42.93s\nsys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute"
+    },
+    {
+      "name": "root-6",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_travel_reachability_pg.py tests/test_turn_observation.py tests/test_unowned_index_adoption_pg.py tests/test_usage_recorder.py tests/test_wizard_agent.py tests/test_wizard_live.py tests/test_wizard_opening_presence_pg.py tests/test_world_clock_contract_pg.py",
+      "exit": 0,
+      "tail": "\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n87 passed, 34 skipped, 7 warnings in 5.98s"
+    },
+    {
+      "name": "offline-subsystems",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util",
+      "exit": 0,
+      "tail": "\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n832 passed, 81 skipped, 7 warnings in 125.58s (0:02:05)"
+    },
+    {
+      "name": "offline-config",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/config",
+      "exit": 0,
+      "tail": "<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n126 passed, 5 warnings in 5.49s"
+    },
+    {
+      "name": "offline-live-collection",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/live_set_designer_test.py tests/live_seed_schema_test.py",
+      "exit": 5,
+      "tail": "\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n2 skipped in 0.02s"
+    },
+    {
+      "name": "reachability",
+      "command": "env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_reachability.py",
+      "exit": 0,
+      "tail": "tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports\n  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\ntests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports\ntests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports\n  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\ntests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n54 passed, 5 warnings in 9.72s"
+    },
+    {
+      "name": "media-stale",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:37:19\n   Duration  666ms (transform 32ms, setup 50ms, collect 0ms, tests 0ms, environment 280ms, prepare 30ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+        "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+        "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+      ]
+    },
+    {
+      "name": "media-regenerate",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/ui run resolve-state-surfaces",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 f1114a71dbf610a9f9418eaf6fde83657f4b4c47d6a6e885b5a1011d5bfe3f10"
+    },
+    {
+      "name": "media-regenerated",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    383|       for (const root of ROOTS) expect(candidates(result.theme, root).\u2026\n    384|       const shipped = measures(result.theme, undefined, false);\n    385|       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(resul\u2026\n       |                                                      ^\n    386|       const shortfalls = shipped.filter(m => m.delta < 15);\n    387|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[2/2]\u23af\n\n Test Files  1 failed (1)\n      Tests  2 failed | 6 passed (8)\n   Start at  10:38:48\n   Duration  1.06s (transform 34ms, setup 28ms, collect 73ms, tests 606ms, environment 169ms, prepare 64ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables",
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures"
+      ]
+    },
+    {
+      "name": "media-restored",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/media/ui test -- state-shades",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 607ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:38:49\n   Duration  1.02s (transform 35ms, setup 28ms, collect 76ms, tests 607ms, environment 161ms, prepare 30ms)\n"
+    },
+    {
+      "name": "opacity-stale",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:39:53\n   Duration  679ms (transform 33ms, setup 46ms, collect 0ms, tests 0ms, environment 304ms, prepare 100ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+        "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+        "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+      ]
+    },
+    {
+      "name": "opacity-regenerate",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/ui run resolve-state-surfaces",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 35cbb5c21da4e4ea9b719fb70fa3c5c2be1b3ac5005bef600d080052bc147cef"
+    },
+    {
+      "name": "opacity-regenerated",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    383|       for (const root of ROOTS) expect(candidates(result.theme, root).\u2026\n    384|       const shipped = measures(result.theme, undefined, false);\n    385|       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(resul\u2026\n       |                                                      ^\n    386|       const shortfalls = shipped.filter(m => m.delta < 15);\n    387|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[2/2]\u23af\n\n Test Files  1 failed (1)\n      Tests  2 failed | 6 passed (8)\n   Start at  10:41:21\n   Duration  1.04s (transform 33ms, setup 27ms, collect 72ms, tests 617ms, environment 163ms, prepare 26ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables",
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures"
+      ]
+    },
+    {
+      "name": "opacity-restored",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/opacity/ui test -- state-shades",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 628ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:41:23\n   Duration  1.06s (transform 36ms, setup 29ms, collect 76ms, tests 628ms, environment 167ms, prepare 29ms)\n"
+    },
+    {
+      "name": "backdrop-stale",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:42:30\n   Duration  652ms (transform 32ms, setup 47ms, collect 0ms, tests 0ms, environment 274ms, prepare 29ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+        "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+        "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+      ]
+    },
+    {
+      "name": "backdrop-regenerate",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/ui run resolve-state-surfaces",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 fee84463ff9728b29e207de897040c15fbe1fd983f8858185b7efec7bc7f9c1d"
+    },
+    {
+      "name": "backdrop-regenerated",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    364|       const evidence = JSON.parse(readFileSync(resolve(import.meta.dir\u2026\n    365|         `../../../docs/qa/777-glyph-first-states/amendment-2/${theme.t\u2026\n    366|       expect(measures(theme, undefined, false)).toEqual(evidence.measu\u2026\n       |                                                 ^\n    367|       expect(measures(theme, undefined, true)).toEqual(evidence.before\u2026\n    368|     }\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  1 failed | 7 passed (8)\n   Start at  10:43:58\n   Duration  1.08s (transform 34ms, setup 28ms, collect 72ms, tests 632ms, environment 164ms, prepare 25ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables"
+      ]
+    },
+    {
+      "name": "backdrop-restored",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/backdrop/ui test -- state-shades",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 629ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:43:59\n   Duration  1.07s (transform 34ms, setup 27ms, collect 74ms, tests 629ms, environment 167ms, prepare 34ms)\n"
+    },
+    {
+      "name": "important-stale",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:44:35\n   Duration  676ms (transform 34ms, setup 48ms, collect 0ms, tests 0ms, environment 301ms, prepare 121ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+        "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+        "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+      ]
+    },
+    {
+      "name": "important-regenerate",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/ui run resolve-state-surfaces",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 cc517b68156af02ba2ada664be52a5ebacacb60bb7779c2c0df1883e98e469e3"
+    },
+    {
+      "name": "important-regenerated",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    383|       for (const root of ROOTS) expect(candidates(result.theme, root).\u2026\n    384|       const shipped = measures(result.theme, undefined, false);\n    385|       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(resul\u2026\n       |                                                      ^\n    386|       const shortfalls = shipped.filter(m => m.delta < 15);\n    387|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[3/3]\u23af\n\n Test Files  1 failed (1)\n      Tests  3 failed | 5 passed (8)\n   Start at  10:46:04\n   Duration  1.00s (transform 34ms, setup 28ms, collect 80ms, tests 542ms, environment 168ms, prepare 55ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_cover_production_compositing_chains",
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables",
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures"
+      ]
+    },
+    {
+      "name": "important-restored",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/important/ui test -- state-shades",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 624ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:46:05\n   Duration  1.05s (transform 34ms, setup 27ms, collect 72ms, tests 624ms, environment 165ms, prepare 28ms)\n"
+    },
+    {
+      "name": "has-stale",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    151| const currentInputs = inputs(resolve(import.meta.dirname, \"../..\"));\n    152| if (JSON.stringify(receipt.inputs) !== JSON.stringify(currentInputs))\n    153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    154| // The browser has already resolved selectors, inheritance, media, spe\u2026\n    155| // !important, custom properties and color-mix. Only numeric source-ov\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  10:47:44\n   Duration  754ms (transform 39ms, setup 55ms, collect 0ms, tests 0ms, environment 338ms, prepare 127ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]",
+        "Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).",
+        "153|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026"
+      ]
+    },
+    {
+      "name": "has-regenerate",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/ui run resolve-state-surfaces",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nResolving Veil/shipped\u2026\nResolving Veil/before\u2026\nResolving Gilded/shipped\u2026\nResolving Gilded/before\u2026\nResolving Vector/shipped\u2026\nResolving Vector/before\u2026\nResolved state surfaces: 3 themes \u00d7 29 contexts \u00d7 2 phases; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900; colorScheme=dark; reducedMotion=reduce; file://; network aborted; API requests=0; page errors=0\nWrote ui/client/src/state-surfaces.resolved.json; inputs SHA-256 049f77151b43e01afc94ed021cb4c935b4aa2922dbf42429043177d39f307c11"
+    },
+    {
+      "name": "has-regenerated",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/ui test -- state-shades",
+      "exit": 1,
+      "tail": "    383|       for (const root of ROOTS) expect(candidates(result.theme, root).\u2026\n    384|       const shipped = measures(result.theme, undefined, false);\n    385|       expect(Math.min(...shipped.map(m => m.delta))).toBeCloseTo(resul\u2026\n       |                                                      ^\n    386|       const shortfalls = shipped.filter(m => m.delta < 15);\n    387|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[3/3]\u23af\n\n Test Files  1 failed (1)\n      Tests  3 failed | 5 passed (8)\n   Start at  10:49:13\n   Duration  962ms (transform 35ms, setup 29ms, collect 73ms, tests 535ms, environment 158ms, prepare 27ms)\n",
+      "failure_diagnostics": [
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_cover_production_compositing_chains",
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables",
+        "FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures"
+      ]
+    },
+    {
+      "name": "has-restored",
+      "command": "env GIT_DIR=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/.git GIT_WORK_TREE=/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/capture STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/results npm --prefix /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r3/final-plants/has/ui test -- state-shades",
+      "exit": 0,
+      "tail": "\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nstdout | src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\n{\"theme\":\"Veil\",\"sizes\":[15,15,18,15,15,15,18,18,18,15,18,12],\"count\":\"258280326000000\",\"feasible\":\"0\",\"best\":9.897315738632694,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\",\"--state-mem-over\":\"hsl(15 75% 60%)\",\"--state-delete-unarmed\":\"hsl(42 30% 65%)\",\"--state-delete-armed\":\"hsl(0 80% 50%)\",\"--state-map-rest\":\"hsl(15 75% 60%)\",\"--state-map-current\":\"hsl(330.2439024390244 60% 50%)\",\"--state-map-selected\":\"hsl(330.2439024390244 50.20408163265306% 70%)\",\"--state-map-hovered\":\"hsl(330.2439024390244 60% 30%)\",\"--state-key-absent\":\"hsl(42 20% 50%)\",\"--state-key-missing\":\"hsl(15 75% 60%)\",\"--state-key-present\":\"hsl(42 50% 70%)\",\"--state-key-verified\":\"hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":270,\"unique\":270,\"expected\":270},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":60750,\"unique\":60750,\"expected\":60750},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":72900,\"unique\":72900,\"expected\":72900}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":48.28249625545695},{\"surface\":\"delete\",\"best\":15.324664169901974},{\"surface\":\"map\",\"best\":9.897315738632694},{\"surface\":\"key\",\"best\":18.405593964688055}]}\n{\"theme\":\"Gilded\",\"sizes\":[18,15,18,15,15,18,18,18,18,18,18,12],\"count\":\"446308403328000\",\"feasible\":\"0\",\"best\":11.37227292852494,\"changes\":8,\"assignment\":{\"--state-mem-normal\":\"hsl(43 74% 47%)\",\"--state-mem-over\":\"hsl(30 50% 45%)\",\"--state-delete-unarmed\":\"hsl(43 40% 70%)\",\"--state-delete-armed\":\"hsl(0 90% 50%)\",\"--state-map-rest\":\"hsl(30 50% 70%)\",\"--state-map-current\":\"hsl(45 75% 40%)\",\"--state-map-selected\":\"hsl(43 84% 60%)\",\"--state-map-hovered\":\"hsl(45 55% 30%)\",\"--state-key-absent\":\"hsl(43 30% 30%)\",\"--state-key-missing\":\"hsl(30 50% 45%)\",\"--state-key-present\":\"hsl(43 40% 70%)\",\"--state-key-verified\":\"hsl(43 74% 47%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":324,\"unique\":324,\"expected\":324},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":72900,\"unique\":72900,\"expected\":72900},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":87480,\"unique\":87480,\"expected\":87480}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":43.17542131118454},{\"surface\":\"delete\",\"best\":12.647089726602504},{\"surface\":\"map\",\"best\":11.37227292852494},{\"surface\":\"key\",\"best\":14.065115965089149}]}\n{\"theme\":\"Vector\",\"sizes\":[12,15,5,15,15,12,18,5,5,12,18,12],\"count\":\"2834352000000\",\"feasible\":\"0\",\"best\":10.192991321299218,\"changes\":5,\"assignment\":{\"--state-mem-normal\":\"hsl(185 100% 50%)\",\"--state-mem-over\":\"hsl(200 90% 55%)\",\"--state-delete-unarmed\":\"hsl(185 40% 55%)\",\"--state-delete-armed\":\"hsl(350 80% 55%)\",\"--state-map-rest\":\"hsl(200 100% 40%)\",\"--state-map-current\":\"hsl(190 100% 40%)\",\"--state-map-selected\":\"hsl(185 100% 50%)\",\"--state-map-hovered\":\"hsl(190 80% 30%)\",\"--state-key-absent\":\"hsl(185 30% 30%)\",\"--state-key-missing\":\"hsl(200 90% 55%)\",\"--state-key-present\":\"hsl(185 40% 55%)\",\"--state-key-verified\":\"hsl(185 100% 70%)\"},\"coverage\":[{\"surface\":\"memory\",\"roots\":[\"--state-mem-normal\",\"--state-mem-over\"],\"visited\":60,\"unique\":60,\"expected\":60},{\"surface\":\"delete\",\"roots\":[\"--state-delete-unarmed\",\"--state-delete-armed\"],\"visited\":216,\"unique\":216,\"expected\":216},{\"surface\":\"map\",\"roots\":[\"--state-map-rest\",\"--state-map-current\",\"--state-map-selected\",\"--state-map-hovered\"],\"visited\":13500,\"unique\":13500,\"expected\":13500},{\"surface\":\"key\",\"roots\":[\"--state-key-absent\",\"--state-key-missing\",\"--state-key-present\",\"--state-key-verified\"],\"visited\":16200,\"unique\":16200,\"expected\":16200}],\"factorMaxima\":[{\"surface\":\"memory\",\"best\":41.81549016617153},{\"surface\":\"delete\",\"best\":24.047661279756532},{\"surface\":\"map\",\"best\":10.192991321299218},{\"surface\":\"key\",\"best\":11.331792045800869}]}\n\n \u2713 src/state-shades.test.ts (8 tests) 607ms\n\n Test Files  1 passed (1)\n      Tests  8 passed (8)\n   Start at  10:49:14\n   Duration  1.04s (transform 34ms, setup 28ms, collect 73ms, tests 607ms, environment 160ms, prepare 24ms)\n"
+    }
+  ],
+  "offline_coverage": {
+    "files": 411,
+    "missing": [],
+    "passed": 4795,
+    "skipped": 1380,
+    "failures": 0,
+    "live_collection_exit": 5
+  },
+  "emitted_reduced_motion": {
+    "file": "ui/dist/public/assets/index-CuQlhIc3.css",
+    "sha256": "57b5b8d72f3d486312684f5781aad7d0ddafc08570d6aa4f15c18427b6843b68",
+    "selector_and_declaration": "[class*=animate-]{animation:none!important}"
+  },
+  "artifact_hashes": {
+    "docs/qa/777-glyph-first-states/amendment-2/exceptions.md": "79e69d9eb0ec24e6af35ba09209776ee78d39e5bed230c4170b8da133595f667",
+    "docs/qa/777-glyph-first-states/amendment-2/gilded-joint.json": "6b7a78663d425dbc56377d28854166a6767d72d4417c2b4a56048da4f9942de6",
+    "docs/qa/777-glyph-first-states/amendment-2/gilded-pairs.md": "79749db6490894eb69bd714985d1a05c02f3deafb29a878a391cf0995e4f159f",
+    "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.csv": "0f2bc9d3d807d6b50e54d3ce36535b68819decfada4a21b6d4451d17b1b75d39",
+    "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.md": "da10bac2c3bdc96f79dbc4d7ae577e2ab348b88c2b8ce932094624ef94462e4d",
+    "docs/qa/777-glyph-first-states/amendment-2/state-tokens.json": "10003b9e3b77be94b66a5fbedbe5ca5009bb83e86170ac9a52d1d6b29a4564e2",
+    "docs/qa/777-glyph-first-states/amendment-2/state-tokens.md": "392e47ca382e16cfd3c7baf706caf2e8990bee2b59fbac0ffd23aa4c7b87fe8d",
+    "docs/qa/777-glyph-first-states/amendment-2/swatches.png": "513cd1ca6d72d86cefb1e479adbbd414d1d7ee23934a31aab3619fc5f00f5f7e",
+    "docs/qa/777-glyph-first-states/amendment-2/swatches.svg": "d795dac27552905a00d9278fa2c666d6e6f89afcf406cf839683c424feec13f4",
+    "docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json": "52ae8caca7be87399c4a9a0374a347bcebbf2b6e75e4981569abb3a9b6c538b3",
+    "docs/qa/777-glyph-first-states/amendment-2/vector-joint.json": "e16f6e66e073e9431bacdc2489e0ca9c703e64464ac68189e5bd10bda4627383",
+    "docs/qa/777-glyph-first-states/amendment-2/vector-pairs.md": "603812f6f21a906793908c7cc0f06acf847dd74d73fa800c4d43b91ec47a233a",
+    "docs/qa/777-glyph-first-states/amendment-2/veil-joint.json": "94e054293b4a2a98e4721d52cc2140862a24029282eff8f01aefda4649397799",
+    "docs/qa/777-glyph-first-states/amendment-2/veil-pairs.md": "1c12876308a2dc2bb6381c54a373e59d6b720076c57021abd1e260eb494c5e5c"
+  },
+  "git": {
+    "implementation_head": "feb4a30d47585ee3b4e5f8c6acf22390e5726cdb",
+    "merged_origin_main": "160134540517f6b74aacd1d1e1f3f584454eef86",
+    "merge_tail": "Already up to date.",
+    "history_rewrite": false,
+    "pr_merge": false
+  }
+}

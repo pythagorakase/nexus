@@ -12,7 +12,8 @@
     "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "desktop:dev": "npm run build && tauri dev",
     "desktop:build": "npm run build && tauri build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "resolve-state-surfaces": "node scripts/resolve-state-surfaces.mjs"
   },
   "dependencies": {
     "@arwes/react-animator": "^1.0.0-next.25020502",
@@ -77,8 +78,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.2",
     "@tailwindcss/typography": "^0.5.15",
+    "@tauri-apps/cli": "^2.11.2",
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
@@ -89,6 +90,7 @@
     "autoprefixer": "^10.4.20",
     "drizzle-orm": "^0.39.1",
     "jsdom": "^25.0.1",
+    "playwright": "^1.63.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
     "typescript": "5.6.3",

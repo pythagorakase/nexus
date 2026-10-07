@@ -1,0 +1,15 @@
+{
+  "name": "ui-build",
+  "args": [
+    "npm",
+    "--prefix",
+    "ui",
+    "run",
+    "build"
+  ],
+  "exit": 0,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 3.3202279999968596,
+  "tail": "../dist/public/assets/KaTeX_Fraktur-Regular-CB_wures.ttf           19.57 kB\n../dist/public/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf              19.58 kB\n../dist/public/assets/KaTeX_Main-Italic-BMLOBm91.woff              19.68 kB\n../dist/public/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf          22.36 kB\n../dist/public/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf            24.50 kB\n../dist/public/assets/KaTeX_Main-Bold-Cx986IdX.woff2               25.32 kB\n../dist/public/assets/KaTeX_Main-Regular-B22Nviop.woff2            26.27 kB\n../dist/public/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf        27.56 kB\n../dist/public/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2             28.08 kB\n../dist/public/assets/KaTeX_Main-Bold-Jm3AIy58.woff                29.91 kB\n../dist/public/assets/KaTeX_Main-Regular-Dr94JaBh.woff             30.77 kB\n../dist/public/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf           31.20 kB\n../dist/public/assets/KaTeX_Math-Italic-flOr_0UB.ttf               31.31 kB\n../dist/public/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf           32.97 kB\n../dist/public/assets/KaTeX_AMS-Regular-DMm9YOAa.woff              33.52 kB\n../dist/public/assets/KaTeX_Main-Italic-3WenGoN9.ttf               33.58 kB\n../dist/public/assets/KaTeX_Main-Bold-waoOVXN0.ttf                 51.34 kB\n../dist/public/assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB\n../dist/public/assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB\n../dist/public/assets/r1c1-CzjRNMRW.png                            95.61 kB\n../dist/public/assets/index-Ddk7DCvv.css                          201.53 kB \u2502 gzip:  36.92 kB\n../dist/public/assets/index-CTjDzXAZ.js                         1,767.86 kB \u2502 gzip: 527.80 kB\n\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n\u2713 built in 2.44s\n\nPWA v1.0.3\nmode      generateSW\nprecache  22 entries (2314.47 KiB)\nfiles generated\n  ../dist/public/sw.js\n  ../dist/public/workbox-40c80ae4.js"
+}
