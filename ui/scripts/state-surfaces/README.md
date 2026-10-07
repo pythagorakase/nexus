@@ -89,9 +89,11 @@ at-rule is silently ignored.
 Coverage is scoped to the emitted CSS's declared conditions: at-rule preludes
 and the inline conditional functions refused above. Paint can also depend on
 viewport-relative math in paint-affecting properties (for example,
-`opacity: calc(100vw / 2000px)`), `env()`, scripts that read `matchMedia`, and
-user-agent or extension stylesheets. These are residuals: the generator does
-not inventory or refuse them.
+`opacity: calc(100vw / 2000px)`), `env()`, scripts that read `matchMedia`,
+rendered `style` attributes and stylesheets injected at run time (neither is
+emitted CSS text, so an inline conditional placed in a React `style` prop is
+outside the scan), and user-agent or extension stylesheets. These are
+residuals: the generator does not inventory or refuse them.
 The shipped CSS has **9 width
 bands × 2 motion values = 18 vectors**, expanded into **27 condition renders**
 by motion start/trough phases. IDs name band and motion, for example
