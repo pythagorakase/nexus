@@ -1,5 +1,10 @@
 [
   {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/calibration.json",
+    "sha256": "2add9397b1928db5a575dc98ddd0c352997679220b06a39471018ef0088fa286",
+    "bytes": 976735
+  },
+  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_armed_hsl_43_40__70__-control.png",
     "sha256": "5fd4ff109c6a17c6e95404c8e6f3dc80350cb7ae7d9b335978c6ed1efa654ed9",
     "bytes": 138
@@ -2220,19 +2225,124 @@
     "bytes": 294
   },
   {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/calibration.json",
-    "sha256": "2add9397b1928db5a575dc98ddd0c352997679220b06a39471018ef0088fa286",
-    "bytes": 976735
-  },
-  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/commands.md",
     "sha256": "18f4d6964dbe3051134f2f71da084985b1ee627409bc223b034d87393bdf6296",
     "bytes": 70109
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/completion.md",
-    "sha256": "241f9dd596f4f254ae34079f88da995c95dc0eb8152226285d9e4b3cc9d92ae5",
-    "bytes": 15014
+    "sha256": "e1b47d915a4aee87932345fa3029bde39782a83917f2ba611c14b8fe3493a490",
+    "bytes": 21239
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/build.log",
+    "sha256": "67dc4a706cc291f67796a38a0f607b75815ecd494787d1fbaa0b92f9ae8343cd",
+    "bytes": 6529
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/check.log",
+    "sha256": "c051bf7d3581c47d3811c3cb8bece2c43aa8194ad48e4e87d1fc54bb95f2c60d",
+    "bytes": 142
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/commands.md",
+    "sha256": "273f50d2d0a4e0e494b0c22c93d47d22bac7bfe0be6e60c0e252ed0d0cb71812",
+    "bytes": 5065
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/comparison.log",
+    "sha256": "00c2910a48cbe8d8d96fdca24fb08d98adad176f86cc4c5dbe88ba2b172feefe",
+    "bytes": 965
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/focused.log",
+    "sha256": "dc83374ef5c7ebb765d1a2acebc148ee0a25f2f25ac68eb6ca2f961a4fb7280a",
+    "bytes": 6682
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/full.log",
+    "sha256": "3875c3cf7cce0c93e2e3e71c8a98ed3a05fcf8cf9e26a368a0d1213ccb4c8493",
+    "bytes": 45605
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/gates.json",
+    "sha256": "32f36684862f288843d6d4e5dfbbfd154a55a612243f3fd497de3c18439b2d10",
+    "bytes": 677
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/merge-main.log",
+    "sha256": "e5d6c99aec87ec07a2d1b5c1222d8b690d0a61c3548a55c795fff56db9450d0d",
+    "bytes": 20
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/before-plants.json",
+    "sha256": "aca8ac79074320066c572d8d7c364477d6c137861937f619ebc3f9219bae9d7a",
+    "bytes": 430
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/control.log",
+    "sha256": "8bf5e0c1d302ca34ee81881d91ac0397215f4058ac762eac75c2ae898e1a4e61",
+    "bytes": 6582
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/emitted-uppercase-rule.css",
+    "sha256": "13013c3fee4e03dcf4c43e13a7c1aa8fde9fc150125b87fc2c9197e4d35ee88f",
+    "bytes": 81
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/optional-key-means.json",
+    "sha256": "a1b561fffe51d4b39701d638382bde38510e016741eb36b70e9017517f2bcfa1",
+    "bytes": 3676
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/partial-receipt.json",
+    "sha256": "626e2168a01dc22ae4a1b01952917c8e0b85a7354442110b69f9930d2e3fbed0",
+    "bytes": 18148322
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/plants-proof.json",
+    "sha256": "7fc117a8e875962d87fa586ff27dc750762b1ac691290a3957946620bcbff127",
+    "bytes": 18613
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/uppercase-media-width-fresh-default.log",
+    "sha256": "510351ffd8c7dc8c315bc29ca68c03f81057219a96a2d4445d0266b8d66f057a",
+    "bytes": 55347
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/uppercase-media-width-regenerate-default.log",
+    "sha256": "a74aae241fb51c9e088ea8b9e228c668eda0c873c6da8d4ac3069c3d8d7d7882",
+    "bytes": 3596
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/plants/uppercase-media-width-stale.log",
+    "sha256": "2d854ea7185cf15cd0272ee74a436f911600138613011a422f5c62dbbe163dc0",
+    "bytes": 1418
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/reachability.log",
+    "sha256": "e3157d02a10c53ea5ac5f41b39140a0f1b93729cd341820b4450486b4ffd9575",
+    "bytes": 1447
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/receipt-comparison.json",
+    "sha256": "00c2910a48cbe8d8d96fdca24fb08d98adad176f86cc4c5dbe88ba2b172feefe",
+    "bytes": 965
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/regeneration.log",
+    "sha256": "b02b693a12248b54077e61759f9aca685e33da1095f6ad93fa3ae1a138fbb545",
+    "bytes": 13947
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/restored.log",
+    "sha256": "8414818eca3c8f2cc95d9b06f96fe93cfde2d13669c6ec336fcf90d1354d0be5",
+    "bytes": 6530
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/eighth-review/unit.log",
+    "sha256": "99170e3df7404b55b1d6d7127cd7bcaacc82823ec0a5d83ca79fccad83b3ae4d",
+    "bytes": 545
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/focused.json",
@@ -2500,9 +2610,139 @@
     "bytes": 3167
   },
   {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/artifact-index.mjs",
+    "sha256": "2a0b7b37d88085363a6210e57c1ae31f1737f25d3bf877df310c8b9f562defbe",
+    "bytes": 1744
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/build.log",
+    "sha256": "42e4133b5726aa84cc42027e237b2694657fcc3dfb391436dd6e6f8abe506ee0",
+    "bytes": 6529
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/check-build.json",
+    "sha256": "8934fabcfa09da154f866aac8c1cb716b762a7cd1f3b53ef07989a662729a563",
+    "bytes": 400
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/check.log",
+    "sha256": "c051bf7d3581c47d3811c3cb8bece2c43aa8194ad48e4e87d1fc54bb95f2c60d",
+    "bytes": 142
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/commands.md",
+    "sha256": "d5d3c9db3d7a2e754a4fea576092ecf36b3849f2c9796807a8bb79cec4a89dcd",
+    "bytes": 5501
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/comparison.log",
+    "sha256": "3530d996ea6860753122de9c648cc4fb0045ddc89f55d7e4a2e3d9b4f51dfa27",
+    "bytes": 1156
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/focused.log",
+    "sha256": "81ec959c36679245c6bdef360eaabaf18ff3ffddfc3dc3d41cd2c355e42a76fa",
+    "bytes": 6682
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/full.log",
+    "sha256": "87decba26805eb3986d76278acdb1dd8ce5e0f27a3d0f5836748c7d98212a05b",
+    "bytes": 45484
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/gates.json",
+    "sha256": "bc710e8d206810bd6b63ead42ab94c4214d355f6bea6d0109b171eabc193acbc",
+    "bytes": 2286
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/merge-main.log",
+    "sha256": "cb3a8bd31321ca5c37a58d521b7f2d7b24d801fa53fc4f2640ac355ab4f56de2",
+    "bytes": 135
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/plants/before-plants.json",
+    "sha256": "b90d1ddcf7c945d3beb8b720dbdd102bff90c00e24154de77bcbb81ea5925221",
+    "bytes": 430
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/plants/control.log",
+    "sha256": "a9941adc78e81cec026132dff4c27462de8257de4048f403024984038deb0592",
+    "bytes": 6584
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/plants/emitted-inline-rule.css",
+    "sha256": "ff95fc4adb72256fc3246448fc64fae3b31a21a6703ceb45dbd2665021d98ebb",
+    "bytes": 95
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/plants/inline-if-media-regenerate-default.log",
+    "sha256": "3107afda28f4a802ae002d5dda0fe73574ca45c03609deafd8df3a581668aa55",
+    "bytes": 1493
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/plants/inline-if-media-stale.log",
+    "sha256": "7c38f9541c30abed9600148d9d17c39c2acd6f6c1d07048422c3d6797b8d7ebe",
+    "bytes": 1418
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/plants/plants-proof.json",
+    "sha256": "5637b00330d60a3bf3e3d60fb5bd2c55abe7449bee5548915170218a5c45c34f",
+    "bytes": 15637
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/prior-index-check.json",
+    "sha256": "10a6a48bb92262dc3eb827e362c33e7d2e2184434f4cf2f3fde8b1d167ac2335",
+    "bytes": 1008
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/prior-index-refusal.log",
+    "sha256": "d158aa21a58e3a4c4974a5c7bcb454ad545e6ad61ef2cd55e663a308a52d011e",
+    "bytes": 755
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/reachability.json",
+    "sha256": "5498caa6c50605ab8c109dcf9de18462c98fc62cd13fc84df001017ecaba9435",
+    "bytes": 206
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/reachability.log",
+    "sha256": "a1cf1a30d07b3f430e7f38d414ccfc6b226901edd9cfdd878031543be8c76850",
+    "bytes": 1447
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/receipt-comparison.json",
+    "sha256": "3530d996ea6860753122de9c648cc4fb0045ddc89f55d7e4a2e3d9b4f51dfa27",
+    "bytes": 1156
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/regeneration-exit.json",
+    "sha256": "bf4fa695dae668f4c0d5ff0a08e484ecb6ea7dcd97c9baf403991401f558c039",
+    "bytes": 77
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/regeneration.log",
+    "sha256": "b1d1d7224a17cb21becb24d4fc2be71c8c1bb6a17fb3cf7d11afb9342a62c02e",
+    "bytes": 14003
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/restored.log",
+    "sha256": "7b891fade3f7f778dfb100c0eecf2a6bcc8d3e7188a9dc985a205dae5a4a549f",
+    "bytes": 6532
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/ninth-review/unit.log",
+    "sha256": "3edf5248ca100a7f2a4ecd6e9cf0e5d691cb3e74438c39875f227af7ead01ac7",
+    "bytes": 545
+  },
+  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/offline-coverage.json",
     "sha256": "29f6ddeef0cce617f902285cfcec2faa0f6576b8c5129e7e52020e696a2c7e08",
     "bytes": 7857
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/plants.md",
+    "sha256": "7f5bdc30139a6d4697ede76316561e06ba8ee720d669836a037282f7854f710d",
+    "bytes": 8703
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/plants/before-plants.json",
@@ -2755,11 +2995,6 @@
     "bytes": 1357
   },
   {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/plants.md",
-    "sha256": "248a0938734424070eb66181bfbb308e8db0d283e8f73e3fe9ed5e068bb96e94",
-    "bytes": 6362
-  },
-  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/regeneration-after-protocol.json",
     "sha256": "773383a66ad5ab40b98d062413a59d426e0ca69f790baf16ded3c3fb69bd12f3",
     "bytes": 474229
@@ -2958,6 +3193,11 @@
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/build.log",
     "sha256": "69d9427df5a8ab8df3a608933101b7d685ca12a3779d3f1d835c27fcb9d3e0b2",
     "bytes": 6529
+  },
+  {
+    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration-maxima.md",
+    "sha256": "111589923bc1f17a2085acdf0c9c656adf2b12e2211f22f099dab20a0f053a70",
+    "bytes": 856
   },
   {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration/w1101-1279_reduce_Gilded_calibration_delete_ready-exceeds_button-hover_armed_hsl_43_40__70__-control.png",
@@ -5180,11 +5420,6 @@
     "bytes": 294
   },
   {
-    "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/calibration-maxima.md",
-    "sha256": "111589923bc1f17a2085acdf0c9c656adf2b12e2211f22f099dab20a0f053a70",
-    "bytes": 856
-  },
-  {
     "path": "docs/qa/777-glyph-first-states/after-review-r5/final/sixth-review/dismissed-focus/check.json",
     "sha256": "2e82dc701857238bae1d066257db1d51c755d82ec93eccd3ce4fac3d6cb65eac",
     "bytes": 173
@@ -5576,7 +5811,7 @@
   },
   {
     "path": "ui/client/src/state-surfaces.resolved.json",
-    "sha256": "1269b33123c432cd8fc9590151f1cd5387dda5b0dac176a68414f091cdde1b81",
-    "bytes": 444573512
+    "sha256": "ddb1734ed62656824f5e884c3d516914b114d8c2bdacfe559d0178d723d73444",
+    "bytes": 444566294
   }
 ]
