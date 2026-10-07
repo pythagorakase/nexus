@@ -77,7 +77,11 @@ over the attempts, jobs or legacy block that reported usage, and reads
 partial a sum is. A turn without provider-backed jobs or legacy events has a
 background of 0 with a null ``provenance``. Providers count differently (OpenAI's
 ``input_tokens`` includes cached input; Anthropic's excludes cache reads and
-writes), so a total across providers is not one comparable quantity; every
+writes), so a sum across providers is not one comparable quantity. Each sum
+names the sorted distinct ``providers`` of the usage it adds (empty when none
+reported) and carries ``comparable``, false when it names more than one; the
+sums stay raw and nothing is normalised (802-Q3). The per-attempt figure
+comparable across transports is the window's ``reported_input_tokens``. Every
 attempt and job names its provider and transport.
 
 The join refuses, instead of guessing, rows from another session or an unread
@@ -94,8 +98,9 @@ the first observed phase. Both are null when phases were observed and none is
 was observed. An attempt's ``usage.provider_completed_at`` is the time of its
 latest usage event, when the provider's response arrived; it is not readiness.
 
-Schema version 2 adds choice readiness, provider completion and the two window
-counts to version 1 and removes nothing. Its top-level keys are:
+Schema version 3 adds ``providers`` and ``comparable`` to each ``usage_totals``
+sum; version 2 added choice readiness, provider completion and the two window
+counts to version 1; neither removes anything. Its top-level keys are:
 ``schema_version``, ``generation_session``, ``read_at`` (UTC),
 ``ledger_days_read`` (every UTC day read: the turn's, from its first observed
 phase through the later of its last phase and ``read_at``, and each
@@ -117,7 +122,7 @@ from nexus.telemetry.attempt_manifest import PROVIDER_JOB_SEATS, validation_meta
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.usage import UsageEvent, read_prompt_windows, summarize_usage
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 UNKNOWN = "unknown"
 MANIFEST = "attempt_manifest"
 WINDOW_LEDGER = "prompt_window_ledger"
@@ -668,12 +673,28 @@ def _job_entries(
     return entries
 
 
+def _section_providers(section: Mapping[str, Any]) -> set[str]:
+    """Return the providers one reported usage section names."""
+    value = section["provider"]
+    if isinstance(value, list):
+        return set(value)
+    if isinstance(value, str):
+        return {value}
+    raise ValueError(f"A reported usage section names no provider: {value!r}")
+
+
 def _sum_totals(usages: list[Mapping[str, Any]]) -> dict[str, Any]:
     """Sum each token field over the usage sections that reported usage."""
     reported = [usage for usage in usages if usage["provenance"] == USAGE_LEDGER]
+    providers = sorted(
+        {provider for usage in reported for provider in _section_providers(usage)}
+    )
     totals: dict[str, Any] = {
         "provenance": USAGE_LEDGER if reported else UNKNOWN,
         "events": sum(usage["events"] for usage in reported),
+        # Raw sums across providers that count input differently (802-Q3).
+        "providers": providers,
+        "comparable": len(providers) <= 1,
     }
     for field in USAGE_TOKEN_FIELDS:
         values = [usage[field] for usage in reported]
@@ -715,7 +736,13 @@ def _background_totals(
         job["usage"] for job in jobs if job["usage"]["provenance"] == USAGE_LEDGER
     ]
     if block is not None:
-        sources.append({"provenance": USAGE_LEDGER, **block})
+        sources.append(
+            {
+                "provenance": USAGE_LEDGER,
+                "provider": _profile({event.provider for event in legacy}),
+                **block,
+            }
+        )
     if sources or jobs:
         totals = _sum_totals(sources)
     else:
@@ -723,6 +750,8 @@ def _background_totals(
         totals = {
             "provenance": None,
             "events": 0,
+            "providers": [],
+            "comparable": True,
             **dict.fromkeys(USAGE_TOKEN_FIELDS, 0),
         }
     return {
@@ -740,6 +769,7 @@ def _overall_totals(
     critical_path: Mapping[str, Any], background: Mapping[str, Any]
 ) -> dict[str, Any]:
     parts = (critical_path, background)
+    providers = sorted({provider for part in parts for provider in part["providers"]})
     totals: dict[str, Any] = {
         "provenance": (
             USAGE_LEDGER
@@ -747,6 +777,8 @@ def _overall_totals(
             else UNKNOWN
         ),
         "events": sum(part["events"] for part in parts),
+        "providers": providers,
+        "comparable": len(providers) <= 1,
     }
     for field in USAGE_TOKEN_FIELDS:
         values = [part[field] for part in parts]
@@ -956,6 +988,13 @@ def _readiness_text(observation: Mapping[str, Any]) -> str:
     return f" · choices ready {_duration(observation['seconds_to_choice_ready'])}"
 
 
+def _comparability(totals: Mapping[str, Any]) -> str:
+    """Name the providers of a sum whose raw counts are not comparable."""
+    if totals["comparable"]:
+        return ""
+    return " · providers differ: " + ", ".join(totals["providers"])
+
+
 def format_turn_summary(observation: Mapping[str, Any]) -> str:
     """Render the observation as a few concise lines of text, in tokens."""
     lines = [
@@ -982,6 +1021,7 @@ def format_turn_summary(observation: Mapping[str, Any]) -> str:
     lines.append(
         _totals_line("Critical path", critical_path)
         + f" · attempts without usage {critical_path['attempts_without_usage']}"
+        + _comparability(critical_path)
     )
     jobs = observation["jobs"]
     for entry in jobs["entries"]:
@@ -998,8 +1038,12 @@ def format_turn_summary(observation: Mapping[str, Any]) -> str:
             _totals_line("Background", background)
             + f" · jobs {background['jobs']} · open {background['jobs_open']} · "
             f"without usage {background['jobs_without_usage']}"
+            + _comparability(background)
         )
-        lines.append(_totals_line("Overall", totals["overall"]))
+        lines.append(
+            _totals_line("Overall", totals["overall"])
+            + _comparability(totals["overall"])
+        )
     else:
         lines.append("Background none")
     lines.append(
