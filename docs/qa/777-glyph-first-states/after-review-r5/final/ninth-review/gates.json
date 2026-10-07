@@ -1,0 +1,41 @@
+[
+  {
+    "name": "comparison",
+    "args": [
+      "node",
+      "--max-old-space-size=8192",
+      "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r9/compare.mjs"
+    ],
+    "code": 0,
+    "wallSeconds": 7.3556850829627365,
+    "boundSeconds": 589
+  },
+  {
+    "name": "focused",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades",
+      "StateGlyphs",
+      "shell-accessibility"
+    ],
+    "code": 0,
+    "wallSeconds": 51.631485374993645,
+    "boundSeconds": 589
+  },
+  {
+    "name": "full",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test"
+    ],
+    "code": 0,
+    "wallSeconds": 52.04345054196892,
+    "boundSeconds": 589
+  }
+]
