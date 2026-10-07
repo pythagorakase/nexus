@@ -147,8 +147,10 @@ PostgreSQL comments define both clocks; read them with `\d+ chunk_metadata`, `\d
 
 ## Schema Documentation
 
-PostgreSQL comments are the schema reference (`\d+` in psql or
-`MEMNON.get_schema_summary`); add a non-empty `COMMENT ON` with each new table,
+PostgreSQL comments are the schema reference; read them with
+`psql -d save_NN -c '\d+ <table>'`, because `MEMNON.get_schema_summary` lists
+only the column names of populated tables and returns no comments. Add a
+non-empty `COMMENT ON` with each new table,
 table column, enum, function, and view. The PostgreSQL-gated
 `tests/test_schema_documentation_pg.py` ratchet checks five object kinds that
 NEXUS owns in `public` and `assets`: tables (`table:<schema>.<name>`), table
