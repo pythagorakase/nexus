@@ -19,17 +19,15 @@ from psycopg2 import sql
 from nexus.config import load_settings
 from nexus.config.story_model import read_story_settings
 from scripts import migrate
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    SEAT_BACKFILL_JOB_TABLES,
+    connect,
+    disposable_slot_database,
+)
 
 pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_corpus]
 
 REFERENCE_CORPUS = "ref_codex_bakeoff_2026_07"
-JOB_TABLES = (
-    "character_experience_jobs",
-    "orrery_maturation_jobs",
-    "correspondence_compaction_jobs",
-    "narrative_summary_jobs",
-)
 
 
 @pytest.fixture(scope="module")
@@ -59,10 +57,13 @@ def test_reference_corpus_clones_with_data_and_pins_after_migrating(
         assert cur.fetchone() is not None
         cur.execute("SELECT count(*) FROM narrative_chunks")
         assert cur.fetchone()[0] > 0
-        # Migration 126 freezes active jobs' models from the pin it finds. The
-        # clone migrates before it is pinned, so no active job may have been
-        # backfilled under the source's pin.
-        for table in JOB_TABLES:
+        # Migration 126 freezes active jobs' models from the pin present at
+        # migration time, which for a data clone is the source's pin. This
+        # corpus has no queued or leased jobs, so no row may carry a
+        # migration_backfill resolution. The fixture itself refuses a clone
+        # where one does (_refuse_source_pin_backfill); this records the
+        # precondition, not the pin order.
+        for table in SEAT_BACKFILL_JOB_TABLES:
             cur.execute(
                 sql.SQL(
                     "SELECT count(*) FROM {} WHERE state IN ('queued', 'leased') "

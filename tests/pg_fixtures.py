@@ -142,6 +142,55 @@ def assert_one_target(dbname: str) -> None:
         )
 
 
+# Migration 126 freezes queued and leased jobs' models from the story pin it
+# finds; these are the job tables it backfills (migrations/126_seat_policies.py
+# JOB_SEATS).
+SEAT_BACKFILL_MIGRATION = "126"
+SEAT_BACKFILL_JOB_TABLES = (
+    "character_experience_jobs",
+    "orrery_maturation_jobs",
+    "correspondence_compaction_jobs",
+    "narrative_summary_jobs",
+)
+
+
+def _has_migration_stamp(dbname: str, version: str) -> bool:
+    """Return whether ``dbname``'s ``schema_migrations`` records ``version``."""
+
+    with closing(_connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.schema_migrations') IS NOT NULL")
+        if not cur.fetchone()[0]:
+            return False
+        cur.execute("SELECT 1 FROM schema_migrations WHERE version = %s", (version,))
+        return cur.fetchone() is not None
+
+
+def _refuse_source_pin_backfill(dbname: str) -> None:
+    """Raise when migration 126 froze active jobs under the source's pin.
+
+    A data clone migrates before it is pinned, so migration 126 resolves its
+    queued and leased jobs under the source's story pin. That resolution is
+    immutable across repins, so the TEST pin written afterward cannot replace
+    it, and a worker would route those jobs to the source's model.
+    """
+
+    with closing(_connect(dbname)) as conn, conn.cursor() as cur:
+        for table in SEAT_BACKFILL_JOB_TABLES:
+            cur.execute(
+                sql.SQL(
+                    "SELECT count(*) FROM {} WHERE state IN ('queued', 'leased') "
+                    "AND resolved_source = 'migration_backfill'"
+                ).format(sql.Identifier(table))
+            )
+            frozen = cur.fetchone()[0]
+            if frozen:
+                raise RuntimeError(
+                    f"Data clone {dbname}: migration 126 froze {frozen} active "
+                    f"{table} rows under the source's story pin, which the TEST "
+                    "pin cannot replace"
+                )
+
+
 @contextmanager
 def disposable_slot_database(
     prefix: str,
@@ -160,8 +209,14 @@ def disposable_slot_database(
     because the pin names columns that a source behind the current stamp may
     lack (``global_variables.gaia_model`` arrives in migration 117; issue
     #1083). Migrations call no provider, and the fixture yields only after the
-    pin, so test code never sees the source's pin. Preserving the source pin
-    requires the explicit live-LLM opt-in.
+    pin, so ``global_variables`` reads the TEST pin. Migration 126 is the one
+    exception the pin cannot reach: it freezes ``resolved_model`` on queued and
+    leased jobs from the pin it finds, which for a data clone is the source's
+    pin, and a later repin does not change it. When the clone crosses 126 under
+    a TEST pin, the fixture fails loudly if any such job was backfilled
+    (``resolved_source = 'migration_backfill'``) instead of yielding it. Jobs
+    the source already resolved before the clone keep their models. Preserving
+    the source pin requires the explicit live-LLM opt-in.
 
     Fails loudly when the admin connection is unavailable; opting into the
     PostgreSQL gate means PostgreSQL is required.
@@ -234,6 +289,9 @@ def disposable_slot_database(
                     text=True,
                     env=subprocess_env(),
                 )
+            crosses_seat_backfill = story_pin is not None and not _has_migration_stamp(
+                dbname, SEAT_BACKFILL_MIGRATION
+            )
             # Migrate before pinning: the pin's UPDATE names columns (such as
             # global_variables.gaia_model) that a source behind the current
             # stamp does not have yet.
@@ -242,6 +300,8 @@ def disposable_slot_database(
                 raise RuntimeError(
                     f"Corpus clone {dbname} has {failed} failed migrations"
                 )
+            if crosses_seat_backfill:
+                _refuse_source_pin_backfill(dbname)
             pin_clone()
         else:
             new_story_setup.initialize_slot_database(dbname, source_db=source_db)
