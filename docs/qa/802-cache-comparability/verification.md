@@ -109,6 +109,11 @@ three-part `(providers, comparable)` assertion, whose `overall` differs.
 
 ## Proof Tails
 
+Where a tail below names no commit, it ran on the tree at `5f1de28d`, the
+implementation commit (`d94681d8` added only this file); the split offline
+rerun names `d94681d8`, and the static checks and ledger counts name
+`797205b5`. `7f6fa0e2` changed only this file.
+
 PostgreSQL set, `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset:
 
 ```
