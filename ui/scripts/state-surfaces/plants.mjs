@@ -17,6 +17,7 @@ const plants = [
   { name: 'mixed-print-width', path: layout, append: '\n@media print, (min-width: 640px) and (max-width: 759px) { .key-row.optional { opacity: .35 } }\n', condition: 'w640-759/reduce', comparisonId: 'w640-760/reduce', width: 759 },
   { name: 'nested-not-print-width', path: layout, append: '\n@media not print { @media (min-width: 640px) and (max-width: 759px) { .key-row.optional { opacity: .35 } } }\n', condition: 'w640-759/reduce', comparisonId: 'w640-760/reduce', width: 759 },
   { name: 'uppercase-media-width', path: layout, append: '\n@MEDIA (min-width: 640px) and (max-width: 759px) { .key-row.optional { opacity: .35 } }\n', condition: 'w640-759/reduce', comparisonId: 'w640-760/reduce', width: 759 },
+  { name: 'inline-if-media', path: layout, append: '\n.key-row.optional { opacity: if(media((min-width: 640px) and (max-width: 759px)): .35; else: .5); }\n' },
   { name: 'optional-row-opacity', path: layout, append: '\n.key-row.optional { opacity: .15; }\n' },
   { name: 'theme-backdrop', path: layout, append: '\n.dark.theme-vector .key-row { background: #ffffff; }\n' },
   { name: 'important-state-surface', path: layout, append: '\n.lm-trash.armed { color: var(--state-delete-unarmed) !important; }\n' },
@@ -117,6 +118,7 @@ try {
         const regenerated = await run(`${plant.name}-regenerate-default`, ['npm', '--prefix', copiedUi, 'run', 'resolve-state-surfaces'],
           { STATE_SURFACES_SCRATCH: capture, STATE_SURFACES_CONDITION: plant.condition ?? 'default', STATE_SURFACES_OUTPUT: resolve(capture, 'default.json') });
         if (regenerated.code !== 0 && !/Measurement failure|Calibration (?:non-vacuity )?failure|Unemulatable/.test(regenerated.tail)) throw new Error('Unrelated regeneration failure');
+        if (plant.name === 'inline-if-media' && (regenerated.code === 0 || !regenerated.tail.includes('.key-row.optional { opacity }: if('))) throw new Error('Expected named inline conditional refusal');
         if (plant.name === 'gradient-state-surface' && regenerated.code !== 0) throw new Error('Gradient must be measured successfully');
       } else if (stage === 'fresh') {
         const capture = report.findLast(r => r.name === `${plant.name}-regenerate-default`);

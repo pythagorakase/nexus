@@ -185,7 +185,9 @@ prior 760px band receipt. The 1200px default lies outside the planted rule.
 The Seventh Review nested `not print` plant uses Astra's exact nested rule
 at the same approved 759×900 representative. The Eighth Review uppercase
 `@MEDIA` plant uses Astra's exact rule at that representative too. These viewport exceptions keep
-partial receipts uncertified.
+partial receipts uncertified. The Ninth Review inline `if(media(…))` plant
+refuses regeneration naming `.key-row.optional { opacity }` and `if(`; this
+refusal is the detection, with no shade-change claim.
 Gradient paint must regenerate successfully; element-scoped state declarations
 must fail. The gradient and redeclaration regressions are included.
 
