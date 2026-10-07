@@ -142,9 +142,12 @@ loops recorded under "Earlier Proof" ran at `364fef4b` and `854190c8`.
 
 ### The Fixed List
 
-Line numbers are at `e34d03c8`. Each test takes `before = scenario.snapshot_reads`,
-asserts `before >= 1 + interval_reads_before_post`, and builds its exact
-`stages_read` from `before`.
+Line numbers are at `e34d03c8`. Tests 1 and 3-7 take
+`before = scenario.snapshot_reads`, assert
+`before >= 1 + interval_reads_before_post`, and build their `stages_read`
+expectation from `before` (a prefix in tests 1 and 5, the exact list in tests
+3, 4, 6 and 7). Test 2 is the exception: its count is loosened to `>= 1`, and
+its `stages_read` still pins one pre-POST read at its 60 s poll (item 2).
 
 1. `test_cli_prints_each_genesis_stage_once_while_transition_runs` (line 763;
    20 ms poll; the order's named test; `934c3625`, `854190c8`, id rename at
