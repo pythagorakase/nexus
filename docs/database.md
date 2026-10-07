@@ -226,3 +226,38 @@ share the world transaction's cursor so their records commit or roll back with
 that world. The Retrograde status route reads the latest run from these tables,
 so every gateway worker reports the same durable record. Rows are kept after
 completion.
+
+## Natural Earth Reference
+
+`natural_earth_features` (migration 147) holds the server-owned real-Earth
+reference geometry of issue #840: the 10m `land`, `admin_0` (countries) and
+`admin_1` (states and provinces) layers of Natural Earth release 5.1.1, one
+row per source feature, keyed by `(layer, source_index)`, with every geometry
+a valid WGS 84 MultiPolygon. `nexus/agents/orrery/geo_reference.py` reads it
+inside the caller's transaction (region lookup by name, point on land,
+polygon validation, land clipping and land coverage), and every read first
+refuses a table whose per-layer counts or release differ from the manifest.
+
+The three zips are vendored unmodified under `data/natural_earth/` (public
+domain; `data/natural_earth/LICENSE.md`). `data/natural_earth/manifest.json`
+pins the release, each layer's file, source URL, sha256 and feature count, and
+the expected repairs. `scripts/load_natural_earth.py` refuses before any
+connection when a zip's sha256 differs from the manifest, when a zip's
+`VERSION.txt` names another release, or when `ogr2ogr` reads another feature
+count. In one transaction per database it then replaces every row, requires
+the invalid features to be exactly the manifest's two repairs (`admin_0`
+1159320575, EGY, and `admin_1` 1159309897, BRA-1294 Goiás, both ring
+self-intersections), repairs them with
+`ST_Multi(ST_CollectionExtract(ST_MakeValid(geom, 'method=structure'), 3))`,
+proves every row valid, and commits; any error rolls back.
+
+```bash
+python scripts/load_natural_earth.py --all                      # Template + unlocked slots
+python scripts/load_natural_earth.py --slot 1 --write-locked-slot   # The locked golden master
+python scripts/load_natural_earth.py --dbname qa640_clone       # One disposable database
+```
+
+`natural_earth_features` is a template seed table (`TEMPLATE_SEED_TABLES` in
+`scripts/new_story_setup.py`): fresh slots and default test clones copy its
+rows from `NEXUS_template`, so loading the template replaces a template
+refresh for this table.

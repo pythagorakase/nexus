@@ -23,6 +23,10 @@ target = "scripts/character_identity_census.py:main"
 reason = "Read-only identity census documented in docs/qa/799-identity-before-minting/verification.md."
 
 [[operators]]
+target = "scripts/load_natural_earth.py:main"
+reason = "Natural Earth reference loader named by docs/database.md and CLAUDE.md; loads the vendored, checksummed 10m files into natural_earth_features (issue 840)."
+
+[[operators]]
 target = "scripts/measure_place_coordinate_costs.py:main"
 reason = "Read-only place-coordinate cost report for 840-Q4; offline grammar weights plus read-only place counts (issue 840)."
 [[operators]]
@@ -342,6 +346,7 @@ paths = [
     { path = "scripts/import_orrery_route_graph.py", class = "test-only", reason = "test root tests/test_orrery/test_routing.py:<module>" },
     { path = "scripts/import_setting.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/install_pgvector.sh", class = "test-only", reason = "Read by tests/test_database_contract.py:228; no root runs it." },
+    { path = "scripts/load_natural_earth.py", class = "operator", reason = "operator root scripts/load_natural_earth.py:main" },
     { path = "scripts/map_builder.md", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/map_builder.py.new", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/map_builder_legacy.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
