@@ -141,9 +141,11 @@ type Sample = {
   meanLinear: [number, number, number]; maskSize: number; coreSize: number;
   controlMeanLinear: [number, number, number]; effectiveOpacity: number; mapPart: string | null;
   histogram: { rgb: number[]; count: number }[]; width: number; height: number;
-  action: string; animationsRunning: number;
+  action: string; animationsRunning: number; settleWaitMs: number;
   settleCriteria: { tooltipExpected: string; tooltipState: string | null;
-    tooltipPresent: boolean; scope: string; animations: string; pseudoClasses: string };
+    tooltipPresent: boolean; scope: string; animations: string; pseudoClasses: string;
+    captures: Record<"painted" | "control", { tooltipPresent: boolean;
+      tooltipState: string | null; matched: boolean; settleWaitMs: number }> };
   pseudos: { pinHover: boolean; hover: boolean; focusVisible: boolean; ancestorHover: boolean; focusWithin: boolean; rowFocusVisible: boolean; controls: { hover: boolean; focusVisible: boolean }[] };
   target: { hover: boolean; focusVisible: boolean };
   stateAttributes: { mapState: string | null; keyNeed: string | null; armed: string | null };
@@ -463,6 +465,16 @@ describe("777-S2 state shades", () => {
       expect(sample.settleCriteria.animations).toContain('all document animations finished');
       expect(sample.settleCriteria.pseudoClasses).toContain('read back');
       expect(sample.settleCriteria.tooltipPresent).toBe(sample.settleCriteria.tooltipExpected === 'open');
+      expect(Number.isFinite(sample.settleWaitMs)).toBe(true);
+      expect(sample.settleWaitMs).toBeGreaterThanOrEqual(0);
+      expect(sample.settleWaitMs).toBe(sample.settleCriteria.captures.painted.settleWaitMs + sample.settleCriteria.captures.control.settleWaitMs);
+      for (const capture of Object.values(sample.settleCriteria.captures)) {
+        expect(capture.matched, `${context}: unsettled tooltip capture`).toBe(true);
+        expect(capture.tooltipPresent).toBe(sample.settleCriteria.tooltipExpected === 'open');
+        if (sample.settleCriteria.tooltipExpected === 'open')
+          expect(['delayed-open', 'instant-open']).toContain(capture.tooltipState);
+      }
+      if (context === 'delete/ready-exceeds/focus-visible') expect(sample.settleCriteria.tooltipExpected).toBe('open');
       if (sample.settleCriteria.tooltipExpected === 'open')
         expect(['delayed-open', 'instant-open']).toContain(sample.settleCriteria.tooltipState);
       const declared = contextInventory.find(c => c.name === context)!.pseudoState;
@@ -484,6 +496,8 @@ describe("777-S2 state shades", () => {
       if (expected === "focus-visible") expect(sample.action).toContain("Tab");
 
     };
+    for (const theme of THEMES) for (const [context, samples] of Object.entries(receipt.proof.calibration[theme].samples))
+      for (const [state, sample] of Object.entries(samples)) check(sample, context, state);
     for (const { id } of receipt.media.variants) for (const theme of THEMES) {
       const data = receipt.conditions[id][theme];
       for (const phase of ["before", "shipped"] as const)

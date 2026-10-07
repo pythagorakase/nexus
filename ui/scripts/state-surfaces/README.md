@@ -62,6 +62,14 @@ and keyboard Tab produce the recorded contexts. Delayed tooltips triggered by ho
 click/leave contexts await closure. Every capture records these settle criteria
 and pseudo-class readbacks. All finite document animations/transitions finish,
 including overlapping siblings and portalled tooltips, before both captures; infinite animations pause at declared start/trough phases.
+Sixth Review Clarification 1 enforces tooltip settledness before each painted
+and control capture: poll until presence and open-state readback match the
+context expectation, within the existing 30-second Playwright settle bound
+(capped by the command bound). Every sample records `settleWaitMs` and both
+capture readbacks. Exceeds-RAM delete focus contexts expect an open tooltip;
+the expectation is independent of the observed state. A timeout writes the
+named context/condition PNGs and readback and stops regeneration. It cannot
+enter an acceptance receipt or redefine the expected state at a narrow width.
 
 The inventory holds reachable states only. Hovered glyphs in sidebar row-hover contexts, absent
 keys in required rows, missing keys in optional rows, and the absent/missing

@@ -98,7 +98,11 @@ async function renderInventory(condition, theme, calibrating = false) {
     results.proof.matchedMedia ??= {}; results.proof.matchedMedia[condition.id] = matchedMedia;
     // Finite transitions/animations finish. Infinite animations have no finished
     // promise: pause the actual browser effect at its start and trough, separately.
-    const settled = async () => page.evaluate(async ({ phase }) => {
+    // Preserve the existing Playwright waitFor settle bound (30 seconds),
+    // capped by the enclosing capture command's derived bound.
+    const settleBoundMs = Math.min(30_000, boundSeconds * 1000);
+    const settled = async (tooltipExpected) => page.evaluate(async ({ phase, tooltipExpected, settleBoundMs }) => {
+      const started = performance.now();
       await new Promise(requestAnimationFrame);
       for (;;) {
         const all = document.getAnimations();
@@ -108,10 +112,20 @@ async function renderInventory(condition, theme, calibrating = false) {
         // The whole document is a conservative superset of the surface, its
         // ancestors and overlapping siblings (including portalled tooltips).
         const running = all.filter(a => a.playState === 'running');
-        if (!running.length) return;
-        await Promise.all(running.map(a => a.finished.catch(() => {})));
+        if (running.length) await Promise.race([
+          Promise.all(running.map(a => a.finished.catch(() => {}))),
+          new Promise(r => setTimeout(r, Math.max(0, settleBoundMs - (performance.now() - started)))),
+        ]);
+        const tooltipState = document.querySelector('.lm-quant')?.getAttribute('data-state') ?? null;
+        const tooltipPresent = !!document.querySelector('[role="tooltip"]');
+        const matched = !document.getAnimations().some(a => a.playState === 'running') &&
+          (tooltipExpected === undefined || (tooltipPresent === (tooltipExpected === 'open') &&
+            (tooltipExpected !== 'open' || ['delayed-open', 'instant-open'].includes(tooltipState))));
+        if (matched || performance.now() - started >= settleBoundMs)
+          return { tooltipState, tooltipPresent, matched, settleWaitMs: performance.now() - started };
+        await new Promise(requestAnimationFrame);
       }
-    }, { phase: condition.animationPhase });
+    }, { phase: condition.animationPhase, tooltipExpected, settleBoundMs });
     async function reset() {
       await page.mouse.move(0, 0);
       await page.locator('body').click({ position: { x: 1, y: 1 } });
@@ -129,21 +143,11 @@ async function renderInventory(condition, theme, calibrating = false) {
     async function sample(selector, action, label, tooltipExpected) {
       const el = page.locator(selector);
       await el.scrollIntoViewIfNeeded();
-      // Held unarmed hover schedules delayed opening; click/leave cancels it.
-      // Tab opens immediately, and the trigger's blur may close it again.
-      // captureValues resolves that immediate final state once for all values.
-      if (tooltipExpected === 'open') {
-        await page.locator('.lm-quant[data-state="delayed-open"],.lm-quant[data-state="instant-open"]').waitFor();
-        await page.getByRole('tooltip').waitFor();
-      } else {
-        await page.getByRole('tooltip').waitFor({ state: 'hidden' });
-      }
-      await settled();
+      const paintedSettle = await settled(tooltipExpected);
       const settleCriteria = {
         tooltipExpected,
-        tooltipState: await page.locator('.lm-quant').count()
-          ? await page.locator('.lm-quant').getAttribute('data-state') : null,
-        tooltipPresent: await page.getByRole('tooltip').count() > 0,
+        tooltipState: paintedSettle.tooltipState,
+        tooltipPresent: paintedSettle.tooltipPresent,
         animations: 'all document animations finished; infinite effects paused at the declared condition phase',
         scope: 'entire document, including surface, ancestors and overlapping/portalled siblings',
         animationPhase: condition.animationPhase ?? null,
@@ -169,11 +173,22 @@ async function renderInventory(condition, theme, calibrating = false) {
       const transparent = ['fill', 'stroke', 'background-color', 'color', 'border-color', 'outline-color',
         'text-decoration-color', 'column-rule-color', 'caret-color', 'stop-color', 'flood-color', 'lighting-color'];
       const controlStyle = await page.addStyleTag({ content: `${selectors.join(',')} { ${transparent.map(p => `${p}: transparent !important;`).join('')} background-image: none !important; }` });
-      await settled();
+      const controlSettle = await settled(tooltipExpected);
       const control = await screenshot(box);
       await controlStyle.evaluate(n => n.remove());
       await el.evaluate(n => n.removeAttribute('data-control-capture'));
       await settled();
+      const settleWaitMs = paintedSettle.settleWaitMs + controlSettle.settleWaitMs;
+      settleCriteria.captures = { painted: paintedSettle, control: controlSettle };
+      if (!paintedSettle.matched || !controlSettle.matched) {
+        const name = label.replace(/[^a-zA-Z0-9-]/g, '_');
+        const prefix = resolve(scratch, `settle-failure-${name}`);
+        writeFileSync(`${prefix}-painted.png`, painted);
+        writeFileSync(`${prefix}-control.png`, control);
+        writeFileSync(`${prefix}.json`, JSON.stringify({ label, condition, selector, box, action, pseudos,
+          settleBoundMs, settleWaitMs, settleCriteria }, null, 2));
+        throw new Error(`Measurement failure ${label}: tooltip did not settle ${tooltipExpected} within ${settleBoundMs}ms before both captures; PNGs/readback: ${prefix}`);
+      }
       renderCount++;
       let measured;
       try { measured = foreground(painted, control, label); }
@@ -203,7 +218,7 @@ async function renderInventory(condition, theme, calibrating = false) {
         writeFileSync(resolve(scratch, captures.painted), painted);
         writeFileSync(resolve(scratch, captures.control), control);
       }
-      return { ...measured, ...paint, selector, box, action, pseudos, target, stateAttributes, animationsRunning, settleCriteria, ...(captures ? { captures } : {}) };
+      return { ...measured, ...paint, selector, box, action, pseudos, target, stateAttributes, animationsRunning, settleCriteria, settleWaitMs, ...(captures ? { captures } : {}) };
     }
       const result = { shipped: {}, before: {}, candidates: {}, reachability: {}, fonts: {} };
       const calibration = { condition: condition.id, pigments: {}, samples: {}, groups: {}, requiredPairs: [],
@@ -258,8 +273,7 @@ async function renderInventory(condition, theme, calibrating = false) {
         result.candidates[prop] ??= {};
         await settled();
         const tooltipExpected = context.startsWith('delete/ready-exceeds/') &&
-          (state === 'unarmed' && context.endsWith('hover') || context.endsWith('focus-visible') &&
-            await page.locator('.lm-quant').getAttribute('data-state') !== 'closed') ? 'open' : 'closed';
+          (state === 'unarmed' && context.endsWith('hover') || context.endsWith('focus-visible')) ? 'open' : 'closed';
         const restState = { memory: 'normal', delete: 'unarmed', map: 'rest', key: 'present' }[group];
         const pigment = now[token(group, restState)];
         if (calibrating) {
