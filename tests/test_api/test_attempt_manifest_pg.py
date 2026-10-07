@@ -293,7 +293,7 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                     "--json",
                 )
             )["observation"]
-            assert observed["schema_version"] == 2
+            assert observed["schema_version"] == 3
             assert observed["generation_session"] == session
             assert observed["ledger_days_read"]
             joined = {
@@ -318,6 +318,18 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                 assert window["reported_input_tokens"] == usage["input_tokens"] == 1000
                 assert isinstance(window["estimated_input_tokens"], int)
                 assert window["estimated_input_tokens"] > 0
+            # One provider served both seats, so the critical-path sum is
+            # comparable and names it.
+            providers = sorted(
+                {
+                    joined[(seat, 1)]["usage"]["provider"]
+                    for seat in ("skald_writer", "gaia")
+                }
+            )
+            assert len(providers) == 1
+            critical_path = observed["usage_totals"]["critical_path"]
+            assert critical_path["providers"] == providers
+            assert critical_path["comparable"] is True
             # Readiness is the server's complete phase row, in the staging
             # transaction; each seat's response arrived before it.
             (complete,) = [

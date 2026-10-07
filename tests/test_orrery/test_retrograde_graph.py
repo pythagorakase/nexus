@@ -365,6 +365,7 @@ def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
     from nexus.config import load_settings
 
     settings = load_settings()
+    assert settings.orrery is not None
     cfg = settings.orrery.retrograde.maturation
     packet = build_runtime_maturation_packet(
         vocabulary=VOCABULARY,
@@ -384,6 +385,7 @@ def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
         cfg=cfg,
         dbname="save_05",
         setting={"genre": "fantasy"},
+        genesis_weird=None,
     )
     request = packet["seed_generation_request"]
     assert request["budget"]["generate_candidates"] == cfg.generate_candidates
@@ -402,7 +404,7 @@ def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
     # the genre band contracted by weird_band_fraction from its floor.
     band = getattr(
         settings.orrery.retrograde.weird.bands_by_genre["fantasy"],
-        cfg.weird_level,
+        settings.orrery.retrograde.weird.default_level,
     )
     roll = request["candidate_graph"]["weird_roll"]
     expected_max_raw = band.min + (band.max - band.min) * cfg.weird_band_fraction

@@ -344,7 +344,6 @@ def _load_from_json(path: Path) -> Settings:
             "message_history_limit": legacy_new_story.get("message_history_limit", 20),
             "max_retries": legacy_new_story.get("max_retries", 2),
             "max_tokens": legacy_new_story.get("max_tokens", 2048),
-            "enable_streaming": legacy_new_story.get("enable_streaming", True),
         },
     }
 

@@ -19,11 +19,11 @@ The repository-wide `offscreen_narrations` trace found these consumers:
 - `nexus/agents/orrery/worker.py`: status reports count rows and embedding/job
   states; they never require the full prose. Those identifiers and counts remain
   compatible with the API and QA queue inspection.
-- `nexus/agents/memnon/memnon.py`: read-only SQL allows access to off-screen rows
-  for explicit audit queries, but warm-slice, text-search, and vector retrieval
-  exclude them. `test_retrieval_boundaries.py` and `test_memnon_whitelist.py`
-  continue to enforce those boundaries. Historical prose remains available
-  through the same audited table; new canonical facts remain linked by
+- `nexus/agents/memnon/memnon.py`: warm-slice, text-search, and vector retrieval
+  exclude off-screen rows, and `test_retrieval_boundaries.py` continues to
+  enforce that boundary. MEMNON no longer offers read-only SQL: #813 deleted the
+  uncalled `execute_readonly_sql` and its table allowlist. Historical prose
+  remains available in the same table; new canonical facts remain linked by
   resolution and tick IDs.
 - Integration fixtures and historical milestone documents contain the remaining
   reads. No embedding processor or future retrieval implementation consumes the

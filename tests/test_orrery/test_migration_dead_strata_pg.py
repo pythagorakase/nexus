@@ -296,7 +296,12 @@ def fleet_archives(
 def _clone(
     archives: dict[str, Path], tmp_path: Path, source: str = "NEXUS_template"
 ) -> Iterator[str]:
-    """Restore raw data, pin TEST, and migrate the clone through predecessors."""
+    """Restore raw data, migrate the clone through predecessors, then pin TEST.
+
+    The pin is written after the migrations because its UPDATE names columns
+    (``global_variables.gaia_model``) that a source behind the current stamp
+    may lack (issue #1083).
+    """
     tree = tmp_path / "preceding"
     tree.mkdir(exist_ok=True)
     for version, _, path in migrate.discover_migrations():
@@ -320,6 +325,10 @@ def _clone(
             text=True,
             timeout=540,
         )
+        applied, failed = migrate.migrate_database(
+            dbname, skip_locked=False, migrations_dir=tree
+        )
+        assert failed == 0, (applied, failed)
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
                 (
@@ -330,10 +339,6 @@ def _clone(
             write_story_settings(
                 cur, StorySettings(skald_model="TEST", gaia_model=None)
             )
-        applied, failed = migrate.migrate_database(
-            dbname, skip_locked=False, migrations_dir=tree
-        )
-        assert failed == 0, (applied, failed)
         yield dbname
 
 
