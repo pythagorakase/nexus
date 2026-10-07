@@ -21,7 +21,7 @@ from nexus.agents.orrery.retrograde_persistence import (
     _insert_place_stub,
     plan_retrograde_summaries,
 )
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import DEFAULT_BASE_TIMESTAMP, connect, set_story_base
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -80,6 +80,7 @@ def test_summary_planning_is_idempotent_on_disposable_database(
     """A persisted event gets one stable dedicated summary identity."""
 
     cur = disposable_cursor
+    set_story_base(cur, DEFAULT_BASE_TIMESTAMP)
     prologue_id = _insert_chunk(
         cur,
         raw_text="[Disposable Retrograde prologue.]",

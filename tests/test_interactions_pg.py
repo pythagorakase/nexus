@@ -38,7 +38,7 @@ from nexus.interactions import (
     UnknownExecutorTransition,
     UntrustedHandlerError,
 )
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import DEFAULT_BASE_TIMESTAMP, connect, set_story_base
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -66,6 +66,7 @@ def disposable_interaction_db() -> Iterator[str]:
         with _connect(dbname) as conn, conn.cursor() as cur:
             cur.execute(migration)
             cur.execute(migration)
+            set_story_base(cur, DEFAULT_BASE_TIMESTAMP)
         yield dbname
     finally:
         with admin.cursor() as cur:

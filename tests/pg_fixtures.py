@@ -594,12 +594,52 @@ def route_slot_from_environment(
     return slot, dbname
 
 
+DEFAULT_BASE_TIMESTAMP = "2100-01-01T00:00:00+00:00"
+
+
+def set_story_base(cur: Any, base_timestamp: str | datetime) -> None:
+    """Set ``global_variables.base_timestamp`` on ``cur``'s open transaction.
+
+    This is the one base path for fixtures. Call it before any
+    ``chunk_metadata`` row exists, as the wizard transition does: the refresh
+    trigger raises on a chunk write while the base is NULL or its row is
+    missing (migration 144 removed the wall-clock fallback), and
+    ``trg_global_variables_base_timestamp_fixed`` refuses to change the base
+    once ``chunk_metadata`` holds a row, because stored event times would keep
+    the old clock. The helper upserts the singleton row and checks nothing
+    else; the guard is the database's.
+    """
+
+    cur.execute(
+        "INSERT INTO global_variables (id, base_timestamp) VALUES (true, %s) "
+        "ON CONFLICT (id) DO UPDATE SET base_timestamp = EXCLUDED.base_timestamp",
+        (base_timestamp,),
+    )
+    assert cur.rowcount == 1
+
+
+def seed_story_base(
+    dbname: str, *, base_timestamp: str | datetime = DEFAULT_BASE_TIMESTAMP
+) -> None:
+    """Seed the story clock's base on a disposable save before any chunk.
+
+    A chunk written before the base raises (migration 144: no wall-clock
+    fallback), and the base cannot change once a chunk exists, so tests that
+    insert chunks without a protagonist call this first. Writes through
+    ``set_story_base`` on one connection.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        set_story_base(cur, base_timestamp)
+
+
 def seed_protagonist(
     dbname: str,
     *,
     name: str = "Fixture Player",
     summary: str = "Canonical player for PostgreSQL coverage.",
-    base_timestamp: str = "2100-01-01T00:00:00+00:00",
+    base_timestamp: str = DEFAULT_BASE_TIMESTAMP,
     current_location: int | None = None,
 ) -> tuple[int, int]:
     """Bind a fixture-owned player to the save and return character/entity IDs.
@@ -611,14 +651,6 @@ def seed_protagonist(
     under stored chunks would desynchronize their ``world_time`` from the
     summed primary-layer deltas until the next ``chunk_metadata`` write
     re-stamps them.
-
-    When the clock is first set under chunks that already exist, those chunks
-    carry wall-clock ``world_time`` stamps (the refresh trigger falls back to
-    ``now()`` while ``base_timestamp`` is NULL). The helper re-stamps them
-    through the ``UPDATE OF time_delta`` statement trigger and asserts the
-    head clock is ``base_timestamp`` plus the summed primary-layer deltas
-    before the character insert, so need clocks never anchor to wall time
-    (#640/#645).
     """
 
     require_disposable_target(dbname)
@@ -634,13 +666,7 @@ def seed_protagonist(
                 f"{requested}; run it before seed_story_clock, or pass the "
                 "clock already set"
             )
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                (base_timestamp,),
-            )
-            assert cur.rowcount == 1
-            if row[0] is None:
-                cur.execute("UPDATE chunk_metadata SET time_delta = time_delta")
+            set_story_base(cur, base_timestamp)
             _require_need_clock_anchor(cur, "seed_protagonist")
             cur.execute(
                 "INSERT INTO entities (kind, is_active) "
@@ -682,8 +708,9 @@ def seed_committed_chunk(
     otherwise; an explicit value passes through unchanged. The
     statement-level ``trg_chunk_metadata_refresh_world_time`` trigger stamps
     ``chunk_metadata.world_time`` as ``base_timestamp`` plus the cumulative
-    primary-layer deltas, so the chunk's clock is exact only once
-    ``base_timestamp`` is set.
+    primary-layer deltas; the insert raises while ``base_timestamp`` is NULL,
+    so seed it first (``seed_story_base``, ``seed_protagonist``, or
+    ``seed_story_clock``).
 
     The chunk carries no ``authorial_directives``, so it satisfies
     ``playable_narrative_predicate`` (reconstruction.py) and counts toward the
@@ -731,8 +758,7 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     ``MAX(chunk_metadata.world_time)``, then at ``base_timestamp``. The anchor
     is exact only when ``base_timestamp`` is set and, if chunks exist, the head
     ``world_time`` equals ``base_timestamp`` plus the summed primary-layer
-    deltas. Chunks stamped while ``base_timestamp`` was NULL carry wall-clock
-    ``world_time`` and fail here rather than seeding wall-clock need clocks.
+    deltas.
     """
 
     cur.execute(
@@ -762,8 +788,8 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     assert chunk_count == 0 or head_world_time == expected_head, (
         f"{helper} found a wall-clock need-clock anchor: head world_time "
         f"{head_world_time} is not base_timestamp {base_timestamp} plus the "
-        f"summed primary-layer deltas ({expected_head}); re-stamp "
-        "chunk_metadata after setting base_timestamp"
+        f"summed primary-layer deltas ({expected_head}); seed "
+        "base_timestamp through set_story_base before any chunk"
     )
 
 
@@ -804,11 +830,7 @@ def seed_story_clock(
         row = cur.fetchone()
         assert row is not None, f"{dbname} has no global_variables row"
         if row[0] is None:
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                (world_time,),
-            )
-            assert cur.rowcount == 1
+            set_story_base(cur, world_time)
         else:
             cur.execute("SELECT EXISTS (SELECT 1 FROM chunk_metadata)")
             if not cur.fetchone()[0]:
@@ -2503,7 +2525,7 @@ def seed_played_story(
     *,
     turns: int,
     protagonist_name: str = "Fixture Player",
-    base_timestamp: str = "2100-01-01T00:00:00+00:00",
+    base_timestamp: str = DEFAULT_BASE_TIMESTAMP,
     time_delta: timedelta = timedelta(minutes=5),
     cast: tuple[str, ...] = (),
     correspondence: bool = False,
