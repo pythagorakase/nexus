@@ -363,7 +363,7 @@ poetry run nexus inspect-turn --slot N --session UUID --summary
 With `--json` the payload carries `observation` beside `turn_inspection`, and
 `--summary` prints a few lines of it. The observation is derived on read from
 the attempt manifests, the prompt-window ledger, the provider usage ledger and
-the job rows; it is never stored. It is schema version 2 and counts tokens
+the job rows; it is never stored. It is schema version 3 and counts tokens
 only: nothing is priced.
 
 Choice readiness is the server's `complete` phase row, which
@@ -380,6 +380,14 @@ the whole request, and `reported_input_tokens`, the provider's input for that
 attempt. For the `anthropic_messages` transport the reported figure adds cache
 reads and writes, so it is the per-attempt figure comparable across transports;
 the `usage` section keeps each provider's raw `input_tokens`.
+
+Each `usage_totals` sum (`critical_path`, `background`, `overall`) adds the
+providers' raw counts and lists the distinct `providers` it added. Providers
+count input differently (OpenAI's `input_tokens` includes cached input;
+Anthropic's excludes cache reads and writes), so `comparable` is false when a
+sum lists more than one provider, and `--summary` ends that sum's line with
+`providers differ:` and their names. Nothing is normalised; for a figure
+comparable across providers, read each attempt's `window.reported_input_tokens`.
 
 Throughout the observation, `"unknown"` means no source recorded the value, and
 null means the thing has not happened.

@@ -14,6 +14,14 @@ import json
 from typing import Any, Optional
 from uuid import uuid4
 
+from anthropic.types import Message, Usage
+from openai.types.chat import ChatCompletion
+from openai.types.completion_usage import CompletionUsage, PromptTokensDetails
+from openai.types.responses import Response, ResponseUsage
+from openai.types.responses.response_usage import (
+    InputTokensDetails,
+    OutputTokensDetails,
+)
 import pytest
 
 from nexus import cli
@@ -38,9 +46,12 @@ from nexus.telemetry.turn_observation import (
 from nexus.telemetry import usage as usage_ledger
 from nexus.telemetry.usage import (
     UsageEvent,
+    record_anthropic_response,
+    record_openai_response,
     record_prompt_window,
     record_usage_event,
     summarize_usage,
+    usage_context,
 )
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
@@ -572,7 +583,7 @@ def test_observation_joins_each_attempt_with_its_provider_usage(
     inspection, session, _ = _two_pass_turn(ledger_clock)
     observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
 
-    assert observation["schema_version"] == SCHEMA_VERSION == 2
+    assert observation["schema_version"] == SCHEMA_VERSION == 3
     assert observation["generation_session"] == session
     assert observation["read_at"] == f"{ledger_clock.today}T12:00:00Z"
     assert observation["ledger_days_read"] == [
@@ -753,6 +764,8 @@ def test_usage_totals_split_the_critical_path_from_background_work(
     assert totals["critical_path"] == {
         "provenance": "provider_usage_ledger",
         "events": 3,
+        "providers": ["anthropic", "openai"],
+        "comparable": False,
         "attempts_without_usage": 1,
         "input_tokens": 20777 + 3000 + 3100,
         "output_tokens": 2100 + 900 + 950,
@@ -763,6 +776,8 @@ def test_usage_totals_split_the_critical_path_from_background_work(
     assert totals["background"] == {
         "provenance": "provider_usage_ledger",
         "events": 6,
+        "providers": ["anthropic", "openai"],
+        "comparable": False,
         "jobs": 6,
         "jobs_open": 1,
         "jobs_without_usage": 1,
@@ -777,6 +792,8 @@ def test_usage_totals_split_the_critical_path_from_background_work(
     assert totals["overall"] == {
         "provenance": "provider_usage_ledger",
         "events": 9,
+        "providers": ["anthropic", "openai"],
+        "comparable": False,
         "input_tokens": 26877 + 68400,
         "output_tokens": 3950 + 6300,
         "cached_input_tokens": 38288,
@@ -792,6 +809,244 @@ def test_usage_totals_split_the_critical_path_from_background_work(
         "relationship_milestone": {"pending": 1},
         "retrograde_maturation": {"succeeded": 1},
     }
+
+
+def _record_writer_through_responses(session: str) -> None:
+    """Record the writer's first attempt through OpenAI's Responses transport."""
+    with usage_context(slot=4, run_id=session):
+        record_openai_response(
+            Response.model_construct(
+                id="resp-writer-1",
+                usage=ResponseUsage(
+                    input_tokens=20777,
+                    input_tokens_details=InputTokensDetails(cached_tokens=12288),
+                    output_tokens=2100,
+                    output_tokens_details=OutputTokensDetails(reasoning_tokens=800),
+                    total_tokens=22877,
+                ),
+            ),
+            provider="openai",
+            model="writer-model",
+            seat="skald_writer",
+            attempt=1,
+            outcome="accepted",
+            transport="responses",
+            request=None,
+        )
+
+
+def test_usage_totals_mark_sums_across_providers_not_comparable(
+    ledger_clock: _LedgerClock,
+) -> None:
+    """A sum names its providers; across providers it is raw, not comparable."""
+    session = str(uuid4())
+    _record_writer_through_responses(session)
+    with usage_context(slot=4, run_id=session):
+        record_openai_response(
+            ChatCompletion.model_construct(
+                id="chat-gaia-1",
+                usage=CompletionUsage(
+                    prompt_tokens=16000,
+                    completion_tokens=900,
+                    total_tokens=16900,
+                    prompt_tokens_details=PromptTokensDetails(cached_tokens=14000),
+                ),
+            ),
+            provider="openai",
+            model="gaia-model",
+            seat="gaia",
+            attempt=1,
+            outcome="rejected_validation",
+            transport="chat_completions",
+            request=None,
+        )
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": None},
+        "phases": [
+            {"phase": "retrieval", "recorded_at": f"{ledger_clock.today} 00:00:01+00"}
+        ],
+        "manifests": [],
+        "jobs": [],
+    }
+
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
+
+    critical_path = observation["usage_totals"]["critical_path"]
+    assert [attempt["usage"]["transport"] for attempt in observation["attempts"]] == [
+        "chat_completions",
+        "responses",
+    ]
+    assert critical_path["providers"] == ["openai"]
+    assert critical_path["comparable"] is True
+    assert "providers differ" not in format_turn_summary(observation)
+
+    # Anthropic's input_tokens excludes the cache reads and writes it reports.
+    with usage_context(slot=4, run_id=session):
+        record_anthropic_response(
+            Message.model_construct(
+                id="msg-gaia-2",
+                usage=Usage(
+                    input_tokens=3100,
+                    output_tokens=950,
+                    cache_read_input_tokens=13000,
+                    cache_creation_input_tokens=1200,
+                ),
+            ),
+            provider="anthropic",
+            model="gaia-model",
+            seat="gaia",
+            attempt=2,
+            outcome="accepted",
+            request=None,
+        )
+
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
+
+    critical_path = observation["usage_totals"]["critical_path"]
+    assert critical_path["providers"] == ["anthropic", "openai"]
+    assert critical_path["comparable"] is False
+    # Raw sums: nothing added back to Anthropic's input, nothing normalised.
+    assert critical_path["events"] == 3
+    assert critical_path["input_tokens"] == 20777 + 16000 + 3100
+    assert critical_path["cached_input_tokens"] == 12288 + 14000 + 13000
+    assert critical_path["output_tokens"] == 2100 + 900 + 950
+    # The OpenAI recorders report no cache writes.
+    assert critical_path["cache_creation_tokens"] == UNKNOWN
+    gaia_2 = next(
+        attempt
+        for attempt in observation["attempts"]
+        if (attempt["seat"], attempt["attempt"]) == ("gaia", 2)
+    )
+    assert gaia_2["usage"]["provider"] == "anthropic"
+    assert gaia_2["usage"]["transport"] == "anthropic_messages"
+    assert gaia_2["usage"]["input_tokens"] == 3100
+    assert gaia_2["usage"]["cache_creation_tokens"] == 1200
+    overall = observation["usage_totals"]["overall"]
+    assert (overall["providers"], overall["comparable"]) == (
+        ["anthropic", "openai"],
+        False,
+    )
+    assert json.loads(json.dumps(observation)) == observation
+    critical_line = next(
+        line
+        for line in format_turn_summary(observation).splitlines()
+        if line.startswith("Critical path ")
+    )
+    assert critical_line.endswith(
+        " · attempts without usage 0 · providers differ: anthropic, openai"
+    )
+
+
+def test_background_and_overall_comparability_follow_their_own_providers(
+    ledger_clock: _LedgerClock,
+) -> None:
+    """Each sum reads its own providers; overall reads both parts."""
+    session = str(uuid4())
+    job_id = 11
+    ledger_clock.now = datetime.combine(
+        ledger_clock.today, time(6), tzinfo=timezone.utc
+    )
+    _record_writer_through_responses(session)
+    with usage_context(slot=4, run_id=str(job_id)):
+        record_anthropic_response(
+            Message.model_construct(
+                id="msg-summary-1",
+                usage=Usage(
+                    input_tokens=41000,
+                    output_tokens=1500,
+                    cache_read_input_tokens=0,
+                    cache_creation_input_tokens=0,
+                ),
+            ),
+            provider="anthropic",
+            model="summary-model",
+            seat="summaries",
+            attempt=1,
+            outcome="accepted",
+            request=None,
+        )
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [
+            {"phase": "writer", "recorded_at": f"{ledger_clock.today} 00:00:01+00"},
+            {"phase": "complete", "recorded_at": f"{ledger_clock.today} 00:00:20+00"},
+        ],
+        "manifests": [],
+        "jobs": [
+            _job(
+                session,
+                "narrative_summary",
+                job_id,
+                "succeeded",
+                ledger_clock.enqueued,
+                f"{ledger_clock.today} 07:00:00+00",
+            )
+        ],
+    }
+
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
+
+    totals = observation["usage_totals"]
+    assert {
+        part: (totals[part]["providers"], totals[part]["comparable"])
+        for part in ("critical_path", "background", "overall")
+    } == {
+        "critical_path": (["openai"], True),
+        "background": (["anthropic"], True),
+        "overall": (["anthropic", "openai"], False),
+    }
+    assert totals["background"]["events"] == 1
+    lines = format_turn_summary(observation).splitlines()
+    (background_line,) = [line for line in lines if line.startswith("Background ")]
+    assert "providers differ" not in background_line
+    (overall_line,) = [line for line in lines if line.startswith("Overall ")]
+    assert overall_line.endswith(" · providers differ: anthropic, openai")
+
+    # The same job's later summary call goes through another provider.
+    ledger_clock.now = datetime.combine(
+        ledger_clock.today, time(6, 0, 5), tzinfo=timezone.utc
+    )
+    with usage_context(slot=4, run_id=str(job_id)):
+        record_openai_response(
+            Response.model_construct(
+                id="resp-summary-2",
+                usage=ResponseUsage(
+                    input_tokens=9000,
+                    input_tokens_details=InputTokensDetails(cached_tokens=0),
+                    output_tokens=1500,
+                    output_tokens_details=OutputTokensDetails(reasoning_tokens=0),
+                    total_tokens=10500,
+                ),
+            ),
+            provider="openai",
+            model="summary-model",
+            seat="summaries",
+            attempt=1,
+            outcome="accepted",
+            transport="responses",
+            request=None,
+        )
+
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
+
+    totals = observation["usage_totals"]
+    (job,) = observation["jobs"]["entries"]
+    assert job["usage"]["provider"] == ["anthropic", "openai"]
+    assert job["usage"]["events"] == 2
+    assert {
+        part: (totals[part]["providers"], totals[part]["comparable"])
+        for part in ("critical_path", "background", "overall")
+    } == {
+        "critical_path": (["openai"], True),
+        "background": (["anthropic", "openai"], False),
+        "overall": (["anthropic", "openai"], False),
+    }
+    assert totals["background"]["input_tokens"] == 41000 + 9000
+    lines = format_turn_summary(observation).splitlines()
+    (background_line,) = [line for line in lines if line.startswith("Background ")]
+    assert background_line.endswith(
+        " · without usage 0 · providers differ: anthropic, openai"
+    )
 
 
 def test_unfound_provider_usage_reads_unknown_and_other_queues_spend_nothing(
@@ -851,6 +1106,8 @@ def test_unfound_provider_usage_reads_unknown_and_other_queues_spend_nothing(
     assert background == {
         "provenance": None,
         "events": 0,
+        "providers": [],
+        "comparable": True,
         "jobs": 0,
         "jobs_open": 0,
         "jobs_without_usage": 0,
@@ -1419,6 +1676,8 @@ def test_session_keyed_background_usage_joins_as_legacy(
     assert totals["background"] == {
         "provenance": "provider_usage_ledger",
         "events": 2,
+        "providers": ["anthropic"],
+        "comparable": True,
         "input_tokens": 50000,
         "output_tokens": 3000,
         "cached_input_tokens": 0,
@@ -1432,6 +1691,8 @@ def test_session_keyed_background_usage_joins_as_legacy(
     assert totals["overall"]["events"] == 3
     assert totals["overall"]["input_tokens"] == 20777 + 50000
     assert totals["overall"]["output_tokens"] == 2100 + 3000
+    assert totals["overall"]["providers"] == ["anthropic", "openai"]
+    assert totals["overall"]["comparable"] is False
     assert json.loads(json.dumps(observation)) == observation
     lines = format_turn_summary(observation).splitlines()
     legacy_line = lines.index(
@@ -1600,7 +1861,7 @@ def test_summary_renders_one_concise_read_of_the_turn(
 
     assert lines[0] == (
         f"Turn {session} (accepted) · read {ledger_clock.today}T12:00:00Z · ledger "
-        f"{ledger_clock.yesterday} to {ledger_clock.today} · schema v2"
+        f"{ledger_clock.yesterday} to {ledger_clock.today} · schema v3"
     )
     assert lines[1] == (
         "Wall 50.250s: retrieval 8.250s → assembly 2.500s → writer 30.125s → "
@@ -1635,7 +1896,8 @@ def test_summary_renders_one_concise_read_of_the_turn(
     assert lines[timed_out + 3] == "  usage unknown"
     assert lines[writer + 6 :] == [
         "Critical path in 26,877 · cached 38,288 · cache write unknown · out "
-        "3,950 · reasoning unknown · events 3 · attempts without usage 1",
+        "3,950 · reasoning unknown · events 3 · attempts without usage 1 · "
+        "providers differ: anthropic, openai",
         "correspondence_compaction #2 compaction-model · succeeded",
         "  usage in 5,000 · cached 0 · cache write unknown · out 300 · reasoning 0 "
         "· effort low · max out 2,000 [provider_usage_ledger ×1]",
@@ -1653,9 +1915,10 @@ def test_summary_renders_one_concise_read_of_the_turn(
         "  usage in 20,000 · cached 0 · cache write unknown · out 3,900 · "
         "reasoning 300 · effort medium · max out 6,000 [provider_usage_ledger ×3]",
         "Background in 68,400 · cached 0 · cache write unknown · out 6,300 · "
-        "reasoning unknown · events 6 · jobs 6 · open 1 · without usage 1",
+        "reasoning unknown · events 6 · jobs 6 · open 1 · without usage 1 · "
+        "providers differ: anthropic, openai",
         "Overall in 95,277 · cached 38,288 · cache write unknown · out 10,250 · "
-        "reasoning unknown · events 9",
+        "reasoning unknown · events 9 · providers differ: anthropic, openai",
         "Jobs 8 · correspondence_compaction succeeded 1 · experience_render "
         "queued 1, succeeded 2 · narration succeeded 1 · narrative_summary "
         "succeeded 1 · relationship_milestone pending 1 · retrograde_maturation "
