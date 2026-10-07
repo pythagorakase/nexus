@@ -3,6 +3,7 @@
 This records the code slices of issue #813 (brainstorm C077) and the guarded
 table/enum retirement in migration 143. The six legacy vector-helper functions
 remain deferred to #812; this is not completion of the entire issue.
+It also records where each remaining entry of `config/schema_docs_baseline.json` is routed.
 
 ## Removed Surface and Reachability Evidence
 
@@ -146,9 +147,24 @@ from names. Current retrieval delegates to the multi-model scorer in
 #810 already removed the obsolete MEMNON setup methods and hybrid-search
 Markdown document; migration 143 neither recreates nor edits them.
 
+The six `function:` entries of `config/schema_docs_baseline.json` name these
+identities and point at this section. #819 closes with them as recorded debt,
+uncommented, because no reader or writer establishes their contract.
+
 The runner's fleet is `NEXUS_template` plus five save slots. Deprecated `NEXUS`,
 mock databases, backups and rehearsals are outside that fleet. Psychology,
 episodes, seasons and legacy-vector tables/data remain outside this cleanup.
 813-Q3 retains the documented unused labels; the separate 813-Q5 MEMNON SQL
 subtraction is unchanged. This slice completes no deferred 813-R5 function drop
 and adds or reopens no owner question.
+
+## Legacy Columns Without Evidence
+
+#819 retires a schema-documentation baseline entry only with a comment that cites reader or writer evidence (`docs/database.md`, Schema Documentation). These nine table columns have no such evidence. They stay uncommented in `config/schema_docs_baseline.json`, whose reasons point here, as #813 debt. This section records them and decides no drop. A drop follows the discipline of migration 143: row and dependency preflights against the fleet and a frozen manifest.
+
+- `assets.new_story_creator.seed_starting_location`, `assets.new_story_creator.seed_initial_mystery`, `assets.new_story_creator.seed_potential_obstacles`, `assets.new_story_creator.zone_boundary_description` and `assets.new_story_creator.zone_approximate_area`, created by migration 007. `write_seed`, `clear_seed_phase`, `clear_character_phase`, `clear_setting_phase` and `write_cache` in `nexus/api/new_story_cache.py` set them to NULL; no code reads them.
+- `public.entity_tags.clear_on_override`, created by migration 023. No code reads or writes it; only migration 046 copied it. `entity_pair_tags.clear_on_override` is a different column with its own comment.
+- `public.orrery_narration_jobs.provider` and `public.orrery_narration_jobs.model_ref`, created by migration 023. The narration worker retains this provider-era provenance and never uses it to make a call; its job insert writes neither column.
+- `public.world_events.narration_chunk_id`, created by migration 023 with a foreign key to `offscreen_narrations(id)`. No code writes it. `orrery_resolutions.narration_chunk_id` is a different column with its own comment.
+
+Read-only counts on 2026-10-07, with `NEXUS_template` and `save_01` to `save_05` at migration 143: every one of these columns is NULL in every row, except `orrery_narration_jobs.provider` and `model_ref`, which are set on all 9 rows of `save_03`.
