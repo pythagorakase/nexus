@@ -1,0 +1,8 @@
+{
+  "head": "4966eff8afe9584cd8402af83944b8ef1ac80574",
+  "files": {
+    "ui/client/src/components/nexus/nexus-layout.css": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+    "ui/client/src/contexts/ThemeContext.tsx": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+    "ui/client/src/state-surfaces.resolved.json": "996938bf6f8152eeaa7683dd0b23d982260dfbbe2d6cd979b836de334cb83018"
+  }
+}
