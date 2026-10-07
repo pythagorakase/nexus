@@ -12,6 +12,7 @@ from __future__ import annotations
 from nexus.api.db_pool import dispose_database
 from nexus.api.save_slots import is_slot_locked
 from nexus.api.slot_utils import slot_dbname
+from nexus.api.story_identity import record_fork, replace_story_identity
 
 from nexus.database import subprocess_env
 
@@ -321,6 +322,10 @@ def initialize_slot_database(
     LOG.info("Applied %d migrations to %s", applied, target_db)
 
     _initialize_empty_idf_corpora(target_db)
+    # Initialization mints the story identity (822-Q13); a reset recreates
+    # the database and so mints a new one.
+    with _connect(target_db) as conn, conn.cursor() as cur:
+        replace_story_identity(cur, origin="wizard")
     dispose_database(target_db)
     LOG.info("Database %s ready", target_db)
 
@@ -448,9 +453,17 @@ def clone_slot_with_data(
     failing step (including one statement of the dump) raises.
     ``target_db`` defaults to the slot's database; tests pass a disposable name.
 
+    A clone is a fork (822-Q4): the copy gets a new ``story_uuid`` with origin
+    ``clone``, and when the source held an identity row, one ``story_lineage``
+    fork row names the source's ``story_uuid`` and ``source_db``. A source
+    without a row (the template, an unbackfilled database) gives a ``clone``
+    row and no lineage.
+
     Raises:
         ValueError: If ``slot`` is outside 1-5, or if ``target_db`` is locked
             (``default_transaction_read_only`` is on); nothing is dropped.
+        RuntimeError: If the copy has no ``story_identity`` table (the source
+            predates migration 146); run ``python scripts/migrate.py`` on it.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
@@ -516,6 +529,28 @@ def clone_slot_with_data(
 
         _restore_plain_dump(target_db, dump_path, tools)
         _post_clone_cleanup(target_db)
+        # A clone is a fork (822-Q4): a new story_uuid with a parent link.
+        with _connect(target_db) as conn, conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.story_identity') IS NULL")
+            if cur.fetchone()[0]:
+                raise RuntimeError(
+                    f"{target_db} has no public.story_identity table: the "
+                    f"source {source_db} predates migration 146. Run python "
+                    f"scripts/migrate.py on {source_db}, then clone again."
+                )
+            cur.execute("SELECT story_uuid::text FROM public.story_identity")
+            copied = [row[0] for row in cur.fetchall()]
+            child = replace_story_identity(cur, origin="clone")
+            if copied:
+                record_fork(
+                    cur,
+                    child_uuid=child,
+                    parent_uuid=copied[0],
+                    source_dbname=source_db,
+                    evidence=(
+                        f"clone_slot_with_data copied {source_db} into {target_db}"
+                    ),
+                )
         dispose_database(target_db)
         LOG.info("Cloned %s into %s (with data)", source_db, target_db)
     finally:
