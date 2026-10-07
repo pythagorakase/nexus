@@ -1,0 +1,2316 @@
+
+> nexus-ui@1.0.0 test
+> vitest run plant-default-r5 -t browser_measurements_match_recorded_tables|same_value_has_exactly_the_same_settled_mask_mean|painted_mask_means_are_linear_and_interactions_are_real_and_settled|global_tokens_are_unchanged|state_surfaces_read_only_state_tokens
+
+
+ RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r8/plants/plant-copy/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ❯ plant-default-r5.test.ts (11 tests | 1 failed | 6 skipped) 1892ms
+   ✓ 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled 579ms
+   ✓ 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean 1236ms
+   × 777-S2 state shades > browser_measurements_match_recorded_tables 20ms
+     → expected [ { theme: 'Veil', …(7) }, …(80) ] to deeply equal [ { theme: 'Veil', …(7) }, …(80) ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  plant-default-r5.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables
+AssertionError: expected [ { theme: 'Veil', …(7) }, …(80) ] to deeply equal [ { theme: 'Veil', …(7) }, …(80) ]
+
+- Expected
++ Received
+
+  Array [
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "fill",
+      "delta": 28.723129322326244,
+      "rgb": Array [
+        Array [
+          0.4793041795112365,
+          0.046664256902248166,
+          0.1946121418067297,
+        ],
+        Array [
+          0.7912642609667706,
+          0.17143300798755115,
+          0.07421057339396858,
+        ],
+      ],
+      "signatures": Array [
+        "meter; warning absent",
+        "meter + AlertTriangle",
+      ],
+      "states": Array [
+        "normal",
+        "over",
+      ],
+      "surface": "memory",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "ready/rest",
+      "delta": 21.125767741100375,
+      "rgb": Array [
+        Array [
+          0.5837681187907803,
+          0.5026017862459905,
+          0.3322679764473092,
+        ],
+        Array [
+          0.9992240951052984,
+          0,
+          0.0000027100623531146203,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "ready/row-hover",
+      "delta": 21.125767741100375,
+      "rgb": Array [
+        Array [
+          0.5837681187907803,
+          0.5026017862459905,
+          0.3322679764473092,
+        ],
+        Array [
+          0.9992240951052984,
+          0,
+          0.0000027100623531146203,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "ready/button-hover",
+      "delta": 21.125767741100375,
+      "rgb": Array [
+        Array [
+          0.5837681187907803,
+          0.5026017862459905,
+          0.3322679764473092,
+        ],
+        Array [
+          0.9992240951052984,
+          0,
+          0.0000027100623531146203,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "ready/focus-visible",
+      "delta": 21.125767741100375,
+      "rgb": Array [
+        Array [
+          0.5837681187907803,
+          0.5026017862459905,
+          0.3322679764473092,
+        ],
+        Array [
+          0.9992240951052984,
+          0,
+          0.0000027100623531146203,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "ready-exceeds/rest",
+      "delta": 15.212427293007858,
+      "rgb": Array [
+        Array [
+          0.07224686877064215,
+          0.06842938734089114,
+          0.05779071712138278,
+        ],
+        Array [
+          0.11434025304868896,
+          0.002428215868390703,
+          0.0043914420374102795,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "ready-exceeds/row-hover",
+-     "delta": 14.995579841895132,
++     "delta": 14.982680819603761,
+      "rgb": Array [
+        Array [
+-         0.06938996260551526,
+-         0.06566231369580504,
+-         0.055429565463306865,
++         0.06926194360774318,
++         0.06553834895266605,
++         0.05531036959239076,
+        ],
+        Array [
+          0.11434025304868896,
+          0.002428215868390703,
+          0.0043914420374102795,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "ready-exceeds/button-hover",
+-     "delta": 14.995579841895132,
++     "delta": 14.982680819603761,
+      "rgb": Array [
+        Array [
+-         0.06938996260551526,
+-         0.06566231369580504,
+-         0.055429565463306865,
++         0.06926194360774318,
++         0.06553834895266605,
++         0.05531036959239076,
+        ],
+        Array [
+          0.11434025304868896,
+          0.002428215868390703,
+          0.0043914420374102795,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "ready-exceeds/focus-visible",
+      "delta": 15.212427293007858,
+      "rgb": Array [
+        Array [
+          0.07224686877064215,
+          0.06842938734089114,
+          0.05779071712138278,
+        ],
+        Array [
+          0.11434025304868896,
+          0.002428215868390703,
+          0.0043914420374102795,
+        ],
+      ],
+      "signatures": Array [
+        "Trash2",
+        "AlertTriangle",
+      ],
+      "states": Array [
+        "unarmed",
+        "armed",
+      ],
+      "surface": "delete",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/rest",
+      "delta": 23.38698385843966,
+      "rgb": Array [
+        Array [
+          0.789892144258791,
+          0.1711043202239247,
+          0.0740675633275448,
+        ],
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "required-missing",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/rest",
+      "delta": 28.73292255124996,
+      "rgb": Array [
+        Array [
+          0.789892144258791,
+          0.1711043202239247,
+          0.0740675633275448,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "required-missing",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/rest",
+      "delta": 22.67163286962177,
+      "rgb": Array [
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/hover",
+      "delta": 23.38698385843966,
+      "rgb": Array [
+        Array [
+          0.789892144258791,
+          0.1711043202239247,
+          0.0740675633275448,
+        ],
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "required-missing",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/hover",
+      "delta": 28.73292255124996,
+      "rgb": Array [
+        Array [
+          0.789892144258791,
+          0.1711043202239247,
+          0.0740675633275448,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "required-missing",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/hover",
+      "delta": 22.67163286962177,
+      "rgb": Array [
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/focus-visible",
+      "delta": 23.38698385843966,
+      "rgb": Array [
+        Array [
+          0.789892144258791,
+          0.1711043202239247,
+          0.0740675633275448,
+        ],
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "required-missing",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/focus-visible",
+      "delta": 28.73292255124996,
+      "rgb": Array [
+        Array [
+          0.789892144258791,
+          0.1711043202239247,
+          0.0740675633275448,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "AlertTriangle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "required-missing",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "required/focus-visible",
+      "delta": 22.67163286962177,
+      "rgb": Array [
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/rest",
+-     "delta": 17.271284617136974,
++     "delta": 11.495414085887742,
+      "rgb": Array [
+        Array [
+-         0.15839642669252507,
+-         0.14065938719848206,
+-         0.09719752796297523,
++         0.08203793450882514,
++         0.07595637219719846,
++         0.06102706745909207,
+        ],
+        Array [
+-         0.051119567467672614,
+-         0.03810851279705756,
+-         0.015166936576537057,
++         0.029499009079878277,
++         0.02508902359342903,
++         0.013688642847193977,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "optional-absent",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/rest",
+-     "delta": 20.56575828136136,
++     "delta": 14.983544655149657,
+      "rgb": Array [
+        Array [
+-         0.15839642669252507,
+-         0.14065938719848206,
+-         0.09719752796297523,
++         0.08203793450882514,
++         0.07595637219719846,
++         0.06102706745909207,
+        ],
+        Array [
+-         0.12441267093190186,
+-         0.020260370102439147,
+-         0.0701895551747783,
++         0.06645307867747019,
++         0.015162634173303411,
++         0.0465312057491369,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "optional-absent",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/rest",
+-     "delta": 17.83409941594261,
++     "delta": 14.715534652167587,
+      "rgb": Array [
+        Array [
+-         0.051119567467672614,
+-         0.03810851279705756,
+-         0.015166936576537057,
++         0.029499009079878277,
++         0.02508902359342903,
++         0.013688642847193977,
+        ],
+        Array [
+-         0.12441267093190186,
+-         0.020260370102439147,
+-         0.0701895551747783,
++         0.06645307867747019,
++         0.015162634173303411,
++         0.0465312057491369,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/hover",
+      "delta": 33.106688270394244,
+      "rgb": Array [
+        Array [
+          0.6355988268611567,
+          0.5193441193917485,
+          0.2952056462208206,
+        ],
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "optional-absent",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/hover",
+      "delta": 30.671891625861303,
+      "rgb": Array [
+        Array [
+          0.6355988268611567,
+          0.5193441193917485,
+          0.2952056462208206,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "optional-absent",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/hover",
+      "delta": 22.67163286962177,
+      "rgb": Array [
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/focus-visible",
+      "delta": 33.106688270394244,
+      "rgb": Array [
+        Array [
+          0.6355988268611567,
+          0.5193441193917485,
+          0.2952056462208206,
+        ],
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleDot",
+      ],
+      "states": Array [
+        "optional-absent",
+        "present",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/focus-visible",
+      "delta": 30.671891625861303,
+      "rgb": Array [
+        Array [
+          0.6355988268611567,
+          0.5193441193917485,
+          0.2952056462208206,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "Circle",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "optional-absent",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "optional/focus-visible",
+      "delta": 22.67163286962177,
+      "rgb": Array [
+        Array [
+          0.17093863170289395,
+          0.10670848163353654,
+          0.019318163878503648,
+        ],
+        Array [
+          0.477961842180771,
+          0.04652171495822914,
+          0.19408431215448346,
+        ],
+      ],
+      "signatures": Array [
+        "CircleDot",
+        "CircleCheck",
+      ],
+      "states": Array [
+        "present",
+        "verified",
+      ],
+      "surface": "key",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/fill",
+-     "delta": 28.045426468172206,
++     "delta": 28.04637816990145,
+      "rgb": Array [
+        Array [
+          0.7897631904708228,
+          0.17107467581513716,
+-         0.07405267532743903,
++         0.07405718833907499,
+        ],
+        Array [
+          0.7439572944692661,
+          0.23406564958422083,
+-         0.44438958767985137,
++         0.4444024955914531,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/fill",
+-     "delta": 41.550915733562185,
++     "delta": 41.55077647019966,
+      "rgb": Array [
+        Array [
+          0.7897631904708228,
+          0.17107467581513716,
+-         0.07405267532743903,
++         0.07405718833907499,
+        ],
+        Array [
+          0.17144110073282123,
+          0.019382360956935688,
+          0.07227185068231771,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/fill",
+-     "delta": 19.408345789192538,
++     "delta": 19.408071007703406,
+      "rgb": Array [
+        Array [
+          0.7897631904708228,
+          0.17107467581513716,
+-         0.07405267532743903,
++         0.07405718833907499,
+        ],
+        Array [
+          0.7912979403326333,
+          0.009721217320237837,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/fill",
+-     "delta": 38.10582735667792,
++     "delta": 38.10595759069959,
+      "rgb": Array [
+        Array [
+          0.7439572944692661,
+          0.23406564958422083,
+-         0.44438958767985137,
++         0.4444024955914531,
+        ],
+        Array [
+          0.17144110073282123,
+          0.019382360956935688,
+          0.07227185068231771,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/fill",
+-     "delta": 15.057020815558461,
++     "delta": 15.057797517201845,
+      "rgb": Array [
+        Array [
+          0.7439572944692661,
+          0.23406564958422083,
+-         0.44438958767985137,
++         0.4444024955914531,
+        ],
+        Array [
+          0.7912979403326333,
+          0.009721217320237837,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/fill",
+      "delta": 24.512314013959262,
+      "rgb": Array [
+        Array [
+          0.17144110073282123,
+          0.019382360956935688,
+          0.07227185068231771,
+        ],
+        Array [
+          0.7912979403326333,
+          0.009721217320237837,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/ring",
+-     "delta": 34.09268546911454,
++     "delta": 34.08207440101574,
+      "rgb": Array [
+        Array [
+          0.7897631904708228,
+          0.17107467581513716,
+-         0.07405267532743903,
++         0.07405718833907499,
+        ],
+        Array [
+-         0.2666906072217434,
+-         0.09277331274821642,
+-         0.17715469562234257,
++         0.2669617666509759,
++         0.09285962802245028,
++         0.17732871225390628,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/ring",
+-     "delta": 49.16262263712205,
++     "delta": 49.16249245581152,
+      "rgb": Array [
+        Array [
+          0.7897631904708228,
+          0.17107467581513716,
+-         0.07405267532743903,
++         0.07405718833907499,
+        ],
+        Array [
+          0.06960547553789175,
+          0.011281851334087864,
+          0.03734690486708614,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/ring",
+-     "delta": 30.85313755793864,
++     "delta": 30.852956754156256,
+      "rgb": Array [
+        Array [
+          0.7897631904708228,
+          0.17107467581513716,
+-         0.07405267532743903,
++         0.07405718833907499,
+        ],
+        Array [
+          0.39215895902683834,
+          0.010329301056794244,
+          0.12332687714516458,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/ring",
+-     "delta": 20.267365770655314,
++     "delta": 20.285712009103804,
+      "rgb": Array [
+        Array [
+-         0.2666906072217434,
+-         0.09277331274821642,
+-         0.17715469562234257,
++         0.2669617666509759,
++         0.09285962802245028,
++         0.17732871225390628,
+        ],
+        Array [
+          0.06960547553789175,
+          0.011281851334087864,
+          0.03734690486708614,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/ring",
+-     "delta": 7.382582522440495,
++     "delta": 7.392032642899122,
+      "rgb": Array [
+        Array [
+-         0.2666906072217434,
+-         0.09277331274821642,
+-         0.17715469562234257,
++         0.2669617666509759,
++         0.09285962802245028,
++         0.17732871225390628,
+        ],
+        Array [
+          0.39215895902683834,
+          0.010329301056794244,
+          0.12332687714516458,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-sea/ring",
+      "delta": 18.028984489962298,
+      "rgb": Array [
+        Array [
+          0.06960547553789175,
+          0.011281851334087864,
+          0.03734690486708614,
+        ],
+        Array [
+          0.39215895902683834,
+          0.010329301056794244,
+          0.12332687714516458,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/fill",
+      "delta": 28.046458259613953,
+      "rgb": Array [
+        Array [
+          0.7889769419315488,
+          0.17089640131863687,
+          0.07403158232849663,
+        ],
+        Array [
+          0.7440612230919592,
+          0.23410046774673485,
+          0.4445058559690763,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/fill",
+      "delta": 41.520805278333654,
+      "rgb": Array [
+        Array [
+          0.7889769419315488,
+          0.17089640131863687,
+          0.07403158232849663,
+        ],
+        Array [
+          0.17144110073282123,
+          0.019382360956935688,
+          0.07227185068231771,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/fill",
+      "delta": 19.392278073011404,
+      "rgb": Array [
+        Array [
+          0.7889769419315488,
+          0.17089640131863687,
+          0.07403158232849663,
+        ],
+        Array [
+          0.7912979403326333,
+          0.009721217320237837,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/fill",
+      "delta": 38.1106385905886,
+      "rgb": Array [
+        Array [
+          0.7440612230919592,
+          0.23410046774673485,
+          0.4445058559690763,
+        ],
+        Array [
+          0.17144110073282123,
+          0.019382360956935688,
+          0.07227185068231771,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/fill",
+      "delta": 15.062590929912908,
+      "rgb": Array [
+        Array [
+          0.7440612230919592,
+          0.23410046774673485,
+          0.4445058559690763,
+        ],
+        Array [
+          0.7912979403326333,
+          0.009721217320237837,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/fill",
+      "delta": 24.512314013959262,
+      "rgb": Array [
+        Array [
+          0.17144110073282123,
+          0.019382360956935688,
+          0.07227185068231771,
+        ],
+        Array [
+          0.7912979403326333,
+          0.009721217320237837,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/ring",
+-     "delta": 33.223168529261585,
++     "delta": 33.222681509784444,
+      "rgb": Array [
+        Array [
+          0.7889769419315488,
+          0.17089640131863687,
+          0.07403158232849663,
+        ],
+        Array [
+-         0.29252197918539025,
++         0.29252892191138247,
+          0.09688169130468664,
+          0.18935696316196185,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/ring",
+      "delta": 47.11418889281287,
+      "rgb": Array [
+        Array [
+          0.7889769419315488,
+          0.17089640131863687,
+          0.07403158232849663,
+        ],
+        Array [
+          0.09147048429325924,
+          0.013833432040835454,
+          0.04571767758688857,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/ring",
+      "delta": 34.04235151632248,
+      "rgb": Array [
+        Array [
+          0.7889769419315488,
+          0.17089640131863687,
+          0.07403158232849663,
+        ],
+        Array [
+          0.327527405652229,
+          0.0082051013741436,
+          0.10509774670847243,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/ring",
+-     "delta": 19.536746293334097,
++     "delta": 19.53695809632675,
+      "rgb": Array [
+        Array [
+-         0.29252197918539025,
++         0.29252892191138247,
+          0.09688169130468664,
+          0.18935696316196185,
+        ],
+        Array [
+          0.09147048429325924,
+          0.013833432040835454,
+          0.04571767758688857,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/ring",
+-     "delta": 9.57754468102783,
++     "delta": 9.577530706198802,
+      "rgb": Array [
+        Array [
+-         0.29252197918539025,
++         0.29252892191138247,
+          0.09688169130468664,
+          0.18935696316196185,
+        ],
+        Array [
+          0.327527405652229,
+          0.0082051013741436,
+          0.10509774670847243,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "canvas-land/ring",
+      "delta": 12.797486678819904,
+      "rgb": Array [
+        Array [
+          0.09147048429325924,
+          0.013833432040835454,
+          0.04571767758688857,
+        ],
+        Array [
+          0.327527405652229,
+          0.0082051013741436,
+          0.10509774670847243,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 28.045181276649522,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.744680932787958,
+          0.23431860512239425,
+          0.4448034635775429,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 41.567769987161995,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.17144110073282137,
+          0.019382360956935688,
+          0.07227185068231716,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 19.41474461838078,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.7912979403326301,
+          0.00972121732023788,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 38.13579915458895,
+      "rgb": Array [
+        Array [
+          0.744680932787958,
+          0.23431860512239425,
+          0.4448034635775429,
+        ],
+        Array [
+          0.17144110073282137,
+          0.019382360956935688,
+          0.07227185068231716,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 15.07183778821908,
+      "rgb": Array [
+        Array [
+          0.744680932787958,
+          0.23431860512239425,
+          0.4448034635775429,
+        ],
+        Array [
+          0.7912979403326301,
+          0.00972121732023788,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/fill",
+      "delta": 24.51231401395907,
+      "rgb": Array [
+        Array [
+          0.17144110073282137,
+          0.019382360956935688,
+          0.07227185068231716,
+        ],
+        Array [
+          0.7912979403326301,
+          0.00972121732023788,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/ring",
+      "delta": 34.70620643690723,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.2540119850214567,
+          0.09079277143196561,
+          0.17224708592743523,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/ring",
+-     "delta": 48.35422684775178,
++     "delta": 48.35362548839469,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+-         0.08430670065539134,
++         0.08431078953120058,
+          0.012983032342172901,
+          0.045186204385675645,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/ring",
+-     "delta": 37.378378724832906,
++     "delta": 37.37917721215082,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.26860020256807465,
+          0.006916376827130498,
+-         0.08975254778819065,
++         0.089759422394787,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/ring",
+-     "delta": 18.108872712653316,
++     "delta": 18.108614174590233,
+      "rgb": Array [
+        Array [
+          0.2540119850214567,
+          0.09079277143196561,
+          0.17224708592743523,
+        ],
+        Array [
+-         0.08430670065539134,
++         0.08431078953120058,
+          0.012983032342172901,
+          0.045186204385675645,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/ring",
+-     "delta": 9.70736044891501,
++     "delta": 9.706228858025435,
+      "rgb": Array [
+        Array [
+          0.2540119850214567,
+          0.09079277143196561,
+          0.17224708592743523,
+        ],
+        Array [
+          0.26860020256807465,
+          0.006916376827130498,
+-         0.08975254778819065,
++         0.089759422394787,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/rest/ring",
+-     "delta": 10.738751130542076,
++     "delta": 10.737528323055578,
+      "rgb": Array [
+        Array [
+-         0.08430670065539134,
++         0.08431078953120058,
+          0.012983032342172901,
+          0.045186204385675645,
+        ],
+        Array [
+          0.26860020256807465,
+          0.006916376827130498,
+-         0.08975254778819065,
++         0.089759422394787,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/hover/fill",
+      "delta": 28.040750598595952,
+      "rgb": Array [
+        Array [
+          0.7899668646958662,
+          0.1711791340020615,
+          0.07412253515501656,
+        ],
+        Array [
+          0.7444691110708797,
+          0.2342644870117787,
+          0.4446666634812615,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/hover/fill",
+      "delta": 41.56017031897608,
+      "rgb": Array [
+        Array [
+          0.7899668646958662,
+          0.1711791340020615,
+          0.07412253515501656,
+        ],
+        Array [
+          0.17144110073282137,
+          0.019382360956935688,
+          0.07227185068231716,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/hover/fill",
+      "delta": 38.127807635341384,
+      "rgb": Array [
+        Array [
+          0.7444691110708797,
+          0.2342644870117787,
+          0.4446666634812615,
+        ],
+        Array [
+          0.17144110073282137,
+          0.019382360956935688,
+          0.07227185068231716,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/hover/ring",
+      "delta": 34.19865130562432,
+      "rgb": Array [
+        Array [
+          0.7899668646958662,
+          0.1711791340020615,
+          0.07412253515501656,
+        ],
+        Array [
+          0.27843000203856244,
+          0.09840901707335664,
+          0.19095536836047905,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/hover/ring",
+-     "delta": 48.34640104120611,
++     "delta": 48.34579964953279,
+      "rgb": Array [
+        Array [
+          0.7899668646958662,
+          0.1711791340020615,
+          0.07412253515501656,
+        ],
+        Array [
+-         0.08430670065539134,
++         0.08431078953120058,
+          0.012983032342172901,
+          0.045186204385675645,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/hover/ring",
+-     "delta": 19.794568257297485,
++     "delta": 19.79432424781442,
+      "rgb": Array [
+        Array [
+          0.27843000203856244,
+          0.09840901707335664,
+          0.19095536836047905,
+        ],
+        Array [
+-         0.08430670065539134,
++         0.08431078953120058,
+          0.012983032342172901,
+          0.045186204385675645,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 28.044641874178666,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.7447594263996495,
+          0.23431860512239425,
+          0.44482303301843756,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 41.567769987161995,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.17144110073282137,
+          0.019382360956935688,
+          0.07227185068231716,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 19.41474461838078,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.7912979403326301,
+          0.00972121732023788,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 38.13750842964996,
+      "rgb": Array [
+        Array [
+          0.7447594263996495,
+          0.23431860512239425,
+          0.44482303301843756,
+        ],
+        Array [
+          0.17144110073282137,
+          0.019382360956935688,
+          0.07227185068231716,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 15.07235370163577,
+      "rgb": Array [
+        Array [
+          0.7447594263996495,
+          0.23431860512239425,
+          0.44482303301843756,
+        ],
+        Array [
+          0.7912979403326301,
+          0.00972121732023788,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/fill",
+      "delta": 24.51231401395907,
+      "rgb": Array [
+        Array [
+          0.17144110073282137,
+          0.019382360956935688,
+          0.07227185068231716,
+        ],
+        Array [
+          0.7912979403326301,
+          0.00972121732023788,
+          0.21223075741405498,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/ring",
+      "delta": 33.78632303866984,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.2870743899197266,
+          0.09517246977623502,
+          0.18851418533366573,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled circle + circular ring",
+      ],
+      "states": Array [
+        "rest",
+        "current",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/ring",
+-     "delta": 48.35422684775178,
++     "delta": 48.35362548839469,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+-         0.08430670065539134,
++         0.08431078953120058,
+          0.012983032342172901,
+          0.045186204385675645,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "rest",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/ring",
+-     "delta": 37.378378724832906,
++     "delta": 37.37917721215082,
+      "rgb": Array [
+        Array [
+          0.7901849969572523,
+          0.17121277476245758,
+          0.07412231145350368,
+        ],
+        Array [
+          0.26860020256807465,
+          0.006916376827130498,
+-         0.08975254778819065,
++         0.089759422394787,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle; no ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "rest",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/ring",
+-     "delta": 19.783510972814003,
++     "delta": 19.783255432555226,
+      "rgb": Array [
+        Array [
+          0.2870743899197266,
+          0.09517246977623502,
+          0.18851418533366573,
+        ],
+        Array [
+-         0.08430670065539134,
++         0.08431078953120058,
+          0.012983032342172901,
+          0.045186204385675645,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled square + square ring",
+      ],
+      "states": Array [
+        "current",
+        "selected",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/ring",
+-     "delta": 11.262037497624837,
++     "delta": 11.261024985889227,
+      "rgb": Array [
+        Array [
+          0.2870743899197266,
+          0.09517246977623502,
+          0.18851418533366573,
+        ],
+        Array [
+          0.26860020256807465,
+          0.006916376827130498,
+-         0.08975254778819065,
++         0.089759422394787,
+        ],
+      ],
+      "signatures": Array [
+        "filled circle + circular ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "current",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+    Object {
+      "condition": "w640-760/reduce",
+      "context": "sidebar/selected-current/ring",
+-     "delta": 10.738751130542076,
++     "delta": 10.737528323055578,
+      "rgb": Array [
+        Array [
+-         0.08430670065539134,
++         0.08431078953120058,
+          0.012983032342172901,
+          0.045186204385675645,
+        ],
+        Array [
+          0.26860020256807465,
+          0.006916376827130498,
+-         0.08975254778819065,
++         0.089759422394787,
+        ],
+      ],
+      "signatures": Array [
+        "filled square + square ring",
+        "filled diamond + diamond ring",
+      ],
+      "states": Array [
+        "selected",
+        "hovered",
+      ],
+      "surface": "map",
+      "theme": "Veil",
+    },
+  ]
+
+ ❯ plant-default-r5.test.ts:556:49
+    554|       const evidence = JSON.parse(readFileSync(resolve("/Users/pythago…
+    555|         `../../../docs/qa/777-glyph-first-states/amendment-2/${theme.t…
+    556|       expect(measures(theme, undefined, false)).toEqual(evidence.measu…
+       |                                                 ^
+    557|       expect(measures(theme, undefined, true)).toEqual(evidence.before…
+    558|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed | 6 skipped (11)
+   Start at  22:29:50
+   Duration  2.62s (transform 37ms, setup 28ms, collect 360ms, tests 1.89s, environment 165ms, prepare 40ms)
+

@@ -1,0 +1,15 @@
+{
+  "name": "frontend-check-final",
+  "args": [
+    "npm",
+    "--prefix",
+    "ui",
+    "run",
+    "check"
+  ],
+  "exit": 0,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 2.232193792006001,
+  "tail": "\n> nexus-ui@1.0.0 check\n> tsc && npm run check:design-sync\n\n\n> nexus-ui@1.0.0 check:design-sync\n> tsc -p .design-sync/tsconfig.previews.json\n"
+}

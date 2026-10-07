@@ -1,0 +1,44 @@
+[
+  {
+    "name": "focused",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades",
+      "StateGlyphs",
+      "shell-accessibility"
+    ],
+    "code": 0,
+    "wallSeconds": 50.46280816703802,
+    "boundSeconds": 589
+  },
+  {
+    "name": "full",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test"
+    ],
+    "code": 0,
+    "wallSeconds": 49.45549600000959,
+    "boundSeconds": 589
+  },
+  {
+    "name": "restored",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "code": 0,
+    "wallSeconds": 50.54029645799892,
+    "boundSeconds": 589
+  }
+]

@@ -1,0 +1,158 @@
+[
+  {
+    "theme": "Veil",
+    "surface": "memory",
+    "maximum": [
+      48.282053187753654,
+      48.282053187753654
+    ],
+    "feasible": [
+      270,
+      270
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Veil",
+    "surface": "delete",
+    "maximum": [
+      14.631357904466427,
+      14.631357904466427
+    ],
+    "feasible": [
+      0,
+      0
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Veil",
+    "surface": "map",
+    "maximum": [
+      5.9942603943504995,
+      5.9942603943504995
+    ],
+    "feasible": [
+      0,
+      0
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Veil",
+    "surface": "key",
+    "maximum": [
+      18.445796640599227,
+      18.445796640599227
+    ],
+    "feasible": [
+      1930,
+      1930
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Gilded",
+    "surface": "memory",
+    "maximum": [
+      43.175673440597784,
+      43.175673440597784
+    ],
+    "feasible": [
+      150,
+      150
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Gilded",
+    "surface": "delete",
+    "maximum": [
+      12.156103621093418,
+      12.156103621093418
+    ],
+    "feasible": [
+      0,
+      0
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Gilded",
+    "surface": "map",
+    "maximum": [
+      7.4977986569476665,
+      7.4977986569476665
+    ],
+    "feasible": [
+      0,
+      0
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Gilded",
+    "surface": "key",
+    "maximum": [
+      16.25619391235776,
+      16.25619391235776
+    ],
+    "feasible": [
+      22,
+      22
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Vector",
+    "surface": "memory",
+    "maximum": [
+      41.81562267183395,
+      41.81562267183395
+    ],
+    "feasible": [
+      36,
+      36
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Vector",
+    "surface": "delete",
+    "maximum": [
+      23.28801782847145,
+      23.28801782847145
+    ],
+    "feasible": [
+      153,
+      156
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Vector",
+    "surface": "map",
+    "maximum": [
+      5.900185376139648,
+      5.900185376139648
+    ],
+    "feasible": [
+      0,
+      0
+    ],
+    "shippedMinimumUnchanged": true
+  },
+  {
+    "theme": "Vector",
+    "surface": "key",
+    "maximum": [
+      11.468145729494452,
+      11.468145729494452
+    ],
+    "feasible": [
+      0,
+      0
+    ],
+    "shippedMinimumUnchanged": true
+  }
+]

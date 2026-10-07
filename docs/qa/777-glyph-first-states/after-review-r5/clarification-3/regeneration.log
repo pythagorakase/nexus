@@ -1,0 +1,91 @@
+
+> nexus-ui@1.0.0 resolve-state-surfaces
+> node scripts/resolve-state-surfaces.mjs
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in "node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+Resolving w1101-1279/reduce/Veil…
+Completed w1101-1279/reduce/Veil; renders=74; wall=28.004s
+Calibration Veil: {"memory":{"opaqueMaximum":0.0002655887508743018,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.006002891112468775,"translucentMaximum":0.012334576619474699,"skippedPairs":0},"key":{"opaqueMaximum":0.03958693576307006,"translucentMaximum":0.01110400212806681,"skippedPairs":0},"map":{"opaqueMaximum":0.07468917510215183,"translucentMaximum":0.4165404892186375,"skippedPairs":20}}; passed
+Resolving w1101-1279/reduce/Gilded…
+Painted capture progress: renders=130; wall=48.330s
+Completed w1101-1279/reduce/Gilded; renders=148; wall=52.216s
+Calibration Gilded: {"memory":{"opaqueMaximum":0.00026620144306678273,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.008785869899490675,"translucentMaximum":0.0079023496576129,"skippedPairs":0},"key":{"opaqueMaximum":0.03689614710862447,"translucentMaximum":0.013172053988944792,"skippedPairs":0},"map":{"opaqueMaximum":0.07115908857600602,"translucentMaximum":0.44470808450281596,"skippedPairs":19}}; passed
+Resolving w1101-1279/reduce/Vector…
+Completed w1101-1279/reduce/Vector; renders=222; wall=76.412s
+Calibration Vector: {"memory":{"opaqueMaximum":0.0003111490327129558,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.029118582412838427,"translucentMaximum":0.02152663851962112,"skippedPairs":0},"key":{"opaqueMaximum":0.04012440845926655,"translucentMaximum":0.014057713074969447,"skippedPairs":0},"map":{"opaqueMaximum":0.08053455545499347,"translucentMaximum":0.34320320374065233,"skippedPairs":19}}; passed
+Resolving w1101-1279/reduce/Veil…
+Resolving w1-639/reduce/Veil…
+Resolving w1-639/reduce/Vector…
+Resolving w1-639/motion/start/Gilded…
+Resolving w1-639/motion/start/Veil…
+Resolving w1-639/motion/trough/Veil…
+Resolving w1-639/motion/trough/Vector…
+Resolving w1101-1279/reduce/Gilded…
+Resolving w1-639/motion/trough/Gilded…
+Resolving w1-639/reduce/Gilded…
+Resolving w1101-1279/reduce/Vector…
+Resolving w1-639/motion/start/Vector…
+Painted capture progress: renders=1032; wall=93.330s
+Painted capture progress: renders=2731; wall=138.331s
+Painted capture progress: renders=4930; wall=183.331s
+Painted capture progress: renders=8333; wall=228.331s
+Painted capture progress: renders=11765; wall=273.331s
+Completed w1101-1279/reduce/Vector; renders=12486; wall=282.589s
+Completed w1-639/reduce/Vector; renders=12610; wall=284.450s
+Completed w1-639/motion/start/Vector; renders=13386; wall=295.896s
+Completed w1-639/motion/trough/Vector; renders=13466; wall=297.079s
+Painted capture progress: renders=14647; wall=318.331s
+Completed w1101-1279/reduce/Veil; renders=14741; wall=319.906s
+Completed w1-639/reduce/Veil; renders=14782; wall=320.710s
+Completed w1101-1279/reduce/Gilded; renders=14961; wall=325.075s
+Resolving w640-760/reduce/Veil…
+Resolving w640-760/reduce/Vector…
+Resolving w640-760/reduce/Gilded…
+Completed w1-639/reduce/Gilded; renders=15104; wall=327.766s
+Resolving w640-760/motion/start/Veil…
+Resolving w640-760/motion/start/Gilded…
+Resolving w640-760/motion/start/Vector…
+Completed w1-639/motion/start/Veil; renders=15337; wall=331.771s
+Completed w1-639/motion/trough/Veil; renders=15394; wall=332.941s
+Completed w1-639/motion/start/Gilded; renders=15575; wall=338.199s
+Resolving w640-760/motion/trough/Veil…
+Resolving w640-760/motion/trough/Gilded…
+Resolving w640-760/motion/trough/Vector…
+Completed w1-639/motion/trough/Gilded; renders=15590; wall=338.741s
+Resolving w761-767/reduce/Veil…
+Resolving w761-767/reduce/Gilded…
+Resolving w761-767/reduce/Vector…
+Painted capture progress: renders=16631; wall=363.331s
+Painted capture progress: renders=18298; wall=408.331s
+Painted capture progress: renders=21081; wall=453.331s
+Painted capture progress: renders=24468; wall=498.330s
+Incomplete painted probe: renders=26896; wall=530.131s; acceptanceComplete=false
+node:internal/modules/run_main:105
+    triggerUncaughtException(
+    ^
+
+page.screenshot: Target page, context or browser has been closed
+Call log:
+[2m  - taking page screenshot[22m
+[2m  - waiting for fonts to load...[22m
+[2m  - fonts loaded[22m
+
+    at screenshot (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:87:36)
+    at sample (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:157:29)
+    at async captureValues (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:273:28)
+    at async renderInventory (/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:343:11)
+    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:396:7
+    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:392:3 {
+  log: [
+    '  - taking page screenshot',
+    '  - waiting for fonts to load...',
+    '  - fonts loaded'
+  ]
+}
+
+Node.js v24.3.0

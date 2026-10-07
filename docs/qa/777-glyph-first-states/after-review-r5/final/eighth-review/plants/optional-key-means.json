@@ -1,0 +1,161 @@
+{
+  "sourceId": "w640-759/reduce",
+  "referenceId": "w640-760/reduce",
+  "changedSamples": 9,
+  "uppercaseAtRuleSurvivesProductionBuild": true,
+  "samples": [
+    {
+      "theme": "Veil",
+      "context": "key/optional/rest",
+      "state": "optional-absent",
+      "before": [
+        0.15839642669252507,
+        0.14065938719848206,
+        0.09719752796297523
+      ],
+      "planted": [
+        0.08203793450882514,
+        0.07595637219719846,
+        0.06102706745909207
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    },
+    {
+      "theme": "Veil",
+      "context": "key/optional/rest",
+      "state": "present",
+      "before": [
+        0.051119567467672614,
+        0.03810851279705756,
+        0.015166936576537057
+      ],
+      "planted": [
+        0.029499009079878277,
+        0.02508902359342903,
+        0.013688642847193977
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    },
+    {
+      "theme": "Veil",
+      "context": "key/optional/rest",
+      "state": "verified",
+      "before": [
+        0.12441267093190186,
+        0.020260370102439147,
+        0.0701895551747783
+      ],
+      "planted": [
+        0.06645307867747019,
+        0.015162634173303411,
+        0.0465312057491369
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    },
+    {
+      "theme": "Gilded",
+      "context": "key/optional/rest",
+      "state": "optional-absent",
+      "before": [
+        0.15545984736223156,
+        0.13530120562160614,
+        0.09507699931158606
+      ],
+      "planted": [
+        0.08404419861045435,
+        0.07398327935442406,
+        0.054296016471247655
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    },
+    {
+      "theme": "Gilded",
+      "context": "key/optional/rest",
+      "state": "present",
+      "before": [
+        0.048079672469044335,
+        0.03679555162655966,
+        0.014403511462233263
+      ],
+      "planted": [
+        0.030595933482010118,
+        0.024057955131962454,
+        0.01094983378128358
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    },
+    {
+      "theme": "Gilded",
+      "context": "key/optional/rest",
+      "state": "verified",
+      "before": [
+        0.2336864329130827,
+        0.12425964811521631,
+        0.0036765073240474476
+      ],
+      "planted": [
+        0.12176696973004754,
+        0.06827269571039034,
+        0.004391442037410275
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    },
+    {
+      "theme": "Vector",
+      "context": "key/optional/rest",
+      "state": "optional-absent",
+      "before": [
+        0.013684825830366915,
+        0.039476781675146434,
+        0.04221744731365769
+      ],
+      "planted": [
+        0.008924721209358652,
+        0.024442360261723264,
+        0.025475757569945974
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    },
+    {
+      "theme": "Vector",
+      "context": "key/optional/rest",
+      "state": "present",
+      "before": [
+        0.024115521481931537,
+        0.11176084342579433,
+        0.12196712758607554
+      ],
+      "planted": [
+        0.014425939031121422,
+        0.061098598322828906,
+        0.0664642490999866
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    },
+    {
+      "theme": "Vector",
+      "context": "key/optional/rest",
+      "state": "verified",
+      "before": [
+        0.03808716213401959,
+        0.22241038143638234,
+        0.24543848993820064
+      ],
+      "planted": [
+        0.022105592701539546,
+        0.11652241754694129,
+        0.127071202379249
+      ],
+      "beforeOpacity": 0.5,
+      "plantedOpacity": 0.35
+    }
+  ]
+}

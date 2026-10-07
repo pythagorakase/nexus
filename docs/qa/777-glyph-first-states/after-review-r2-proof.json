@@ -1,0 +1,563 @@
+{
+  "date": "2026-10-01",
+  "reviewed_head": "2c2ae60d5585f72ccd2fc67c7b0b6ee7075c5862",
+  "source_sha256": "25a18f2bc89d382f8b19690ef6fd55af25a5edfe3d62d4ba6f4aa1d32afd0bfc",
+  "main": "160134540517f6b74aacd1d1e1f3f584454eef86",
+  "shipped_state_assignments_changed": false,
+  "joint_results": [
+    {
+      "theme": "Veil",
+      "best": 9.913464335675082,
+      "assignment": {
+        "--state-mem-normal": "hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)",
+        "--state-mem-over": "hsl(15 75% 60%)",
+        "--state-delete-unarmed": "hsl(42 30% 65%)",
+        "--state-delete-armed": "hsl(0 80% 50%)",
+        "--state-map-rest": "hsl(15 75% 60%)",
+        "--state-map-current": "hsl(330.2439024390244 70% 50%)",
+        "--state-map-selected": "hsl(330.2439024390244 50.20408163265306% 70%)",
+        "--state-map-hovered": "hsl(330.2439024390244 60% 30%)",
+        "--state-key-absent": "hsl(42 20% 50%)",
+        "--state-key-missing": "hsl(15 75% 60%)",
+        "--state-key-present": "hsl(42 50% 70%)",
+        "--state-key-verified": "hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)"
+      },
+      "count": "258280326000000",
+      "feasible": "0",
+      "measurements": 139,
+      "shortfalls": 30
+    },
+    {
+      "theme": "Gilded",
+      "best": 11.515866170801722,
+      "assignment": {
+        "--state-mem-normal": "hsl(43 74% 47%)",
+        "--state-mem-over": "hsl(30 50% 45%)",
+        "--state-delete-unarmed": "hsl(43 40% 70%)",
+        "--state-delete-armed": "hsl(0 90% 50%)",
+        "--state-map-rest": "hsl(30 50% 70%)",
+        "--state-map-current": "hsl(45 75% 40%)",
+        "--state-map-selected": "hsl(43 84% 60%)",
+        "--state-map-hovered": "hsl(45 55% 30%)",
+        "--state-key-absent": "hsl(43 30% 30%)",
+        "--state-key-missing": "hsl(30 50% 45%)",
+        "--state-key-present": "hsl(43 40% 70%)",
+        "--state-key-verified": "hsl(43 74% 47%)"
+      },
+      "count": "446308403328000",
+      "feasible": "0",
+      "measurements": 139,
+      "shortfalls": 45
+    },
+    {
+      "theme": "Vector",
+      "best": 10.191082279599211,
+      "assignment": {
+        "--state-mem-normal": "hsl(185 100% 50%)",
+        "--state-mem-over": "hsl(200 90% 55%)",
+        "--state-delete-unarmed": "hsl(185 40% 55%)",
+        "--state-delete-armed": "hsl(350 80% 55%)",
+        "--state-map-rest": "hsl(200 100% 40%)",
+        "--state-map-current": "hsl(190 100% 40%)",
+        "--state-map-selected": "hsl(185 100% 50%)",
+        "--state-map-hovered": "hsl(190 80% 30%)",
+        "--state-key-absent": "hsl(185 30% 30%)",
+        "--state-key-missing": "hsl(200 90% 55%)",
+        "--state-key-present": "hsl(185 40% 55%)",
+        "--state-key-verified": "hsl(185 100% 70%)"
+      },
+      "count": "2834352000000",
+      "feasible": "0",
+      "measurements": 139,
+      "shortfalls": 58
+    }
+  ],
+  "unchanged_artifacts": [
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/veil-joint.json",
+      "sha256": "d198e9838cfb0d77def4a840a917e504a5147b6d3f01c927e94132faf0957f41",
+      "regenerated_byte_identical": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-joint.json",
+      "sha256": "9caf0b037d3bb5511f20b7b7c909474d6aaee56813ef6cc0ebf730b9ed6414ec",
+      "regenerated_byte_identical": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/vector-joint.json",
+      "sha256": "cc8c52495bd67baea2bdb2370180260c0907864ed0a7e82baf85ad883dcd67b5",
+      "regenerated_byte_identical": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/backdrop-correction.json",
+      "sha256": "af95e7f98455f869a408aaa676240a5e726568d33d6e6751c9d6dc321282b6b4",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/browser-proof.json",
+      "sha256": "75b1743aaf77d03552208473e40f0c8a0caf2cb5b8df9e67a66d890a6ff5b55a",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/commands.md",
+      "sha256": "7b7757ee256203ca19c532a2bace5a18eae28c123e4aa3d0269176c1dd136794",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/exceptions.md",
+      "sha256": "b91a799bcadef8c45ca30da7e4ec0ab5c43d21b42e3531a78bbad3639b89678f",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/gilded-pairs.md",
+      "sha256": "4d210d3f4d5e0808e1ca830728b118e5bd04dc98a30b602fd4688f06a8480bf7",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/global-proof.json",
+      "sha256": "c1e364b3507fe29de2a4b09646f0d888649bc7117d08eb114c41020aa2f48058",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/global-swatches.png",
+      "sha256": "b3a0a30131537a815afaee7d5e06a91cc08025c8d1abcf720f225280cc86c7b6",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/global-swatches.svg",
+      "sha256": "83ddc388f5a5f8a8d9ace029094e1313fd6f565b096c3a08ceb1b73707f59c8e",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/global-tokens.md",
+      "sha256": "c07cc3af843ee639abd2e6fcddd08628fb8ad7898045074d48f39719d7a50bc2",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/globals-after.png",
+      "sha256": "e05c0a10fa77ccec4dbfc5ee7a8c131abe50a051e959f6702b4622f06cd9337c",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/globals-before.png",
+      "sha256": "54fa1fb6e152ca60da5a2a69c597cc7df7e0307452a6157f7624a3b52c8d3341",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/glyphs-monochrome-reduced-motion.png",
+      "sha256": "a718dfe9e5cd65fcfb640052d7d814c7da24b42fed967225a8af43b27d4f53e7",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/glyphs-reduced-motion.png",
+      "sha256": "20d5c381e4d59495d7955a5f8dbf453a4d156235559b765c21257fa7aa143faf",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.csv",
+      "sha256": "a8ea0f3aa7ac1d70cb81fc2338a814aa09179ffe04e957ad3ea581954d7ea7cc",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/pair-measurements.md",
+      "sha256": "1fc4fd591e2a4a85343ba06586a9df5af1fd014e767ac3fc355622a8f92189ee",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/production-panes-reduced-motion.png",
+      "sha256": "49dc2cbd90b4607bbf175cd3d8a0fd409dda03ad65a355b8dd816c9e4f43b3e5",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.json",
+      "sha256": "56cb2582f6e284722cf0925b09d22eab612f20c82eb1c15a78c1f3e2ce9751ec",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/state-tokens.md",
+      "sha256": "0e44cafc30c92727d609135ef68a39f474ccdb17a023ebd7faefc28b4a55c456",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.png",
+      "sha256": "1846abcb1e4180e9afbbe5409b1b0159c36dd03ec7fe0873c99143ffb3a49af9",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/swatches.svg",
+      "sha256": "a5eb5d81d3841408118208b928cc88bd18aaf2a9d2dad3dd0b19661881030ea7",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/theme-exceptions.json",
+      "sha256": "52ae8caca7be87399c4a9a0374a347bcebbf2b6e75e4981569abb3a9b6c538b3",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/vector-pairs.md",
+      "sha256": "5ce4c66432e69a259de2ba93321dd087ef90f404239d2b9d5d6fb581c714d783",
+      "retained_dependency_of_identical_measurements": true
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/amendment-2/veil-pairs.md",
+      "sha256": "10ca6c02404a9b116759ae137ce595cd95b60903feefedd97968a9c597808d71",
+      "retained_dependency_of_identical_measurements": true
+    }
+  ],
+  "browser_receipt_dependencies_unchanged": true,
+  "plants": [
+    {
+      "name": "red-backdrop",
+      "plant": ".dark.theme-vector .set-card-frame { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "opacity_backdrops_follow_the_production_painting_ancestors"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-descendant",
+      "plant": ".theme-vector .dark .set-card-frame { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-root",
+      "plant": ":root .set-card-frame { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "opacity_backdrops_follow_the_production_painting_ancestors"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-media",
+      "plant": "@media (min-width: 1px) { .set-card-frame { background: var(--bg); } }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-container",
+      "plant": "@container (min-width: 1px) { .set-card-frame { background: var(--bg); } }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-ancestor",
+      "plant": "[data-mode=\"alternate\"] .set-card-frame { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-compound",
+      "plant": ".set-card-frame[data-mode=\"alternate\"] { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-is",
+      "plant": ":is(.set-card-frame) { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-where",
+      "plant": ".key-status:where(*) { color: var(--state-key-present); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-has",
+      "plant": ".set-card-frame:has(.key-row) { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-important",
+      "plant": ".set-card-frame { background: var(--bg) !important; }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-state-media",
+      "plant": "@media (min-width: 1px) { .map-state-ring { stroke: var(--state-map-rest); } }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-local-token",
+      "plant": ".set-card-frame { --bg-elev-2: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-consumer",
+      "plant": ".lm-trash:hover { color: var(--brass); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "state_surfaces_read_only_state_tokens"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-unknown-ancestor",
+      "plant": ".unmodeled-context .set-card-frame { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-unknown-compound",
+      "plant": ".set-card-frame.unmodeled-context { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-sibling",
+      "plant": ".set-card-frame + .set-card-frame { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-specificity",
+      "plant": ".dark.theme-vector .set-card-frame { background: var(--bg); } .set-card-frame { background: var(--bg-elev-2); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "opacity_backdrops_follow_the_production_painting_ancestors"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-source-order",
+      "plant": ".dark.theme-vector .set-card-frame { background: var(--bg-elev-2); } .dark.theme-vector .set-card-frame { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "opacity_backdrops_follow_the_production_painting_ancestors"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-child",
+      "plant": ".set-card-frame > .key-list { background: var(--bg); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "red-themed-state",
+      "plant": ".dark.theme-vector .key-status.verified { color: var(--state-key-present); }",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs",
+        "-t",
+        "theme_ancestry_and_every_relevant_rule_are_modeled"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "restored-plant",
+      "plant": "",
+      "command": [
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "--config",
+        "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r2/plant.config.mjs"
+      ],
+      "exit": 0
+    }
+  ],
+  "test_file_inventory": 411,
+  "offline_passed": 4795,
+  "offline_skipped": 1380
+}

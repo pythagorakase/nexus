@@ -1,0 +1,28 @@
+[
+  {
+    "name": "check",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "check"
+    ],
+    "code": 0,
+    "wallSeconds": 1.854633666051086,
+    "boundSeconds": 589
+  },
+  {
+    "name": "build",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "build"
+    ],
+    "code": 0,
+    "wallSeconds": 3.4277647500275634,
+    "boundSeconds": 589
+  }
+]

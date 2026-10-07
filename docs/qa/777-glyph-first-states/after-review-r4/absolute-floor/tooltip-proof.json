@@ -1,0 +1,793 @@
+{
+  "conditions": {
+    "viewport": {
+      "width": 639,
+      "height": 900
+    },
+    "deviceScaleFactor": 4,
+    "colorScheme": "dark",
+    "reducedMotion": "reduce"
+  },
+  "chromium": "153.0.8010.12",
+  "samples": [
+    {
+      "i": 1,
+      "width": 44,
+      "height": 44,
+      "maskSize": 727,
+      "modeCount": 44,
+      "modeFraction": 0.06052269601100413,
+      "top8": [
+        {
+          "rgb": [
+            47,
+            67,
+            68
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            52,
+            74,
+            75
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            53,
+            75,
+            76
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            48,
+            68,
+            69
+          ],
+          "count": 43
+        },
+        {
+          "rgb": [
+            49,
+            69,
+            70
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            50,
+            71,
+            72
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            51,
+            72,
+            73
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            48,
+            69,
+            69
+          ],
+          "count": 32
+        }
+      ],
+      "paintedHash": "30d25584b9f3cc138e48fbbbf7ce45953283a35b6de06da87b9d56aa73240f7d",
+      "controlHash": "e806f16bde235d6279812a0c8d391a9f2bd17ba91dc444da170e6dc4361468b3",
+      "suppressed": {
+        "filter": "none",
+        "shadow": "none",
+        "children": [
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          }
+        ]
+      },
+      "error": "Measurement failure Vector/width-639/exceeds-row-hover/unarmed: weak foreground mask; mode=44 device pixels < 64; fraction=0.060523; top8=[{\"rgb\":[47,67,68],\"count\":44},{\"rgb\":[52,74,75],\"count\":44},{\"rgb\":[53,75,76],\"count\":44},{\"rgb\":[48,68,69],\"count\":43},{\"rgb\":[49,69,70],\"count\":42},{\"rgb\":[50,71,72],\"count\":36},{\"rgb\":[51,72,73],\"count\":36},{\"rgb\":[48,69,69],\"count\":32}]"
+    },
+    {
+      "i": 2,
+      "width": 44,
+      "height": 44,
+      "maskSize": 727,
+      "modeCount": 44,
+      "modeFraction": 0.06052269601100413,
+      "top8": [
+        {
+          "rgb": [
+            47,
+            67,
+            68
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            52,
+            74,
+            75
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            53,
+            75,
+            76
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            48,
+            68,
+            69
+          ],
+          "count": 43
+        },
+        {
+          "rgb": [
+            49,
+            69,
+            70
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            50,
+            71,
+            72
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            51,
+            72,
+            73
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            48,
+            69,
+            69
+          ],
+          "count": 32
+        }
+      ],
+      "paintedHash": "30d25584b9f3cc138e48fbbbf7ce45953283a35b6de06da87b9d56aa73240f7d",
+      "controlHash": "e806f16bde235d6279812a0c8d391a9f2bd17ba91dc444da170e6dc4361468b3",
+      "suppressed": {
+        "filter": "none",
+        "shadow": "none",
+        "children": [
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          }
+        ]
+      },
+      "error": "Measurement failure Vector/width-639/exceeds-row-hover/unarmed: weak foreground mask; mode=44 device pixels < 64; fraction=0.060523; top8=[{\"rgb\":[47,67,68],\"count\":44},{\"rgb\":[52,74,75],\"count\":44},{\"rgb\":[53,75,76],\"count\":44},{\"rgb\":[48,68,69],\"count\":43},{\"rgb\":[49,69,70],\"count\":42},{\"rgb\":[50,71,72],\"count\":36},{\"rgb\":[51,72,73],\"count\":36},{\"rgb\":[48,69,69],\"count\":32}]"
+    },
+    {
+      "i": 3,
+      "width": 44,
+      "height": 44,
+      "maskSize": 727,
+      "modeCount": 44,
+      "modeFraction": 0.06052269601100413,
+      "top8": [
+        {
+          "rgb": [
+            47,
+            67,
+            68
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            52,
+            74,
+            75
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            53,
+            75,
+            76
+          ],
+          "count": 44
+        },
+        {
+          "rgb": [
+            48,
+            68,
+            69
+          ],
+          "count": 43
+        },
+        {
+          "rgb": [
+            49,
+            69,
+            70
+          ],
+          "count": 42
+        },
+        {
+          "rgb": [
+            50,
+            71,
+            72
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            51,
+            72,
+            73
+          ],
+          "count": 36
+        },
+        {
+          "rgb": [
+            48,
+            69,
+            69
+          ],
+          "count": 32
+        }
+      ],
+      "paintedHash": "30d25584b9f3cc138e48fbbbf7ce45953283a35b6de06da87b9d56aa73240f7d",
+      "controlHash": "e806f16bde235d6279812a0c8d391a9f2bd17ba91dc444da170e6dc4361468b3",
+      "suppressed": {
+        "filter": "none",
+        "shadow": "none",
+        "children": [
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          },
+          {
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)",
+            "color": "rgba(0, 0, 0, 0)",
+            "filter": "none",
+            "shadow": "none"
+          }
+        ]
+      },
+      "error": "Measurement failure Vector/width-639/exceeds-row-hover/unarmed: weak foreground mask; mode=44 device pixels < 64; fraction=0.060523; top8=[{\"rgb\":[47,67,68],\"count\":44},{\"rgb\":[52,74,75],\"count\":44},{\"rgb\":[53,75,76],\"count\":44},{\"rgb\":[48,68,69],\"count\":43},{\"rgb\":[49,69,70],\"count\":42},{\"rgb\":[50,71,72],\"count\":36},{\"rgb\":[51,72,73],\"count\":36},{\"rgb\":[48,69,69],\"count\":32}]"
+    }
+  ],
+  "requests": [],
+  "errors": [],
+  "readback": {
+    "ancestors": [
+      {
+        "tag": "svg",
+        "classes": "lucide lucide-trash2",
+        "fill": "none",
+        "stroke": "rgb(148, 204, 209)",
+        "color": "rgb(148, 204, 209)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "block",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "BUTTON",
+        "classes": "lm-trash ",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(148, 204, 209)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "flex",
+        "transition": "color 0.2s"
+      },
+      {
+        "tag": "SPAN",
+        "classes": "lm-action",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "flex",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "lm-quant ready exceeds",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgb(11, 20, 20)",
+        "opacity": "0.35",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "grid",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "lm-quant-list",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "flex",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "lm-quants",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "block",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "LI",
+        "classes": "lm-group",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "list-item",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "UL",
+        "classes": "model-list",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "flex",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "LI",
+        "classes": "model-provider open",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgb(5, 10, 10)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "list-item",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "UL",
+        "classes": "model-providers",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "flex",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "set-card-body",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "flex",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "set-card-frame",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgb(9, 17, 17)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "rgba(30, 11, 23, 0.55) 0px 8px 30px -8px",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "block",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "SECTION",
+        "classes": "set-card",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "block",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "set-scroller",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "flex",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "settings-pane-v2",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "grid",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "MAIN",
+        "classes": "nexus-content",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgb(5, 10, 10)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "block",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "nexus-main no-ledger",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "grid",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": "nexus-shell animate-fade-in terminal-scanlines",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgb(5, 10, 10)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "grid",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "DIV",
+        "classes": null,
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "block",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "BODY",
+        "classes": null,
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(222, 237, 237)",
+        "background-color": "rgb(5, 10, 10)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "block",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "HTML",
+        "classes": "dark theme-vector",
+        "fill": "rgb(0, 0, 0)",
+        "stroke": "none",
+        "color": "rgb(0, 0, 0)",
+        "background-color": "rgb(9, 16, 28)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "block",
+        "transition": "--scrollbar-alpha 0.45s"
+      }
+    ],
+    "children": [
+      {
+        "tag": "path",
+        "classes": null,
+        "fill": "none",
+        "stroke": "rgb(148, 204, 209)",
+        "color": "rgb(148, 204, 209)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "inline",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "path",
+        "classes": null,
+        "fill": "none",
+        "stroke": "rgb(148, 204, 209)",
+        "color": "rgb(148, 204, 209)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "inline",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "path",
+        "classes": null,
+        "fill": "none",
+        "stroke": "rgb(148, 204, 209)",
+        "color": "rgb(148, 204, 209)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "inline",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "line",
+        "classes": null,
+        "fill": "none",
+        "stroke": "rgb(148, 204, 209)",
+        "color": "rgb(148, 204, 209)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "inline",
+        "transition": "--scrollbar-alpha 0.45s"
+      },
+      {
+        "tag": "line",
+        "classes": null,
+        "fill": "none",
+        "stroke": "rgb(148, 204, 209)",
+        "color": "rgb(148, 204, 209)",
+        "background-color": "rgba(0, 0, 0, 0)",
+        "opacity": "1",
+        "filter": "none",
+        "box-shadow": "none",
+        "text-shadow": "none",
+        "visibility": "visible",
+        "display": "inline",
+        "transition": "--scrollbar-alpha 0.45s"
+      }
+    ],
+    "dpr": 4,
+    "armed": "false",
+    "rowHover": true,
+    "hover": false,
+    "focusVisible": false,
+    "animations": []
+  },
+  "box": {
+    "x": 522.03125,
+    "y": 395,
+    "width": 11,
+    "height": 11
+  },
+  "tooltip": {
+    "text": "needs 96 gb · 32 gb memoryneeds 96 gb · 32 gb memory",
+    "box": {
+      "x": 378.75,
+      "y": 351.5,
+      "width": 209.265625,
+      "height": 30,
+      "top": 351.5,
+      "right": 588.015625,
+      "bottom": 381.5,
+      "left": 378.75
+    },
+    "shadow": "rgba(0, 0, 0, 0.5) 0px 8px 24px 0px",
+    "html": "<div data-side=\"top\" data-align=\"center\" data-state=\"delayed-open\" class=\"z-50 overflow-hidden rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-tooltip-content-transform-origin] lm-tip\" style=\"--radix-tooltip-content-transform-origin: var(--radix-popper-transform-origin); --radix-tooltip-content-available-width: var(--radix-popper-available-width); --radix-tooltip-content-available-height: var(--radix-popper-available-height); --radix-tooltip-trigger-width: var(--radix-popper-anchor-width); --radix-tooltip-trigger-height: var(--radix-popper-anchor-height);\">needs 96 gb · 32 gb memory<span id=\"radix-:r1:\" role=\"tooltip\" style=\"position: absolute; border: 0px; width: 1px; height: 1px; padding: 0px; margin: -1px; overflow: hidden; clip: rect(0px, 0px, 0px, 0px); white-space: nowrap; overflow-wrap: normal;\">needs 96 gb · 32 gb memory</span></div>"
+  }
+}

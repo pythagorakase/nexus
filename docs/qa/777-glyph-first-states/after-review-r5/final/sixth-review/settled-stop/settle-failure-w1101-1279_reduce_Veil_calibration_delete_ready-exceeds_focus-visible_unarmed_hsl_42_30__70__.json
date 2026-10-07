@@ -1,0 +1,76 @@
+{
+  "label": "w1101-1279/reduce/Veil/calibration/delete/ready-exceeds/focus-visible/unarmed/hsl(42 30% 70%)",
+  "condition": {
+    "viewport": {
+      "width": 1200,
+      "height": 900
+    },
+    "deviceScaleFactor": 4,
+    "colorScheme": "dark",
+    "reducedMotion": "reduce",
+    "forcedColors": "none",
+    "hasTouch": false,
+    "isMobile": false,
+    "origin": "file://",
+    "network": "aborted",
+    "band": "w1101-1279",
+    "features": {
+      "prefers-reduced-motion": "reduce"
+    },
+    "satisfied": [
+      "media (max-width: 1280px)",
+      "media (prefers-reduced-motion: reduce)",
+      "media (min-width: 640px)",
+      "media (min-width: 768px)",
+      "media (min-width: 1024px)"
+    ],
+    "id": "w1101-1279/reduce"
+  },
+  "selector": ".lm-trash svg",
+  "box": {
+    "x": 1083,
+    "y": 880.6875,
+    "width": 11,
+    "height": 11
+  },
+  "action": "expand model family by click; keyboard Tab ×24",
+  "pseudos": {
+    "hover": false,
+    "focusVisible": false,
+    "pinHover": false,
+    "ancestorHover": false,
+    "focusWithin": true,
+    "rowFocusVisible": false,
+    "controls": [
+      {
+        "hover": false,
+        "focusVisible": true
+      }
+    ]
+  },
+  "settleBoundMs": 30000,
+  "settleWaitMs": 60026.90000003576,
+  "settleCriteria": {
+    "tooltipExpected": "open",
+    "tooltipState": "closed",
+    "tooltipPresent": false,
+    "animations": "all document animations finished; infinite effects paused at the declared condition phase",
+    "scope": "entire document, including surface, ancestors and overlapping/portalled siblings",
+    "animationPhase": null,
+    "pseudoClasses": "matched hover/focus-visible read back after the driving action",
+    "captures": {
+      "painted": {
+        "tooltipState": "closed",
+        "tooltipPresent": false,
+        "matched": false,
+        "settleWaitMs": 30014.900000035763
+      },
+      "control": {
+        "tooltipState": "closed",
+        "tooltipPresent": false,
+        "matched": false,
+        "settleWaitMs": 30012
+      }
+    }
+  }
+}

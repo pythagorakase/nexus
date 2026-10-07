@@ -1,0 +1,19 @@
+{
+  "label": "default/Vector/candidate/key/optional/rest/present/hsl(185 50% 50%)",
+  "selector": "[data-testid=\"key-row-present\"] .key-status svg",
+  "box": {
+    "x": 564.84375,
+    "y": 295.25,
+    "width": 12,
+    "height": 12
+  },
+  "action": "seed status; verified via fixture VERIFY click",
+  "pseudos": {
+    "hover": false,
+    "focusVisible": false,
+    "pinHover": false,
+    "ancestorHover": false,
+    "focusWithin": false
+  },
+  "error": "Measurement failure default/Vector/candidate/key/optional/rest/present/hsl(185 50% 50%): empty foreground mask"
+}

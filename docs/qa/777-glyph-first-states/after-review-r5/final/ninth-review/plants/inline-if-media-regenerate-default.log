@@ -1,0 +1,18 @@
+
+> nexus-ui@1.0.0 resolve-state-surfaces
+> node scripts/resolve-state-surfaces.mjs
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in "node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r9/plants/plant-copy/ui/scripts/resolve-state-surfaces.mjs:68
+if (media.unsupported.length) throw new Error(`Unemulatable at-rule/media preludes or declaration functions: ${media.unsupported.join('; ')}`);
+                                    ^
+
+Error: Unemulatable at-rule/media preludes or declaration functions: .key-row.optional { opacity }: if(
+    at file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r9/plants/plant-copy/ui/scripts/resolve-state-surfaces.mjs:68:37
+
+Node.js v24.3.0

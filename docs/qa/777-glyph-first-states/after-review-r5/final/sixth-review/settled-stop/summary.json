@@ -1,0 +1,36 @@
+{
+  "codeCheckpoint": "eba2dd46",
+  "regenerationExit": 1,
+  "conditionCount": 27,
+  "renderCount": 16,
+  "wallSeconds": 81.714858209,
+  "acceptanceComplete": false,
+  "failure": "Measurement failure w1101-1279/reduce/Veil/calibration/delete/ready-exceeds/focus-visible/unarmed/hsl(42 30% 70%): tooltip did not settle open within 30000ms before both captures; PNGs/readback: /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r6/settled/capture/settle-failure-w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__",
+  "fingerprint": "74cfa420b5536865c06c7efbd90276e95d3b7ea5559cd46104a4821a7bb4b7f4",
+  "shippingReceiptUnchanged": true,
+  "shippingReceiptSha256": "8564787141402230bfe5e24e94753964ebe1f0cba84aefb4d7411276179179d3",
+  "settleBoundMs": 30000,
+  "settleWaitMs": 60026.90000003576,
+  "captures": {
+    "painted": {
+      "tooltipState": "closed",
+      "tooltipPresent": false,
+      "matched": false,
+      "settleWaitMs": 30014.900000035763
+    },
+    "control": {
+      "tooltipState": "closed",
+      "tooltipPresent": false,
+      "matched": false,
+      "settleWaitMs": 30012
+    }
+  },
+  "files": {
+    "settle-failure-w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__-painted.png": "db96873ffb46a965235b8c29989496819c7b19cadae1007f444a066be43a539d",
+    "regeneration.log": "531c566083853d4b5e7ab16a6dd02c498689b25daeaf74a9f1d6f7c74a850a7c",
+    "incomplete-probe.json": "4cf2e5202a155c315507d25c5173d81964eee6bbd22174e92a5d4ef058b2e019",
+    "settle-failure-w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__.json": "40806a007c4b6c787aee9508b300801c30795913e872960ad4105559ddbd806f",
+    "unit.log": "61ce1a6c84f12ca809fe098e19d069bb791c55db8b6b877ab55bae6cfa7a8a3e",
+    "settle-failure-w1101-1279_reduce_Veil_calibration_delete_ready-exceeds_focus-visible_unarmed_hsl_42_30__70__-control.png": "ffd0645bc90eec3fd374cbb861d3bdafb76af17d92394c91392f526320fb1036"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "acceptedReceiptContentSha256": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+  "regeneratedReceiptContentSha256": "f35086dda98bdb2ff75bd63b74f2a12bc50754627069495e3e7dac046c9754b8",
+  "conditionsEqual": false,
+  "mediaEqual": true,
+  "calibrationEqual": false,
+  "calibrationMaximaEqual": true,
+  "searchAssignmentsEqual": true,
+  "groupBestAndShippedMinimumEqual": true,
+  "recordRefreshReason": "Settled delete-tooltip overlay/readback variation and condition ordering; full diagnostic passes calibration, semantics and exact same-value witnesses. All palettes and group minima stand. Vector/delete feasible enumeration count is 153 (previously 152).",
+  "inputChanges": [
+    "scripts/state-surfaces/plants.mjs"
+  ],
+  "currentFingerprintEqual": true,
+  "conditionCount": 27,
+  "renderCount": 101742,
+  "wallSeconds": 2082.6461787499998
+}

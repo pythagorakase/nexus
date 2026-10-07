@@ -1,0 +1,311 @@
+{
+  "shards": [
+    {
+      "path": "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/final-capture/shards/batch-1.json",
+      "sha256": "fc0b96d47d99f17820a1e8887ea165035a4e73bc0bcae8256b40ebbe0790fb50",
+      "conditions": [
+        "default",
+        "motion-start",
+        "motion-trough"
+      ],
+      "renderCount": 10668,
+      "acceptanceComplete": false
+    },
+    {
+      "path": "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/final-capture/shards/batch-2.json",
+      "sha256": "d93bc23750b56b9e5e19c7b5dc34f76cb37cfcb9113b7a06296217c4c25355a0",
+      "conditions": [
+        "width-639",
+        "width-640",
+        "width-760",
+        "width-761",
+        "width-767",
+        "width-768"
+      ],
+      "renderCount": 21336,
+      "acceptanceComplete": false
+    },
+    {
+      "path": "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/final-capture/shards/batch-3.json",
+      "sha256": "df97c4593355a2a3d62e9caf886d5d390dd975ea24a382541e4f70cf74eb1c06",
+      "conditions": [
+        "width-1023",
+        "width-1024",
+        "width-1100",
+        "width-1101",
+        "width-1279",
+        "width-1280"
+      ],
+      "renderCount": 21336,
+      "acceptanceComplete": false
+    },
+    {
+      "path": "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/settled/final-capture/shards/batch-4.json",
+      "sha256": "4833a967292ee12f72af8d2d027bd5195519e5e41fa3928e8263391b326f47a6",
+      "conditions": [
+        "width-1281",
+        "width-1535",
+        "width-1536"
+      ],
+      "renderCount": 10668,
+      "acceptanceComplete": false
+    }
+  ],
+  "acceptedReceipt": "ui/client/src/state-surfaces.resolved.json",
+  "fileSha256": "cf61bff653ccbd9c4340dd96addc7a311288f05e7d6090331d14a1cae6db3534",
+  "proof": {
+    "minimumMaskPixels": 16,
+    "measurement": "painted/paint-suppressed control foreground mask; mean in linear sRGB over changed device pixels; visibility and layout retained",
+    "stylesheet": "production Vite build emitted CSS, production order",
+    "pageErrors": [],
+    "networkRequests": [],
+    "matchedMedia": {
+      "default": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "motion-start": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": false,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "motion-trough": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": false,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-639": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": true,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": false,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-640": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": true,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-761": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-760": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": true,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-767": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": false,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-768": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-1023": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": false,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-1024": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-1101": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-1100": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": true,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-1279": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": false,
+        "media (min-width: 1536px)": false
+      },
+      "width-1280": {
+        "media (max-width: 1280px)": true,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": true,
+        "media (min-width: 1536px)": false
+      },
+      "width-1281": {
+        "media (max-width: 1280px)": false,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": true,
+        "media (min-width: 1536px)": false
+      },
+      "width-1535": {
+        "media (max-width: 1280px)": false,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": true,
+        "media (min-width: 1536px)": false
+      },
+      "width-1536": {
+        "media (max-width: 1280px)": false,
+        "media (max-width: 1100px)": false,
+        "media (max-width: 760px)": false,
+        "media (prefers-reduced-motion: reduce)": true,
+        "media (min-width: 640px)": true,
+        "media (min-width: 768px)": true,
+        "media (min-width: 1024px)": true,
+        "media (min-width: 1280px)": true,
+        "media (min-width: 1536px)": true
+      }
+    },
+    "renderCount": 64008,
+    "wallSeconds": 1436.203856792,
+    "acceptanceComplete": true,
+    "shards": [
+      {
+        "conditions": [
+          "default",
+          "motion-start",
+          "motion-trough"
+        ],
+        "renders": 10668,
+        "wallSeconds": 246.50842458399998
+      },
+      {
+        "conditions": [
+          "width-639",
+          "width-640",
+          "width-760",
+          "width-761",
+          "width-767",
+          "width-768"
+        ],
+        "renders": 21336,
+        "wallSeconds": 476.294882666
+      },
+      {
+        "conditions": [
+          "width-1023",
+          "width-1024",
+          "width-1100",
+          "width-1101",
+          "width-1279",
+          "width-1280"
+        ],
+        "renders": 21336,
+        "wallSeconds": 477.602998417
+      },
+      {
+        "conditions": [
+          "width-1281",
+          "width-1535",
+          "width-1536"
+        ],
+        "renders": 10668,
+        "wallSeconds": 235.79755112499998
+      }
+    ]
+  },
+  "inputsFingerprint": "5fe7c407848242b61e8ce45313ab3d4cd61fb8c84319ea058dd6ffa0f6596901"
+}

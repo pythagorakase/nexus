@@ -1,0 +1,35 @@
+
+> nexus-ui@1.0.0 resolve-state-surfaces
+> node scripts/resolve-state-surfaces.mjs
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in "node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+Resolving w1101-1279/reduce/Veil…
+Completed w1101-1279/reduce/Veil; renders=74; wall=39.227s
+Calibration Veil: {"memory":{"opaqueMaximum":0.00026414815709771805,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.006002891112468775,"translucentMaximum":0.012334576619474699,"skippedPairs":0},"key":{"opaqueMaximum":0.030457571214044847,"translucentMaximum":0.013459005795140349,"skippedPairs":0},"map":{"opaqueMaximum":0.13262498315540136,"translucentMaximum":0.4083523106915002,"skippedPairs":23}}; passed
+Resolving w1101-1279/reduce/Gilded…
+Painted capture progress: renders=84; wall=48.224s
+Completed w1101-1279/reduce/Gilded; renders=148; wall=74.537s
+Calibration Gilded: {"memory":{"opaqueMaximum":0.0002619007277823465,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.008785869899490675,"translucentMaximum":0.0079023496576129,"skippedPairs":0},"key":{"opaqueMaximum":0.04713082389726427,"translucentMaximum":0.02240636952243324,"skippedPairs":0},"map":{"opaqueMaximum":0.11785516567096833,"translucentMaximum":0.4249545915725878,"skippedPairs":21}}; passed
+Resolving w1101-1279/reduce/Vector…
+Painted capture progress: renders=165; wall=93.226s
+Completed w1101-1279/reduce/Vector; renders=222; wall=110.062s
+Calibration Vector: {"memory":{"opaqueMaximum":0.0003181767847390889,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.029118582412838427,"translucentMaximum":0.02152663851962112,"skippedPairs":0},"key":{"opaqueMaximum":0.011120218162869937,"translucentMaximum":0.003968024121739456,"skippedPairs":0},"map":{"opaqueMaximum":0.1690033415162844,"translucentMaximum":0.500656347153232,"skippedPairs":21}}; passed
+Resolving w1101-1279/reduce/Veil…
+Resolving w1101-1279/reduce/Gilded…
+Resolving w1101-1279/reduce/Vector…
+Painted capture progress: renders=526; wall=138.228s
+Painted capture progress: renders=907; wall=183.229s
+Painted capture progress: renders=1494; wall=228.230s
+Painted capture progress: renders=2393; wall=273.230s
+Completed w1101-1279/reduce/Vector; renders=3353; wall=317.449s
+Painted capture progress: renders=3365; wall=318.229s
+Completed w1101-1279/reduce/Gilded; renders=3979; wall=360.746s
+Completed w1101-1279/reduce/Veil; renders=3982; wall=361.063s
+Resolved painted state surfaces: renders=3982; wall=361.065s; Chromium 153.0.8010.12; Playwright 1.63.0
+Emulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 1 media conditions; file://; network aborted; requests=0; errors=0
+Wrote /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/opaque-gradient-stop-capture/default.json; module graph=2095 inputs; SHA-256 a30c7068502ff7e1559da574974dcc5c19d1151683485877880825eac25dd55e

@@ -1,0 +1,695 @@
+[
+  {
+    "record": "tooltip-proof.json",
+    "repeat": 1,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 44,
+    "top8": [
+      {
+        "rgb": [
+          47,
+          67,
+          68
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          53,
+          75,
+          76
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          48,
+          68,
+          69
+        ],
+        "count": 43
+      },
+      {
+        "rgb": [
+          49,
+          69,
+          70
+        ],
+        "count": 42
+      },
+      {
+        "rgb": [
+          50,
+          71,
+          72
+        ],
+        "count": 36
+      },
+      {
+        "rgb": [
+          51,
+          72,
+          73
+        ],
+        "count": 36
+      },
+      {
+        "rgb": [
+          48,
+          69,
+          69
+        ],
+        "count": 32
+      }
+    ],
+    "agreesWithNode": true
+  },
+  {
+    "record": "tooltip-proof.json",
+    "repeat": 2,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 44,
+    "top8": [
+      {
+        "rgb": [
+          47,
+          67,
+          68
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          53,
+          75,
+          76
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          48,
+          68,
+          69
+        ],
+        "count": 43
+      },
+      {
+        "rgb": [
+          49,
+          69,
+          70
+        ],
+        "count": 42
+      },
+      {
+        "rgb": [
+          50,
+          71,
+          72
+        ],
+        "count": 36
+      },
+      {
+        "rgb": [
+          51,
+          72,
+          73
+        ],
+        "count": 36
+      },
+      {
+        "rgb": [
+          48,
+          69,
+          69
+        ],
+        "count": 32
+      }
+    ],
+    "agreesWithNode": true
+  },
+  {
+    "record": "tooltip-proof.json",
+    "repeat": 3,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 44,
+    "top8": [
+      {
+        "rgb": [
+          47,
+          67,
+          68
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          53,
+          75,
+          76
+        ],
+        "count": 44
+      },
+      {
+        "rgb": [
+          48,
+          68,
+          69
+        ],
+        "count": 43
+      },
+      {
+        "rgb": [
+          49,
+          69,
+          70
+        ],
+        "count": 42
+      },
+      {
+        "rgb": [
+          50,
+          71,
+          72
+        ],
+        "count": 36
+      },
+      {
+        "rgb": [
+          51,
+          72,
+          73
+        ],
+        "count": 36
+      },
+      {
+        "rgb": [
+          48,
+          69,
+          69
+        ],
+        "count": 32
+      }
+    ],
+    "agreesWithNode": true
+  },
+  {
+    "record": "shadow-causality.json",
+    "repeat": 1,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 293,
+    "top8": [
+      {
+        "rgb": [
+          55,
+          78,
+          79
+        ],
+        "count": 293
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 148
+      },
+      {
+        "rgb": [
+          31,
+          45,
+          46
+        ],
+        "count": 41
+      },
+      {
+        "rgb": [
+          36,
+          53,
+          54
+        ],
+        "count": 30
+      },
+      {
+        "rgb": [
+          19,
+          29,
+          30
+        ],
+        "count": 20
+      },
+      {
+        "rgb": [
+          40,
+          59,
+          60
+        ],
+        "count": 18
+      },
+      {
+        "rgb": [
+          38,
+          56,
+          57
+        ],
+        "count": 16
+      },
+      {
+        "rgb": [
+          42,
+          62,
+          63
+        ],
+        "count": 14
+      }
+    ],
+    "agreesWithNode": true
+  },
+  {
+    "record": "shadow-causality.json",
+    "repeat": 2,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 293,
+    "top8": [
+      {
+        "rgb": [
+          55,
+          78,
+          79
+        ],
+        "count": 293
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 148
+      },
+      {
+        "rgb": [
+          31,
+          45,
+          46
+        ],
+        "count": 41
+      },
+      {
+        "rgb": [
+          36,
+          53,
+          54
+        ],
+        "count": 30
+      },
+      {
+        "rgb": [
+          19,
+          29,
+          30
+        ],
+        "count": 20
+      },
+      {
+        "rgb": [
+          40,
+          59,
+          60
+        ],
+        "count": 18
+      },
+      {
+        "rgb": [
+          38,
+          56,
+          57
+        ],
+        "count": 16
+      },
+      {
+        "rgb": [
+          42,
+          62,
+          63
+        ],
+        "count": 14
+      }
+    ],
+    "agreesWithNode": true
+  },
+  {
+    "record": "shadow-causality.json",
+    "repeat": 3,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 293,
+    "top8": [
+      {
+        "rgb": [
+          55,
+          78,
+          79
+        ],
+        "count": 293
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 148
+      },
+      {
+        "rgb": [
+          31,
+          45,
+          46
+        ],
+        "count": 41
+      },
+      {
+        "rgb": [
+          36,
+          53,
+          54
+        ],
+        "count": 30
+      },
+      {
+        "rgb": [
+          19,
+          29,
+          30
+        ],
+        "count": 20
+      },
+      {
+        "rgb": [
+          40,
+          59,
+          60
+        ],
+        "count": 18
+      },
+      {
+        "rgb": [
+          38,
+          56,
+          57
+        ],
+        "count": 16
+      },
+      {
+        "rgb": [
+          42,
+          62,
+          63
+        ],
+        "count": 14
+      }
+    ],
+    "agreesWithNode": true
+  },
+  {
+    "record": "before-tooltip-proof.json",
+    "repeat": 1,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 293,
+    "top8": [
+      {
+        "rgb": [
+          55,
+          78,
+          79
+        ],
+        "count": 293
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 148
+      },
+      {
+        "rgb": [
+          31,
+          45,
+          46
+        ],
+        "count": 41
+      },
+      {
+        "rgb": [
+          36,
+          53,
+          54
+        ],
+        "count": 30
+      },
+      {
+        "rgb": [
+          19,
+          29,
+          30
+        ],
+        "count": 20
+      },
+      {
+        "rgb": [
+          40,
+          59,
+          60
+        ],
+        "count": 18
+      },
+      {
+        "rgb": [
+          38,
+          56,
+          57
+        ],
+        "count": 16
+      },
+      {
+        "rgb": [
+          42,
+          62,
+          63
+        ],
+        "count": 14
+      }
+    ],
+    "agreesWithNode": true
+  },
+  {
+    "record": "before-tooltip-proof.json",
+    "repeat": 2,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 293,
+    "top8": [
+      {
+        "rgb": [
+          55,
+          78,
+          79
+        ],
+        "count": 293
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 148
+      },
+      {
+        "rgb": [
+          31,
+          45,
+          46
+        ],
+        "count": 41
+      },
+      {
+        "rgb": [
+          36,
+          53,
+          54
+        ],
+        "count": 30
+      },
+      {
+        "rgb": [
+          19,
+          29,
+          30
+        ],
+        "count": 20
+      },
+      {
+        "rgb": [
+          40,
+          59,
+          60
+        ],
+        "count": 18
+      },
+      {
+        "rgb": [
+          38,
+          56,
+          57
+        ],
+        "count": 16
+      },
+      {
+        "rgb": [
+          42,
+          62,
+          63
+        ],
+        "count": 14
+      }
+    ],
+    "agreesWithNode": true
+  },
+  {
+    "record": "before-tooltip-proof.json",
+    "repeat": 3,
+    "dimensions": [
+      44,
+      44
+    ],
+    "maskSize": 727,
+    "modeCount": 293,
+    "top8": [
+      {
+        "rgb": [
+          55,
+          78,
+          79
+        ],
+        "count": 293
+      },
+      {
+        "rgb": [
+          52,
+          74,
+          75
+        ],
+        "count": 148
+      },
+      {
+        "rgb": [
+          31,
+          45,
+          46
+        ],
+        "count": 41
+      },
+      {
+        "rgb": [
+          36,
+          53,
+          54
+        ],
+        "count": 30
+      },
+      {
+        "rgb": [
+          19,
+          29,
+          30
+        ],
+        "count": 20
+      },
+      {
+        "rgb": [
+          40,
+          59,
+          60
+        ],
+        "count": 18
+      },
+      {
+        "rgb": [
+          38,
+          56,
+          57
+        ],
+        "count": 16
+      },
+      {
+        "rgb": [
+          42,
+          62,
+          63
+        ],
+        "count": 14
+      }
+    ],
+    "agreesWithNode": true
+  }
+]

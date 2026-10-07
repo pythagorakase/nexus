@@ -1,0 +1,68 @@
+{
+  "chromium": "153.0.8010.12",
+  "range": {
+    "minimum": 1281,
+    "maximum": 1535
+  },
+  "nearestEdge": 1281,
+  "clarification3NamedRepresentative": 1535,
+  "witnesses": [
+    {
+      "width": 1200,
+      "distanceFromDefault": 0,
+      "matched": [
+        "media (max-width: 1280px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)"
+      ]
+    },
+    {
+      "width": 1280,
+      "distanceFromDefault": 80,
+      "matched": [
+        "media (max-width: 1280px)",
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ]
+    },
+    {
+      "width": 1281,
+      "distanceFromDefault": 81,
+      "matched": [
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ]
+    },
+    {
+      "width": 1535,
+      "distanceFromDefault": 335,
+      "matched": [
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)"
+      ]
+    },
+    {
+      "width": 1536,
+      "distanceFromDefault": 336,
+      "matched": [
+        "media (prefers-reduced-motion: reduce)",
+        "media (min-width: 640px)",
+        "media (min-width: 768px)",
+        "media (min-width: 1024px)",
+        "media (min-width: 1280px)",
+        "media (min-width: 1536px)"
+      ]
+    }
+  ]
+}

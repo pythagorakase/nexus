@@ -1,0 +1,17 @@
+{
+  "name": "owner-target-guard",
+  "args": [
+    "/Users/pythagor/nexus/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "tests.dbname_audit",
+    "tests/test_owner_target_guard.py"
+  ],
+  "exit": 0,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 3.7634725410025567,
+  "tail": "<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n........................................................................ [ 90%]\n........                                                                 [100%]\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\ndbname audit: 0 targets: none\ndbname audit: owner server: local:5432\ndbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection\ndbname audit: owner targets: none\n80 passed in 3.12s"
+}

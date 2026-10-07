@@ -1,0 +1,18 @@
+{
+  "plant": "key-overpainting-shadow",
+  "context": "Vector/key/required/rest",
+  "states": [
+    "required-missing",
+    "present"
+  ],
+  "opacity": "opaque",
+  "delta": 1.1084665796847142,
+  "tolerance": 1.0,
+  "result": "calibration rejection before fresh table diagnostic",
+  "captures": [
+    "docs/qa/777-glyph-first-states/after-review-r5/final/plants/key-overpainting-required-missing-painted.png",
+    "docs/qa/777-glyph-first-states/after-review-r5/final/plants/key-overpainting-required-missing-control.png",
+    "docs/qa/777-glyph-first-states/after-review-r5/final/plants/key-overpainting-present-painted.png",
+    "docs/qa/777-glyph-first-states/after-review-r5/final/plants/key-overpainting-present-control.png"
+  ]
+}

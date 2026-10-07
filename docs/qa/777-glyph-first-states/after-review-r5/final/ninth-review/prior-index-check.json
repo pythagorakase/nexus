@@ -1,0 +1,27 @@
+{
+  "indexed": 1116,
+  "matching": 1113,
+  "mismatches": [
+    {
+      "path": "docs/qa/777-glyph-first-states/after-review-r5/final/completion.md",
+      "indexed": "241f9dd596f4f254ae34079f88da995c95dc0eb8152226285d9e4b3cc9d92ae5",
+      "actual": "a6227b562bd4ad747235aa12c6ec3518ecaa1e127943445dac7897268a065869",
+      "indexedBytes": 15014,
+      "actualBytes": 17915
+    },
+    {
+      "path": "docs/qa/777-glyph-first-states/after-review-r5/final/plants.md",
+      "indexed": "248a0938734424070eb66181bfbb308e8db0d283e8f73e3fe9ed5e068bb96e94",
+      "actual": "c8644d42233d207d0dbcc6ed07cbda2f6087e3ad43791c0f8a43c87a3c79bcf3",
+      "indexedBytes": 6362,
+      "actualBytes": 7570
+    },
+    {
+      "path": "ui/client/src/state-surfaces.resolved.json",
+      "indexed": "1269b33123c432cd8fc9590151f1cd5387dda5b0dac176a68414f091cdde1b81",
+      "actual": "996938bf6f8152eeaa7683dd0b23d982260dfbbe2d6cd979b836de334cb83018",
+      "indexedBytes": 444573512,
+      "actualBytes": 444572933
+    }
+  ]
+}

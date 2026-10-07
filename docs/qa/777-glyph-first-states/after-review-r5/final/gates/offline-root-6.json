@@ -1,0 +1,24 @@
+{
+  "name": "offline-root-6",
+  "args": [
+    "/Users/pythagor/nexus/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_trait_menu_docs.py",
+    "tests/test_travel_reachability.py",
+    "tests/test_travel_reachability_pg.py",
+    "tests/test_turn_observation.py",
+    "tests/test_unowned_index_adoption_pg.py",
+    "tests/test_usage_recorder.py",
+    "tests/test_wizard_agent.py",
+    "tests/test_wizard_live.py",
+    "tests/test_wizard_opening_presence_pg.py",
+    "tests/test_world_clock_contract_pg.py"
+  ],
+  "exit": 0,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 6.653271457995288,
+  "tail": "...sss.........................................ssss..................... [ 58%]\n.........................sssssssssssssssssssssssssss                     [100%]\n=============================== warnings summary ===============================\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n<frozen abc>:106\n<frozen abc>:106\n  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n\n../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201\n  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute\n\n<frozen importlib._bootstrap>:241\n  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\n90 passed, 34 skipped, 7 warnings in 6.00s"
+}

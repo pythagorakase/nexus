@@ -1,0 +1,191 @@
+[
+  {
+    "theme": "Veil",
+    "changedTokens": [
+      {
+        "token": "--state-map-current",
+        "before": "hsl(330.2439024390244 60% 50%)",
+        "after": "hsl(330.2439024390244 60% 70%)"
+      },
+      {
+        "token": "--state-map-selected",
+        "before": "hsl(330.2439024390244 50.20408163265306% 70%)",
+        "after": "hsl(330.2439024390244 50.20408163265306% 30%)"
+      },
+      {
+        "token": "--state-map-hovered",
+        "before": "hsl(330.2439024390244 60% 30%)",
+        "after": "hsl(330.2439024390244 80% 50%)"
+      },
+      {
+        "token": "--state-key-absent",
+        "before": "hsl(42 20% 50%)",
+        "after": "hsl(42 20% 70%)"
+      },
+      {
+        "token": "--state-key-present",
+        "before": "hsl(42 50% 70%)",
+        "after": "hsl(42 50% 30%)"
+      },
+      {
+        "token": "--state-delete-unarmed",
+        "before": "hsl(42 30% 65%)",
+        "after": "hsl(42 30% 70%)"
+      },
+      {
+        "token": "--state-delete-armed",
+        "before": "hsl(0 80% 50%)",
+        "after": "hsl(0 100% 50%)"
+      }
+    ],
+    "factorMaximaBefore": [
+      {
+        "surface": "memory",
+        "best": 48.28249625545695
+      },
+      {
+        "surface": "delete",
+        "best": 15.324664169901974
+      },
+      {
+        "surface": "map",
+        "best": 9.897315738632694
+      },
+      {
+        "surface": "key",
+        "best": 18.405593964688055
+      }
+    ]
+  },
+  {
+    "theme": "Gilded",
+    "changedTokens": [
+      {
+        "token": "--state-map-rest",
+        "before": "hsl(30 50% 70%)",
+        "after": "hsl(30 70% 60%)"
+      },
+      {
+        "token": "--state-map-current",
+        "before": "hsl(45 75% 40%)",
+        "after": "hsl(45 55% 70%)"
+      },
+      {
+        "token": "--state-map-selected",
+        "before": "hsl(43 84% 60%)",
+        "after": "hsl(43 94% 47%)"
+      },
+      {
+        "token": "--state-key-absent",
+        "before": "hsl(43 30% 30%)",
+        "after": "hsl(43 30% 70%)"
+      },
+      {
+        "token": "--state-key-missing",
+        "before": "hsl(30 50% 45%)",
+        "after": "hsl(30 50% 70%)"
+      },
+      {
+        "token": "--state-key-present",
+        "before": "hsl(43 40% 70%)",
+        "after": "hsl(43 60% 40%)"
+      },
+      {
+        "token": "--state-key-verified",
+        "before": "hsl(43 74% 47%)",
+        "after": "hsl(43 74% 30%)"
+      },
+      {
+        "token": "--state-mem-over",
+        "before": "hsl(30 50% 45%)",
+        "after": "hsl(30 50% 30%)"
+      },
+      {
+        "token": "--state-delete-armed",
+        "before": "hsl(0 90% 50%)",
+        "after": "hsl(0 100% 50%)"
+      }
+    ],
+    "factorMaximaBefore": [
+      {
+        "surface": "memory",
+        "best": 43.17542131118454
+      },
+      {
+        "surface": "delete",
+        "best": 12.647089726602504
+      },
+      {
+        "surface": "map",
+        "best": 11.37227292852494
+      },
+      {
+        "surface": "key",
+        "best": 14.065115965089149
+      }
+    ]
+  },
+  {
+    "theme": "Vector",
+    "changedTokens": [
+      {
+        "token": "--state-map-current",
+        "before": "hsl(190 100% 40%)",
+        "after": "hsl(190 80% 30%)"
+      },
+      {
+        "token": "--state-map-selected",
+        "before": "hsl(185 100% 50%)",
+        "after": "hsl(185 100% 70%)"
+      },
+      {
+        "token": "--state-map-hovered",
+        "before": "hsl(190 80% 30%)",
+        "after": "hsl(190 100% 50%)"
+      },
+      {
+        "token": "--state-key-absent",
+        "before": "hsl(185 30% 30%)",
+        "after": "hsl(185 50% 70%)"
+      },
+      {
+        "token": "--state-key-present",
+        "before": "hsl(185 40% 55%)",
+        "after": "hsl(185 60% 40%)"
+      },
+      {
+        "token": "--state-key-verified",
+        "before": "hsl(185 100% 70%)",
+        "after": "hsl(185 100% 30%)"
+      },
+      {
+        "token": "--state-mem-over",
+        "before": "hsl(200 90% 55%)",
+        "after": "hsl(200 90% 30%)"
+      },
+      {
+        "token": "--state-delete-armed",
+        "before": "hsl(350 80% 55%)",
+        "after": "hsl(350 80% 50%)"
+      }
+    ],
+    "factorMaximaBefore": [
+      {
+        "surface": "memory",
+        "best": 41.81549016617153
+      },
+      {
+        "surface": "delete",
+        "best": 24.047661279756532
+      },
+      {
+        "surface": "map",
+        "best": 10.192991321299218
+      },
+      {
+        "surface": "key",
+        "best": 11.331792045800869
+      }
+    ]
+  }
+]

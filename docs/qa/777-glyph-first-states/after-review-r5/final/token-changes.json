@@ -1,0 +1,218 @@
+[
+  {
+    "theme": "Veil",
+    "token": "--state-map-rest",
+    "from": "hsl(15 75% 60%)",
+    "to": "hsl(15 75% 60%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-map-current",
+    "from": "hsl(330.2439024390244 60% 70%)",
+    "to": "hsl(330.2439024390244 60% 70%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-map-selected",
+    "from": "hsl(330.2439024390244 50.20408163265306% 30%)",
+    "to": "hsl(330.2439024390244 50.20408163265306% 30%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-map-hovered",
+    "from": "hsl(330.2439024390244 80% 50%)",
+    "to": "hsl(330.2439024390244 80% 50%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-key-absent",
+    "from": "hsl(42 20% 70%)",
+    "to": "hsl(42 40% 70%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-key-missing",
+    "from": "hsl(15 75% 60%)",
+    "to": "hsl(15 75% 60%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-key-present",
+    "from": "hsl(42 50% 30%)",
+    "to": "hsl(42 50% 30%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-key-verified",
+    "from": "hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)",
+    "to": "#b83d7a"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-mem-normal",
+    "from": "hsl(330.2439024390244 50.20408163265306% 48.03921568627451%)",
+    "to": "#b83d7a"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-mem-over",
+    "from": "hsl(15 75% 60%)",
+    "to": "hsl(15 75% 60%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-delete-unarmed",
+    "from": "hsl(42 30% 70%)",
+    "to": "hsl(42 30% 70%)"
+  },
+  {
+    "theme": "Veil",
+    "token": "--state-delete-armed",
+    "from": "hsl(0 100% 50%)",
+    "to": "hsl(0 100% 50%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-map-rest",
+    "from": "hsl(30 70% 60%)",
+    "to": "hsl(30 60% 60%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-map-current",
+    "from": "hsl(45 55% 70%)",
+    "to": "hsl(45 55% 70%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-map-selected",
+    "from": "hsl(43 94% 47%)",
+    "to": "hsl(43 74% 30%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-map-hovered",
+    "from": "hsl(45 55% 30%)",
+    "to": "hsl(45 75% 50%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-key-absent",
+    "from": "hsl(43 30% 70%)",
+    "to": "hsl(43 30% 70%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-key-missing",
+    "from": "hsl(30 50% 70%)",
+    "to": "hsl(30 50% 45%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-key-present",
+    "from": "hsl(43 60% 40%)",
+    "to": "hsl(43 40% 30%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-key-verified",
+    "from": "hsl(43 74% 30%)",
+    "to": "hsl(43 94% 50%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-mem-normal",
+    "from": "hsl(43 74% 47%)",
+    "to": "hsl(43 74% 47%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-mem-over",
+    "from": "hsl(30 50% 30%)",
+    "to": "hsl(30 50% 30%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-delete-unarmed",
+    "from": "hsl(43 40% 70%)",
+    "to": "hsl(43 40% 70%)"
+  },
+  {
+    "theme": "Gilded",
+    "token": "--state-delete-armed",
+    "from": "hsl(0 100% 50%)",
+    "to": "hsl(0 100% 50%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-map-rest",
+    "from": "hsl(200 100% 40%)",
+    "to": "hsl(200 90% 55%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-map-current",
+    "from": "hsl(190 80% 30%)",
+    "to": "hsl(190 100% 50%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-map-selected",
+    "from": "hsl(185 100% 70%)",
+    "to": "hsl(185 100% 70%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-map-hovered",
+    "from": "hsl(190 100% 50%)",
+    "to": "hsl(190 90% 40%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-key-absent",
+    "from": "hsl(185 50% 70%)",
+    "to": "hsl(185 30% 30%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-key-missing",
+    "from": "hsl(200 90% 55%)",
+    "to": "hsl(200 90% 55%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-key-present",
+    "from": "hsl(185 60% 40%)",
+    "to": "hsl(185 40% 50%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-key-verified",
+    "from": "hsl(185 100% 30%)",
+    "to": "hsl(185 100% 70%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-mem-normal",
+    "from": "hsl(185 100% 50%)",
+    "to": "hsl(185 100% 50%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-mem-over",
+    "from": "hsl(200 90% 30%)",
+    "to": "hsl(200 90% 30%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-delete-unarmed",
+    "from": "hsl(185 40% 55%)",
+    "to": "hsl(185 40% 55%)"
+  },
+  {
+    "theme": "Vector",
+    "token": "--state-delete-armed",
+    "from": "hsl(350 80% 50%)",
+    "to": "hsl(350 80% 55%)"
+  }
+]

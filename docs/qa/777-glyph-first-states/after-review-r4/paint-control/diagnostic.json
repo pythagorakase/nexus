@@ -1,0 +1,2789 @@
+{
+  "chromium": "153.0.8010.12",
+  "fixtureHash": "687b52ad7c3088754e1dd52fd04b5e558c259c1917a9a241414f5440fd5dda48",
+  "errors": [],
+  "requests": [],
+  "comparisons": [
+    {
+      "theme": "veil",
+      "variant": "neutral",
+      "repeat": 1,
+      "names": {
+        "painted": "veil-neutral-1-painted.png",
+        "control": "veil-neutral-1-control.png"
+      },
+      "rule": "[data-control-capture=\"veil-neutral-1\"] { --control-diagnostic: 1; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(184, 61, 122)",
+        "color": "rgb(184, 61, 122)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(184, 61, 122)",
+        "color": "rgb(184, 61, 122)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "box": {
+        "x": 564.0625,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 0,
+      "modeFraction": null,
+      "histogram": [],
+      "measured": {
+        "error": "Measurement failure veil/neutral/1: empty foreground mask"
+      },
+      "hashes": {
+        "painted": "89192e50a603dd5cb6c150800d083eccc1039acf1e796609f7519943e28914ff",
+        "control": "89192e50a603dd5cb6c150800d083eccc1039acf1e796609f7519943e28914ff"
+      }
+    },
+    {
+      "theme": "veil",
+      "variant": "prescribed",
+      "repeat": 1,
+      "names": {
+        "painted": "veil-prescribed-1-painted.png",
+        "control": "veil-prescribed-1-control.png"
+      },
+      "rule": "[data-control-capture=\"veil-prescribed-1\"], [data-control-capture=\"veil-prescribed-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(184, 61, 122)",
+        "color": "rgb(184, 61, 122)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "box": {
+        "x": 564.0625,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.18359375,
+      "histogram": [
+        {
+          "rgb": [
+            184,
+            61,
+            122
+          ],
+          "count": 423
+        },
+        {
+          "rgb": [
+            25,
+            18,
+            30
+          ],
+          "count": 197
+        },
+        {
+          "rgb": [
+            35,
+            20,
+            36
+          ],
+          "count": 164
+        },
+        {
+          "rgb": [
+            27,
+            18,
+            31
+          ],
+          "count": 148
+        },
+        {
+          "rgb": [
+            31,
+            19,
+            33
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            26,
+            18,
+            31
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            32,
+            19,
+            34
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            33,
+            19,
+            35
+          ],
+          "count": 124
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure veil/prescribed/1: weak foreground mask; mode=0.183594 < 0.3; top8=[{\"rgb\":[184,61,122],\"count\":423},{\"rgb\":[25,18,30],\"count\":197},{\"rgb\":[35,20,36],\"count\":164},{\"rgb\":[27,18,31],\"count\":148},{\"rgb\":[31,19,33],\"count\":132},{\"rgb\":[26,18,31],\"count\":129},{\"rgb\":[32,19,34],\"count\":129},{\"rgb\":[33,19,35],\"count\":124}]"
+      },
+      "hashes": {
+        "painted": "89192e50a603dd5cb6c150800d083eccc1039acf1e796609f7519943e28914ff",
+        "control": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19"
+      }
+    },
+    {
+      "theme": "veil",
+      "variant": "prescribed",
+      "repeat": 2,
+      "names": {
+        "painted": "veil-prescribed-2-painted.png",
+        "control": "veil-prescribed-2-control.png"
+      },
+      "rule": "[data-control-capture=\"veil-prescribed-2\"], [data-control-capture=\"veil-prescribed-2\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(184, 61, 122)",
+        "color": "rgb(184, 61, 122)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "box": {
+        "x": 564.0625,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.18359375,
+      "histogram": [
+        {
+          "rgb": [
+            184,
+            61,
+            122
+          ],
+          "count": 423
+        },
+        {
+          "rgb": [
+            25,
+            18,
+            30
+          ],
+          "count": 197
+        },
+        {
+          "rgb": [
+            35,
+            20,
+            36
+          ],
+          "count": 164
+        },
+        {
+          "rgb": [
+            27,
+            18,
+            31
+          ],
+          "count": 148
+        },
+        {
+          "rgb": [
+            31,
+            19,
+            33
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            26,
+            18,
+            31
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            32,
+            19,
+            34
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            33,
+            19,
+            35
+          ],
+          "count": 124
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure veil/prescribed/2: weak foreground mask; mode=0.183594 < 0.3; top8=[{\"rgb\":[184,61,122],\"count\":423},{\"rgb\":[25,18,30],\"count\":197},{\"rgb\":[35,20,36],\"count\":164},{\"rgb\":[27,18,31],\"count\":148},{\"rgb\":[31,19,33],\"count\":132},{\"rgb\":[26,18,31],\"count\":129},{\"rgb\":[32,19,34],\"count\":129},{\"rgb\":[33,19,35],\"count\":124}]"
+      },
+      "hashes": {
+        "painted": "89192e50a603dd5cb6c150800d083eccc1039acf1e796609f7519943e28914ff",
+        "control": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19"
+      }
+    },
+    {
+      "theme": "veil",
+      "variant": "prescribed",
+      "repeat": 3,
+      "names": {
+        "painted": "veil-prescribed-3-painted.png",
+        "control": "veil-prescribed-3-control.png"
+      },
+      "rule": "[data-control-capture=\"veil-prescribed-3\"], [data-control-capture=\"veil-prescribed-3\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(184, 61, 122)",
+        "color": "rgb(184, 61, 122)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "box": {
+        "x": 564.0625,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.18359375,
+      "histogram": [
+        {
+          "rgb": [
+            184,
+            61,
+            122
+          ],
+          "count": 423
+        },
+        {
+          "rgb": [
+            25,
+            18,
+            30
+          ],
+          "count": 197
+        },
+        {
+          "rgb": [
+            35,
+            20,
+            36
+          ],
+          "count": 164
+        },
+        {
+          "rgb": [
+            27,
+            18,
+            31
+          ],
+          "count": 148
+        },
+        {
+          "rgb": [
+            31,
+            19,
+            33
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            26,
+            18,
+            31
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            32,
+            19,
+            34
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            33,
+            19,
+            35
+          ],
+          "count": 124
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure veil/prescribed/3: weak foreground mask; mode=0.183594 < 0.3; top8=[{\"rgb\":[184,61,122],\"count\":423},{\"rgb\":[25,18,30],\"count\":197},{\"rgb\":[35,20,36],\"count\":164},{\"rgb\":[27,18,31],\"count\":148},{\"rgb\":[31,19,33],\"count\":132},{\"rgb\":[26,18,31],\"count\":129},{\"rgb\":[32,19,34],\"count\":129},{\"rgb\":[33,19,35],\"count\":124}]"
+      },
+      "hashes": {
+        "painted": "89192e50a603dd5cb6c150800d083eccc1039acf1e796609f7519943e28914ff",
+        "control": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19"
+      }
+    },
+    {
+      "theme": "veil",
+      "variant": "tag-status-same-clip",
+      "repeat": 1,
+      "names": {
+        "painted": "veil-tag-status-same-clip-1-painted.png",
+        "control": "veil-tag-status-same-clip-1-control.png"
+      },
+      "rule": "[data-control-capture=\"veil-tag-status-same-clip-1\"], [data-control-capture=\"veil-tag-status-same-clip-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(184, 61, 122)",
+        "color": "rgb(184, 61, 122)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(184, 61, 122) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "box": {
+        "x": 564.0625,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.18359375,
+      "histogram": [
+        {
+          "rgb": [
+            184,
+            61,
+            122
+          ],
+          "count": 423
+        },
+        {
+          "rgb": [
+            25,
+            18,
+            30
+          ],
+          "count": 197
+        },
+        {
+          "rgb": [
+            35,
+            20,
+            36
+          ],
+          "count": 164
+        },
+        {
+          "rgb": [
+            27,
+            18,
+            31
+          ],
+          "count": 148
+        },
+        {
+          "rgb": [
+            31,
+            19,
+            33
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            26,
+            18,
+            31
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            32,
+            19,
+            34
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            33,
+            19,
+            35
+          ],
+          "count": 124
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure veil/tag-status-same-clip/1: weak foreground mask; mode=0.183594 < 0.3; top8=[{\"rgb\":[184,61,122],\"count\":423},{\"rgb\":[25,18,30],\"count\":197},{\"rgb\":[35,20,36],\"count\":164},{\"rgb\":[27,18,31],\"count\":148},{\"rgb\":[31,19,33],\"count\":132},{\"rgb\":[26,18,31],\"count\":129},{\"rgb\":[32,19,34],\"count\":129},{\"rgb\":[33,19,35],\"count\":124}]"
+      },
+      "hashes": {
+        "painted": "89192e50a603dd5cb6c150800d083eccc1039acf1e796609f7519943e28914ff",
+        "control": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19"
+      }
+    },
+    {
+      "theme": "veil",
+      "variant": "diagnostic-ancestor-filter-none",
+      "repeat": 1,
+      "names": {
+        "painted": "veil-diagnostic-ancestor-filter-none-1-painted.png",
+        "control": "veil-diagnostic-ancestor-filter-none-1-control.png"
+      },
+      "rule": "[data-control-capture=\"veil-diagnostic-ancestor-filter-none-1\"], [data-control-capture=\"veil-diagnostic-ancestor-filter-none-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(184, 61, 122)",
+        "color": "rgb(184, 61, 122)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(184, 61, 122)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.0625,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.0625,\"bottom\":307.25,\"left\":564.0625}"
+      },
+      "box": {
+        "x": 564.0625,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 723,
+      "modeFraction": 0.5822959889349931,
+      "histogram": [
+        {
+          "rgb": [
+            184,
+            61,
+            122
+          ],
+          "count": 421
+        },
+        {
+          "rgb": [
+            81,
+            32,
+            62
+          ],
+          "count": 19
+        },
+        {
+          "rgb": [
+            181,
+            60,
+            120
+          ],
+          "count": 9
+        },
+        {
+          "rgb": [
+            171,
+            56,
+            114
+          ],
+          "count": 8
+        },
+        {
+          "rgb": [
+            54,
+            24,
+            46
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            71,
+            30,
+            57
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            180,
+            59,
+            119
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            35,
+            20,
+            35
+          ],
+          "count": 5
+        }
+      ],
+      "measured": {
+        "painted": [
+          184,
+          61,
+          122
+        ],
+        "maskSize": 723,
+        "modeFraction": 0.5822959889349931,
+        "histogram": [
+          {
+            "rgb": [
+              184,
+              61,
+              122
+            ],
+            "count": 421
+          },
+          {
+            "rgb": [
+              81,
+              32,
+              62
+            ],
+            "count": 19
+          },
+          {
+            "rgb": [
+              181,
+              60,
+              120
+            ],
+            "count": 9
+          },
+          {
+            "rgb": [
+              171,
+              56,
+              114
+            ],
+            "count": 8
+          },
+          {
+            "rgb": [
+              54,
+              24,
+              46
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              71,
+              30,
+              57
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              180,
+              59,
+              119
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              35,
+              20,
+              35
+            ],
+            "count": 5
+          }
+        ],
+        "width": 48,
+        "height": 48
+      },
+      "hashes": {
+        "painted": "d616f7da2a09d29c81b49cd77ea5d38e5c21597a2a1227cabf955318efd11802",
+        "control": "dc1440a8a0861106a42bee90cc068d1f14599d22a76810f6129cb95990299a19"
+      }
+    },
+    {
+      "theme": "gilded",
+      "variant": "neutral",
+      "repeat": 1,
+      "names": {
+        "painted": "gilded-neutral-1-painted.png",
+        "control": "gilded-neutral-1-control.png"
+      },
+      "rule": "[data-control-capture=\"gilded-neutral-1\"] { --control-diagnostic: 1; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(209, 158, 31)",
+        "color": "rgb(209, 158, 31)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(209, 158, 31)",
+        "color": "rgb(209, 158, 31)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "box": {
+        "x": 564.328125,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 0,
+      "modeFraction": null,
+      "histogram": [],
+      "measured": {
+        "error": "Measurement failure gilded/neutral/1: empty foreground mask"
+      },
+      "hashes": {
+        "painted": "be4df28dc40d4abc8460798e26243da64d9d10a3451ba56929a487be19836be8",
+        "control": "be4df28dc40d4abc8460798e26243da64d9d10a3451ba56929a487be19836be8"
+      }
+    },
+    {
+      "theme": "gilded",
+      "variant": "prescribed",
+      "repeat": 1,
+      "names": {
+        "painted": "gilded-prescribed-1-painted.png",
+        "control": "gilded-prescribed-1-control.png"
+      },
+      "rule": "[data-control-capture=\"gilded-prescribed-1\"], [data-control-capture=\"gilded-prescribed-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(209, 158, 31)",
+        "color": "rgb(209, 158, 31)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "box": {
+        "x": 564.328125,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.18359375,
+      "histogram": [
+        {
+          "rgb": [
+            209,
+            158,
+            31
+          ],
+          "count": 423
+        },
+        {
+          "rgb": [
+            29,
+            24,
+            12
+          ],
+          "count": 244
+        },
+        {
+          "rgb": [
+            30,
+            25,
+            12
+          ],
+          "count": 144
+        },
+        {
+          "rgb": [
+            35,
+            29,
+            13
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            36,
+            29,
+            13
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            38,
+            31,
+            13
+          ],
+          "count": 124
+        },
+        {
+          "rgb": [
+            37,
+            30,
+            13
+          ],
+          "count": 113
+        },
+        {
+          "rgb": [
+            39,
+            31,
+            13
+          ],
+          "count": 103
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure gilded/prescribed/1: weak foreground mask; mode=0.183594 < 0.3; top8=[{\"rgb\":[209,158,31],\"count\":423},{\"rgb\":[29,24,12],\"count\":244},{\"rgb\":[30,25,12],\"count\":144},{\"rgb\":[35,29,13],\"count\":132},{\"rgb\":[36,29,13],\"count\":129},{\"rgb\":[38,31,13],\"count\":124},{\"rgb\":[37,30,13],\"count\":113},{\"rgb\":[39,31,13],\"count\":103}]"
+      },
+      "hashes": {
+        "painted": "be4df28dc40d4abc8460798e26243da64d9d10a3451ba56929a487be19836be8",
+        "control": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376"
+      }
+    },
+    {
+      "theme": "gilded",
+      "variant": "prescribed",
+      "repeat": 2,
+      "names": {
+        "painted": "gilded-prescribed-2-painted.png",
+        "control": "gilded-prescribed-2-control.png"
+      },
+      "rule": "[data-control-capture=\"gilded-prescribed-2\"], [data-control-capture=\"gilded-prescribed-2\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(209, 158, 31)",
+        "color": "rgb(209, 158, 31)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "box": {
+        "x": 564.328125,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.18359375,
+      "histogram": [
+        {
+          "rgb": [
+            209,
+            158,
+            31
+          ],
+          "count": 423
+        },
+        {
+          "rgb": [
+            29,
+            24,
+            12
+          ],
+          "count": 244
+        },
+        {
+          "rgb": [
+            30,
+            25,
+            12
+          ],
+          "count": 144
+        },
+        {
+          "rgb": [
+            35,
+            29,
+            13
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            36,
+            29,
+            13
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            38,
+            31,
+            13
+          ],
+          "count": 124
+        },
+        {
+          "rgb": [
+            37,
+            30,
+            13
+          ],
+          "count": 113
+        },
+        {
+          "rgb": [
+            39,
+            31,
+            13
+          ],
+          "count": 103
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure gilded/prescribed/2: weak foreground mask; mode=0.183594 < 0.3; top8=[{\"rgb\":[209,158,31],\"count\":423},{\"rgb\":[29,24,12],\"count\":244},{\"rgb\":[30,25,12],\"count\":144},{\"rgb\":[35,29,13],\"count\":132},{\"rgb\":[36,29,13],\"count\":129},{\"rgb\":[38,31,13],\"count\":124},{\"rgb\":[37,30,13],\"count\":113},{\"rgb\":[39,31,13],\"count\":103}]"
+      },
+      "hashes": {
+        "painted": "be4df28dc40d4abc8460798e26243da64d9d10a3451ba56929a487be19836be8",
+        "control": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376"
+      }
+    },
+    {
+      "theme": "gilded",
+      "variant": "prescribed",
+      "repeat": 3,
+      "names": {
+        "painted": "gilded-prescribed-3-painted.png",
+        "control": "gilded-prescribed-3-control.png"
+      },
+      "rule": "[data-control-capture=\"gilded-prescribed-3\"], [data-control-capture=\"gilded-prescribed-3\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(209, 158, 31)",
+        "color": "rgb(209, 158, 31)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "box": {
+        "x": 564.328125,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.18359375,
+      "histogram": [
+        {
+          "rgb": [
+            209,
+            158,
+            31
+          ],
+          "count": 423
+        },
+        {
+          "rgb": [
+            29,
+            24,
+            12
+          ],
+          "count": 244
+        },
+        {
+          "rgb": [
+            30,
+            25,
+            12
+          ],
+          "count": 144
+        },
+        {
+          "rgb": [
+            35,
+            29,
+            13
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            36,
+            29,
+            13
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            38,
+            31,
+            13
+          ],
+          "count": 124
+        },
+        {
+          "rgb": [
+            37,
+            30,
+            13
+          ],
+          "count": 113
+        },
+        {
+          "rgb": [
+            39,
+            31,
+            13
+          ],
+          "count": 103
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure gilded/prescribed/3: weak foreground mask; mode=0.183594 < 0.3; top8=[{\"rgb\":[209,158,31],\"count\":423},{\"rgb\":[29,24,12],\"count\":244},{\"rgb\":[30,25,12],\"count\":144},{\"rgb\":[35,29,13],\"count\":132},{\"rgb\":[36,29,13],\"count\":129},{\"rgb\":[38,31,13],\"count\":124},{\"rgb\":[37,30,13],\"count\":113},{\"rgb\":[39,31,13],\"count\":103}]"
+      },
+      "hashes": {
+        "painted": "be4df28dc40d4abc8460798e26243da64d9d10a3451ba56929a487be19836be8",
+        "control": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376"
+      }
+    },
+    {
+      "theme": "gilded",
+      "variant": "tag-status-same-clip",
+      "repeat": 1,
+      "names": {
+        "painted": "gilded-tag-status-same-clip-1-painted.png",
+        "control": "gilded-tag-status-same-clip-1-control.png"
+      },
+      "rule": "[data-control-capture=\"gilded-tag-status-same-clip-1\"], [data-control-capture=\"gilded-tag-status-same-clip-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(209, 158, 31)",
+        "color": "rgb(209, 158, 31)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(209, 158, 31) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "box": {
+        "x": 564.328125,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.18359375,
+      "histogram": [
+        {
+          "rgb": [
+            209,
+            158,
+            31
+          ],
+          "count": 423
+        },
+        {
+          "rgb": [
+            29,
+            24,
+            12
+          ],
+          "count": 244
+        },
+        {
+          "rgb": [
+            30,
+            25,
+            12
+          ],
+          "count": 144
+        },
+        {
+          "rgb": [
+            35,
+            29,
+            13
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            36,
+            29,
+            13
+          ],
+          "count": 129
+        },
+        {
+          "rgb": [
+            38,
+            31,
+            13
+          ],
+          "count": 124
+        },
+        {
+          "rgb": [
+            37,
+            30,
+            13
+          ],
+          "count": 113
+        },
+        {
+          "rgb": [
+            39,
+            31,
+            13
+          ],
+          "count": 103
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure gilded/tag-status-same-clip/1: weak foreground mask; mode=0.183594 < 0.3; top8=[{\"rgb\":[209,158,31],\"count\":423},{\"rgb\":[29,24,12],\"count\":244},{\"rgb\":[30,25,12],\"count\":144},{\"rgb\":[35,29,13],\"count\":132},{\"rgb\":[36,29,13],\"count\":129},{\"rgb\":[38,31,13],\"count\":124},{\"rgb\":[37,30,13],\"count\":113},{\"rgb\":[39,31,13],\"count\":103}]"
+      },
+      "hashes": {
+        "painted": "be4df28dc40d4abc8460798e26243da64d9d10a3451ba56929a487be19836be8",
+        "control": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376"
+      }
+    },
+    {
+      "theme": "gilded",
+      "variant": "diagnostic-ancestor-filter-none",
+      "repeat": 1,
+      "names": {
+        "painted": "gilded-diagnostic-ancestor-filter-none-1-painted.png",
+        "control": "gilded-diagnostic-ancestor-filter-none-1-control.png"
+      },
+      "rule": "[data-control-capture=\"gilded-diagnostic-ancestor-filter-none-1\"], [data-control-capture=\"gilded-diagnostic-ancestor-filter-none-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(209, 158, 31)",
+        "color": "rgb(209, 158, 31)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(209, 158, 31)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.328125,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.328125,\"bottom\":307.25,\"left\":564.328125}"
+      },
+      "box": {
+        "x": 564.328125,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 723,
+      "modeFraction": 0.5822959889349931,
+      "histogram": [
+        {
+          "rgb": [
+            209,
+            158,
+            31
+          ],
+          "count": 421
+        },
+        {
+          "rgb": [
+            91,
+            70,
+            17
+          ],
+          "count": 10
+        },
+        {
+          "rgb": [
+            92,
+            71,
+            17
+          ],
+          "count": 9
+        },
+        {
+          "rgb": [
+            204,
+            154,
+            30
+          ],
+          "count": 8
+        },
+        {
+          "rgb": [
+            206,
+            156,
+            30
+          ],
+          "count": 7
+        },
+        {
+          "rgb": [
+            61,
+            48,
+            15
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            81,
+            63,
+            17
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            39,
+            32,
+            12
+          ],
+          "count": 5
+        }
+      ],
+      "measured": {
+        "painted": [
+          209,
+          158,
+          31
+        ],
+        "maskSize": 723,
+        "modeFraction": 0.5822959889349931,
+        "histogram": [
+          {
+            "rgb": [
+              209,
+              158,
+              31
+            ],
+            "count": 421
+          },
+          {
+            "rgb": [
+              91,
+              70,
+              17
+            ],
+            "count": 10
+          },
+          {
+            "rgb": [
+              92,
+              71,
+              17
+            ],
+            "count": 9
+          },
+          {
+            "rgb": [
+              204,
+              154,
+              30
+            ],
+            "count": 8
+          },
+          {
+            "rgb": [
+              206,
+              156,
+              30
+            ],
+            "count": 7
+          },
+          {
+            "rgb": [
+              61,
+              48,
+              15
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              81,
+              63,
+              17
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              39,
+              32,
+              12
+            ],
+            "count": 5
+          }
+        ],
+        "width": 48,
+        "height": 48
+      },
+      "hashes": {
+        "painted": "b6abb7531ccd5ca42e52971c05aba9c3ae8eebb20ee3b1a3b4355181658a6dcb",
+        "control": "7368c50a3677c67dd590345e696840406b9f1b44eddb789e39211485971dd376"
+      }
+    },
+    {
+      "theme": "vector",
+      "variant": "neutral",
+      "repeat": 1,
+      "names": {
+        "painted": "vector-neutral-1-painted.png",
+        "control": "vector-neutral-1-control.png"
+      },
+      "rule": "[data-control-capture=\"vector-neutral-1\"] { --control-diagnostic: 1; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(102, 242, 255)",
+        "color": "rgb(102, 242, 255)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(102, 242, 255)",
+        "color": "rgb(102, 242, 255)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "box": {
+        "x": 564.84375,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 0,
+      "modeFraction": null,
+      "histogram": [],
+      "measured": {
+        "error": "Measurement failure vector/neutral/1: empty foreground mask"
+      },
+      "hashes": {
+        "painted": "43add0a45004ffa286fed1aab1205319f39c744c5269ba8662635b3aac6027a2",
+        "control": "43add0a45004ffa286fed1aab1205319f39c744c5269ba8662635b3aac6027a2"
+      }
+    },
+    {
+      "theme": "vector",
+      "variant": "prescribed",
+      "repeat": 1,
+      "names": {
+        "painted": "vector-prescribed-1-painted.png",
+        "control": "vector-prescribed-1-control.png"
+      },
+      "rule": "[data-control-capture=\"vector-prescribed-1\"], [data-control-capture=\"vector-prescribed-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(102, 242, 255)",
+        "color": "rgb(102, 242, 255)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "box": {
+        "x": 564.84375,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.12630208333333334,
+      "histogram": [
+        {
+          "rgb": [
+            102,
+            242,
+            255
+          ],
+          "count": 291
+        },
+        {
+          "rgb": [
+            17,
+            40,
+            42
+          ],
+          "count": 158
+        },
+        {
+          "rgb": [
+            17,
+            39,
+            41
+          ],
+          "count": 147
+        },
+        {
+          "rgb": [
+            97,
+            230,
+            242
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            14,
+            31,
+            32
+          ],
+          "count": 112
+        },
+        {
+          "rgb": [
+            18,
+            42,
+            44
+          ],
+          "count": 109
+        },
+        {
+          "rgb": [
+            14,
+            30,
+            31
+          ],
+          "count": 108
+        },
+        {
+          "rgb": [
+            16,
+            38,
+            40
+          ],
+          "count": 87
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure vector/prescribed/1: weak foreground mask; mode=0.126302 < 0.3; top8=[{\"rgb\":[102,242,255],\"count\":291},{\"rgb\":[17,40,42],\"count\":158},{\"rgb\":[17,39,41],\"count\":147},{\"rgb\":[97,230,242],\"count\":132},{\"rgb\":[14,31,32],\"count\":112},{\"rgb\":[18,42,44],\"count\":109},{\"rgb\":[14,30,31],\"count\":108},{\"rgb\":[16,38,40],\"count\":87}]"
+      },
+      "hashes": {
+        "painted": "43add0a45004ffa286fed1aab1205319f39c744c5269ba8662635b3aac6027a2",
+        "control": "e778c98b8e85a54cf9b711ee026783ec42935560417c7c6ae6efe599ec32f26b"
+      }
+    },
+    {
+      "theme": "vector",
+      "variant": "prescribed",
+      "repeat": 2,
+      "names": {
+        "painted": "vector-prescribed-2-painted.png",
+        "control": "vector-prescribed-2-control.png"
+      },
+      "rule": "[data-control-capture=\"vector-prescribed-2\"], [data-control-capture=\"vector-prescribed-2\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(102, 242, 255)",
+        "color": "rgb(102, 242, 255)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "box": {
+        "x": 564.84375,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.12630208333333334,
+      "histogram": [
+        {
+          "rgb": [
+            102,
+            242,
+            255
+          ],
+          "count": 291
+        },
+        {
+          "rgb": [
+            17,
+            40,
+            42
+          ],
+          "count": 158
+        },
+        {
+          "rgb": [
+            17,
+            39,
+            41
+          ],
+          "count": 147
+        },
+        {
+          "rgb": [
+            97,
+            230,
+            242
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            14,
+            31,
+            32
+          ],
+          "count": 112
+        },
+        {
+          "rgb": [
+            18,
+            42,
+            44
+          ],
+          "count": 109
+        },
+        {
+          "rgb": [
+            14,
+            30,
+            31
+          ],
+          "count": 108
+        },
+        {
+          "rgb": [
+            16,
+            38,
+            40
+          ],
+          "count": 87
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure vector/prescribed/2: weak foreground mask; mode=0.126302 < 0.3; top8=[{\"rgb\":[102,242,255],\"count\":291},{\"rgb\":[17,40,42],\"count\":158},{\"rgb\":[17,39,41],\"count\":147},{\"rgb\":[97,230,242],\"count\":132},{\"rgb\":[14,31,32],\"count\":112},{\"rgb\":[18,42,44],\"count\":109},{\"rgb\":[14,30,31],\"count\":108},{\"rgb\":[16,38,40],\"count\":87}]"
+      },
+      "hashes": {
+        "painted": "43add0a45004ffa286fed1aab1205319f39c744c5269ba8662635b3aac6027a2",
+        "control": "e778c98b8e85a54cf9b711ee026783ec42935560417c7c6ae6efe599ec32f26b"
+      }
+    },
+    {
+      "theme": "vector",
+      "variant": "prescribed",
+      "repeat": 3,
+      "names": {
+        "painted": "vector-prescribed-3-painted.png",
+        "control": "vector-prescribed-3-control.png"
+      },
+      "rule": "[data-control-capture=\"vector-prescribed-3\"], [data-control-capture=\"vector-prescribed-3\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(102, 242, 255)",
+        "color": "rgb(102, 242, 255)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "box": {
+        "x": 564.84375,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.12630208333333334,
+      "histogram": [
+        {
+          "rgb": [
+            102,
+            242,
+            255
+          ],
+          "count": 291
+        },
+        {
+          "rgb": [
+            17,
+            40,
+            42
+          ],
+          "count": 158
+        },
+        {
+          "rgb": [
+            17,
+            39,
+            41
+          ],
+          "count": 147
+        },
+        {
+          "rgb": [
+            97,
+            230,
+            242
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            14,
+            31,
+            32
+          ],
+          "count": 112
+        },
+        {
+          "rgb": [
+            18,
+            42,
+            44
+          ],
+          "count": 109
+        },
+        {
+          "rgb": [
+            14,
+            30,
+            31
+          ],
+          "count": 108
+        },
+        {
+          "rgb": [
+            16,
+            38,
+            40
+          ],
+          "count": 87
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure vector/prescribed/3: weak foreground mask; mode=0.126302 < 0.3; top8=[{\"rgb\":[102,242,255],\"count\":291},{\"rgb\":[17,40,42],\"count\":158},{\"rgb\":[17,39,41],\"count\":147},{\"rgb\":[97,230,242],\"count\":132},{\"rgb\":[14,31,32],\"count\":112},{\"rgb\":[18,42,44],\"count\":109},{\"rgb\":[14,30,31],\"count\":108},{\"rgb\":[16,38,40],\"count\":87}]"
+      },
+      "hashes": {
+        "painted": "43add0a45004ffa286fed1aab1205319f39c744c5269ba8662635b3aac6027a2",
+        "control": "e778c98b8e85a54cf9b711ee026783ec42935560417c7c6ae6efe599ec32f26b"
+      }
+    },
+    {
+      "theme": "vector",
+      "variant": "tag-status-same-clip",
+      "repeat": 1,
+      "names": {
+        "painted": "vector-tag-status-same-clip-1-painted.png",
+        "control": "vector-tag-status-same-clip-1-control.png"
+      },
+      "rule": "[data-control-capture=\"vector-tag-status-same-clip-1\"], [data-control-capture=\"vector-tag-status-same-clip-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(102, 242, 255)",
+        "color": "rgb(102, 242, 255)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "drop-shadow(rgb(102, 242, 255) 0px 0px 5px)",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "box": {
+        "x": 564.84375,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 2304,
+      "modeFraction": 0.12630208333333334,
+      "histogram": [
+        {
+          "rgb": [
+            102,
+            242,
+            255
+          ],
+          "count": 291
+        },
+        {
+          "rgb": [
+            17,
+            40,
+            42
+          ],
+          "count": 158
+        },
+        {
+          "rgb": [
+            17,
+            39,
+            41
+          ],
+          "count": 147
+        },
+        {
+          "rgb": [
+            97,
+            230,
+            242
+          ],
+          "count": 132
+        },
+        {
+          "rgb": [
+            14,
+            31,
+            32
+          ],
+          "count": 112
+        },
+        {
+          "rgb": [
+            18,
+            42,
+            44
+          ],
+          "count": 109
+        },
+        {
+          "rgb": [
+            14,
+            30,
+            31
+          ],
+          "count": 108
+        },
+        {
+          "rgb": [
+            16,
+            38,
+            40
+          ],
+          "count": 87
+        }
+      ],
+      "measured": {
+        "error": "Measurement failure vector/tag-status-same-clip/1: weak foreground mask; mode=0.126302 < 0.3; top8=[{\"rgb\":[102,242,255],\"count\":291},{\"rgb\":[17,40,42],\"count\":158},{\"rgb\":[17,39,41],\"count\":147},{\"rgb\":[97,230,242],\"count\":132},{\"rgb\":[14,31,32],\"count\":112},{\"rgb\":[18,42,44],\"count\":109},{\"rgb\":[14,30,31],\"count\":108},{\"rgb\":[16,38,40],\"count\":87}]"
+      },
+      "hashes": {
+        "painted": "43add0a45004ffa286fed1aab1205319f39c744c5269ba8662635b3aac6027a2",
+        "control": "e778c98b8e85a54cf9b711ee026783ec42935560417c7c6ae6efe599ec32f26b"
+      }
+    },
+    {
+      "theme": "vector",
+      "variant": "diagnostic-ancestor-filter-none",
+      "repeat": 1,
+      "names": {
+        "painted": "vector-diagnostic-ancestor-filter-none-1-painted.png",
+        "control": "vector-diagnostic-ancestor-filter-none-1-control.png"
+      },
+      "rule": "[data-control-capture=\"vector-diagnostic-ancestor-filter-none-1\"], [data-control-capture=\"vector-diagnostic-ancestor-filter-none-1\"] * { fill: transparent !important; stroke: transparent !important; background-color: transparent !important; color: transparent !important; box-shadow: none !important; filter: none !important; text-shadow: none !important; }",
+      "before": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "none",
+        "stroke": "rgb(102, 242, 255)",
+        "color": "rgb(102, 242, 255)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "none",
+            "stroke": "rgb(102, 242, 255)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "during": {
+        "visibility": "visible",
+        "display": "block",
+        "opacity": "1",
+        "fill": "rgba(0, 0, 0, 0)",
+        "stroke": "rgba(0, 0, 0, 0)",
+        "color": "rgba(0, 0, 0, 0)",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "boxShadow": "none",
+        "filter": "none",
+        "textShadow": "none",
+        "descendants": [
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          },
+          {
+            "visibility": "visible",
+            "fill": "rgba(0, 0, 0, 0)",
+            "stroke": "rgba(0, 0, 0, 0)"
+          }
+        ],
+        "rowOpacity": "1",
+        "rowHover": false,
+        "focusWithin": false,
+        "statusFilter": "none",
+        "running": 0,
+        "dpr": 4,
+        "box": "{\"x\":564.84375,\"y\":295.25,\"width\":12,\"height\":12,\"top\":295.25,\"right\":576.84375,\"bottom\":307.25,\"left\":564.84375}"
+      },
+      "box": {
+        "x": 564.84375,
+        "y": 295.25,
+        "width": 12,
+        "height": 12
+      },
+      "maskSize": 726,
+      "modeFraction": 0.38980716253443526,
+      "histogram": [
+        {
+          "rgb": [
+            102,
+            242,
+            255
+          ],
+          "count": 283
+        },
+        {
+          "rgb": [
+            97,
+            230,
+            242
+          ],
+          "count": 134
+        },
+        {
+          "rgb": [
+            40,
+            93,
+            98
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            42,
+            98,
+            103
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            95,
+            225,
+            238
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            101,
+            240,
+            253
+          ],
+          "count": 6
+        },
+        {
+          "rgb": [
+            18,
+            42,
+            44
+          ],
+          "count": 5
+        },
+        {
+          "rgb": [
+            7,
+            17,
+            17
+          ],
+          "count": 4
+        }
+      ],
+      "measured": {
+        "painted": [
+          102,
+          242,
+          255
+        ],
+        "maskSize": 726,
+        "modeFraction": 0.38980716253443526,
+        "histogram": [
+          {
+            "rgb": [
+              102,
+              242,
+              255
+            ],
+            "count": 283
+          },
+          {
+            "rgb": [
+              97,
+              230,
+              242
+            ],
+            "count": 134
+          },
+          {
+            "rgb": [
+              40,
+              93,
+              98
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              42,
+              98,
+              103
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              95,
+              225,
+              238
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              101,
+              240,
+              253
+            ],
+            "count": 6
+          },
+          {
+            "rgb": [
+              18,
+              42,
+              44
+            ],
+            "count": 5
+          },
+          {
+            "rgb": [
+              7,
+              17,
+              17
+            ],
+            "count": 4
+          }
+        ],
+        "width": 48,
+        "height": 48
+      },
+      "hashes": {
+        "painted": "23487cb58e4071c5989e1b71ffcfd09c106bfd26950271bbd8fa00afea46ae18",
+        "control": "e778c98b8e85a54cf9b711ee026783ec42935560417c7c6ae6efe599ec32f26b"
+      }
+    }
+  ]
+}

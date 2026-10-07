@@ -1,0 +1,11 @@
+{
+  "args": [
+    "npm",
+    "--prefix",
+    "ui",
+    "test"
+  ],
+  "exit": 1,
+  "wallSeconds": 48.81203504203586,
+  "boundSeconds": 589
+}

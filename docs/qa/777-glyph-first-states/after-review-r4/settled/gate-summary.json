@@ -1,0 +1,23 @@
+{
+  "offline": {
+    "passed": 4795,
+    "skipped": 1380,
+    "files": 411,
+    "failures": 0
+  },
+  "ui": {
+    "files": 37,
+    "passed": 503
+  },
+  "focused": {
+    "files": 3,
+    "passed": 25
+  },
+  "ownerGuard": {
+    "passed": 80,
+    "databaseTargets": 0
+  },
+  "reachability": {
+    "passed": 54
+  }
+}

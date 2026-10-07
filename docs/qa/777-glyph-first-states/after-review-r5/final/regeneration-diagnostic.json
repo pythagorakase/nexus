@@ -1,0 +1,17 @@
+{
+  "name": "protocol-rerun-diagnostic",
+  "args": [
+    "npm",
+    "--prefix",
+    "ui",
+    "test",
+    "--",
+    "protocol-rerun"
+  ],
+  "exit": 1,
+  "boundSeconds": 589,
+  "timedOut": false,
+  "wallSeconds": 54.45746883295942,
+  "tail": "    \"w1536+/reduce/map/sidebar/selected-current/ring/current/hovered\",\n    \"w1536+/reduce/map/sidebar/selected-current/ring/selected/hovered\",\n    \"w1536+/motion/start/map/canvas-sea/ring/current/hovered\",\n    \"w1536+/motion/start/map/canvas-sea/ring/selected/hovered\",\n    \"w1536+/motion/start/map/canvas-land/ring/current/hovered\",\n    \"w1536+/motion/start/map/canvas-land/ring/selected/hovered\",\n    \"w1536+/motion/start/map/sidebar/rest/ring/current/hovered\",\n    \"w1536+/motion/start/map/sidebar/rest/ring/selected/hovered\",\n    \"w1536+/motion/start/map/sidebar/selected-current/ring/current/hovered\",\n    \"w1536+/motion/start/map/sidebar/selected-current/ring/selected/hovered\",\n    \"w1536+/motion/trough/map/canvas-sea/ring/current/hovered\",\n    \"w1536+/motion/trough/map/canvas-sea/ring/selected/hovered\",\n    \"w1536+/motion/trough/map/canvas-land/ring/current/hovered\",\n    \"w1536+/motion/trough/map/canvas-land/ring/selected/hovered\",\n    \"w1536+/motion/trough/map/sidebar/rest/ring/current/hovered\",\n    \"w1536+/motion/trough/map/sidebar/rest/ring/selected/hovered\",\n    \"w1536+/motion/trough/map/sidebar/selected-current/ring/current/hovered\",\n    \"w1536+/motion/trough/map/sidebar/selected-current/ring/selected/hovered\",\n  ]\n\n \u276f protocol-rerun.test.ts:559:40\n    557|       expect(result.measurements).toEqual(shipped);\n    558|       const shortfalls = shipped.filter(m => m.delta < 15);\n    559|       expect(exceptions[result.theme]).toEqual(shortfalls.map(m => `${\u2026\n       |                                        ^\n    560|       for (const factor of result.factorMaxima) expect(shortfalls.some\u2026\n    561|       for (const m of shortfalls) expect(m.signatures[0]).not.toEqual(\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[2/2]\u23af\n\n Test Files  1 failed (1)\n      Tests  2 failed | 9 passed (11)\n   Start at  18:15:31\n   Duration  54.08s (transform 41ms, setup 61ms, collect 1.50s, tests 51.75s, environment 363ms, prepare 179ms)\n",
+  "scope": "Temporary clone of all eleven current shade assertions against the fresh full receipt. Receipt path and import locations relocated; no assertion removed. Clone outside client/src and removed afterwards. Two expected old-table/order failures, nine passes; final production tests follow after evidence refresh."
+}

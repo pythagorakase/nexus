@@ -1,0 +1,434 @@
+[
+  {
+    "name": "opaque-gradient-stop",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 361.553187209,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "opaque-gradient-stop-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "theme-provider-opacity",
+    "staleExit": 1,
+    "captureExit": 1,
+    "captureWallSeconds": 39.988165083,
+    "freshExit": null,
+    "failures": [],
+    "measurementRejected": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving w1101-1279/reduce/Veil\u2026\nCompleted w1101-1279/reduce/Veil; renders=74; wall=39.492s\nIncomplete painted probe: renders=74; wall=39.495s; acceptanceComplete=false\nfile:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390\n            throw new Error(`Calibration non-vacuity failure ${theme}/${wanted.context}/${wanted.states.join('/')}: required ${wanted.opacity} pair, got ${pair?.opacity ?? 'skipped'}; effective opacities=${wanted.states.map(s => calibration.samples[wanted.context][s].effectiveOpacity).join('/')}`);\n                  ^\n\nError: Calibration non-vacuity failure Veil/key/required/rest/present/verified: required opaque pair, got translucent; effective opacities=0.35/0.35\n    at renderInventory (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:390:19)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:400:53\n\nNode.js v24.3.0\n",
+    "restored": {
+      "name": "theme-provider-opacity-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "media-root-override",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 362.096137708,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean",
+      "777-S2 state shades > browser_measurements_match_recorded_tables",
+      "777-S2 state shades > global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values",
+      "777-S2 state shades > state_surfaces_read_only_state_tokens"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "media-root-override-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "optional-row-opacity",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 362.528324916,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "optional-row-opacity-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "theme-backdrop",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 371.170949458,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "theme-backdrop-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "important-state-surface",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 346.417936542,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled",
+      "777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean",
+      "777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "important-state-surface-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "has-state-surface",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 365.370434542,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "has-state-surface-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "map-blend",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 376.824829125,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > browser_measurements_match_recorded_tables"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "map-blend-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "key-overpainting-shadow",
+    "staleExit": 1,
+    "captureExit": 1,
+    "captureWallSeconds": 112.406132667,
+    "freshExit": null,
+    "failures": [],
+    "measurementRejected": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\nBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:\n  npx update-browserslist-db@latest\n  Why you should do it regularly: https://github.com/browserslist/update-db#readme\nnode_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in \"node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js\" is strongly discouraged as it poses security risks and may cause issues with minification.\nResolving w1101-1279/reduce/Veil\u2026\nCompleted w1101-1279/reduce/Veil; renders=74; wall=40.809s\nCalibration Veil: {\"memory\":{\"opaqueMaximum\":0.00026414815709771805,\"translucentMaximum\":0,\"skippedPairs\":0},\"delete\":{\"opaqueMaximum\":0.006002891112468775,\"translucentMaximum\":0.012334576619474699,\"skippedPairs\":0},\"key\":{\"opaqueMaximum\":0.034006547360171085,\"translucentMaximum\":0.008877003922876377,\"skippedPairs\":0},\"map\":{\"opaqueMaximum\":0.07468917510215183,\"translucentMaximum\":0.4165404892186375,\"skippedPairs\":20}}; passed\nResolving w1101-1279/reduce/Gilded\u2026\nPainted capture progress: renders=84; wall=49.494s\nCompleted w1101-1279/reduce/Gilded; renders=148; wall=76.321s\nCalibration Gilded: {\"memory\":{\"opaqueMaximum\":0.0002619007277823465,\"translucentMaximum\":0,\"skippedPairs\":0},\"delete\":{\"opaqueMaximum\":0.008785869899490675,\"translucentMaximum\":0.0079023496576129,\"skippedPairs\":0},\"key\":{\"opaqueMaximum\":0.01299809656952449,\"translucentMaximum\":3.023813192249318e-14,\"skippedPairs\":0},\"map\":{\"opaqueMaximum\":0.07196338979953294,\"translucentMaximum\":0.4249545915725878,\"skippedPairs\":19}}; passed\nResolving w1101-1279/reduce/Vector\u2026\nPainted capture progress: renders=164; wall=94.494s\nCompleted w1101-1279/reduce/Vector; renders=222; wall=111.830s\nIncomplete painted probe: renders=222; wall=111.833s; acceptanceComplete=false\nfile:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:379\n          throw new Error(`Calibration failure ${theme}/${failure.context}/${failure.states.join('/')}: ${failure.opacity} deutan delta=${failure.delta} > ${calibration.tolerances[failure.opacity]}; PNGs: ${failure.captures.map(c => resolve(scratch, c.painted)).join('; ')}`);\n                ^\n\nError: Calibration failure Vector/key/required/rest/required-missing/present: opaque deutan delta=1.1084665796847142 > 1; PNGs: /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/key-overpainting-shadow-capture/calibration/w1101-1279_reduce_Vector_calibration_key_required_rest_required-missing_hsl_185_40__50__-painted.png; /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/key-overpainting-shadow-capture/calibration/w1101-1279_reduce_Vector_calibration_key_required_rest_present_hsl_185_40__50__-painted.png\n    at renderInventory (file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:379:17)\n    at async file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/scratchpad/777-S2/after-review-r5/plants-final/plant-copy/ui/scripts/resolve-state-surfaces.mjs:400:53\n\nNode.js v24.3.0\n",
+    "restored": {
+      "name": "key-overpainting-shadow-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "gradient-state-surface",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 370.57610520800006,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > browser_measurements_match_recorded_tables",
+      "777-S2 state shades > state_surfaces_read_only_state_tokens"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "gradient-state-surface-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  },
+  {
+    "name": "element-state-redeclaration",
+    "staleExit": 1,
+    "captureExit": 0,
+    "captureWallSeconds": 364.367962083,
+    "freshExit": 1,
+    "failures": [
+      "777-S2 state shades > global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values",
+      "777-S2 state shades > state_surfaces_read_only_state_tokens"
+    ],
+    "measurementRejected": null,
+    "restored": {
+      "name": "element-state-redeclaration-restored",
+      "passed": true,
+      "files": [
+        {
+          "path": "ui/client/src/components/nexus/nexus-layout.css",
+          "before": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "worktree": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "head": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c",
+          "scratch": "9b2e0ebe39029941892f84440d222fa32ce1c6ee3131ceefdcb22a92a59dab8c"
+        },
+        {
+          "path": "ui/client/src/contexts/ThemeContext.tsx",
+          "before": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "worktree": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "head": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a",
+          "scratch": "f45ae5ac19190d25852042dab9e8865956a81b9e105e0515aa12d0440e8a452a"
+        },
+        {
+          "path": "ui/client/src/state-surfaces.resolved.json",
+          "before": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "worktree": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "head": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880",
+          "scratch": "4b2ce6a0f4f4c52fc737fbeb94d4c36943219792fe0b3323c08938e8ad92d880"
+        }
+      ],
+      "prePlantCommit": "2f586440b9cbc69afdb0fecb52c06325af48e5c4"
+    }
+  }
+]

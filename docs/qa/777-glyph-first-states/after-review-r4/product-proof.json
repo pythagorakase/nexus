@@ -1,0 +1,118 @@
+{
+  "conditions": {
+    "viewport": {
+      "width": 1200,
+      "height": 900
+    },
+    "deviceScaleFactor": 4,
+    "colorScheme": "dark",
+    "reducedMotion": "reduce",
+    "origin": "file://",
+    "network": "aborted"
+  },
+  "chromium": "153.0.8010.12",
+  "labels": [
+    {
+      "theme": "veil",
+      "state": "selected",
+      "beforeColor": "rgb(190, 55, 145)",
+      "afterColor": "rgb(184, 61, 122)",
+      "changedPixels": 815,
+      "width": 136,
+      "height": 52,
+      "disposition": "Mandatory Veil anchor correction; 815 changed pixels; --brass paints #b83d7a exactly"
+    },
+    {
+      "theme": "gilded",
+      "state": "selected",
+      "beforeColor": "rgb(209, 158, 31)",
+      "afterColor": "rgb(209, 158, 31)",
+      "changedPixels": 0,
+      "width": 212,
+      "height": 64,
+      "disposition": "Pixel-identical to 8ccd3008"
+    },
+    {
+      "theme": "vector",
+      "state": "selected",
+      "beforeColor": "rgb(0, 234, 255)",
+      "afterColor": "rgb(0, 234, 255)",
+      "changedPixels": 0,
+      "width": 208,
+      "height": 48,
+      "disposition": "Pixel-identical to 8ccd3008"
+    }
+  ],
+  "halo": [
+    {
+      "theme": "veil",
+      "state": "normal",
+      "beforeShadow": "rgba(190, 55, 145, 0.55) 0px 0px 8px 0px, rgba(230, 115, 77, 0.25) 0px 0px 18px 0px",
+      "afterShadow": "rgba(190, 55, 145, 0.55) 0px 0px 8px 0px, rgba(230, 115, 77, 0.25) 0px 0px 18px 0px",
+      "pixelIdentical": true
+    },
+    {
+      "theme": "veil",
+      "state": "over",
+      "beforeShadow": "rgba(190, 55, 145, 0.55) 0px 0px 8px 0px, rgba(230, 115, 77, 0.25) 0px 0px 18px 0px",
+      "afterShadow": "rgba(190, 55, 145, 0.55) 0px 0px 8px 0px, rgba(230, 115, 77, 0.25) 0px 0px 18px 0px",
+      "pixelIdentical": true
+    },
+    {
+      "theme": "gilded",
+      "state": "normal",
+      "beforeShadow": "rgba(209, 158, 31, 0.5) 0px 0px 8px 0px, rgba(209, 158, 31, 0.25) 0px 0px 16px 0px",
+      "afterShadow": "rgba(209, 158, 31, 0.5) 0px 0px 8px 0px, rgba(209, 158, 31, 0.25) 0px 0px 16px 0px",
+      "pixelIdentical": true
+    },
+    {
+      "theme": "gilded",
+      "state": "over",
+      "beforeShadow": "rgba(209, 158, 31, 0.5) 0px 0px 8px 0px, rgba(209, 158, 31, 0.25) 0px 0px 16px 0px",
+      "afterShadow": "rgba(209, 158, 31, 0.5) 0px 0px 8px 0px, rgba(209, 158, 31, 0.25) 0px 0px 16px 0px",
+      "pixelIdentical": true
+    },
+    {
+      "theme": "vector",
+      "state": "normal",
+      "beforeShadow": "rgba(0, 234, 255, 0.6) 0px 0px 8px 0px, rgba(0, 234, 255, 0.3) 0px 0px 16px 0px",
+      "afterShadow": "rgba(0, 234, 255, 0.6) 0px 0px 8px 0px, rgba(0, 234, 255, 0.3) 0px 0px 16px 0px",
+      "pixelIdentical": true
+    },
+    {
+      "theme": "vector",
+      "state": "over",
+      "beforeShadow": "rgba(0, 234, 255, 0.6) 0px 0px 8px 0px, rgba(0, 234, 255, 0.3) 0px 0px 16px 0px",
+      "afterShadow": "rgba(0, 234, 255, 0.6) 0px 0px 8px 0px, rgba(0, 234, 255, 0.3) 0px 0px 16px 0px",
+      "pixelIdentical": true
+    }
+  ],
+  "pointer": [
+    {
+      "theme": "veil",
+      "hovered": "hovered",
+      "selected": "selected",
+      "rest": "rest",
+      "identity": true,
+      "restIdentity": true
+    },
+    {
+      "theme": "gilded",
+      "hovered": "hovered",
+      "selected": "selected",
+      "rest": "rest",
+      "identity": true,
+      "restIdentity": true
+    },
+    {
+      "theme": "vector",
+      "hovered": "hovered",
+      "selected": "selected",
+      "rest": "rest",
+      "identity": true,
+      "restIdentity": true
+    }
+  ],
+  "pageErrors": [],
+  "clarification": "Coordinator clarification after round-four stop-report retains the seven-token Veil anchor exception. No old pigment is authorized."
+}

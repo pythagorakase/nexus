@@ -1,0 +1,218 @@
+[
+  {
+    "name": "capture-1",
+    "args": [
+      "env",
+      "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/batch-1",
+      "STATE_SURFACES_OUTPUT=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-1.json",
+      "STATE_SURFACES_CONDITION=default,motion-start,motion-trough,width-639,width-640,width-760",
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 424.05969620801625,
+    "tail": "Painted capture progress: renders=4119; wall=93.142s\nPainted capture progress: renders=7938; wall=138.141s\nCompleted default/Vector; renders=11429; wall=177.973s\nCompleted width-639/Vector; renders=11481; wall=178.631s\nPainted capture progress: renders=11819; wall=183.141s\nCompleted motion-trough/Vector; renders=12264; wall=188.884s\nCompleted motion-start/Vector; renders=12265; wall=188.900s\nCompleted width-639/Veil; renders=13630; wall=210.492s\nCompleted default/Veil; renders=13689; wall=211.473s\nCompleted width-639/Gilded; renders=13973; wall=217.480s\nResolving width-640/Veil\u2026\nResolving width-640/Gilded\u2026\nResolving width-640/Vector\u2026\nCompleted default/Gilded; renders=13983; wall=217.804s\nResolving width-760/Veil\u2026\nResolving width-760/Gilded\u2026\nResolving width-760/Vector\u2026\nCompleted motion-start/Veil; renders=14337; wall=222.577s\nCompleted motion-trough/Veil; renders=14337; wall=222.580s\nPainted capture progress: renders=14545; wall=228.141s\nCompleted motion-start/Gilded; renders=14559; wall=228.492s\nCompleted motion-trough/Gilded; renders=14559; wall=228.497s\nPainted capture progress: renders=15497; wall=273.141s\nPainted capture progress: renders=16944; wall=318.142s\nPainted capture progress: renders=19100; wall=363.142s\nCompleted width-640/Vector; renders=20141; wall=384.200s\nCompleted width-760/Vector; renders=20170; wall=384.893s\nPainted capture progress: renders=20938; wall=408.143s\nCompleted width-640/Veil; renders=21220; wall=416.609s\nCompleted width-760/Veil; renders=21231; wall=417.002s\nCompleted width-640/Gilded; renders=21331; wall=422.945s\nCompleted width-760/Gilded; renders=21336; wall=423.454s\nResolved painted state surfaces: renders=21336; wall=423.457s; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900 default; deviceScaleFactor=4; dark; reduced motion; 6 media conditions; file://; network aborted; requests=0; errors=0\nWrote /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-1.json; module graph=2095 inputs; SHA-256 f8ebb445ed2a41072d3d9661fb41c41c1fbb899486029837609ed33c569325bb\n"
+  },
+  {
+    "name": "capture-2",
+    "args": [
+      "env",
+      "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/batch-2",
+      "STATE_SURFACES_OUTPUT=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-2.json",
+      "STATE_SURFACES_CONDITION=width-761,width-767,width-768,width-1023,width-1024,width-1100",
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 422.39534229200217,
+    "tail": "Painted capture progress: renders=4337; wall=93.295s\nPainted capture progress: renders=8251; wall=138.295s\nCompleted width-1023/Vector; renders=11856; wall=178.057s\nCompleted width-761/Vector; renders=11877; wall=178.272s\nCompleted width-767/Vector; renders=11898; wall=178.542s\nCompleted width-768/Vector; renders=11901; wall=178.562s\nPainted capture progress: renders=12211; wall=183.295s\nCompleted width-768/Veil; renders=13992; wall=210.223s\nCompleted width-1023/Veil; renders=14006; wall=210.447s\nCompleted width-767/Veil; renders=14020; wall=210.733s\nCompleted width-761/Veil; renders=14034; wall=211.025s\nCompleted width-761/Gilded; renders=14212; wall=216.359s\nResolving width-1024/Veil\u2026\nResolving width-1024/Gilded\u2026\nResolving width-1024/Vector\u2026\nCompleted width-767/Gilded; renders=14220; wall=216.646s\nCompleted width-768/Gilded; renders=14225; wall=216.733s\nResolving width-1100/Veil\u2026\nResolving width-1100/Gilded\u2026\nResolving width-1100/Vector\u2026\nCompleted width-1023/Gilded; renders=14230; wall=216.902s\nPainted capture progress: renders=14582; wall=228.296s\nPainted capture progress: renders=15528; wall=273.296s\nPainted capture progress: renders=17012; wall=318.296s\nPainted capture progress: renders=19163; wall=363.297s\nCompleted width-1024/Vector; renders=20148; wall=383.047s\nCompleted width-1100/Vector; renders=20165; wall=383.431s\nPainted capture progress: renders=20985; wall=408.297s\nCompleted width-1024/Veil; renders=21224; wall=415.372s\nCompleted width-1100/Veil; renders=21239; wall=415.924s\nCompleted width-1024/Gilded; renders=21335; wall=421.641s\nCompleted width-1100/Gilded; renders=21336; wall=421.745s\nResolved painted state surfaces: renders=21336; wall=421.748s; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900 default; deviceScaleFactor=4; dark; reduced motion; 6 media conditions; file://; network aborted; requests=0; errors=0\nWrote /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-2.json; module graph=2095 inputs; SHA-256 f8ebb445ed2a41072d3d9661fb41c41c1fbb899486029837609ed33c569325bb\n"
+  },
+  {
+    "name": "capture-3",
+    "args": [
+      "env",
+      "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/batch-3",
+      "STATE_SURFACES_OUTPUT=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-3.json",
+      "STATE_SURFACES_CONDITION=width-1101,width-1279,width-1280,width-1281,width-1535,width-1536",
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "resolve-state-surfaces"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 425.4057517090114,
+    "tail": "Painted capture progress: renders=4314; wall=93.358s\nPainted capture progress: renders=8075; wall=138.359s\nCompleted width-1280/Vector; renders=11878; wall=181.120s\nCompleted width-1281/Vector; renders=11905; wall=181.456s\nCompleted width-1101/Vector; renders=11905; wall=181.457s\nCompleted width-1279/Vector; renders=11922; wall=181.702s\nPainted capture progress: renders=12029; wall=183.359s\nCompleted width-1281/Veil; renders=13981; wall=212.906s\nCompleted width-1279/Veil; renders=13985; wall=212.952s\nCompleted width-1101/Veil; renders=14008; wall=213.397s\nCompleted width-1280/Veil; renders=14024; wall=213.765s\nCompleted width-1280/Gilded; renders=14198; wall=218.971s\nResolving width-1535/Veil\u2026\nResolving width-1535/Gilded\u2026\nResolving width-1535/Vector\u2026\nCompleted width-1279/Gilded; renders=14211; wall=219.342s\nResolving width-1536/Veil\u2026\nResolving width-1536/Vector\u2026\nResolving width-1536/Gilded\u2026\nCompleted width-1101/Gilded; renders=14265; wall=220.270s\nCompleted width-1281/Gilded; renders=14267; wall=220.296s\nPainted capture progress: renders=14528; wall=228.359s\nPainted capture progress: renders=15473; wall=273.361s\nPainted capture progress: renders=16888; wall=318.361s\nPainted capture progress: renders=19040; wall=363.362s\nCompleted width-1535/Vector; renders=20152; wall=385.752s\nCompleted width-1536/Vector; renders=20171; wall=386.144s\nPainted capture progress: renders=20903; wall=408.363s\nCompleted width-1535/Veil; renders=21222; wall=417.979s\nCompleted width-1536/Veil; renders=21230; wall=418.256s\nCompleted width-1535/Gilded; renders=21331; wall=424.281s\nCompleted width-1536/Gilded; renders=21336; wall=424.779s\nResolved painted state surfaces: renders=21336; wall=424.782s; Chromium 153.0.8010.12; Playwright 1.63.0\nEmulation: 1200\u00d7900 default; deviceScaleFactor=4; dark; reduced motion; 6 media conditions; file://; network aborted; requests=0; errors=0\nWrote /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture/shards/batch-3.json; module graph=2095 inputs; SHA-256 f8ebb445ed2a41072d3d9661fb41c41c1fbb899486029837609ed33c569325bb\n"
+  },
+  {
+    "name": "assemble-search",
+    "args": [
+      "env",
+      "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/full-capture",
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "resolve-state-surfaces",
+      "--",
+      "--assemble"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 1,
+    "wallSeconds": 0.7960821250162553,
+    "tail": "\n> nexus-ui@1.0.0 resolve-state-surfaces\n> node scripts/resolve-state-surfaces.mjs --assemble\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\nfile:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:33\n      if (merged.conditions[id] || Object.keys(data).sort().join() !== 'Gilded,Veil,Vector') throw new Error(`Duplicate/incomplete shard ${id}`);\n                                                                                                   ^\n\nError: Duplicate/incomplete shard default\n    at file:///Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/scripts/resolve-state-surfaces.mjs:33:100\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n\nNode.js v24.3.0\n"
+  },
+  {
+    "name": "search",
+    "args": [
+      "env",
+      "STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/search-evidence",
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 1,
+    "wallSeconds": 1.3194806670071557,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades\n\n\n RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n \u276f src/state-shades.test.ts (0 test)\n\n\u23af\u23af\u23af\u23af\u23af\u23af Failed Suites 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n \u276f src/state-shades.test.ts:161:9\n    159|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m\u2026\n    160| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    161|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    162| if (receipt.proof.acceptanceComplete !== true)\n    163|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  14:18:34\n   Duration  672ms (transform 32ms, setup 28ms, collect 0ms, tests 0ms, environment 179ms, prepare 30ms)\n\n"
+  },
+  {
+    "name": "provisional-search",
+    "args": [
+      "env",
+      "STATE_SHADES_EVIDENCE_DIR=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/search-evidence",
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 1,
+    "wallSeconds": 3.7231734590022825,
+    "tail": "+       \"current\",\n+       \"selected\",\n      ],\n      \"surface\": \"map\",\n      \"theme\": \"Veil\",\n    },\n  ]\n\n \u276f src/state-shades.test.ts:368:49\n    366|       const evidence = JSON.parse(readFileSync(resolve(import.meta.dir\u2026\n    367|         `../../../docs/qa/777-glyph-first-states/amendment-2/${theme.t\u2026\n    368|       expect(measures(theme, undefined, false)).toEqual(evidence.measu\u2026\n       |                                                 ^\n    369|       expect(measures(theme, undefined, true)).toEqual(evidence.before\u2026\n    370|     }\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/2]\u23af\n\n FAIL  src/state-shades.test.ts > 777-S2 state shades > reachable_deutan_pairs_meet_15_and_exceptions_keep_distinct_static_signatures\nAssertionError: Veil/delete: group maximum: expected 11.463988767175804 to be close to 14.897964380235265, received difference is 3.433975613059461, but expected 5e-11\n \u276f src/state-shades.test.ts:391:82\n    389|         const minimum = Math.min(...shipped.filter(m => m.surface === \u2026\n    390|         if (factor.feasible) expect(minimum, `${result.theme}/${factor\u2026\n    391|         else expect(minimum, `${result.theme}/${factor.surface}: group\u2026\n       |                                                                                  ^\n    392|         expect(minimum).toBeCloseTo(factor.shippedMinimum, 10);\n    393|       }\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[2/2]\u23af\n\n Test Files  1 failed (1)\n      Tests  2 failed | 6 passed (8)\n   Start at  14:19:42\n   Duration  3.34s (transform 34ms, setup 25ms, collect 485ms, tests 2.51s, environment 152ms, prepare 26ms)\n\n"
+  },
+  {
+    "name": "control-diagnostic",
+    "args": [
+      "env",
+      "STATE_SURFACES_SCRATCH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4",
+      "node",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/control-diagnostic.mjs"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 2.668905333004659,
+    "tail": "{\"theme\":\"veil\",\"state\":\"optional-absent\",\"props\":{\"svg\":\"rgb(153, 138, 102)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":0,\"painted\":[10,15,24],\"maskSize\":2304,\"modeFraction\":0.73046875,\"pairs\":[[\"10,15,24=>11,16,25\",1683],[\"83,78,65=>11,16,25\",359],[\"78,73,62=>11,16,25\",9]],\"controlTop\":[{\"rgb\":[11,16,25],\"count\":2304}]},{\"repeat\":1,\"painted\":[10,15,24],\"maskSize\":2304,\"modeFraction\":0.73046875,\"pairs\":[[\"10,15,24=>11,16,25\",1683],[\"83,78,65=>11,16,25\",359],[\"78,73,62=>11,16,25\",9]],\"controlTop\":[{\"rgb\":[11,16,25],\"count\":2304}]},{\"repeat\":2,\"painted\":[10,15,24],\"maskSize\":2304,\"modeFraction\":0.73046875,\"pairs\":[[\"10,15,24=>11,16,25\",1683],[\"83,78,65=>11,16,25\",359],[\"78,73,62=>11,16,25\",9]],\"controlTop\":[{\"rgb\":[11,16,25],\"count\":2304}]}]}\n{\"theme\":\"veil\",\"state\":\"present\",\"props\":{\"svg\":\"rgb(217, 194, 140)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":0,\"painted\":[10,15,24],\"maskSize\":2304,\"modeFraction\":0.7057291666666666,\"pairs\":[[\"10,15,24=>11,16,25\",1626],[\"115,106,84=>11,16,25\",395],[\"107,99,79=>11,16,25\",10]],\"controlTop\":[{\"rgb\":[11,16,25],\"count\":2304}]},{\"repeat\":1,\"painted\":[10,15,24],\"maskSize\":2304,\"modeFraction\":0.7057291666666666,\"pairs\":[[\"10,15,24=>11,16,25\",1626],[\"115,106,84=>11,16,25\",395],[\"107,99,79=>11,16,25\",10]],\"controlTop\":[{\"rgb\":[11,16,25],\"count\":2304}]},{\"repeat\":2,\"painted\":[10,15,24],\"maskSize\":2304,\"modeFraction\":0.7057291666666666,\"pairs\":[[\"10,15,24=>11,16,25\",1626],[\"115,106,84=>11,16,25\",395],[\"107,99,79=>11,16,25\",10]],\"controlTop\":[{\"rgb\":[11,16,25],\"count\":2304}]}]}\n{\"theme\":\"gilded\",\"state\":\"optional-absent\",\"props\":{\"svg\":\"rgb(99, 86, 54)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":0,\"painted\":[13,13,13],\"maskSize\":2304,\"modeFraction\":0.7322048611111112,\"pairs\":[[\"13,13,13=>14,14,14\",1687],[\"58,52,36=>14,14,14\",359],[\"55,49,34=>14,14,14\",16]],\"controlTop\":[{\"rgb\":[14,14,14],\"count\":2304}]},{\"repeat\":1,\"painted\":[13,13,13],\"maskSize\":2304,\"modeFraction\":0.7322048611111112,\"pairs\":[[\"13,13,13=>14,14,14\",1687],[\"58,52,36=>14,14,14\",359],[\"55,49,34=>14,14,14\",16]],\"controlTop\":[{\"rgb\":[14,14,14],\"count\":2304}]},{\"repeat\":2,\"painted\":[13,13,13],\"maskSize\":2304,\"modeFraction\":0.7322048611111112,\"pairs\":[[\"13,13,13=>14,14,14\",1687],[\"58,52,36=>14,14,14\",359],[\"55,49,34=>14,14,14\",16]],\"controlTop\":[{\"rgb\":[14,14,14],\"count\":2304}]}]}\n{\"theme\":\"gilded\",\"state\":\"present\",\"props\":{\"svg\":\"rgb(209, 192, 148)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":0,\"painted\":[13,13,13],\"maskSize\":2304,\"modeFraction\":0.7057291666666666,\"pairs\":[[\"13,13,13=>14,14,14\",1626],[\"114,105,83=>14,14,14\",395],[\"107,99,78=>14,14,14\",14]],\"controlTop\":[{\"rgb\":[14,14,14],\"count\":2304}]},{\"repeat\":1,\"painted\":[13,13,13],\"maskSize\":2304,\"modeFraction\":0.7057291666666666,\"pairs\":[[\"13,13,13=>14,14,14\",1626],[\"114,105,83=>14,14,14\",395],[\"107,99,78=>14,14,14\",14]],\"controlTop\":[{\"rgb\":[14,14,14],\"count\":2304}]},{\"repeat\":2,\"painted\":[13,13,13],\"maskSize\":2304,\"modeFraction\":0.7057291666666666,\"pairs\":[[\"13,13,13=>14,14,14\",1626],[\"114,105,83=>14,14,14\",395],[\"107,99,78=>14,14,14\",14]],\"controlTop\":[{\"rgb\":[14,14,14],\"count\":2304}]}]}\n{\"theme\":\"vector\",\"state\":\"optional-absent\",\"props\":{\"svg\":\"rgb(54, 96, 99)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":0,\"painted\":[6,12,12],\"maskSize\":1299,\"modeFraction\":0.28714395688991534,\"pairs\":[[\"6,12,12=>7,12,12\",372],[\"6,13,13=>7,13,13\",305],[\"31,56,58=>6,13,13\",130]],\"controlTop\":[{\"rgb\":[6,12,12],\"count\":672},{\"rgb\":[6,13,13],\"count\":672},{\"rgb\":[7,12,12],\"count\":480},{\"rgb\":[7,13,13],\"count\":480}]},{\"repeat\":1,\"painted\":[6,12,12],\"maskSize\":1299,\"modeFraction\":0.28714395688991534,\"pairs\":[[\"6,12,12=>7,12,12\",372],[\"6,13,13=>7,13,13\",305],[\"31,56,58=>6,13,13\",130]],\"controlTop\":[{\"rgb\":[6,12,12],\"count\":672},{\"rgb\":[6,13,13],\"count\":672},{\"rgb\":[7,12,12],\"count\":480},{\"rgb\":[7,13,13],\"count\":480}]},{\"repeat\":2,\"painted\":[6,12,12],\"maskSize\":1299,\"modeFraction\":0.28714395688991534,\"pairs\":[[\"6,12,12=>7,12,12\",372],[\"6,13,13=>7,13,13\",305],[\"31,56,58=>6,13,13\",130]],\"controlTop\":[{\"rgb\":[6,12,12],\"count\":672},{\"rgb\":[6,13,13],\"count\":672},{\"rgb\":[7,12,12],\"count\":480},{\"rgb\":[7,13,13],\"count\":480}]}]}\n{\"theme\":\"vector\",\"state\":\"present\",\"props\":{\"svg\":\"rgb(94, 179, 186)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":0,\"painted\":[6,12,12],\"maskSize\":2304,\"modeFraction\":0.3975694444444444,\"pairs\":[[\"6,12,12=>7,12,12\",916],[\"6,13,13=>7,13,13\",709],[\"51,98,102=>7,13,13\",273]],\"controlTop\":[{\"rgb\":[7,12,12],\"count\":1152},{\"rgb\":[7,13,13],\"count\":1152}]},{\"repeat\":1,\"painted\":[6,12,12],\"maskSize\":2304,\"modeFraction\":0.3975694444444444,\"pairs\":[[\"6,12,12=>7,12,12\",916],[\"6,13,13=>7,13,13\",709],[\"51,98,102=>7,13,13\",273]],\"controlTop\":[{\"rgb\":[7,12,12],\"count\":1152},{\"rgb\":[7,13,13],\"count\":1152}]},{\"repeat\":2,\"painted\":[6,12,12],\"maskSize\":2304,\"modeFraction\":0.3975694444444444,\"pairs\":[[\"6,12,12=>7,12,12\",916],[\"6,13,13=>7,13,13\",709],[\"51,98,102=>7,13,13\",273]],\"controlTop\":[{\"rgb\":[7,12,12],\"count\":1152},{\"rgb\":[7,13,13],\"count\":1152}]}]}\n"
+  },
+  {
+    "name": "control-causality",
+    "args": [
+      "node",
+      "/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/777-S2/after-review-r4/control-causality.mjs"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 5.13884595799027,
+    "tail": "{\"theme\":\"veil\",\"state\":\"optional-absent\",\"props\":{\"svg\":\"rgb(153, 138, 102)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":\"neutral-style\",\"pairs\":[],\"controlTop\":[{\"rgb\":[10,15,24],\"count\":1683},{\"rgb\":[83,78,65],\"count\":359},{\"rgb\":[78,73,62],\"count\":9},{\"rgb\":[82,77,64],\"count\":9}]},{\"repeat\":\"hidden\",\"painted\":[10,15,24],\"maskSize\":2304,\"modeFraction\":0.73046875,\"pairs\":[[\"10,15,24=>11,16,25\",1683],[\"83,78,65=>11,16,25\",359],[\"78,73,62=>11,16,25\",9]],\"controlTop\":[{\"rgb\":[11,16,25],\"count\":2304}]},{\"repeat\":\"transparent-stroke\",\"painted\":[83,78,65],\"maskSize\":621,\"modeFraction\":0.5780998389694042,\"pairs\":[[\"83,78,65=>10,15,24\",359],[\"78,73,62=>10,15,24\",9],[\"82,77,64=>10,15,24\",9]],\"controlTop\":[{\"rgb\":[10,15,24],\"count\":2304}]},{\"repeat\":\"opaque-row-hidden\",\"painted\":[153,138,102],\"maskSize\":621,\"modeFraction\":0.5780998389694042,\"pairs\":[[\"153,138,102=>9,13,21\",359],[\"151,136,100=>9,13,21\",7],[\"46,45,41=>9,13,21\",6]],\"controlTop\":[{\"rgb\":[9,13,21],\"count\":2304}]}]}\n{\"theme\":\"veil\",\"state\":\"present\",\"props\":{\"svg\":\"rgb(217, 194, 140)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":\"neutral-style\",\"pairs\":[],\"controlTop\":[{\"rgb\":[10,15,24],\"count\":1626},{\"rgb\":[115,106,84],\"count\":395},{\"rgb\":[107,99,79],\"count\":10},{\"rgb\":[114,105,83],\"count\":9}]},{\"repeat\":\"hidden\",\"painted\":[10,15,24],\"maskSize\":2304,\"modeFraction\":0.7057291666666666,\"pairs\":[[\"10,15,24=>11,16,25\",1626],[\"115,106,84=>11,16,25\",395],[\"107,99,79=>11,16,25\",10]],\"controlTop\":[{\"rgb\":[11,16,25],\"count\":2304}]},{\"repeat\":\"transparent-stroke\",\"painted\":[115,106,84],\"maskSize\":678,\"modeFraction\":0.5825958702064897,\"pairs\":[[\"115,106,84=>10,15,24\",395],[\"107,99,79=>10,15,24\",10],[\"114,105,83=>10,15,24\",9]],\"controlTop\":[{\"rgb\":[10,15,24],\"count\":2304}]},{\"repeat\":\"opaque-row-hidden\",\"painted\":[217,194,140],\"maskSize\":678,\"modeFraction\":0.5825958702064897,\"pairs\":[[\"217,194,140=>9,13,21\",395],[\"214,191,138=>9,13,21\",7],[\"62,59,51=>9,13,21\",6]],\"controlTop\":[{\"rgb\":[9,13,21],\"count\":2304}]}]}\n{\"theme\":\"gilded\",\"state\":\"optional-absent\",\"props\":{\"svg\":\"rgb(99, 86, 54)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":\"neutral-style\",\"pairs\":[],\"controlTop\":[{\"rgb\":[13,13,13],\"count\":1687},{\"rgb\":[58,52,36],\"count\":359},{\"rgb\":[55,49,34],\"count\":16},{\"rgb\":[20,19,16],\"count\":13}]},{\"repeat\":\"hidden\",\"painted\":[13,13,13],\"maskSize\":2304,\"modeFraction\":0.7322048611111112,\"pairs\":[[\"13,13,13=>14,14,14\",1687],[\"58,52,36=>14,14,14\",359],[\"55,49,34=>14,14,14\",16]],\"controlTop\":[{\"rgb\":[14,14,14],\"count\":2304}]},{\"repeat\":\"transparent-stroke\",\"painted\":[58,52,36],\"maskSize\":617,\"modeFraction\":0.5818476499189628,\"pairs\":[[\"58,52,36=>13,13,13\",359],[\"55,49,34=>13,13,13\",16],[\"20,19,16=>13,13,13\",13]],\"controlTop\":[{\"rgb\":[13,13,13],\"count\":2304}]},{\"repeat\":\"opaque-row-hidden\",\"painted\":[99,86,54],\"maskSize\":620,\"modeFraction\":0.5790322580645161,\"pairs\":[[\"99,86,54=>10,10,10\",359],[\"92,80,50=>10,10,10\",9],[\"97,84,53=>10,10,10\",9]],\"controlTop\":[{\"rgb\":[10,10,10],\"count\":2304}]}]}\n{\"theme\":\"gilded\",\"state\":\"present\",\"props\":{\"svg\":\"rgb(209, 192, 148)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":\"neutral-style\",\"pairs\":[],\"controlTop\":[{\"rgb\":[13,13,13],\"count\":1626},{\"rgb\":[114,105,83],\"count\":395},{\"rgb\":[107,99,78],\"count\":14},{\"rgb\":[106,98,77],\"count\":8}]},{\"repeat\":\"hidden\",\"painted\":[13,13,13],\"maskSize\":2304,\"modeFraction\":0.7057291666666666,\"pairs\":[[\"13,13,13=>14,14,14\",1626],[\"114,105,83=>14,14,14\",395],[\"107,99,78=>14,14,14\",14]],\"controlTop\":[{\"rgb\":[14,14,14],\"count\":2304}]},{\"repeat\":\"transparent-stroke\",\"painted\":[114,105,83],\"maskSize\":678,\"modeFraction\":0.5825958702064897,\"pairs\":[[\"114,105,83=>13,13,13\",395],[\"107,99,78=>13,13,13\",14],[\"106,98,77=>13,13,13\",8]],\"controlTop\":[{\"rgb\":[13,13,13],\"count\":2304}]},{\"repeat\":\"opaque-row-hidden\",\"painted\":[209,192,148],\"maskSize\":678,\"modeFraction\":0.5825958702064897,\"pairs\":[[\"209,192,148=>10,10,10\",395],[\"162,149,115=>10,10,10\",7],[\"206,189,146=>10,10,10\",7]],\"controlTop\":[{\"rgb\":[10,10,10],\"count\":2304}]}]}\n{\"theme\":\"vector\",\"state\":\"optional-absent\",\"props\":{\"svg\":\"rgb(54, 96, 99)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":\"neutral-style\",\"pairs\":[],\"controlTop\":[{\"rgb\":[6,12,12],\"count\":915},{\"rgb\":[6,13,13],\"count\":770},{\"rgb\":[31,56,58],\"count\":237},{\"rgb\":[29,53,55],\"count\":128}]},{\"repeat\":\"hidden\",\"painted\":[6,12,12],\"maskSize\":1299,\"modeFraction\":0.28714395688991534,\"pairs\":[[\"6,12,12=>7,12,12\",372],[\"6,13,13=>7,13,13\",305],[\"31,56,58=>6,13,13\",130]],\"controlTop\":[{\"rgb\":[6,12,12],\"count\":672},{\"rgb\":[6,13,13],\"count\":672},{\"rgb\":[7,12,12],\"count\":480},{\"rgb\":[7,13,13],\"count\":480}]},{\"repeat\":\"transparent-stroke\",\"painted\":[31,56,58],\"maskSize\":622,\"modeFraction\":0.38102893890675243,\"pairs\":[[\"31,56,58=>6,13,13\",237],[\"29,53,55=>6,12,12\",128],[\"29,53,54=>6,13,13\",13]],\"controlTop\":[{\"rgb\":[6,12,12],\"count\":1152},{\"rgb\":[6,13,13],\"count\":1152}]},{\"repeat\":\"opaque-row-hidden\",\"painted\":[54,96,99],\"maskSize\":624,\"modeFraction\":0.3798076923076923,\"pairs\":[[\"54,96,99=>5,10,10\",237],[\"51,91,94=>5,9,9\",128],[\"50,89,92=>5,10,10\",9]],\"controlTop\":[{\"rgb\":[5,9,9],\"count\":1152},{\"rgb\":[5,10,10],\"count\":1152}]}]}\n{\"theme\":\"vector\",\"state\":\"present\",\"props\":{\"svg\":\"rgb(94, 179, 186)\",\"fill\":\"none\",\"rowOpacity\":\"0.5\",\"rowHover\":false,\"rowFocus\":false,\"running\":0,\"deviceScale\":4},\"shots\":[{\"repeat\":\"neutral-style\",\"pairs\":[],\"controlTop\":[{\"rgb\":[6,12,12],\"count\":916},{\"rgb\":[6,13,13],\"count\":709},{\"rgb\":[51,98,102],\"count\":273},{\"rgb\":[48,93,97],\"count\":128}]},{\"repeat\":\"hidden\",\"painted\":[6,12,12],\"maskSize\":2304,\"modeFraction\":0.3975694444444444,\"pairs\":[[\"6,12,12=>7,12,12\",916],[\"6,13,13=>7,13,13\",709],[\"51,98,102=>7,13,13\",273]],\"controlTop\":[{\"rgb\":[7,12,12],\"count\":1152},{\"rgb\":[7,13,13],\"count\":1152}]},{\"repeat\":\"transparent-stroke\",\"painted\":[51,98,102],\"maskSize\":679,\"modeFraction\":0.4020618556701031,\"pairs\":[[\"51,98,102=>6,13,13\",273],[\"48,93,97=>6,12,12\",128],[\"48,92,95=>6,13,13\",11]],\"controlTop\":[{\"rgb\":[6,12,12],\"count\":1152},{\"rgb\":[6,13,13],\"count\":1152}]},{\"repeat\":\"opaque-row-hidden\",\"painted\":[94,179,186],\"maskSize\":684,\"modeFraction\":0.3991228070175439,\"pairs\":[[\"94,179,186=>5,10,10\",273],[\"89,170,177=>5,9,9\",128],[\"87,167,173=>5,10,10\",7]],\"controlTop\":[{\"rgb\":[5,9,9],\"count\":1152},{\"rgb\":[5,10,10],\"count\":1152}]}]}\n"
+  },
+  {
+    "name": "product-tests-resumed",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "StateGlyphs",
+      "MapPane",
+      "shell-accessibility"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 1.343519916990772,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run StateGlyphs MapPane shell-accessibility\n\n\n RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n \u2713 src/shell-accessibility.test.ts (9 tests) 53ms\n \u2713 src/components/nexus/MapPane.test.tsx (3 tests) 115ms\n \u2713 src/components/nexus/StateGlyphs.test.tsx (6 tests) 402ms\n\n Test Files  3 passed (3)\n      Tests  18 passed (18)\n   Start at  14:25:48\n   Duration  1.09s (transform 228ms, setup 96ms, collect 658ms, tests 571ms, environment 536ms, prepare 86ms)\n\n"
+  },
+  {
+    "name": "check-resumed",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "check"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 4.6349427919776645,
+    "tail": "\n> nexus-ui@1.0.0 check\n> tsc && npm run check:design-sync\n\n\n> nexus-ui@1.0.0 check:design-sync\n> tsc -p .design-sync/tsconfig.previews.json\n\n"
+  },
+  {
+    "name": "focused-resumed",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "test",
+      "--",
+      "state-shades",
+      "StateGlyphs",
+      "shell-accessibility"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 1,
+    "wallSeconds": 1.4790923749969807,
+    "tail": "\n> nexus-ui@1.0.0 test\n> vitest run state-shades StateGlyphs shell-accessibility\n\n\n RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states/ui/client\n\n[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`\n \u2713 src/shell-accessibility.test.ts (9 tests) 57ms\n \u276f src/state-shades.test.ts (0 test)\n \u2713 src/components/nexus/StateGlyphs.test.tsx (6 tests) 417ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af Failed Suites 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]\nError: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).\n \u276f src/state-shades.test.ts:161:9\n    159|   [resolve(import.meta.dirname, \"../../scripts/state-surfaces/inputs.m\u2026\n    160| if (JSON.stringify(currentInputs) !== JSON.stringify(receipt.inputs))\n    161|   throw new Error(\"Stale browser-resolved state surfaces: run npm --pr\u2026\n       |         ^\n    162| if (receipt.proof.acceptanceComplete !== true)\n    163|   throw new Error(\"Incomplete painted state surfaces: filtered/probe c\u2026\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n Test Files  1 failed | 2 passed (3)\n      Tests  15 passed (15)\n   Start at  14:26:26\n   Duration  1.21s (transform 237ms, setup 99ms, collect 399ms, tests 474ms, environment 620ms, prepare 132ms)\n\n"
+  },
+  {
+    "name": "build-resumed",
+    "args": [
+      "npm",
+      "--prefix",
+      "ui",
+      "run",
+      "build"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 3.9199302500055637,
+    "tail": "../dist/public/assets/KaTeX_Fraktur-Regular-CB_wures.ttf           19.57 kB\n../dist/public/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf              19.58 kB\n../dist/public/assets/KaTeX_Main-Italic-BMLOBm91.woff              19.68 kB\n../dist/public/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf          22.36 kB\n../dist/public/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf            24.50 kB\n../dist/public/assets/KaTeX_Main-Bold-Cx986IdX.woff2               25.32 kB\n../dist/public/assets/KaTeX_Main-Regular-B22Nviop.woff2            26.27 kB\n../dist/public/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf        27.56 kB\n../dist/public/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2             28.08 kB\n../dist/public/assets/KaTeX_Main-Bold-Jm3AIy58.woff                29.91 kB\n../dist/public/assets/KaTeX_Main-Regular-Dr94JaBh.woff             30.77 kB\n../dist/public/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf           31.20 kB\n../dist/public/assets/KaTeX_Math-Italic-flOr_0UB.ttf               31.31 kB\n../dist/public/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf           32.97 kB\n../dist/public/assets/KaTeX_AMS-Regular-DMm9YOAa.woff              33.52 kB\n../dist/public/assets/KaTeX_Main-Italic-3WenGoN9.ttf               33.58 kB\n../dist/public/assets/KaTeX_Main-Bold-waoOVXN0.ttf                 51.34 kB\n../dist/public/assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB\n../dist/public/assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB\n../dist/public/assets/r1c1-CzjRNMRW.png                            95.61 kB\n../dist/public/assets/index-ZHT8B-SR.css                          201.64 kB \u2502 gzip:  36.92 kB\n../dist/public/assets/index-Db6kY7u9.js                         1,767.86 kB \u2502 gzip: 527.80 kB\n\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n\u2713 built in 2.70s\n\nPWA v1.0.3\nmode      generateSW\nprecache  22 entries (2314.58 KiB)\nfiles generated\n  ../dist/public/sw.js\n  ../dist/public/workbox-40c80ae4.js\n"
+  },
+  {
+    "name": "owner-target-resumed",
+    "args": [
+      "env",
+      "-u",
+      "NEXUS_GATEWAY_PORT",
+      "-u",
+      "NEXUS_API_URL",
+      "-u",
+      "NEXUS_SLOT",
+      "NEXUS_RUN_POSTGRES=1",
+      "/Users/pythagor/nexus/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "tests.dbname_audit",
+      "tests/test_owner_target_guard.py"
+    ],
+    "cwd": "/Users/pythagor/nexus/.claude/worktrees/777-glyph-first-states",
+    "exit": 0,
+    "wallSeconds": 3.6699773330183234,
+    "tail": "<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.\n  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()\n........................................................................ [ 90%]\n........                                                                 [100%]\nsecret-store guard: active; nexus-api: denied; disposable keychain: denied\ndbname audit: 0 targets: none\ndbname audit: owner server: local:5432\ndbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection\ndbname audit: owner targets: none\n80 passed in 2.97s\n"
+  }
+]
