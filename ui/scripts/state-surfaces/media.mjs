@@ -25,68 +25,101 @@ const compare = (a, op, b) => ({ '<': a < b, '<=': a <= b, '>': a > b, '>=': a >
 
 /** Cross feature values, then retain one vector per satisfied-prelude set. */
 export function mediaConditions(css) {
-  const preludes = [], excluded = [], unsupported = [], queries = new Map();
+  const preludes = [], excluded = [], stripped = [], unsupported = [], queries = new Map();
   const ranges = { width: [], height: [] }, features = new Set();
-  function parse(raw, prelude) {
-    let rest = raw.trim(), negate = /^not\b/.test(rest);
-    rest = rest.replace(/^(?:not|only)\s+/, '');
-    const tests = [];
-    const range = (axis, op, value) => {
-      ranges[axis].push({ op, value: Number(value) });
-      tests.push(v => compare(v.viewport[axis], op, Number(value)));
-    };
-    rest = rest.replace(/\(([^()]*)\)/g, (_, feature) => {
-      let m = feature.match(/^(?:(min|max)-)?(width|height)\s*:\s*([\d.]+)px$/);
-      if (m) { range(m[2], m[1] === 'min' ? '>=' : m[1] === 'max' ? '<=' : '=', m[3]); return ''; }
-      m = feature.match(/^(width|height)\s*(<=|>=|<|>|=)\s*([\d.]+)px$/);
-      if (m) { range(m[1], m[2], m[3]); return ''; }
-      m = feature.match(/^([\d.]+)px\s*(<=|>=|<|>|=)\s*(width|height)(?:\s*(<=|>=|<|>|=)\s*([\d.]+)px)?$/);
-      if (m) {
-        range(m[3], { '<': '>', '<=': '>=', '>': '<', '>=': '<=', '=': '=' }[m[2]], m[1]);
-        if (m[4]) range(m[3], m[4], m[5]); return '';
+  const remember = prelude => { if (!preludes.includes(prelude)) preludes.push(prelude); };
+  // Evaluate only this allowlist in screen / forced-colors:none. Parse the
+  // entire alternative before exclusion so an unknown term never disappears.
+  function evaluate(raw, parentList) {
+    const prelude = `media ${raw}`, terms = raw.toLowerCase().trim().split(/\s*\band\b\s*/);
+    remember(prelude);
+    const tests = [], kept = [], always = [];
+    let reason;
+    const refuse = () => { unsupported.push(prelude); return undefined; };
+    if (/\bor\b/.test(raw.toLowerCase())) return refuse();
+    if (/^not\b/.test(terms[0])) {
+      if (terms.length !== 1) return refuse();
+      const term = terms[0];
+      if (term === 'not print' || /^not\s+\(\s*forced-colors\s*:\s*active\s*\)$/.test(term))
+        always.push(term);
+      else if (term === 'not screen' || term === 'not all')
+        reason = `${term} is false in the screen environment`;
+      else if (/^not\s+\(\s*forced-colors\s*:\s*none\s*\)$/.test(term))
+        reason = 'not (forced-colors: none) is false with forced-colors: none';
+      else return refuse();
+    } else {
+      for (const [i, term] of terms.entries()) {
+        if (i === 0 && /^(?:only\s+)?(?:screen|all|print)$/.test(term)) {
+          if (term.replace(/^only\s+/, '') === 'print')
+            reason = 'print media type is false in the screen environment';
+          else always.push(term);
+          continue;
+        }
+        const feature = term.match(/^\(\s*([^()]*)\s*\)$/)?.[1].trim();
+        if (!feature) return refuse();
+        let m = feature.match(/^(?:(min|max)-)?(width|height)\s*:\s*(\d+(?:\.\d+)?|\.\d+)px$/);
+        if (m) {
+          const axis = m[2], op = m[1] === 'min' ? '>=' : m[1] === 'max' ? '<=' : '=';
+          tests.push({ axis, op, value: Number(m[3]) }); kept.push(term); continue;
+        }
+        m = feature.match(/^([a-z-]+)\s*:\s*([a-z-]+)$/);
+        if (m?.[1] === 'forced-colors' && ['active', 'none'].includes(m[2])) {
+          if (m[2] === 'active') reason = 'forced-colors: active is false with forced-colors: none';
+          else always.push(term);
+        } else if (m && discrete[m[1]]?.includes(m[2])) {
+          tests.push({ feature: m[1], value: m[2] }); kept.push(term);
+        } else return refuse();
       }
-      m = feature.match(/^([a-z-]+)\s*:\s*([a-z-]+)$/);
-      if (m && discrete[m[1]]?.includes(m[2])) {
-        features.add(m[1]); tests.push(v => v.features[m[1]] === m[2]); return '';
-      }
-      unsupported.push(prelude); return '';
-    });
-    if (rest.replace(/\b(?:screen|all|and)\b|\s/g, '')) unsupported.push(prelude);
-    return v => negate !== tests.every(test => test(v));
+    }
+    for (const term of always) {
+      if (!stripped.some(e => e.prelude === prelude && e.parentList === parentList && e.term === term))
+        stripped.push({ prelude, parentList, term, reason: 'always true in screen / forced-colors: none' });
+    }
+    if (reason) {
+      let entry = excluded.find(e => e.prelude === prelude && e.parentList === parentList);
+      if (!entry) { entry = { prelude, parentList, reason }; excluded.push(entry); }
+      return { excluded: entry };
+    }
+    // Only kept alternatives contribute dimensions to the measured inventory.
+    for (const test of tests) {
+      if (test.axis) ranges[test.axis].push(test);
+      else features.add(test.feature);
+    }
+    return { terms: kept, test: v => tests.every(t => t.axis ?
+      compare(v.viewport[t.axis], t.op, t.value) : v.features[t.feature] === t.value) };
   }
-  postcss.parse(css).walkAtRules(rule => {
-    if (!['media', 'container'].includes(rule.name)) return;
-    if (rule.name === 'container') {
-      const prelude = `container ${rule.params}`;
-      if (!preludes.includes(prelude)) preludes.push(prelude);
-      unsupported.push(prelude); return;
+  function visit(node, parents = [{ terms: [], test: () => true }]) {
+    for (const rule of node.nodes ?? []) {
+      if (rule.type !== 'atrule' || !['media', 'container'].includes(rule.name)) {
+        visit(rule, parents); continue;
+      }
+      if (rule.name === 'container') {
+        const prelude = `container ${rule.params}`; remember(prelude);
+        unsupported.push(prelude); continue;
+      }
+      const own = mediaAlternatives(rule.params).map(raw => evaluate(raw, `media ${rule.params}`));
+      // Refused parents fail before their children are inspected.
+      if (own.some(alternative => !alternative)) continue;
+      for (const alternative of own.filter(a => a.excluded)) {
+        const skipped = [];
+        rule.walkAtRules(child => {
+          if (['media', 'container'].includes(child.name)) skipped.push(`${child.name} ${child.params}`);
+        });
+        if (skipped.length) alternative.excluded.skipped = [...new Set(skipped)];
+      }
+      const effective = parents.flatMap(parent => own.filter(a => !a.excluded).map(child => ({
+        terms: [...parent.terms, ...child.terms], test: v => parent.test(v) && child.test(v),
+      })));
+      for (const alternative of effective) {
+        const prelude = `media ${alternative.terms.join(' and ') || 'all'}`;
+        remember(prelude);
+        const previous = queries.get(prelude);
+        queries.set(prelude, previous ? v => previous(v) || alternative.test(v) : alternative.test);
+      }
+      if (effective.length) visit(rule, effective);
     }
-    const included = raw => mediaAlternatives(raw).filter(alternative => {
-      const prelude = `media ${alternative}`, parentList = `media ${raw}`;
-      if (!preludes.includes(prelude)) preludes.push(prelude);
-      const reason = /^(?:(?:not|only)\s+)?print\b/i.test(alternative) ?
-        'print media type is outside the screen color objective' :
-        /\(\s*forced-colors\b/i.test(alternative) ? 'forced colors replace every pigment' : undefined;
-      if (!reason) return true;
-      if (!excluded.some(e => e.prelude === prelude && e.parentList === parentList))
-        excluded.push({ prelude, parentList, reason });
-      return false;
-    });
-    // Nested Tailwind media variants are conjunctions too. Exclude each
-    // alternative before extracting ranges/features from any ancestor list.
-    const own = included(rule.params), chain = [];
-    for (let parent = rule.parent; parent; parent = parent.parent)
-      if (parent.type === 'atrule' && parent.name === 'media') chain.unshift(included(parent.params));
-    if (!own.length || chain.some(list => !list.length)) return;
-    for (const alternative of own) {
-      const prelude = `media ${alternative}`;
-      const alternatives = [...chain, [alternative]].map(list => list.map(raw => parse(raw, prelude)));
-      const test = v => alternatives.every(list => list.some(t => t(v)));
-      // A repeated alternative under different ancestors is an alternative chain.
-      const previous = queries.get(prelude);
-      queries.set(prelude, previous ? v => previous(v) || test(v) : test);
-    }
-  });
+  }
+  visit(postcss.parse(css));
   function bands(axis) {
     if (!ranges[axis].length) return [{ name: '', value: conditions.viewport[axis] }];
     // Playwright viewports use integer CSS pixels. Preserve inclusive/exclusive
@@ -136,5 +169,5 @@ export function mediaConditions(css) {
     return reducedMotion === 'reduce' ? [{ ...common, id: `${prefix}/reduce` }] :
       [0, .5].map(animationPhase => ({ ...common, animationPhase, id: `${prefix}/motion/${animationPhase ? 'trough' : 'start'}` }));
   });
-  return { preludes, excluded, unsupported: [...new Set(unsupported)], representatives, variants };
+  return { preludes, excluded, stripped, unsupported: [...new Set(unsupported)], representatives, variants };
 }

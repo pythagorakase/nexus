@@ -15,6 +15,7 @@ const plants = [
   { name: 'theme-provider-opacity', path: theme, replace: ['{children}', '<div style={{opacity: 0.35}}>{children}</div>'] },
   { name: 'media-root-override', path: layout, append: '\n@media (prefers-color-scheme: dark) { html.dark.theme-vector { --state-key-verified: var(--state-key-present); } }\n' },
   { name: 'mixed-print-width', path: layout, append: '\n@media print, (min-width: 640px) and (max-width: 759px) { .key-row.optional { opacity: .35 } }\n', condition: 'w640-759/reduce', comparisonId: 'w640-760/reduce', width: 759 },
+  { name: 'nested-not-print-width', path: layout, append: '\n@media not print { @media (min-width: 640px) and (max-width: 759px) { .key-row.optional { opacity: .35 } } }\n', condition: 'w640-759/reduce', comparisonId: 'w640-760/reduce', width: 759 },
   { name: 'optional-row-opacity', path: layout, append: '\n.key-row.optional { opacity: .15; }\n' },
   { name: 'theme-backdrop', path: layout, append: '\n.dark.theme-vector .key-row { background: #ffffff; }\n' },
   { name: 'important-state-surface', path: layout, append: '\n.lm-trash.armed { color: var(--state-delete-unarmed) !important; }\n' },

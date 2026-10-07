@@ -49,11 +49,24 @@ comma lists are alternatives. One vector per distinct satisfied-prelude set
 is retained, and every included prelude must be satisfied. Sixth Review:
 every media list is split at depth-zero commas (parentheses may nest); each
 kept alternative is its own prelude for bands, features and satisfied sets.
-Only alternatives with a print media type or a forced-colors feature are
-excluded, with their parent list and reason recorded in `media.excluded`.
-An entirely excluded list contributes nothing; a mixed list retains its
-screen alternatives. Unsupported
-features and container preludes fail by name. The shipped CSS has **9 width
+The evaluator's measured environment is screen, `forced-colors: none`.
+Its allowlist is colon-form width/height in px (including min-/max- prefixes),
+`prefers-reduced-motion` (reduce/no-preference), `prefers-color-scheme`
+(dark/light), hover/any-hover (hover/none), pointer/any-pointer
+(fine/coarse/none), and forced-colors (active/none). Media types screen/all
+or no type are true; print is false; only is a no-op. Bare not print is true,
+bare not screen/not all are false. Forced-colors none and bare
+`not (forced-colors: active)` are true; active and bare
+`not (forced-colors: none)` are false. Always-true terms are stripped and
+recorded in `media.stripped`; false alternatives are individually recorded
+with parent list and reason in `media.excluded`. Children under excluded
+parents are skipped and named in that exclusion. Each kept nested alternative
+is the conjunction of its kept parent and child. Unknown terms refuse before
+exclusion; refused parents are not traversed. Negation combined with any other
+term, any `or`, Level-4 range syntax, unknown types/feature values, every
+feature outside this allowlist, and container preludes fail naming the prelude.
+A mixed list retains its kept alternatives.
+The shipped CSS has **9 width
 bands × 2 motion values = 18 vectors**, expanded into **27 condition renders**
 by motion start/trough phases. IDs name band and motion, for example
 `w1101-1279/reduce` and `w1101-1279/motion/{start,trough}`. Pair scoring takes
@@ -143,7 +156,9 @@ uses the html-qualified dark media override that wins the production cascade.
 The Sixth Review mixed-print/width plant uses Astra's exact 640–759px rule;
 its capture is the new 759×900/dark/reduce representative, compared with the
 prior 760px band receipt. The 1200px default lies outside the planted rule.
-This sole viewport exception keeps partial receipts uncertified.
+The Seventh Review nested `not print` plant uses Astra's exact nested rule
+at the same approved 759×900 representative. These viewport exceptions keep
+partial receipts uncertified.
 Gradient paint must regenerate successfully; element-scoped state declarations
 must fail. The gradient and redeclaration regressions are included.
 
