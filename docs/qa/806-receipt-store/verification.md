@@ -35,26 +35,89 @@ no service.
 
 ## One Receipt Line From Each of Tests 1-3
 
-Produced by a scratch script that repeats tests 1-3 against the helpers in
-`tests/test_runtime/test_receipts.py` (scratch path shortened to `<scratch>`).
-None contains either planted string, a message, an input or a source line.
+Regenerated at `e846614e` (the review fixes added a non-identifier
+`[usage.daily_allowance]` key to test 2's configuration, so its receipt now
+holds four errors). The script below, saved as `<scratch>/806-S1/ev_lines.py`,
+repeats tests 1-3 with the helpers in `tests/test_runtime/test_receipts.py`
+and prints the last receipt line after each failure. It was run from the
+worktree root as
+
+```
+PYTHONPATH=$PWD $PY <scratch>/806-S1/ev_lines.py <scratch>/806-S1/ev > <scratch>/806-S1/ev_lines.out
+```
+
+with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset and
+`NEXUS_KEYRING_DISABLE=1`; the lines below are its stdout with the scratch
+path shortened to `<scratch>`. None contains either planted string
+(`grep -c PLANTED` on the output prints `0`), a message, an input or a source
+line.
+
+```python
+"""Print one receipt line from each of tests 1-3 of test_receipts.py.
+
+Usage, from the worktree root:
+    PYTHONPATH=$PWD $PY <scratch>/806-S1/ev_lines.py <scratch>/806-S1/ev
+"""
+
+import os
+import sys
+from pathlib import Path
+
+out = Path(sys.argv[1])
+out.mkdir(parents=True, exist_ok=False)
+os.environ["NEXUS_TEST_RECEIPTS_DIR"] = str(out / "receipts")
+os.environ.pop("NEXUS_HOME", None)
+os.environ.pop("NEXUS_RUNTIME_CONFIG", None)
+
+from nexus.config.loader import load_settings  # noqa: E402
+from nexus.config.preferences import load_preferences, preferences_path  # noqa: E402
+from tests.test_runtime import test_receipts as t  # noqa: E402
+
+home = out / "receipts" / "home"
+for label, path in (
+    ("test 1", t._broken_config(out)),
+    ("test 2", t._invalid_config(out)),
+):
+    try:
+        load_settings(path)
+    except Exception as exc:
+        print(label, "raised", type(exc).__name__, file=sys.stderr)
+    print(t._receipt_lines(home)[-1].decode())
+
+settings = load_settings()
+runtime = settings.runtime.model_copy(update={"state_dir": str(out / "state")})
+settings = settings.model_copy(update={"runtime": runtime})
+prefs = preferences_path(settings)
+prefs.parent.mkdir(parents=True)
+prefs.write_text(
+    f"theme = {t.PLANTED_SECRET}\nwizard_model = {t.PLANTED_PROMPT}\n",
+    encoding="utf-8",
+)
+try:
+    load_preferences(settings)
+except Exception as exc:
+    print("test 3 raised", type(exc).__name__, file=sys.stderr)
+print(t._receipt_lines(home)[-1].decode())
+```
 
 Test 1 (malformed TOML, `details == {"kind": "toml", "line": 3, "column": 11}`):
 
 ```json
-{"schema_version":1,"recorded_at":"2026-10-08T04:19:43.035131Z","surface":"config.load_settings","pid":16550,"config_path":"<scratch>/806-S1/ev/broken.toml","exception_type":"TOMLDecodeError","exception_module":"tomllib","frames":[{"file":"nexus/config/loader.py","line":278,"function":"load_settings"},{"file":"nexus/config/loader.py","line":299,"function":"_load_from_toml"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":66,"function":"load"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":102,"function":"loads"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":326,"function":"key_value_rule"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":369,"function":"parse_key_value_pair"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":649,"function":"parse_value"}],"frames_dropped":0,"details":{"kind":"toml","line":3,"column":11},"fingerprint":"d187a33a6f219a3c0244ab0b8f2a3ca2496d5a22bd4b3f89c46eec650a9fd179"}
+{"schema_version":1,"recorded_at":"2026-10-08T05:13:06.459743Z","surface":"config.load_settings","pid":33996,"config_path":"<scratch>/806-S1/ev/broken.toml","exception_type":"TOMLDecodeError","exception_module":"tomllib","frames":[{"file":"nexus/config/loader.py","line":278,"function":"load_settings"},{"file":"nexus/config/loader.py","line":299,"function":"_load_from_toml"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":66,"function":"load"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":102,"function":"loads"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":326,"function":"key_value_rule"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":369,"function":"parse_key_value_pair"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":649,"function":"parse_value"}],"frames_dropped":0,"details":{"kind":"toml","line":3,"column":11},"fingerprint":"d187a33a6f219a3c0244ab0b8f2a3ca2496d5a22bd4b3f89c46eec650a9fd179"}
 ```
 
-Test 2 (validation: `loc` and `type` only; both unknown keys are `["runtime", "?"]`):
+Test 2 (validation: `loc` and `type` only; both unknown `[runtime]` keys are
+`["runtime", "?"]`, and the prompt-named `[usage.daily_allowance]` key is
+`["usage", "daily_allowance", "?"]`):
 
 ```json
-{"schema_version":1,"recorded_at":"2026-10-08T04:19:43.296436Z","surface":"config.load_settings","pid":16550,"config_path":"<scratch>/806-S1/ev/invalid.toml","exception_type":"ValidationError","exception_module":"pydantic_core._pydantic_core","frames":[{"file":"nexus/config/loader.py","line":278,"function":"load_settings"},{"file":"nexus/config/loader.py","line":309,"function":"_load_from_toml"},{"file":"/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pydantic/main.py","line":253,"function":"__init__"}],"frames_dropped":0,"details":{"kind":"validation","model":"Settings","error_count":3,"errors":[{"loc":["runtime","default_slot"],"type":"int_parsing"},{"loc":["runtime","?"],"type":"extra_forbidden"},{"loc":["runtime","?"],"type":"extra_forbidden"}]},"fingerprint":"81a1c6aaf3c48a22df9e8d84eb915d2a084672f4ab97734563cf4845f7107696"}
+{"schema_version":1,"recorded_at":"2026-10-08T05:13:06.711334Z","surface":"config.load_settings","pid":33996,"config_path":"<scratch>/806-S1/ev/invalid.toml","exception_type":"ValidationError","exception_module":"pydantic_core._pydantic_core","frames":[{"file":"nexus/config/loader.py","line":278,"function":"load_settings"},{"file":"nexus/config/loader.py","line":309,"function":"_load_from_toml"},{"file":"/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pydantic/main.py","line":253,"function":"__init__"}],"frames_dropped":0,"details":{"kind":"validation","model":"Settings","error_count":4,"errors":[{"loc":["runtime","default_slot"],"type":"int_parsing"},{"loc":["runtime","?"],"type":"extra_forbidden"},{"loc":["runtime","?"],"type":"extra_forbidden"},{"loc":["usage","daily_allowance","?"],"type":"int_parsing"}]},"fingerprint":"81a1c6aaf3c48a22df9e8d84eb915d2a084672f4ab97734563cf4845f7107696"}
 ```
 
 Test 3 (malformed `preferences.toml`):
 
 ```json
-{"schema_version":1,"recorded_at":"2026-10-08T04:19:43.304658Z","surface":"config.preferences","pid":16550,"config_path":"<scratch>/806-S1/ev/state/preferences.toml","exception_type":"TOMLDecodeError","exception_module":"tomllib","frames":[{"file":"nexus/config/preferences.py","line":36,"function":"load_preferences"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":66,"function":"load"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":102,"function":"loads"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":326,"function":"key_value_rule"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":369,"function":"parse_key_value_pair"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":649,"function":"parse_value"}],"frames_dropped":0,"details":{"kind":"toml","line":1,"column":9},"fingerprint":"42e12f179a442d3a2e87e8798e2f4558c4b392ad87782e52ec1fe8227ba8127b"}
+{"schema_version":1,"recorded_at":"2026-10-08T05:13:06.719723Z","surface":"config.preferences","pid":33996,"config_path":"<scratch>/806-S1/ev/state/preferences.toml","exception_type":"TOMLDecodeError","exception_module":"tomllib","frames":[{"file":"nexus/config/preferences.py","line":36,"function":"load_preferences"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":66,"function":"load"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":102,"function":"loads"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":326,"function":"key_value_rule"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":369,"function":"parse_key_value_pair"},{"file":"/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/tomllib/_parser.py","line":649,"function":"parse_value"}],"frames_dropped":0,"details":{"kind":"toml","line":1,"column":9},"fingerprint":"42e12f179a442d3a2e87e8798e2f4558c4b392ad87782e52ec1fe8227ba8127b"}
 ```
 
 ## Reachability Delta
@@ -67,16 +130,25 @@ production-reachable list (between `nexus/runtime/readiness.py` and
 
 ## Red Runs
 
-(a) The `load_settings` hook removed (its `record_failure` call replaced by
-`del exc, record_failure`), then reverted with `git checkout`. Tests 1, 2, 4,
-5, 6, 7 and 8 fail; 3 and 9 pass:
+Rerun at `e846614e` (eleven tests after the review fixes). Each plant was reverted
+with `git checkout` before anything was committed.
+
+(a) The `load_settings` hook removed (its `record_failure(...)` call in
+`nexus/config/loader.py` replaced by `del exc, record_failure`). Tests 1, 2,
+4, 5, 6, 7 and 8 fail, and so does
+`test_home_equal_to_user_home_reads_each_receipt_once`, which plants its
+receipt through `load_settings`; 3, 9 and
+`test_undecodable_receipt_line_is_a_read_error` pass:
 
 ```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings -rpf tests/test_runtime/test_receipts.py
+tests/test_runtime/test_receipts.py:485: AssertionError
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 =========================== short test summary info ============================
 PASSED tests/test_runtime/test_receipts.py::test_preferences_failure_writes_a_receipt
 PASSED tests/test_runtime/test_receipts.py::test_receipts_command_reports_a_broken_home
+PASSED tests/test_runtime/test_receipts.py::test_undecodable_receipt_line_is_a_read_error
 FAILED tests/test_runtime/test_receipts.py::test_malformed_toml_writes_one_sanitized_receipt
 FAILED tests/test_runtime/test_receipts.py::test_validation_receipt_keeps_loc_and_type_only
 FAILED tests/test_runtime/test_receipts.py::test_runtime_home_error_goes_to_the_fallback_root
@@ -84,38 +156,59 @@ FAILED tests/test_runtime/test_receipts.py::test_production_roots_without_the_se
 FAILED tests/test_runtime/test_receipts.py::test_repeats_compact_to_one_group
 FAILED tests/test_runtime/test_receipts.py::test_unwritable_root_does_not_mask_the_error
 FAILED tests/test_runtime/test_receipts.py::test_child_receipts_land_in_the_session_root
-7 failed, 2 passed in 0.88s
+FAILED tests/test_runtime/test_receipts.py::test_home_equal_to_user_home_reads_each_receipt_once
+8 failed, 3 passed in 0.99s
 ```
 
-(b) The seam export in `tests/conftest.py` replaced by `pass`, test 8 run
-alone, then reverted with `git checkout`; the worktree's `.nexus/receipts`
-was deleted afterwards:
+(b) The seam export in `tests/conftest.py`
+(`os.environ[TEST_RECEIPTS_ENV] = _RECEIPT_SEAM`) replaced by `pass`, test 8
+run alone with `NEXUS_TEST_RECEIPTS_DIR` also unset in the shell; the
+worktree's `.nexus/receipts` was deleted afterwards:
 
 ```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings tests/test_runtime/test_receipts.py::test_child_receipts_land_in_the_session_root
 >       assert (_snapshot(checkout), _snapshot(user)) == before
 E       AssertionError: assert ([('failures-... 1228)], None) == (None, None)
 E         
 E         At index 0 diff: [('failures-2026-10-08.jsonl', 1228)] != None
 E         Use -v to get more diff
 
-tests/test_runtime/test_receipts.py:402: AssertionError
+tests/test_runtime/test_receipts.py:422: AssertionError
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: receipts changed (/Users/pythagor/nexus/.claude/worktrees/806-receipt-store/.nexus/receipts)
 =========================== short test summary info ============================
 FAILED tests/test_runtime/test_receipts.py::test_child_receipts_land_in_the_session_root
-1 failed in 0.60s
+1 failed in 0.49s
 ```
+
+Review-fix plants at `e846614e`, each run as
+`PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings tests/test_runtime/test_receipts.py`
+and reverted from a scratch copy:
+
+- `_read_receipts` back to `path.open("r", encoding="utf-8")`:
+  `FAILED ...::test_undecodable_receipt_line_is_a_read_error`, `1 failed, 10 passed`.
+- `run_receipts` reading the home root whenever it is known:
+  `FAILED ...::test_home_equal_to_user_home_reads_each_receipt_once`, `1 failed, 10 passed`.
+- `_safe_token(str(part))` replaced by `str(part)` for `loc` parts:
+  `FAILED ...::test_validation_receipt_keeps_loc_and_type_only`, `1 failed, 10 passed`.
+- The `last_seen` sort removed, and separately made ascending:
+  `FAILED ...::test_repeats_compact_to_one_group`, `1 failed, 10 passed` each.
 
 ## Proof Tails
 
-Focused set, offline:
-`PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings tests/test_runtime/test_receipts.py tests/test_runtime_home.py tests/test_cli_contract.py tests/test_runtime tests/test_config`
+Focused set, offline, at `e846614e`:
+`PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings tests/test_runtime/test_receipts.py tests/test_runtime_home.py tests/test_cli_contract.py tests/test_runtime tests/test_config tests/test_cli_reference_doc.py tests/test_doc_front_matter.py tests/test_reachability.py`
 
 ```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
-484 passed, 18 skipped in 222.72s (0:03:42)
+594 passed, 18 skipped in 209.59s (0:03:29)
 ```
+
+The PostgreSQL and whole-tree offline tails below were recorded before
+`e846614e`, with the evidence commit `e7f7a29d`. `e846614e` changes no PostgreSQL path
+(the receipt reader, `run_receipts`, comments, docs and offline tests); the
+coordinator's whole-tree gate at the final commit supersedes them.
 
 PostgreSQL. The machine-load rule of 2026-10-07 forbids builders the whole
 PostgreSQL gate; it is satisfied by the focused set plus
@@ -162,26 +255,55 @@ receipt isolation: checkout and user receipts untouched
 exit 0
 ```
 
-`tests/test_doc_front_matter.py tests/test_reachability.py`:
-
-```
-secret-store guard: active; nexus-api: denied; disposable keychain: denied
-receipt isolation: checkout and user receipts untouched
-96 passed in 14.63s
-```
-
 ## Static Checks
 
-- Black: `$PY -m black --check` on the eleven changed Python files: unchanged.
-- flake8 on the changed files gives 12 diagnostics, all on untouched lines of
-  `nexus/cli.py` (nine E501) and `nexus/config/loader.py` (two F541, one
-  E501); the `origin/main` versions give the same 12 (compared by file, code
-  and text; line numbers shift).
-- mypy: `$PY -m mypy --explicit-package-bases` on the eleven changed Python
-  files: `Success: no issues found in 11 source files`.
-- Exception dispositions:
-  `$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
-  `OK: exception disposition coverage and shrink-only baseline verified.`
+At `e846614e`, on every Python file the branch changes
+(`git diff --name-only origin/main...HEAD`). The flake8 gate is no new
+diagnostics: the branch's 12 are the `origin/main` copies' 12, by file, code
+and text (line numbers shift by the added code); `nexus/runtime/receipts.py`
+and `tests/test_runtime/test_receipts.py` are new and have none.
+
+```
+$ $PY -m black --check nexus/cli.py nexus/cli_contract.py nexus/config/loader.py nexus/config/preferences.py nexus/runtime/contract.py nexus/runtime/home.py nexus/runtime/home_plan.py nexus/runtime/receipts.py tests/conftest.py tests/test_runtime/test_receipts.py tests/test_runtime_home.py
+All done! ✨ 🍰 ✨
+11 files would be left unchanged.
+
+$ $PY -m flake8 nexus/cli.py nexus/cli_contract.py nexus/config/loader.py nexus/config/preferences.py nexus/runtime/contract.py nexus/runtime/home.py nexus/runtime/home_plan.py nexus/runtime/receipts.py tests/conftest.py tests/test_runtime/test_receipts.py tests/test_runtime_home.py   # branch, at HEAD
+nexus/cli.py:976:89: E501 line too long (92 > 88 characters)
+nexus/cli.py:4330:89: E501 line too long (93 > 88 characters)
+nexus/cli.py:4788:89: E501 line too long (113 > 88 characters)
+nexus/cli.py:4817:89: E501 line too long (118 > 88 characters)
+nexus/cli.py:4857:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:4942:89: E501 line too long (151 > 88 characters)
+nexus/cli.py:4968:89: E501 line too long (94 > 88 characters)
+nexus/cli.py:4969:89: E501 line too long (103 > 88 characters)
+nexus/cli.py:4988:89: E501 line too long (101 > 88 characters)
+nexus/config/loader.py:365:13: F541 f-string is missing placeholders
+nexus/config/loader.py:368:15: F541 f-string is missing placeholders
+nexus/config/loader.py:388:89: E501 line too long (89 > 88 characters)
+(exit 1)
+
+$ cd <scratch>/806-S1/main && $PY -m flake8 --config <worktree>/.flake8 nexus/cli.py nexus/cli_contract.py nexus/config/loader.py nexus/config/preferences.py nexus/runtime/contract.py nexus/runtime/home.py nexus/runtime/home_plan.py tests/conftest.py tests/test_runtime_home.py   # origin/main copies
+nexus/cli.py:976:89: E501 line too long (92 > 88 characters)
+nexus/cli.py:4330:89: E501 line too long (93 > 88 characters)
+nexus/cli.py:4696:89: E501 line too long (113 > 88 characters)
+nexus/cli.py:4725:89: E501 line too long (118 > 88 characters)
+nexus/cli.py:4765:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:4850:89: E501 line too long (151 > 88 characters)
+nexus/cli.py:4876:89: E501 line too long (94 > 88 characters)
+nexus/cli.py:4877:89: E501 line too long (103 > 88 characters)
+nexus/cli.py:4896:89: E501 line too long (101 > 88 characters)
+nexus/config/loader.py:357:13: F541 f-string is missing placeholders
+nexus/config/loader.py:360:15: F541 f-string is missing placeholders
+nexus/config/loader.py:380:89: E501 line too long (89 > 88 characters)
+(exit 1)
+
+$ $PY -m mypy --explicit-package-bases nexus/cli.py nexus/cli_contract.py nexus/config/loader.py nexus/config/preferences.py nexus/runtime/contract.py nexus/runtime/home.py nexus/runtime/home_plan.py nexus/runtime/receipts.py tests/conftest.py tests/test_runtime/test_receipts.py tests/test_runtime_home.py
+Success: no issues found in 11 source files
+
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+```
 
 ## Markers
 
@@ -190,7 +312,7 @@ so each header carries a short marker, as earlier markers in
 `nexus/runtime/` do, and the order's full reason and safety are a comment
 directly above the handler:
 
-- `nexus/runtime/receipts.py` `_receipt_dir`: `safe-continuation; reason=806-Q12; safety=logged`.
-- `nexus/runtime/receipts.py` `record_failure`: `safe-continuation; reason=no mask; safety=raise`.
+- `nexus/runtime/receipts.py` `_receipt_dir`: `safe-continuation; reason=Q12; safety=receipted` (the `RuntimeHomeError` already wrote its own `runtime.home` receipt to the fallback root).
+- `nexus/runtime/receipts.py` `record_failure`: `safe-continuation; reason=no mask; safety=caller` (the handler prints to stderr; the caller re-raises).
 - `nexus/cli.py` `run_receipts`, home locator: `degrade-read-only; reason=no home; safety=exit 1`.
 - `nexus/cli.py` `run_receipts`, read: `fail; reason=bad line; safety=exit 1`.
