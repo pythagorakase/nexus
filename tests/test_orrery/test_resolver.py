@@ -135,6 +135,8 @@ class FakeSession:
         tag_rows=None,
         location_rows=None,
         location_class_rows=None,
+        charted_place_rows=None,
+        timed_route_rows=None,
         activity_rows=None,
         relationship_rows=None,
         orbit_rows=None,
@@ -174,6 +176,9 @@ class FakeSession:
         self.location_class_rows = location_class_rows or [
             {"id": 10, "location_class": "fixed_location", "is_primary": True},
         ]
+        # Route knowledge (785-Q6): uncharted unless a test charts its places.
+        self.charted_place_rows = charted_place_rows or []
+        self.timed_route_rows = timed_route_rows or []
         self.activity_rows = activity_rows or [
             {"entity_id": 1, "current_activity": "idle"}
         ]
@@ -280,6 +285,13 @@ class FakeSession:
                 assert category in sql
             assert "place_affordance" not in sql
             return FakeResult(self.location_class_rows)
+        if "/* orrery:charted_places */" in sql:
+            assert "coordinates IS NOT NULL" in sql
+            return FakeResult(self.charted_place_rows)
+        if "/* orrery:timed_route_pairs */" in sql:
+            assert "route_method = 'authored_edge'" in sql
+            assert "duration_minutes IS NOT NULL" in sql
+            return FakeResult(self.timed_route_rows)
         if "/* orrery:character_activities */" in sql:
             return FakeResult(self.activity_rows)
         if "/* orrery:relationship_types */" in sql:
@@ -1041,6 +1053,7 @@ def test_resolve_dry_run_fires_socialize_need_template() -> None:
                 {"id": 10, "location_class": "dwelling", "is_primary": True},
                 {"id": 20, "location_class": "meeting", "is_primary": True},
             ],
+            charted_place_rows=[{"id": 10}, {"id": 20}],
             need_debt_rows=[
                 {
                     "character_entity_id": 1,
@@ -1789,6 +1802,7 @@ def test_resolve_dry_run_fires_travel_departure_from_planned_destination() -> No
     proposal = resolve_dry_run(
         FakeSession(
             tag_rows=[{"entity_id": 1, "tag": "travel_ready", "is_ephemeral": False}],
+            charted_place_rows=[{"id": 10}, {"id": 20}],
             travel_state_rows=[
                 {
                     "character_entity_id": 1,
@@ -2020,6 +2034,7 @@ def test_routine_commute_sends_actor_home_after_work_window() -> None:
                     "is_primary": False,
                 },
             ],
+            charted_place_rows=[{"id": 10}, {"id": 20}],
             routine_anchor_rows=[
                 {
                     "character_entity_id": 1,

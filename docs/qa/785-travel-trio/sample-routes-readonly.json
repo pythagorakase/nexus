@@ -1,0 +1,103 @@
+{
+  "read_only": true,
+  "coordinates": {
+    "Times Square": [
+      -73.9855,
+      40.758
+    ],
+    "Bethesda Terrace": [
+      -73.9712,
+      40.774
+    ],
+    "Grand Central": [
+      -73.9772,
+      40.7527
+    ],
+    "JFK": [
+      -73.7781,
+      40.6413
+    ],
+    "Penn Station": [
+      -73.9935,
+      40.7506
+    ],
+    "30th Street": [
+      -75.1819,
+      39.9557
+    ],
+    "Whitehall": [
+      -74.0131,
+      40.7013
+    ],
+    "St. George": [
+      -74.0735,
+      40.6437
+    ],
+    "LAX": [
+      -118.4085,
+      33.9416
+    ],
+    "Borough Hall": [
+      -73.9903,
+      40.6928
+    ]
+  },
+  "routes": [
+    {
+      "mode": "walking",
+      "from": "Times Square",
+      "to": "Bethesda Terrace",
+      "geodesic_m": 2148.19582506,
+      "before_minutes": 34.800772365972,
+      "after_minutes": 34.800772365972
+    },
+    {
+      "mode": "covert",
+      "from": "Times Square",
+      "to": "Bethesda Terrace",
+      "geodesic_m": 2148.19582506,
+      "before_minutes": 66.28718545899429,
+      "after_minutes": 96.66881212770001
+    },
+    {
+      "mode": "vehicle",
+      "from": "Grand Central",
+      "to": "JFK",
+      "geodesic_m": 20885.63456128,
+      "before_minutes": 34.809390935466666,
+      "after_minutes": 33.417015298048
+    },
+    {
+      "mode": "rail",
+      "from": "Penn Station",
+      "to": "30th Street",
+      "geodesic_m": 134099.76358253,
+      "before_minutes": 123.37178249592756,
+      "after_minutes": 193.57497253545122
+    },
+    {
+      "mode": "water",
+      "from": "Whitehall",
+      "to": "St. George",
+      "geodesic_m": 8184.92117918,
+      "before_minutes": 27.501335162044796,
+      "after_minutes": 27.501335162044796
+    },
+    {
+      "mode": "air",
+      "from": "JFK",
+      "to": "LAX",
+      "geodesic_m": 3983079.74847042,
+      "before_minutes": 557.6311647858588,
+      "after_minutes": 557.6311647858588
+    },
+    {
+      "mode": "mixed",
+      "from": "Borough Hall",
+      "to": "Times Square",
+      "geodesic_m": 7251.71631726,
+      "before_minutes": 24.365766825993596,
+      "after_minutes": 24.365766825993596
+    }
+  ]
+}

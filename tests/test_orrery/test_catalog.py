@@ -235,7 +235,7 @@ def test_render_predicate_name_handles_known_predicates() -> None:
         ),
         (
             "routine_anchor_has_destination(home@actor)",
-            "actor's `home` routine can resolve a destination",
+            "actor's `home` routine can resolve a routable destination",
         ),
         (
             "travel_purpose_is(socialize@actor)",
