@@ -17,6 +17,8 @@ open at `5830781b`. `origin/main` was still `b0da93ea`, so no merge was owed.
 | `5830781b` | Proof: quote audit, red run, test tails, static checks | This "Resumed" table |
 | `b77b59a8` | This "Resumed" table and a fresh audit run | Nothing |
 | `4c9ebb83` | Review fixes: the Links-position cases, the audit's Fetch column and docstrings, `table_check.py` | This file's fix-pass evidence (next commit) |
+| `e371d45c` | This file's evidence for the `4c9ebb83` fix pass | Nothing |
+| `f7b73277` | Second review fixes: the committed order copy and `table_check.py` default, the audit's strip on both sides and its stray-quote check | This file's evidence (next commit) |
 | (uncommitted) | None | None |
 
 The resume first rechecked the records against the order's table with an
@@ -68,6 +70,75 @@ FAILED tests/test_doc_front_matter.py::test_ledger_rejects_format_violations[fil
 1 failed, 23 passed, 42 deselected, 5 warnings in 0.58s
 ```
 
+## Second Review Fixes on 2026-10-07
+
+A second fix pass applied five confirmed review findings in `f7b73277`. Every
+tail in this file marked `f7b73277` ran on that commit, with
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset. `git fetch`
+showed `origin/main` still at the merge base `b0da93ea`, so no merge was owed
+and the stamps stay valid.
+
+- `table_check.py` read the record table and the fixed text from the
+  coordinator's order file under the gitignored `temp/`. The order's "Required
+  Changes" section is now committed byte for byte as
+  `docs/qa/817-decision-ledger/order_817_S3.md` and is the script's default
+  input. A run without the worktree argument exits with a usage message:
+
+  ```text
+  $ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/table_check.py
+  usage: python table_check.py <worktree> [<work order .md>]
+  exit 1
+  ```
+
+- `quote_audit.py` compared a whole comment's stripped quote with the fetched
+  lines left unstripped, so a source line that already starts with `>` would
+  report DIFFER. It now strips `^> ?` from `forward(<fetched lines>)` for every
+  block kind and keeps the byte check `flines == forward(elines)`. No cited
+  comment holds such a line today, so the audit output is unchanged. A scratch
+  check (`817-S3-resume/strip_demo.py` in the session scratchpad) runs both
+  comparisons on a synthetic comment that holds one:
+
+  ```text
+  $ PYTHONPATH=$PWD $PY <scratch>/817-S3-resume/strip_demo.py
+  quoted lines: ['> Ruling text.', '> an already quoted line', '>', '> Last line.']
+  old (e371d45c): False
+  new: True
+  ```
+
+- `quote_audit.py` ignored a `>` run without a `Source:` line. `record_blocks`
+  now records every line it collects and fails the record when a line that
+  starts with `>` or a fence line lies outside every collected block. Because
+  the audit fails on such a line, `table_check.py`, which leaves quoted lines to
+  the audit, cannot pass a record with an unsourced quote either. Negative
+  control: a paraphrased `>` line planted at the top of 0001's Rejected
+  Alternatives (reverted with `git checkout -- docs/decisions`). The audit at
+  `f7b73277` fails it; the audit at `e371d45c` (copied to the scratchpad) passes
+  it:
+
+  ```diff
+  @@ -18,6 +18,8 @@ Source: https://github.com/pythagorakase/nexus/issues/850#issuecomment-555677701
+   
+   ## Rejected Alternatives
+   
+  +> The cut belongs to Skald, not the player.
+  +
+   - "must cuts stay player-initiated". Reason: "The cut is a craft move Skald owns; thresholds still only raise attention."
+  ```
+
+  ```text
+  $ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/quote_audit.py $PWD
+  [... the 0001 row ends | 0 | 2 | DIFFER |; the other 54 rows read MATCH ...]
+  FAILURES:
+  0001: quoted or fenced lines without a Source line: [21]
+  0001: 0 blocks, expected 1
+  $ PYTHONPATH=$PWD nice -n 15 $PY <scratch>/817-S3-resume/quote_audit_e371d45c.py $PWD
+  [...]
+  all 55 records match (merge base b0da93eaedb4d1661af50742440e7988c7e48185)
+  ```
+
+- The 819-S3 merge check below now records the command for each line.
+- The focused test set is rerun with `nice -n 15` (Test Tails below).
+
 ## 819-S3 Merge Check
 
 819-S3 (#1109, `e0966c6d`) landed before this branch was cut, so rows
@@ -76,9 +147,13 @@ FAILED tests/test_doc_front_matter.py::test_ledger_rejects_format_violations[fil
 ```text
 $ git grep -n "Legacy Columns Without Evidence" origin/main -- docs/dead_retrieval_subtraction.md
 origin/main:docs/dead_retrieval_subtraction.md:182:## Legacy Columns Without Evidence
+$ git log --oneline -1 e0966c6d
 e0966c6d Route the legacy schema-docs baseline debt into #813's manifest (#819 S3) (#1109)
+$ git merge-base --is-ancestor e0966c6d origin/main && echo "e0966c6d is an ancestor of origin/main"
 e0966c6d is an ancestor of origin/main
 ```
+
+Rerun on `f7b73277` with `origin/main` at `b0da93ea`; the output is the same.
 
 ## Quote Audit
 
@@ -88,7 +163,9 @@ issue fresh with `gh api repos/pythagorakase/nexus/issues/comments/<ID>` and
 the JSON `.body` (the same text as `-q .body`, without the newline `gh` appends).
 It does not import the generator. For each record it:
 
-- parses every block that follows a `Source: <URL>.` line and a blank line;
+- parses every block that follows a `Source: <URL>.` line and a blank line,
+  and fails the record when a line that starts with `>` or a fence line lies
+  outside every such block, so every quoted block in a record is compared;
 - recomputes the expected block from the fetched text: the whole comment body;
   for a relay, the first maximal run of `^>( |$)` lines after the first line
   containing `verbatim` (case-insensitive), or lines 3-10 of 5817898265 (the
@@ -97,9 +174,11 @@ It does not import the generator. For each record it:
   the #849 section; the 819-Q1 `Decision:` line, the `<key>: <reason>` lines of
   `config/schema_docs_baseline.json` and the #819 Summary sentence;
 - strips `^> ?` from each quoted line (the #737 fence is compared as it is) and
-  asserts equality, not containment, with the whole expected text (for a relay
-  block, the run with its own `> ` removed), and also asserts that the quoted
-  lines equal the expected lines under the quoting rule byte for byte;
+  asserts equality, not containment, with the whole expected text after the
+  quoting rule and the same strip (so a relay run loses its own `> `, and a
+  source line that already starts with `>` compares as itself), and also
+  asserts that the quoted lines equal the expected lines under the quoting rule
+  byte for byte;
 - prints, per record, the `gh api` commands that record reads (the Fetch
   column);
 - checks the source URL and section of each block, the block count, that every
@@ -108,7 +187,9 @@ It does not import the generator. For each record it:
   one bullet per "not chosen" occurrence (0033 and 0044 take the order's
   wording).
 
-Run on `4c9ebb83`: `PYTHONPATH=$PWD $PY docs/qa/817-decision-ledger/quote_audit.py $PWD`
+Run on `4c9ebb83`: `PYTHONPATH=$PWD $PY docs/qa/817-decision-ledger/quote_audit.py $PWD`.
+Rerun on `f7b73277` as `PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/quote_audit.py $PWD`
+(exit 0); its output is identical to the block below (`diff` empty).
 
 ```text
 | Record | Sources | Fetch | Blocks | Inline quotes | Result |
@@ -187,8 +268,10 @@ FAILURES:
 ## Order Table and Fixed-Text Check
 
 `docs/qa/817-decision-ledger/table_check.py` parses the work order's record
-table and the fixed text of its Required Changes 3 from the order file, and
-compares every record with them. It requires equality, not containment:
+table and the fixed text of its Required Changes 3 from
+`docs/qa/817-decision-ledger/order_817_S3.md` (the order's "Required Changes"
+section, committed byte for byte; a different order file may be passed as the
+second argument), and compares every record with them. It requires equality, not containment:
 
 - the file name `NNNN-slug.md` and the set of files under `docs/decisions/`;
 - the front matter: `status`, `sources` in the table's order, `verified_commit`
@@ -212,10 +295,13 @@ compares every record with them. It requires equality, not containment:
 
 Quoted blocks are left to the quote audit above.
 
-Run on `4c9ebb83`:
-`PYTHONPATH=$PWD $PY docs/qa/817-decision-ledger/table_check.py $PWD /Users/pythagor/nexus/temp/orders_2026_10_07/817-S3-resume.md`
+Run on `f7b73277` with the committed order copy (exit 0). The table rows are
+identical to the earlier run on `4c9ebb83`, which passed the coordinator's
+order file under `temp/` as the second argument.
+`PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/table_check.py $PWD`
 
 ```text
+order: order_817_S3.md
 order table rows: 55; files under docs/decisions/: 56
 lead-ins: 14; fixed Rejected rows: 28; fixed Reopening rows: 13
 
@@ -467,18 +553,22 @@ docs/decisions/README.md: the Records list lacks '- [0055: Weirdness Control](00
 All runs with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset.
 No PostgreSQL proof is owed: no code path that opens a database changes.
 
-`$PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py` on
-`4c9ebb83` (two more rejection cases than the earlier `118 passed`):
+On `f7b73277`:
 
 ```text
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-120 passed, 5 warnings in 20.29s
+120 passed, 5 warnings in 17.38s
 ```
 
+The earlier run on `4c9ebb83` (two more rejection cases than the first
+`118 passed`) was recorded without its command; it gave `120 passed, 5 warnings
+in 20.29s`.
+
 The two offline runs below were recorded before `5830781b` and were not rerun
-in the fix pass, which changed only the rejection cases of
-`tests/test_doc_front_matter.py` (covered by the run above) and the two scripts
-under `docs/qa/`.
+in either fix pass. The first changed only the rejection cases of
+`tests/test_doc_front_matter.py` (covered by the run above); the second changed
+only files under `docs/qa/` (the run above covers the doc classification).
 
 `$PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`
 
@@ -496,14 +586,14 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 
 ## Static Checks
 
-On `4c9ebb83`:
+On `f7b73277` (the same output as on `4c9ebb83`):
 
 ```text
 $ $PY -m black --check tests/test_doc_front_matter.py docs/qa/817-decision-ledger/quote_audit.py docs/qa/817-decision-ledger/table_check.py
 3 files would be left unchanged.
 $ $PY -m flake8 tests/test_doc_front_matter.py docs/qa/817-decision-ledger/quote_audit.py docs/qa/817-decision-ledger/table_check.py
 (no output, exit 0)
-$ $PY -m mypy --explicit-package-bases tests/test_doc_front_matter.py
+$ nice -n 15 $PY -m mypy --explicit-package-bases tests/test_doc_front_matter.py
 Success: no issues found in 1 source file
 $ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
 OK: exception disposition coverage and shrink-only baseline verified.
