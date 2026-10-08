@@ -33,6 +33,7 @@ from nexus.presence.roster import Kind, PresenceRoster, RosterEntry, write_roste
 from scripts import entity_reference_parity as parity
 from scripts import migrate
 from tests.pg_fixtures import (
+    DEFAULT_BASE_TIMESTAMP,
     connect,
     disposable_slot_database,
     route_slot_to_disposable,
@@ -89,7 +90,7 @@ class Ref(NamedTuple):
         )
 
 
-def _seed_story(dbname: str) -> Ref:
+def _seed_story(dbname: str, *, base_timestamp: str = DEFAULT_BASE_TIMESTAMP) -> Ref:
     """Give a fresh clone a zone and a bound player; return the player."""
     seed_zone(
         dbname,
@@ -99,7 +100,9 @@ def _seed_story(dbname: str) -> Ref:
         max_longitude=-73.8,
         max_latitude=40.9,
     )
-    player_id, player_entity_id = seed_protagonist(dbname)
+    player_id, player_entity_id = seed_protagonist(
+        dbname, base_timestamp=base_timestamp
+    )
     return Ref("character", player_id, player_entity_id, "Fixture Player")
 
 
@@ -531,12 +534,17 @@ def test_wizard_reset_clears_unified_rows(monkeypatch: pytest.MonkeyPatch) -> No
     chunk the reset keeps. Fails without the DELETE of chunk_entity_references
     in perform_transition (the orphan-entity row survives).
     """
-    from tests.test_orrery.test_need_clock_anchor_pg import _build_story_transition
+    from tests.test_orrery.test_need_clock_anchor_pg import (
+        STORY_BASE,
+        _build_story_transition,
+    )
 
     with disposable_slot_database(CLONE_PREFIX) as dbname:
         route_slot_to_disposable(monkeypatch.setattr, slot=3, dbname=dbname)
         try:
-            player = _seed_story(dbname)
+            # Migration 144 fixes the base after the first chunk. Keep the
+            # retained chunk on the same clock as the replacement wizard world.
+            player = _seed_story(dbname, base_timestamp=STORY_BASE.isoformat())
             plaza = _place(dbname, "Reset Plaza")
             mara = _character(dbname, "Reset Mara")
             wardens = _faction(dbname, "Reset Wardens")

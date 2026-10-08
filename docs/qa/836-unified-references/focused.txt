@@ -1,0 +1,2730 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+.......Fssss....................................................FFF..... [ 25%]
+........................................................................ [ 50%]
+........................................................................ [ 75%]
+.............................................................ss......... [100%]
+=================================== FAILURES ===================================
+____________________ test_wizard_reset_clears_unified_rows _____________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111a19dd0>
+
+    def test_wizard_reset_clears_unified_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+        """The wizard's clean slate empties chunk_entity_references.
+    
+        Rows naming a character, faction or place are already removed by the
+        forget triggers when the reset deletes the subtype rows, so the row that
+        shows the reset's own DELETE names an entity with no subtype row, on a
+        chunk the reset keeps. Fails without the DELETE of chunk_entity_references
+        in perform_transition (the orphan-entity row survives).
+        """
+        from tests.test_orrery.test_need_clock_anchor_pg import _build_story_transition
+    
+        with disposable_slot_database(CLONE_PREFIX) as dbname:
+            route_slot_to_disposable(monkeypatch.setattr, slot=3, dbname=dbname)
+            try:
+                player = _seed_story(dbname)
+                plaza = _place(dbname, "Reset Plaza")
+                mara = _character(dbname, "Reset Mara")
+                wardens = _faction(dbname, "Reset Wardens")
+                chunk_id = _chunk(dbname, "Reset chunk.")
+                _write(
+                    dbname,
+                    chunk_id,
+                    present=[player.entry()],
+                    setting=[plaza.entry("The plaza.")],
+                    referenced=[mara.entry(), wardens.entry()],
+                )
+                with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                    cur.execute("INSERT INTO entities (kind) VALUES ('place') RETURNING id")
+                    (orphan_entity_id,) = cur.fetchone()
+                    cur.execute(
+                        f"INSERT INTO {UNIFIED_TABLE} "
+                        "(chunk_id, entity_id, entity_kind, reference_kind) "
+                        "VALUES (%s, %s, 'place', 'setting')",
+                        (chunk_id, orphan_entity_id),
+                    )
+                    cur.execute(f"SELECT count(*) FROM {UNIFIED_TABLE}")
+                    assert cur.fetchone()[0] == 5
+    
+                transition = _build_story_transition(dbname)
+>               NewStoryDatabaseMapper(dbname=dbname).perform_transition(transition)
+
+tests/test_chunk_entity_references_pg.py:564: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.api.new_story_db_mapper.NewStoryDatabaseMapper object at 0x112058810>
+transition_data = TransitionData(setting=SettingCard(genre=<Genre.THRILLER: 'thriller'>, secondary_genres=[<Genre.CONTEMPORARY: 'contemp...tc), thread_id='issue_640_ordering_regression', setup_duration_minutes=None, ready_for_transition=True, validated=True)
+in_transaction = None
+
+    def perform_transition(
+        self,
+        transition_data: TransitionData,
+        in_transaction: Optional[Callable[[Any], None]] = None,
+    ) -> Dict[str, int]:
+        """
+        Perform complete transition from setup to narrative mode.
+    
+        This is an atomic operation - either all steps succeed or all are rolled back.
+    
+        Steps:
+        1. Validates transition data completeness
+        2. Saves setting to global_variables
+        3. Saves story seed to global_variables
+        4. Sets base timestamp
+        5. Creates protagonist character
+        6. Creates complete location hierarchy (layer -> zone -> place)
+        7. Applies typed trait compilation and persists the audit result
+        8. Runs the optional in_transaction hook on the same cursor (used by
+           Retrograde wizard-time persistence so generated history commits
+           atomically with the world; a raise rolls back everything)
+        9. Clears the wizard cache (mode is derived from data presence)
+    
+        Args:
+            transition_data: Complete transition data package
+            in_transaction: Optional callable invoked with the open cursor
+                after all transition writes, before commit
+    
+        Returns:
+            Dictionary with created IDs
+    
+        Raises:
+            ValueError: If transition data is incomplete
+            Exception: If any step fails (all changes will be rolled back)
+        """
+        # Validate before attempting any database operations
+        if not transition_data.validate_completeness():
+            missing_fields = []
+            if not transition_data.setting:
+                missing_fields.append("setting")
+            if not transition_data.character:
+                missing_fields.append("character")
+            if not transition_data.seed:
+                missing_fields.append("seed")
+            if not transition_data.layer:
+                missing_fields.append("layer")
+            if not transition_data.zone:
+                missing_fields.append("zone")
+            if not transition_data.location:
+                missing_fields.append("location")
+    
+            raise ValueError(
+                f"Transition data is incomplete. Missing: {', '.join(missing_fields)}"
+            )
+    
+        logger.info(
+            f"Starting atomic transition for {transition_data.character.name} in {transition_data.setting.world_name}"
+        )
+    
+        # ATOMIC OPERATION: All database operations in ONE transaction
+        with get_connection(self.dbname) as conn:
+            try:
+                with conn.cursor() as cur:
+                    # Ensure global_variables row exists (may have been deleted by previous CASCADE)
+                    cur.execute(
+                        """
+                        INSERT INTO global_variables (id, new_story)
+                        VALUES (true, true)
+                        ON CONFLICT (id) DO NOTHING
+                    """
+                    )
+    
+                    # Clean slate: DELETE all entity data and reset sequences
+                    # NOTE: Can't use TRUNCATE because global_variables has FK to characters,
+                    # and PostgreSQL blocks TRUNCATE on tables with inbound FK references.
+                    # DELETE respects ON DELETE SET NULL and works with FK constraints.
+                    cur.execute(
+                        "UPDATE global_variables SET user_character = NULL WHERE id = true"
+                    )
+    
+                    # Delete in reverse dependency order (children before parents)
+                    cur.execute(
+                        """
+                        DELETE FROM chunk_entity_references;
+                        DELETE FROM chunk_character_references;
+                        DELETE FROM chunk_faction_references;
+                        DELETE FROM place_chunk_references;
+                        DELETE FROM character_aliases;
+                        DELETE FROM character_psychology;
+                        SET LOCAL nexus.write_producer = 'manual';
+                        DELETE FROM character_relationships;
+                        DELETE FROM faction_relationships;
+                        DELETE FROM faction_character_relationships;
+                        DELETE FROM factions;
+                        DELETE FROM characters;
+                        DELETE FROM places;
+                        DELETE FROM zones;
+                        DELETE FROM layers;
+                    """
+                    )
+    
+                    # Reset identity sequences so protagonist gets ID=1
+                    cur.execute(
+                        """
+                        ALTER SEQUENCE characters_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE places_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE zones_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE layers_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE character_relationships_id_seq RESTART WITH 1;
+                    """
+                    )
+                    logger.info("Truncated entity tables for clean slate")
+    
+                    # Save setting (using shared cursor)
+                    self.save_setting_to_globals(transition_data.setting, cursor=cur)
+                    logger.debug("Saved setting to global_variables")
+    
+                    # Save story seed (using shared cursor)
+                    self.save_story_seed(transition_data.seed, cursor=cur)
+                    logger.debug("Saved story seed to global_variables")
+    
+                    # The world clock must exist before any character row because
+                    # the need-state trigger anchors need clocks to it (two-clocks
+                    # doctrine).
+>                   cur.execute(
+                        """
+                        UPDATE global_variables
+                        SET base_timestamp = %s
+                        WHERE id = true
+                        """,
+                        (transition_data.base_timestamp,),
+                    )
+E                   psycopg2.errors.RaiseException: global_variables.base_timestamp is fixed once chunk_metadata holds a row: refusing to change it from 2100-01-01 00:00:00+00 to 2189-10-17 19:12:00+00
+E                   CONTEXT:  PL/pgSQL function refuse_base_timestamp_change() line 4 at RAISE
+
+nexus/api/new_story_db_mapper.py:613: RaiseException
+----------------------------- Captured stdout call -----------------------------
+CREATE EXTENSION
+CREATE EXTENSION
+CREATE SCHEMA
+SET
+SET
+SET
+SET
+SET
+SET
+ set_config 
+------------
+ 
+(1 row)
+
+SET
+SET
+SET
+SET
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE DOMAIN
+ALTER DOMAIN
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE TYPE
+ALTER TYPE
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+SET
+SET
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COMMENT
+ALTER TABLE
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COMMENT
+ALTER TABLE
+COMMENT
+ALTER TABLE
+COMMENT
+ALTER TABLE
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+REVOKE
+SET
+SET
+SET
+SET
+SET
+SET
+ set_config 
+------------
+ 
+(1 row)
+
+SET
+SET
+SET
+SET
+COPY 11
+COPY 108
+COPY 29
+COPY 142
+COPY 45
+COPY 465
+ setval 
+--------
+     29
+(1 row)
+
+ setval 
+--------
+    532
+(1 row)
+
+----------------------------- Captured stderr call -----------------------------
+pg_dump: warning: there are circular foreign-key constraints on this table:
+pg_dump: detail: tags
+pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: warning: there are circular foreign-key constraints on this table:
+pg_dump: detail: event_types
+pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.api.new_story_db_mapper:new_story_db_mapper.py:687 Atomic transition failed for Jules Mercer: global_variables.base_timestamp is fixed once chunk_metadata holds a row: refusing to change it from 2100-01-01 00:00:00+00 to 2189-10-17 19:12:00+00
+CONTEXT:  PL/pgSQL function refuse_base_timestamp_change() line 4 at RAISE
+. All database changes rolled back (no partial data).
+____ test_atomic_transition_replaces_stale_clock_before_protagonist_trigger ____
+
+disposable_need_clock_db = 'qa640_5e8c3793f510'
+
+    def test_atomic_transition_replaces_stale_clock_before_protagonist_trigger(
+        disposable_need_clock_db: str,
+    ) -> None:
+        """The wizard transaction exposes the new clock before character creation."""
+    
+        _apply_migration_100(disposable_need_clock_db)
+        transition = _build_story_transition(disposable_need_clock_db)
+        with _transaction(disposable_need_clock_db) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM chunk_metadata")
+                _set_base_timestamp(cur, STALE_STORY_BASE)
+    
+>       result = NewStoryDatabaseMapper(dbname=disposable_need_clock_db).perform_transition(
+            transition
+        )
+
+tests/test_orrery/test_need_clock_anchor_pg.py:1601: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.api.new_story_db_mapper.NewStoryDatabaseMapper object at 0x16e318710>
+transition_data = TransitionData(setting=SettingCard(genre=<Genre.THRILLER: 'thriller'>, secondary_genres=[<Genre.CONTEMPORARY: 'contemp...tc), thread_id='issue_640_ordering_regression', setup_duration_minutes=None, ready_for_transition=True, validated=True)
+in_transaction = None
+
+    def perform_transition(
+        self,
+        transition_data: TransitionData,
+        in_transaction: Optional[Callable[[Any], None]] = None,
+    ) -> Dict[str, int]:
+        """
+        Perform complete transition from setup to narrative mode.
+    
+        This is an atomic operation - either all steps succeed or all are rolled back.
+    
+        Steps:
+        1. Validates transition data completeness
+        2. Saves setting to global_variables
+        3. Saves story seed to global_variables
+        4. Sets base timestamp
+        5. Creates protagonist character
+        6. Creates complete location hierarchy (layer -> zone -> place)
+        7. Applies typed trait compilation and persists the audit result
+        8. Runs the optional in_transaction hook on the same cursor (used by
+           Retrograde wizard-time persistence so generated history commits
+           atomically with the world; a raise rolls back everything)
+        9. Clears the wizard cache (mode is derived from data presence)
+    
+        Args:
+            transition_data: Complete transition data package
+            in_transaction: Optional callable invoked with the open cursor
+                after all transition writes, before commit
+    
+        Returns:
+            Dictionary with created IDs
+    
+        Raises:
+            ValueError: If transition data is incomplete
+            Exception: If any step fails (all changes will be rolled back)
+        """
+        # Validate before attempting any database operations
+        if not transition_data.validate_completeness():
+            missing_fields = []
+            if not transition_data.setting:
+                missing_fields.append("setting")
+            if not transition_data.character:
+                missing_fields.append("character")
+            if not transition_data.seed:
+                missing_fields.append("seed")
+            if not transition_data.layer:
+                missing_fields.append("layer")
+            if not transition_data.zone:
+                missing_fields.append("zone")
+            if not transition_data.location:
+                missing_fields.append("location")
+    
+            raise ValueError(
+                f"Transition data is incomplete. Missing: {', '.join(missing_fields)}"
+            )
+    
+        logger.info(
+            f"Starting atomic transition for {transition_data.character.name} in {transition_data.setting.world_name}"
+        )
+    
+        # ATOMIC OPERATION: All database operations in ONE transaction
+        with get_connection(self.dbname) as conn:
+            try:
+                with conn.cursor() as cur:
+                    # Ensure global_variables row exists (may have been deleted by previous CASCADE)
+                    cur.execute(
+                        """
+                        INSERT INTO global_variables (id, new_story)
+                        VALUES (true, true)
+                        ON CONFLICT (id) DO NOTHING
+                    """
+                    )
+    
+                    # Clean slate: DELETE all entity data and reset sequences
+                    # NOTE: Can't use TRUNCATE because global_variables has FK to characters,
+                    # and PostgreSQL blocks TRUNCATE on tables with inbound FK references.
+                    # DELETE respects ON DELETE SET NULL and works with FK constraints.
+                    cur.execute(
+                        "UPDATE global_variables SET user_character = NULL WHERE id = true"
+                    )
+    
+                    # Delete in reverse dependency order (children before parents)
+>                   cur.execute(
+                        """
+                        DELETE FROM chunk_entity_references;
+                        DELETE FROM chunk_character_references;
+                        DELETE FROM chunk_faction_references;
+                        DELETE FROM place_chunk_references;
+                        DELETE FROM character_aliases;
+                        DELETE FROM character_psychology;
+                        SET LOCAL nexus.write_producer = 'manual';
+                        DELETE FROM character_relationships;
+                        DELETE FROM faction_relationships;
+                        DELETE FROM faction_character_relationships;
+                        DELETE FROM factions;
+                        DELETE FROM characters;
+                        DELETE FROM places;
+                        DELETE FROM zones;
+                        DELETE FROM layers;
+                    """
+                    )
+E                   psycopg2.errors.UndefinedTable: relation "chunk_entity_references" does not exist
+E                   LINE 2:                         DELETE FROM chunk_entity_references;
+E                                                               ^
+
+nexus/api/new_story_db_mapper.py:570: UndefinedTable
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.api.new_story_db_mapper:new_story_db_mapper.py:687 Atomic transition failed for Jules Mercer: relation "chunk_entity_references" does not exist
+LINE 2:                         DELETE FROM chunk_entity_references;
+                                            ^
+. All database changes rolled back (no partial data).
+__________ test_atomic_transition_bounds_zone_with_configured_radius ___________
+
+disposable_need_clock_db = 'qa640_8e144d992e70'
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-349/test_atomic_transition_bounds_0')
+
+    def test_atomic_transition_bounds_zone_with_configured_radius(
+        disposable_need_clock_db: str, tmp_path: Path
+    ) -> None:
+        """Issue #840: [wizard.geo] sizes the genesis zone circle, not a literal."""
+    
+        radius_m = 5000.0
+        config = tmp_path / "nexus.toml"
+        source, replaced = RADIUS_SETTING_PATTERN.subn(
+            f"default_zone_radius_m = {radius_m}", (ROOT / "nexus.toml").read_text()
+        )
+        assert replaced == 1
+        config.write_text(source)
+        transition = _prepare_stale_clock_transition(disposable_need_clock_db)
+    
+        with settings_path_scope(config):
+            result = NewStoryDatabaseMapper(
+                dbname=disposable_need_clock_db
+>           ).perform_transition(transition)
+
+tests/test_orrery/test_need_clock_anchor_pg.py:1709: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.api.new_story_db_mapper.NewStoryDatabaseMapper object at 0x111c30d10>
+transition_data = TransitionData(setting=SettingCard(genre=<Genre.THRILLER: 'thriller'>, secondary_genres=[<Genre.CONTEMPORARY: 'contemp...tc), thread_id='issue_640_ordering_regression', setup_duration_minutes=None, ready_for_transition=True, validated=True)
+in_transaction = None
+
+    def perform_transition(
+        self,
+        transition_data: TransitionData,
+        in_transaction: Optional[Callable[[Any], None]] = None,
+    ) -> Dict[str, int]:
+        """
+        Perform complete transition from setup to narrative mode.
+    
+        This is an atomic operation - either all steps succeed or all are rolled back.
+    
+        Steps:
+        1. Validates transition data completeness
+        2. Saves setting to global_variables
+        3. Saves story seed to global_variables
+        4. Sets base timestamp
+        5. Creates protagonist character
+        6. Creates complete location hierarchy (layer -> zone -> place)
+        7. Applies typed trait compilation and persists the audit result
+        8. Runs the optional in_transaction hook on the same cursor (used by
+           Retrograde wizard-time persistence so generated history commits
+           atomically with the world; a raise rolls back everything)
+        9. Clears the wizard cache (mode is derived from data presence)
+    
+        Args:
+            transition_data: Complete transition data package
+            in_transaction: Optional callable invoked with the open cursor
+                after all transition writes, before commit
+    
+        Returns:
+            Dictionary with created IDs
+    
+        Raises:
+            ValueError: If transition data is incomplete
+            Exception: If any step fails (all changes will be rolled back)
+        """
+        # Validate before attempting any database operations
+        if not transition_data.validate_completeness():
+            missing_fields = []
+            if not transition_data.setting:
+                missing_fields.append("setting")
+            if not transition_data.character:
+                missing_fields.append("character")
+            if not transition_data.seed:
+                missing_fields.append("seed")
+            if not transition_data.layer:
+                missing_fields.append("layer")
+            if not transition_data.zone:
+                missing_fields.append("zone")
+            if not transition_data.location:
+                missing_fields.append("location")
+    
+            raise ValueError(
+                f"Transition data is incomplete. Missing: {', '.join(missing_fields)}"
+            )
+    
+        logger.info(
+            f"Starting atomic transition for {transition_data.character.name} in {transition_data.setting.world_name}"
+        )
+    
+        # ATOMIC OPERATION: All database operations in ONE transaction
+        with get_connection(self.dbname) as conn:
+            try:
+                with conn.cursor() as cur:
+                    # Ensure global_variables row exists (may have been deleted by previous CASCADE)
+                    cur.execute(
+                        """
+                        INSERT INTO global_variables (id, new_story)
+                        VALUES (true, true)
+                        ON CONFLICT (id) DO NOTHING
+                    """
+                    )
+    
+                    # Clean slate: DELETE all entity data and reset sequences
+                    # NOTE: Can't use TRUNCATE because global_variables has FK to characters,
+                    # and PostgreSQL blocks TRUNCATE on tables with inbound FK references.
+                    # DELETE respects ON DELETE SET NULL and works with FK constraints.
+                    cur.execute(
+                        "UPDATE global_variables SET user_character = NULL WHERE id = true"
+                    )
+    
+                    # Delete in reverse dependency order (children before parents)
+>                   cur.execute(
+                        """
+                        DELETE FROM chunk_entity_references;
+                        DELETE FROM chunk_character_references;
+                        DELETE FROM chunk_faction_references;
+                        DELETE FROM place_chunk_references;
+                        DELETE FROM character_aliases;
+                        DELETE FROM character_psychology;
+                        SET LOCAL nexus.write_producer = 'manual';
+                        DELETE FROM character_relationships;
+                        DELETE FROM faction_relationships;
+                        DELETE FROM faction_character_relationships;
+                        DELETE FROM factions;
+                        DELETE FROM characters;
+                        DELETE FROM places;
+                        DELETE FROM zones;
+                        DELETE FROM layers;
+                    """
+                    )
+E                   psycopg2.errors.UndefinedTable: relation "chunk_entity_references" does not exist
+E                   LINE 2:                         DELETE FROM chunk_entity_references;
+E                                                               ^
+
+nexus/api/new_story_db_mapper.py:570: UndefinedTable
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.api.new_story_db_mapper:new_story_db_mapper.py:687 Atomic transition failed for Jules Mercer: relation "chunk_entity_references" does not exist
+LINE 2:                         DELETE FROM chunk_entity_references;
+                                            ^
+. All database changes rolled back (no partial data).
+_______ test_atomic_transition_rolls_back_when_zone_boundary_write_fails _______
+
+disposable_need_clock_db = 'qa640_2e4c14f5b415'
+
+    def test_atomic_transition_rolls_back_when_zone_boundary_write_fails(
+        disposable_need_clock_db: str,
+    ) -> None:
+        """Issue #840: a rejected zone boundary aborts genesis, not a warning.
+    
+        The boundary UPDATE's own error must surface. Swallowing it left the
+        transaction aborted, so the next statement failed with a misleading
+        ``InFailedSqlTransaction`` instead.
+        """
+    
+        transition = _prepare_stale_clock_transition(disposable_need_clock_db)
+        with _transaction(disposable_need_clock_db) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "ALTER TABLE zones ADD CONSTRAINT qa840_boundary_rejected "
+                    "CHECK (boundary IS NULL) NOT VALID"
+                )
+    
+        with pytest.raises(psycopg2.errors.CheckViolation, match="qa840_boundary_rejected"):
+>           NewStoryDatabaseMapper(dbname=disposable_need_clock_db).perform_transition(
+                transition
+            )
+
+tests/test_orrery/test_need_clock_anchor_pg.py:1740: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.api.new_story_db_mapper.NewStoryDatabaseMapper object at 0x11213ab50>
+transition_data = TransitionData(setting=SettingCard(genre=<Genre.THRILLER: 'thriller'>, secondary_genres=[<Genre.CONTEMPORARY: 'contemp...tc), thread_id='issue_640_ordering_regression', setup_duration_minutes=None, ready_for_transition=True, validated=True)
+in_transaction = None
+
+    def perform_transition(
+        self,
+        transition_data: TransitionData,
+        in_transaction: Optional[Callable[[Any], None]] = None,
+    ) -> Dict[str, int]:
+        """
+        Perform complete transition from setup to narrative mode.
+    
+        This is an atomic operation - either all steps succeed or all are rolled back.
+    
+        Steps:
+        1. Validates transition data completeness
+        2. Saves setting to global_variables
+        3. Saves story seed to global_variables
+        4. Sets base timestamp
+        5. Creates protagonist character
+        6. Creates complete location hierarchy (layer -> zone -> place)
+        7. Applies typed trait compilation and persists the audit result
+        8. Runs the optional in_transaction hook on the same cursor (used by
+           Retrograde wizard-time persistence so generated history commits
+           atomically with the world; a raise rolls back everything)
+        9. Clears the wizard cache (mode is derived from data presence)
+    
+        Args:
+            transition_data: Complete transition data package
+            in_transaction: Optional callable invoked with the open cursor
+                after all transition writes, before commit
+    
+        Returns:
+            Dictionary with created IDs
+    
+        Raises:
+            ValueError: If transition data is incomplete
+            Exception: If any step fails (all changes will be rolled back)
+        """
+        # Validate before attempting any database operations
+        if not transition_data.validate_completeness():
+            missing_fields = []
+            if not transition_data.setting:
+                missing_fields.append("setting")
+            if not transition_data.character:
+                missing_fields.append("character")
+            if not transition_data.seed:
+                missing_fields.append("seed")
+            if not transition_data.layer:
+                missing_fields.append("layer")
+            if not transition_data.zone:
+                missing_fields.append("zone")
+            if not transition_data.location:
+                missing_fields.append("location")
+    
+            raise ValueError(
+                f"Transition data is incomplete. Missing: {', '.join(missing_fields)}"
+            )
+    
+        logger.info(
+            f"Starting atomic transition for {transition_data.character.name} in {transition_data.setting.world_name}"
+        )
+    
+        # ATOMIC OPERATION: All database operations in ONE transaction
+        with get_connection(self.dbname) as conn:
+            try:
+                with conn.cursor() as cur:
+                    # Ensure global_variables row exists (may have been deleted by previous CASCADE)
+                    cur.execute(
+                        """
+                        INSERT INTO global_variables (id, new_story)
+                        VALUES (true, true)
+                        ON CONFLICT (id) DO NOTHING
+                    """
+                    )
+    
+                    # Clean slate: DELETE all entity data and reset sequences
+                    # NOTE: Can't use TRUNCATE because global_variables has FK to characters,
+                    # and PostgreSQL blocks TRUNCATE on tables with inbound FK references.
+                    # DELETE respects ON DELETE SET NULL and works with FK constraints.
+                    cur.execute(
+                        "UPDATE global_variables SET user_character = NULL WHERE id = true"
+                    )
+    
+                    # Delete in reverse dependency order (children before parents)
+>                   cur.execute(
+                        """
+                        DELETE FROM chunk_entity_references;
+                        DELETE FROM chunk_character_references;
+                        DELETE FROM chunk_faction_references;
+                        DELETE FROM place_chunk_references;
+                        DELETE FROM character_aliases;
+                        DELETE FROM character_psychology;
+                        SET LOCAL nexus.write_producer = 'manual';
+                        DELETE FROM character_relationships;
+                        DELETE FROM faction_relationships;
+                        DELETE FROM faction_character_relationships;
+                        DELETE FROM factions;
+                        DELETE FROM characters;
+                        DELETE FROM places;
+                        DELETE FROM zones;
+                        DELETE FROM layers;
+                    """
+                    )
+E                   psycopg2.errors.UndefinedTable: relation "chunk_entity_references" does not exist
+E                   LINE 2:                         DELETE FROM chunk_entity_references;
+E                                                               ^
+
+nexus/api/new_story_db_mapper.py:570: UndefinedTable
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.api.new_story_db_mapper:new_story_db_mapper.py:687 Atomic transition failed for Jules Mercer: relation "chunk_entity_references" does not exist
+LINE 2:                         DELETE FROM chunk_entity_references;
+                                            ^
+. All database changes rolled back (no partial data).
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_wizard_opening_presence_pg.py::test_declared_character_named_without_presence_commits_present_row
+  /Users/pythagor/nexus/.claude/worktrees/836-unified-references/nexus/agents/memnon/utils/cross_encoder.py:173: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+    elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
+
+tests/test_wizard_opening_presence_pg.py::test_declared_character_named_without_presence_commits_present_row
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/convert_slow_tokenizer.py:559: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 77 targets: mock, nexus_m10_fresh_test_28802, nexus_m10_template_test_28802, postgres, qa640_* x18, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_836_parity_* x2, qa640_836s3_* x3, qa640_885_ren_replay_* x4, qa640_docs_refresh_*, qa640_roster798_* x23, qa640_schema_docs_* x3, qa655_wizard_488459e7ef, qa655_wizard_62b9df1b5f, qa655_wizard_7eaacf63a7, qa655_wizard_8516f45361, qa655_wizard_a9a54968f9, qa655_wizard_e4702d56b5, qa885_transaction_writer_*, qa_wt724_recall_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:52869 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:52870 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:52869 (psycopg2), save_04@local:52870 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_chunk_entity_references_pg.py::test_wizard_reset_clears_unified_rows
+FAILED tests/test_orrery/test_need_clock_anchor_pg.py::test_atomic_transition_replaces_stale_clock_before_protagonist_trigger
+FAILED tests/test_orrery/test_need_clock_anchor_pg.py::test_atomic_transition_bounds_zone_with_configured_radius
+FAILED tests/test_orrery/test_need_clock_anchor_pg.py::test_atomic_transition_rolls_back_when_zone_boundary_write_fails
+4 failed, 278 passed, 6 skipped, 4 warnings in 161.16s (0:02:41)
