@@ -52,6 +52,15 @@ def _stored_runs(dbname: str) -> List[Dict[str, Any]]:
         return [{"id": row[0], "config": row[1]} for row in cur.fetchall()]
 
 
+def test_fresh_clone_copies_ir_eval_schema_without_run_data(clone: str) -> None:
+    """A template clone restores ir_eval objects covered by its migration stamps."""
+
+    with closing(connect(clone)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('ir_eval.eval_runs')::text")
+        assert cur.fetchone()[0] == "ir_eval.eval_runs"
+    assert _stored_runs(clone) == []
+
+
 def test_create_run_resolves_an_embedding_candidate(
     clone: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -126,3 +135,41 @@ def test_create_run_refuses_an_unknown_model_before_writing(
     assert "[ir_eval.embedding_candidates]" in message
     assert PRODUCTION in message
     assert _stored_runs(clone) == []
+
+
+def test_create_run_refuses_an_unknown_reranker_before_writing(
+    clone: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unknown enabled reranker is refused before a run row is stored."""
+
+    with pytest.raises(ValueError, match=r"\[ir_eval.reranker_candidates\]"):
+        _create_run(
+            clone,
+            ["--model", f"{PRODUCTION}:1.0", "--reranker", "unregistered-reranker"],
+            capsys,
+        )
+    assert _stored_runs(clone) == []
+
+
+def test_disabled_reranking_ignores_an_unknown_candidate(
+    clone: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A disabled candidate neither resolves nor overwrites production identity."""
+
+    _create_run(
+        clone,
+        [
+            "--model",
+            f"{PRODUCTION}:1.0",
+            "--no-cross-encoder",
+            "--reranker",
+            "unregistered-reranker",
+        ],
+        capsys,
+    )
+    (run,) = _stored_runs(clone)
+    assert run["config"]["cross_encoder_enabled"] is False
+    stored = run["config"]["settings_snapshot"]["retrieval"]["cross_encoder_reranking"]
+    assert (
+        stored == load_settings().memnon.retrieval.cross_encoder_reranking.model_dump()
+    )
