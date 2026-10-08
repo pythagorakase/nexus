@@ -235,8 +235,8 @@ _register(
 _register(
     r"has_location_class_destination\((?P<lc>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: (
-        f"{_slot(m.group('slot'))} can resolve a destination with place class "
-        f"`{m.group('lc')}`"
+        f"{_slot(m.group('slot'))} can resolve a routable destination with place "
+        f"class `{m.group('lc')}`"
     ),
 )
 _register(
@@ -297,7 +297,7 @@ _register(
     r"routine_anchor_has_destination\((?P<anchor>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: (
         f"{_slot(m.group('slot'))}'s `{m.group('anchor')}` routine "
-        "can resolve a destination"
+        "can resolve a routable destination"
     ),
 )
 _register(
