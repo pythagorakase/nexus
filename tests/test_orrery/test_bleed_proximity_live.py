@@ -26,7 +26,7 @@ from nexus.agents.orrery.bleed import (
 )
 from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.config.settings_models import OrreryBleedSettings
-from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
+from tests.pg_fixtures import disposable_slot_database, seed_story_base, sqlalchemy_url
 from tests.settings_helpers import settings_with, table
 
 
@@ -241,6 +241,7 @@ def _insert_candidate(
 def bleed_proximity_db() -> Iterator[dict[str, Any]]:
     """Build the candidate pool in a disposable clone, never a native save."""
     with disposable_slot_database("qa640_bleed_proximity") as dbname:
+        seed_story_base(dbname)
         yield from _bleed_proximity_rows(dbname)
 
 
