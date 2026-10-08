@@ -1,0 +1,10 @@
+0010-the-gaia-seat.md
+    UNTRACKED:~/.codex/config.toml (body lines 11)
+0018-killed-c003.md
+    UNTRACKED:doctrine.md (body lines 27)
+0022-killed-c068.md
+    UNTRACKED:doctrine.md (body lines 23)
+0023-killed-c100.md
+    UNTRACKED:doctrine.md (body lines 27)
+    UNTRACKED:coverage_critique.md (body lines 27)
+tracked files cited but not in sources: 0

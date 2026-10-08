@@ -1,0 +1,76 @@
+{
+  "captured_at": "2026-10-08T17:33:01.888157+00:00",
+  "integration_worktree": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus",
+  "head": "f291dc792e4b071a4cc4940101f6c40871ea8b7b",
+  "git_status_porcelain": "",
+  "origin_main_tracking": "afd034f360e625f8bc4ffa8a717dda28422b19c7",
+  "origin_main_ls_remote": "afd034f360e625f8bc4ffa8a717dda28422b19c7",
+  "feature_ancestry": {
+    "822": {
+      "head": "f192fccd951c96689b5b76c2ff7d1680e3f97254",
+      "included": true
+    },
+    "840": {
+      "head": "e79dfda0c37826b673042a93eedca252708b935e",
+      "included": true
+    },
+    "836": {
+      "head": "9f7d5a8cef1f2092d5ac637b39ee047f8b9fc123",
+      "included": true
+    },
+    "806": {
+      "head": "cf61a440da7f3236226c717d031a493cbc25f5c5",
+      "included": true
+    },
+    "817": {
+      "head": "5cff344d54688d5e6b35e4dad83e369c9f45cfd3",
+      "included": true
+    },
+    "812": {
+      "head": "060972651214b96c45ec94657ec35d363261f973",
+      "included": true
+    },
+    "816": {
+      "head": "a6ed8862ca875a069cbefd52bcae8e65d90e9337",
+      "included": true
+    },
+    "785": {
+      "head": "9e207e558d250636b9a1a571b03178fefb62d8f9",
+      "included": true
+    },
+    "810": {
+      "head": "487f3a08564979505b8913c7e95c4d4363b7662e",
+      "included": true
+    }
+  },
+  "counts": {
+    "core": {
+      "passed": 3624,
+      "skipped": 52,
+      "warnings": 30
+    },
+    "api": {
+      "passed": 887,
+      "skipped": 4,
+      "warnings": 9
+    },
+    "orrery": {
+      "passed": 2473,
+      "skipped": 16,
+      "warnings": 2
+    }
+  },
+  "total": {
+    "passed": 6984,
+    "skipped": 72,
+    "warnings": 41
+  },
+  "commands": [
+    "git rev-parse HEAD",
+    "git status --porcelain",
+    "git rev-parse origin/main",
+    "git ls-remote origin refs/heads/main",
+    "git merge-base --is-ancestor <each captured feature head> HEAD"
+  ],
+  "signature": "Codex \u2014 GPT-6"
+}

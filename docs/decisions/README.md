@@ -3,7 +3,7 @@ status: canonical
 sources:
   - tests/test_doc_front_matter.py
   - README.md
-verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
+verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
 ---
 
 # Document Status and the Decision Ledger

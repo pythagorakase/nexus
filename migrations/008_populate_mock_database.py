@@ -348,7 +348,8 @@ def populate_post_transition_data(conn, cache: dict):
                 ),
             ),
         )
-        assert cur.rowcount == 1, "global_variables singleton row is missing"
+        if cur.rowcount != 1:
+            raise RuntimeError("global_variables singleton row is missing")
 
     print("✓ Populated layers, zones, places, characters, global_variables")
 
@@ -439,7 +440,8 @@ def populate_save_slot(conn):
     """Mark the story transitioned and pin its model to TEST."""
     with conn.cursor() as cur:
         cur.execute("UPDATE global_variables SET new_story = FALSE WHERE id = TRUE")
-        assert cur.rowcount == 1, "global_variables singleton row is missing"
+        if cur.rowcount != 1:
+            raise RuntimeError("global_variables singleton row is missing")
         write_story_settings(cur, StorySettings(skald_model="TEST", gaia_model=None))
     print("✓ Configured mock slot model (TEST)")
 
@@ -468,21 +470,22 @@ def seed_test_provider_database(dbname: str) -> None:
 
 
 def main():
-    settings = load_settings()
-    if settings.api is None:
-        raise ValueError("nexus.toml is missing the [api] section")
     parser = argparse.ArgumentParser(description="Seed a TEST provider database.")
     parser.add_argument(
         "--dbname",
-        default=settings.api.test_provider.database,
         help="TEST provider database to seed (default: [api.test_provider] database)",
     )
     dbname = parser.parse_args().dbname
+    if dbname is None:
+        settings = load_settings()
+        if settings.api is None:
+            raise ValueError("nexus.toml is missing the [api] section")
+        dbname = settings.api.test_provider.database
 
     print(f"Loading wizard cache from {CACHE_FILE}...")
     print(f"Seeding TEST provider database {dbname!r}...")
     seed_test_provider_database(dbname)
-    print("\n✅ Mock database populated successfully!")
+    print(f"\n✅ TEST provider database {dbname!r} populated successfully!")
 
 
 if __name__ == "__main__":

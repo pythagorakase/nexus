@@ -1,0 +1,53 @@
+scripts/regenerate_embeddings.py:12:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:18:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:21:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:24:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:53:1: F401 'json' imported but unused
+scripts/regenerate_embeddings.py:57:1: F401 'typing.Union' imported but unused
+scripts/regenerate_embeddings.py:102:1: E402 module level import not at top of file
+scripts/regenerate_embeddings.py:149:5: F401 'sqlalchemy as sa' imported but unused
+scripts/regenerate_embeddings.py:158:5: F401 'pgvector' imported but unused
+scripts/regenerate_embeddings.py:159:5: F401 'pgvector.sqlalchemy.Vector' imported but unused
+scripts/regenerate_embeddings.py:305:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:328:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:332:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:388:43: W291 trailing whitespace
+scripts/regenerate_embeddings.py:389:38: W291 trailing whitespace
+scripts/regenerate_embeddings.py:402:21: E722 do not use bare 'except'
+scripts/regenerate_embeddings.py:407:89: E501 line too long (95 > 88 characters)
+scripts/regenerate_embeddings.py:414:29: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:425:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:440:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:498:36: W291 trailing whitespace
+scripts/regenerate_embeddings.py:499:38: W291 trailing whitespace
+scripts/regenerate_embeddings.py:540:62: W291 trailing whitespace
+scripts/regenerate_embeddings.py:549:89: E501 line too long (91 > 88 characters)
+scripts/regenerate_embeddings.py:556:41: W291 trailing whitespace
+scripts/regenerate_embeddings.py:567:89: E501 line too long (102 > 88 characters)
+scripts/regenerate_embeddings.py:570:89: E501 line too long (93 > 88 characters)
+scripts/regenerate_embeddings.py:606:89: E501 line too long (98 > 88 characters)
+scripts/regenerate_embeddings.py:621:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:657:89: E501 line too long (109 > 88 characters)
+scripts/regenerate_embeddings.py:660:89: E501 line too long (104 > 88 characters)
+scripts/regenerate_embeddings.py:674:41: W291 trailing whitespace
+scripts/regenerate_embeddings.py:675:57: W291 trailing whitespace
+scripts/regenerate_embeddings.py:702:49: W291 trailing whitespace
+scripts/regenerate_embeddings.py:703:65: W291 trailing whitespace
+scripts/regenerate_embeddings.py:704:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:832:89: E501 line too long (101 > 88 characters)
+scripts/regenerate_embeddings.py:862:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:908:89: E501 line too long (128 > 88 characters)
+scripts/regenerate_embeddings.py:915:46: W291 trailing whitespace
+scripts/regenerate_embeddings.py:945:89: E501 line too long (104 > 88 characters)
+scripts/regenerate_embeddings.py:949:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:952:25: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:952:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:983:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:1077:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:1117:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:1132:40: W291 trailing whitespace
+scripts/regenerate_embeddings.py:1133:42: W291 trailing whitespace
+scripts/regenerate_embeddings.py:1205:89: E501 line too long (135 > 88 characters)
+scripts/regenerate_embeddings.py:1235:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:1492:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:1550:23: F541 f-string is missing placeholders

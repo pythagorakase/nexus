@@ -539,3 +539,130 @@ check found no remaining `qa640_816_%` or `qa640_836%` databases. This targeted
 proof completes the repair; the coordinator still owns the full combined gate.
 
 Codex — GPT-6
+
+## PR 1123 Operator Review Fixes (2026-10-08)
+
+Addressed the actionable portions of
+[Claude's review](https://github.com/pythagorakase/nexus/pull/1123#issuecomment-6065700584).
+The two singleton UPDATE checks now raise `RuntimeError` explicitly, including
+under optimized Python. `main` parses arguments before reading the default target
+from settings, so `--help` works with malformed configuration. Explicit targets
+still use `connection_kwargs` and `write_story_settings`, which require validated
+configuration; no connection-policy bypass was added. Successful output names
+the selected database. `docs/settings_scopes.md` now documents the process-wide
+validated `NEXUS_TEST_PROVIDER_DATABASE` override.
+
+The frozen order's Pydantic `mock` default and literal test-owner guards remain:
+deriving the protected owner from an environment-overlaid setting would weaken
+isolation. Existing proof logs, story-name refusals, current-schema requirements,
+single-transaction rollback and conditional migration-148 cleanup remain intact.
+
+Merged landed main `d476db9117104d5dfddba742e85e7966efec89e4` as `cf6d459e`,
+resolving `tests/conftest.py` to the already-tested f291 contents. After the first
+focused pass, merged landed 812 main `7399bd991294715ba724e7779ae753f66f80cfe6`
+as `0668a640ee9db4601d1ea99abdbcff4eabab8ae1`. Canonical source declarations were
+reviewed and their freshness stamps advanced to that main commit. The
+[scoped diff from f291](review-2026-10-08/scoped-f291.patch) records only this
+review repair's source, tests and settings documentation.
+
+The new tests run the actual 008 CLI under `python -O`. For each singleton
+UPDATE separately, a trigger on a disposable database suppresses that UPDATE;
+the test requires the specific runtime refusal and unchanged singleton/cache
+data after rollback. No fake cursor or monkeypatched seeding path is used.
+
+The following commands used `PY=/Users/pythagor/nexus/.venv/bin/python`, this
+worktree's exact `PYTHONPATH`, and unset `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
+`NEXUS_SLOT`. Import provenance printed this worktree's `nexus/__init__.py`.
+Pre-run one-minute loads were 3.93, 6.28, 5.66 and 5.49, all below 24.
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q \
+  -p tests.dbname_audit tests/test_test_provider_seeder.py \
+  tests/test_mock_openai.py::test_seeded_test_provider_database_holds_the_rows_the_provider_reads
+```
+
+[Red](review-2026-10-08/red.txt): `4 failed, 1 passed in 7.31s`. Both optimized
+singleton cases incorrectly reported success before the fix; malformed-config
+help and target-specific success output also failed. The retained
+[initial red](review-2026-10-08/red-initial.txt) has one additional test assertion
+error: TOML's exception did not include the config filename. The test was
+corrected to require `TOMLDecodeError` before the reported red run; production
+source was still unchanged.
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs \
+  -p tests.dbname_audit tests/test_test_provider_seeder.py \
+  tests/test_mock_openai.py tests/test_config/test_test_provider_database.py \
+  tests/test_owner_target_guard.py tests/test_doc_front_matter.py \
+  tests/test_reachability.py
+```
+
+[First repaired run](review-2026-10-08/green.txt): `1 failed, 213 passed, 1 skipped
+in 37.82s`. The sole failure was the turn-flow document's freshness stamp after
+the main merge; the sole skip was the actual-148 parity test because migration
+148 is not yet on this feature branch. Every operator/routing/rollback test
+passed. After the next main merge and freshness repair:
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs \
+  -p tests.dbname_audit tests/test_test_provider_seeder.py \
+  tests/test_mock_openai.py::test_seeded_test_provider_database_holds_the_rows_the_provider_reads \
+  tests/test_mock_openai.py::test_seeder_trait_mismatch_rolls_back_every_write \
+  tests/test_config/test_test_provider_database.py tests/test_doc_front_matter.py
+```
+
+[Final focused run](review-2026-10-08/green-after-main.txt):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: owner targets: none
+57 passed in 12.73s
+```
+
+Black passes all three changed Python files. Mypy with
+`--explicit-package-bases` reports no issues in those three files or in the two
+existing files from `origin/main`. Flake8 reports the same thirteen pre-existing
+008 line-length diagnostics on both sides, none on changed lines or either test
+file. The exception disposition checker passes against `origin/main`. Outputs
+are retained in [review-2026-10-08](review-2026-10-08/).
+
+A second agent reviewed the final source/test diff without executing it and
+found no blocker. No owner call, paid call, service change or whole-suite run
+was made. The coordinator will exercise the unchanged actual-148 parity test
+again after merging this repair into the combined integration.
+
+Codex — GPT-6
+
+### Final Main Refresh
+
+Merged landed 785 main `6f338c55c1d1f769633136f91c2cad1bc8ff99ae` as
+`9b6940e04e9141d96f74598f8a8fdc2f3025241d`. The travel/configuration changes
+match tested integration f291. The seeder and review-regression tests remain
+byte-identical to `e6d3d146`; 008 SHA256 is
+`6c1dcdadf733fd7570221d368f97b9507c1cfa1bdffc6c50a19935cad51bf925`.
+Within the 816 production scope, the only difference from f291 remains the
+operator patch shown above. Other branch-versus-f291 differences are the still
+unlanded 810/836 lanes, not new 816 changes.
+
+Rechecked the canonical document claims against the merged sources: no prose
+correction was required. Both source freshness stamps now name `6f338c55`.
+With the coordinated test slot free and one-minute load 3.95:
+
+```sh
+PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python \
+  -m pytest -q tests/test_doc_front_matter.py
+```
+
+[Final document check](review-2026-10-08/final-doc-freshness.txt):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+42 passed, 5 warnings in 4.02s
+```
+
+No behavioral tests were repeated for this unchanged-source merge. The test
+slot was released to the 810 reviewer immediately after this check.
+
+Codex — GPT-6

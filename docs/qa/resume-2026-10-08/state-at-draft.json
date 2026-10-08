@@ -1,0 +1,133 @@
+{
+  "task": "Resume Claude unfinished NEXUS campaign",
+  "base": "afd034f360e625f8bc4ffa8a717dda28422b19c7",
+  "source_handoff": "temp/orders_2026_10_07/coord/paused-2026-10-08-limit.md",
+  "scope": "Complete nine started lanes before considering drafted wave B",
+  "lanes": {
+    "822": {
+      "branch": "claude/822-story-identity",
+      "pr": 1117,
+      "state": "focused validation complete, integrated; combined gate pending",
+      "head": "f192fccd951c96689b5b76c2ff7d1680e3f97254"
+    },
+    "840": {
+      "branch": "claude/840-natural-earth",
+      "pr": 1116,
+      "state": "focused validation complete, integrated; combined gate pending",
+      "head": "e79dfda0c37826b673042a93eedca252708b935e"
+    },
+    "836": {
+      "branch": "claude/836-unified-references",
+      "pr": null,
+      "state": "focused validation complete, integrated; combined gate pending",
+      "head": "9f7d5a8cef1f2092d5ac637b39ee047f8b9fc123"
+    },
+    "806": {
+      "branch": "claude/806-receipt-store",
+      "pr": 1118,
+      "state": "focused validation complete, integrated; combined gate pending",
+      "head": "cf61a440da7f3236226c717d031a493cbc25f5c5"
+    },
+    "817": {
+      "branch": "claude/817-decision-ledger",
+      "pr": 1115,
+      "state": "focused validation complete, integrated; combined gate pending",
+      "head": "5cff344d54688d5e6b35e4dad83e369c9f45cfd3"
+    },
+    "812": {
+      "branch": "claude/812-one-embedder",
+      "pr": null,
+      "state": "focused validation complete, integrated; combined gate pending",
+      "head": "060972651214b96c45ec94657ec35d363261f973"
+    },
+    "816": {
+      "branch": "claude/816-test-provider-database",
+      "pr": null,
+      "state": "focused validation complete, integrated; combined gate pending",
+      "head": "a6ed8862ca875a069cbefd52bcae8e65d90e9337"
+    },
+    "785": {
+      "branch": "claude/785-travel-trio",
+      "pr": null,
+      "state": "focused validation complete, integrated; full gate running",
+      "head": "9e207e558d250636b9a1a571b03178fefb62d8f9"
+    },
+    "810": {
+      "branch": "claude/810-legacy-ddl-ownership",
+      "pr": null,
+      "state": "focused validation complete, integrated; combined gate pending",
+      "head": "487f3a08564979505b8913c7e95c4d4363b7662e"
+    }
+  },
+  "integration_worktree": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus",
+  "constraints": [
+    "one whole gate at a time; nice 15; load below 24",
+    "owner services stay stopped; no touching nightly lane 8012",
+    "tests on disposable databases with dbname audit and secret-store guard",
+    "never poetry install or rewrite history",
+    "no fleet mutation before reviewed changes and concrete landing assessment",
+    "16 drafted wave B orders not started; 810-S4a explicitly parked"
+  ],
+  "signature": "Codex \u2014 GPT-6",
+  "owner_decisions": {
+    "816_legacy_seed_break": "Approved by user in current chat: keep planned change; explicit --dbname for current-schema databases"
+  },
+  "calibration": {
+    "rail_kmh": [
+      75.0,
+      47.8
+    ],
+    "covert_kmh": [
+      3.5,
+      2.4
+    ],
+    "vehicle_detour": [
+      1.25,
+      1.2
+    ],
+    "issue785_comment": "https://github.com/pythagorakase/nexus/issues/785#issuecomment-6063841210"
+  },
+  "integration_head": "f291dc792e4b071a4cc4940101f6c40871ea8b7b",
+  "gate": {
+    "state": "running",
+    "head": "f291dc792e4b071a4cc4940101f6c40871ea8b7b",
+    "pieces": [
+      "core",
+      "api",
+      "orrery"
+    ],
+    "directory": "temp/orders_2026_10_08_codex/coord/full-gate",
+    "runner": "temp/orders_2026_10_08_codex/coord/run_combined_gate.py",
+    "session_id": 52962,
+    "results_file": "temp/orders_2026_10_08_codex/coord/full-gate/results.json"
+  },
+  "heartbeat_id": "finish-claude-s-nexus-handoff",
+  "models_verify": {
+    "state": "passed",
+    "head": "027ca3d774a12d7eb0a78deadba17347db2a2643",
+    "log": "temp/orders_2026_10_08_codex/coord/models-verify.json",
+    "artifacts": [
+      "Octen-Embedding-4B",
+      "deberta-v3-trecdl22"
+    ]
+  },
+  "gate_previous_attempts": [
+    {
+      "state": "interrupted_for_confirmed_816_836_integration_fix",
+      "head": "027ca3d774a12d7eb0a78deadba17347db2a2643",
+      "log": "/tmp/nexus-codex-integration-full-gate-interrupted-027ca3d7.log",
+      "command": "nice -n15 env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests",
+      "result": "No full result; stopped at approximately 10 percent; SIGINT also caused pytest tmp_path teardown KeyError"
+    }
+  ],
+  "landing_plan": "temp/orders_2026_10_08_codex/coord/fleet-landing-plan.md",
+  "backup_helper": "temp/orders_2026_10_08_codex/coord/prepare-fleet-backups.py",
+  "review_evidence": [
+    "temp/orders_2026_10_08_codex/coord/pr-review-closeout.md",
+    "temp/orders_2026_10_08_codex/coord/review-816-812.md",
+    "temp/orders_2026_10_08_codex/coord/review-810-812-836.md",
+    "temp/orders_2026_10_08_codex/coord/review-ledger-integration.md"
+  ],
+  "follow_on_inventory": "temp/orders_2026_10_08_codex/coord/wave-b-inventory.md",
+  "follow_on_scope_question": "Optional user question pending: continue recorded campaign or finish nine interrupted lanes only; no queued implementation begun"
+}

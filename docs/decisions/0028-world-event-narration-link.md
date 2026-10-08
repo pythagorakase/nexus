@@ -4,7 +4,7 @@ sources:
   - config/schema_docs_baseline.json
   - migrations/023_orrery_schema.py
   - docs/dead_retrieval_subtraction.md
-verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
+verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
 ---
 
 # 0028: World Event Narration Link Column
@@ -20,7 +20,7 @@ Source: https://github.com/pythagorakase/nexus/issues/819#issuecomment-591595041
 
 > - Decision: The routing of the 29 baseline entries without evidence goes into #813's manifest (`docs/dead_retrieval_subtraction.md`), and each baseline reason points at it.
 
-Source: config/schema_docs_baseline.json at afd034f360e625f8bc4ffa8a717dda28422b19c7.
+Source: config/schema_docs_baseline.json at d70a1991210ce16aef5d6f9b57b0ec563ee1d164.
 
 > column:public.world_events.narration_chunk_id: No current writer establishes this legacy narration link; do not infer the contract from the similarly named resolution column. Routed as #813 debt: docs/dead_retrieval_subtraction.md, section "Legacy Columns Without Evidence".
 

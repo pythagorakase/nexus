@@ -368,7 +368,9 @@ def _ann_message(table: str, dimensions: int) -> str:
 
 
 _PROBE = r"""
+import contextlib
 import importlib.util
+import io
 import json
 import sys
 from pathlib import Path
@@ -383,6 +385,7 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 result = None
+model_load_calls = []
 try:
     if call == "require_scene_column":
         conn = psycopg2.connect(**url_connection_kwargs(url))
@@ -404,6 +407,50 @@ try:
         result = regenerator.create_vector_indexes()
     elif call == "regenerator":
         module.EmbeddingRegenerator("bge-large", db_url=url, load_model=False)
+    elif call.startswith("regenerator_precheck"):
+        def record_model_load(name):
+            model_load_calls.append(name)
+            return object()
+        module.ModelLoader.load_model = staticmethod(record_model_load)
+        if call == "regenerator_precheck_chunk":
+            result = module.regenerate_specific_chunk(
+                "bge-large", 1, db_url=url, create_indexes=True
+            )
+        elif call in ("regenerator_precheck_resume", "regenerator_precheck_resume_cli"):
+            missing = Path("resume.txt")
+            missing.write_text("1\n")
+            if call.endswith("_cli"):
+                sys.argv = [script, "--model", "bge-large", "--resume-from",
+                            str(missing), "--db-url", url, "--create-indexes",
+                            "--truncate-table"]
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    try:
+                        module.main()
+                    except SystemExit as exc:
+                        result = {"exit_code": exc.code}
+                result["stdout"] = output.getvalue()
+            else:
+                result = module.regenerate_missing_chunks(
+                    "bge-large", str(missing), db_url=url,
+                    create_indexes=True, truncate_table=True
+                )
+        elif call == "regenerator_precheck_all":
+            module.SETTINGS["models"] = {
+                "bge-large": {"is_active": True},
+                "e5-large": {"is_active": True},
+            }
+            result = module.regenerate_all_models(
+                db_url=url, create_indexes=True, truncate_table=True
+            )
+        else:
+            high_dimension = call.startswith("regenerator_precheck_high")
+            model = "Octen-Embedding-4B" if high_dimension else "bge-large"
+            regenerator = module.EmbeddingRegenerator(
+                model, db_url=url, create_indexes=True, truncate_table=True,
+                dry_run=call.endswith("_dry")
+            )
+            regenerator.engine.dispose()
     elif call == "season_episode_extractor":
         module.SeasonEpisodeExtractor(url)
     else:
@@ -415,6 +462,8 @@ except Exception as exc:
         "message": str(exc),
         "result": None,
     }
+if call.startswith("regenerator_precheck"):
+    outcome["model_load_calls"] = model_load_calls
 print(json.dumps(outcome))
 """
 
@@ -626,6 +675,104 @@ def test_ann_steps_build_no_index(script: str, call: str, tmp_path: Path) -> Non
             "message": "",
             "result": True,
         }
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize(
+    "call",
+    [
+        "regenerator_precheck",
+        "regenerator_precheck_dry",
+        "regenerator_precheck_chunk",
+        "regenerator_precheck_resume",
+        "regenerator_precheck_resume_cli",
+        "regenerator_precheck_all",
+    ],
+)
+def test_requested_ann_refuses_before_model_load_or_existing_vector_deletion(
+    call: str, shared: bool, tmp_path: Path
+) -> None:
+    """Real missing-ANN refusal precedes TRUNCATE, shared DELETE and chunk DELETE.
+
+    Only model loading is replaced by a recording sentinel: no artifact is read
+    and no inference occurs. Catalog reads and stored-row operations are real.
+    """
+    with disposable_database("qa640_810s3_ann_precheck") as dbname:
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION vector")
+            cur.execute(
+                "CREATE TABLE public.narrative_chunks "
+                "(id bigint PRIMARY KEY, raw_text text NOT NULL)"
+            )
+            cur.execute("INSERT INTO public.narrative_chunks VALUES (1, 'the bell')")
+            table = ensure_embedding_table(cur, _DIMENSIONS)
+            vector = "[" + ",".join(["0.5"] * _DIMENSIONS) + "]"
+            models = [_MODEL, "e5-large"] if shared else [_MODEL]
+            for model in models:
+                cur.execute(
+                    f"INSERT INTO public.{table} (chunk_id, model, embedding) "
+                    "VALUES (1, %s, %s::vector)",
+                    (model, vector),
+                )
+        snapshot_sql = (
+            f"SELECT jsonb_agg(to_jsonb(t) ORDER BY model) FROM public.{table} t"
+        )
+        before = _scalar(dbname, snapshot_sql)
+        assert _ann_count(dbname, table) == 0
+
+        outcome = _probe("scripts/regenerate_embeddings.py", call, dbname, tmp_path)
+        after = _scalar(dbname, snapshot_sql)
+        expected: Dict[str, Any] = {
+            "type": "builtins.RuntimeError",
+            "message": _ann_message(table, _DIMENSIONS),
+            "result": None,
+            "model_load_calls": [],
+        }
+        if call == "regenerator_precheck_all":
+            expected = {
+                "type": None,
+                "message": "",
+                "result": {"total": 0, "success": 0, "failed": 2},
+                "model_load_calls": [],
+            }
+        elif call == "regenerator_precheck_resume_cli":
+            expected = {
+                "type": None,
+                "message": "",
+                "result": {
+                    "exit_code": 1,
+                    "stdout": f"Error: {_ann_message(table, _DIMENSIONS)}\n",
+                },
+                "model_load_calls": [],
+            }
+        assert outcome == expected and after == before, {
+            "outcome": outcome,
+            "existing_rows_unchanged": after == before,
+        }
+        assert _ann_count(dbname, table) == 0
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_requested_ann_preserves_high_dimension_exemption_and_dry_run(
+    dry_run: bool, tmp_path: Path
+) -> None:
+    """The legacy >2000d exemption retains lazy table ownership and dry-run safety."""
+    with disposable_database("qa640_810s3_ann_high") as dbname:
+        _execute(dbname, "CREATE EXTENSION vector")
+        _execute(dbname, "CREATE TABLE public.narrative_chunks (id bigint PRIMARY KEY)")
+        call = "regenerator_precheck_high" + ("_dry" if dry_run else "")
+        outcome = _probe("scripts/regenerate_embeddings.py", call, dbname, tmp_path)
+        assert outcome == {
+            "type": None,
+            "message": "",
+            "result": None,
+            "model_load_calls": ["Octen-Embedding-4B"],
+        }
+        table = "chunk_embeddings_2560d"
+        assert _regclass(dbname, "public." + table) == (None if dry_run else table)
+        assert _ann_count(dbname, table) == 0
 
 
 @pytest.mark.requires_postgres

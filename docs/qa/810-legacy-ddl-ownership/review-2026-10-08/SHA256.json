@@ -1,0 +1,16 @@
+{
+  "black.txt": "b9cf511501d306d2bd8355ccb165c8ddc0a6fdd62d7c72c4a7b1795cf8934c8c",
+  "exceptions.txt": "f057d64e294865122adb27ec838770c5bf9e491217f3bc74c6d959c58959a0d9",
+  "flake8-baseline.txt": "144ca5e30b60c24f481d3fdbcf70adc1a1baf86a07d3a39c86e69af3845dc573",
+  "flake8-branch.txt": "c1bab839f120fdd46600ee84f085c896731b2ae3bbb3ab2d97e65b456dc060a2",
+  "flake8-delta.txt": "42379a9ab6bd86dc89a0e144d2ac786ff337304c61da9e7ee4b1e171852ac0f6",
+  "green.txt": "eb2a19150ceb4bda11f0153028a4c5ba6bf29b16ef14380618f52a7d04e8bcd2",
+  "intermediate.txt": "10319984875aa1ecec8341aa4df0be413ff7f1beedc1f7f36ac47c1c20e03572",
+  "mypy-baseline.txt": "98edd765e0207448f44a4c3705ce71df4d4aac34b2f643aca860bb6fa1f63772",
+  "mypy-branch.txt": "b2861985ef904920836c8be6c76823f3be4b5d5ce428802bb375b83c63308870",
+  "mypy-delta.txt": "42379a9ab6bd86dc89a0e144d2ac786ff337304c61da9e7ee4b1e171852ac0f6",
+  "red.txt": "312bf1a130d3486f0f76b0965ec40c12ec3d5872a573684afbc880d1b86ee6d4",
+  "scoped-f291.patch": "4d3166c70cfe3c489d2c4b627598d302d513d5d092167f514941b37c44cac726",
+  "static-comparison.json": "595ea0b558e280292755ebc4c9492ca2ff5b593b1ac92601cdfdea3025ea3892",
+  "verification.md": "cd104ff276f05f2d987828912a29dd3abfb262cd2a066c49b66b9aa1bd245e03"
+}
