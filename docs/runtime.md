@@ -338,6 +338,7 @@ nexus restart [service] [--slot N] [--config PATH]
 nexus status [--config PATH]
 nexus logs [service] [-n LINES] [-f] [--mark | --since MARK] [--config PATH]
 nexus doctor [--target owner-host|owner-client|ci-runner] [--config PATH]
+nexus receipts
 ```
 
 All verbs honor the global `--json` flag for machine-readable output.
@@ -459,11 +460,16 @@ selects a configuration.
 | `models_dir` | `models` | model directories named by `local_path` and `model_path` keys |
 | `cache_dir` | `.nexus/cache` | reserved for derived caches |
 | `backups_dir` | `.nexus/backups` | reserved for backups |
+| `receipts_dir` | `.nexus/receipts` | failure receipts (append-only) |
 
-The last four have no configuration key yet: each gains one in the slice
-that gives it a runtime owner. Until then the upload endpoints and static
-mounts serve the checkout's `ui/client/public` even when `NEXUS_HOME` is
-set, and model paths stay exactly as configured.
+`uploads_dir`, `models_dir`, `cache_dir` and `backups_dir` have no
+configuration key yet: each gains one in the slice that gives it a runtime
+owner. Until then the upload endpoints and static mounts serve the
+checkout's `ui/client/public` even when `NEXUS_HOME` is set, and model
+paths stay exactly as configured.
+
+`receipts_dir` never gets a configuration key: a receipt of a configuration
+failure is written before any configuration is known.
 
 `nexus home plan [--to DIR]` is a read-only dry run of moving the
 checkout's runtime data into a home. Before the move, run it as
@@ -505,6 +511,60 @@ model store it runs for minutes. Moving files, re-anchoring uploads and
 static mounts, slot-namespacing assets (which rewrites asset path rows and
 needs PostgreSQL validation), and teaching the Tauri shell the home are the
 next slices.
+
+## Failure Receipts
+
+Three surfaces record a failure receipt when they fail, then re-raise the
+original exception unchanged (issue #806):
+
+- `config.load_settings`: `nexus.toml` is missing, does not parse, fails
+  validation, or has an unsupported file type.
+- `config.preferences`: `preferences.toml` does not parse or fails
+  validation.
+- `runtime.home`: the locators are malformed or name two configurations, or
+  the configuration has no `[runtime]` section (`RuntimeHomeError`).
+
+A receipt is one JSON line in an allowlisted envelope: schema version, UTC
+time, surface, process id, the configuration path, the exception's type and
+module, the innermost 64 traceback frames as file, line and function (a file
+under the checkout is checkout-relative), a details record, and a SHA-256
+fingerprint of the surface, the exception class and the frames. The details
+are the position of a TOML parse error; the model, error count and the first
+20 errors' location and error type of a validation error, with an unknown
+key and any location part that is not identifier-shaped recorded as `?`; the
+collapsed message of a `RuntimeHomeError` (first 512 characters); or the
+`errno` of an `OSError`. A receipt never records an exception message other
+than that `RuntimeHomeError` text, a source line, local variables, an input
+value or a configuration value, so a key or a prompt in a broken file cannot
+reach it.
+
+Receipts go to the home's `receipts_dir` when the home can be located
+(`load_settings` with an explicit path included) and to the per-user
+fallback root `~/.nexus/receipts` when it cannot; a `runtime.home` receipt
+always goes to the fallback root. Each UTC day's receipts are appended to
+`failures-<YYYY-MM-DD>.jsonl` (directory mode `0700`, file mode `0600`);
+nothing prunes or rewrites them. A receipt that cannot be written prints
+`receipt not written for <surface>: <exception type>` on stderr and never
+masks the original error.
+
+`nexus receipts` reads both roots and prints one group per fingerprint with
+its count, first and last time, and roots, followed by the first receipt's
+configuration path, details and frames (`--json` prints `home_dir`,
+`fallback_dir` and `groups`). Like `doctor` it runs without loading the
+configuration. When the home cannot be located, locating it appends a
+`runtime.home` receipt to the fallback root; the command reads the fallback
+root, that receipt included, and exits with `config_error`. A line that is
+not a valid receipt fails the read as a `domain_failure` naming its file and
+line. The read never rewrites or deletes a file.
+
+Tests never write to the checkout's or the user's receipts.
+`tests/conftest.py` sets `NEXUS_TEST_RECEIPTS_DIR` to a temporary directory
+for the session, and child processes inherit it: home receipts then go to
+its `home` subdirectory and fallback receipts to its `fallback`
+subdirectory, while the locator still runs. The session fails, with
+`receipt isolation: receipts changed (...)` in its summary, if either real
+receipt directory changed. The variable must be absolute and is not an
+owner setting.
 
 ## Model Backends Are Runtime Services
 
