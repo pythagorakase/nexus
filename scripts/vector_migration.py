@@ -41,38 +41,25 @@ def get_db_connection():
     return conn
 
 
-def add_dimensions_column():
-    """Add dimensions column to chunk_embeddings if it doesn't exist."""
+def require_dimensions_column() -> None:
+    """Raise unless chunk_embeddings.dimensions exists; this script creates none."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            # Check if column exists
             cur.execute(
                 """
-            SELECT column_name FROM information_schema.columns 
-            WHERE table_name = 'chunk_embeddings' AND column_name = 'dimensions'
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'chunk_embeddings'
+              AND column_name = 'dimensions'
             """
             )
 
             if cur.fetchone() is None:
-                # Add the column
-                cur.execute(
-                    """
-                ALTER TABLE chunk_embeddings ADD COLUMN dimensions INTEGER DEFAULT 1024;
-                """
+                raise RuntimeError(
+                    "Missing chunk_embeddings.dimensions; no migration owns "
+                    "public.chunk_embeddings, and migration 022's dimension-keyed "
+                    "tables replaced it. This script no longer creates it."
                 )
-
-                # Set default value for existing records
-                cur.execute(
-                    """
-                UPDATE chunk_embeddings SET dimensions = 1024;
-                """
-                )
-
-                logger.info("Added dimensions column to chunk_embeddings table")
-            else:
-                logger.info("Dimensions column already exists")
-
-            conn.commit()
 
 
 def migrate_small_embeddings():
@@ -187,29 +174,12 @@ def verify_migration():
             return count_384, count_small
 
 
-def create_index():
-    """Create an index on dimensions to speed up queries."""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            try:
-                cur.execute(
-                    """
-                CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_dimensions 
-                ON chunk_embeddings(dimensions)
-                """
-                )
-                conn.commit()
-                logger.info("Created index on dimensions column")
-            except Exception as e:
-                logger.warning(f"Error creating index: {e}")
-
-
 def main():
     """Main entry point for the script."""
     print("Starting vector migration...")
 
-    # Step 1: Add dimensions column
-    add_dimensions_column()
+    # Step 1: Require the dimensions column
+    require_dimensions_column()
 
     # Step 2: Migrate small embeddings
     migrate_small_embeddings()
@@ -217,18 +187,12 @@ def main():
     # Step 3: Verify the migration
     count_384, count_small = verify_migration()
 
-    # Step 4: Create index
-    create_index()
-
     print(
         f"Migration completed. Found {count_384} migrated embeddings out of {count_small} in source table."
     )
 
     if count_384 == count_small:
         print("All embeddings successfully migrated.")
-        print(
-            "You can safely drop the old table with: DROP TABLE chunk_embeddings_small;"
-        )
     else:
         print(f"Warning: {count_small - count_384} embeddings were not migrated.")
 

@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to create vector indexes for existing embedding tables.
-This should be run after data is loaded to avoid index maintenance overhead
-during high-volume inserts.
+Check that an ANN index exists on a model's embedding table; this script creates none.
 """
 
 from nexus.database import create_slot_engine
@@ -11,7 +9,6 @@ import os
 import sys
 import argparse
 import json
-import time
 import logging
 from sqlalchemy import text
 
@@ -96,14 +93,18 @@ def get_table_name(model_name: str) -> str:
 
 def create_vector_indexes(model_name: str, db_url: str = None):
     """
-    Create optimized vector indexes for a model's embedding table
+    Check that an ANN index exists on this model's embedding table.
 
     Args:
         model_name: Name of the embedding model
         db_url: Database URL (optional)
 
     Returns:
-        True if indexes were created successfully, False otherwise
+        True when an ANN index exists or the table is over 2000 dimensions;
+        False when the table is missing, or holds no rows for the model.
+
+    Raises:
+        RuntimeError: When no ANN index exists.
     """
     # Set default db_url if not provided
     if not db_url:
@@ -113,7 +114,7 @@ def create_vector_indexes(model_name: str, db_url: str = None):
     dimensions = get_model_dimensions(model_name)
     table_name = get_table_name(model_name)
 
-    logger.info(f"Creating vector indexes for {model_name} ({dimensions}D)")
+    logger.info(f"Checking ANN indexes for {model_name} ({dimensions}D)")
     logger.info(f"Table: {table_name}")
 
     # Connect to database
@@ -156,77 +157,30 @@ def create_vector_indexes(model_name: str, db_url: str = None):
             )
             return True
 
-        # Check for existing vector indexes
-        index_sql = f"""
-        SELECT indexname, indexdef
-        FROM pg_indexes
-        WHERE tablename = '{table_name.lower()}' 
-        AND indexdef LIKE '%vector_cosine_ops%';
-        """
-        indexes = list(conn.execute(text(index_sql)))
+        ann_indexes = conn.execute(
+            text(
+                "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' "
+                "AND tablename = :table AND indexdef ~ 'USING (hnsw|ivfflat)'"
+            ),
+            {"table": table_name},
+        ).fetchall()
 
-        if indexes:
-            logger.info("Vector indexes already exist:")
-            for idx in indexes:
-                logger.info(f"- {idx[0]}: {idx[1]}")
-
-            # Ask for confirmation before recreating
-            if input("Indexes already exist. Recreate? (y/n): ").lower() != "y":
-                logger.info("Keeping existing indexes")
-                return True
-
-            # Drop existing vector indexes
-            for idx in indexes:
-                drop_sql = f"DROP INDEX IF EXISTS {idx[0]};"
-                conn.execute(text(drop_sql))
-                logger.info(f"Dropped index: {idx[0]}")
-
-            conn.commit()
-
-    success = False
-
-    # Now create the vector indexes based on dimensions
-    with engine.begin() as conn:
-        # Create specialized indexes based on dimensions
-        if dimensions <= 2000:
-            # For lower dimensions, create IVFFLAT index
-            try:
-                logger.info(f"Creating IVFFLAT index for {dimensions}D vectors...")
-                start_time = time.time()
-
-                ivf_sql = f"""
-                CREATE INDEX IF NOT EXISTS {table_name}_ivf_idx
-                ON {table_name} USING ivfflat (embedding vector_cosine_ops)
-                WITH (lists=100);
-                """
-                conn.execute(text(ivf_sql))
-
-                elapsed_time = time.time() - start_time
-                logger.info(f"✓ Created IVFFLAT index in {elapsed_time:.2f} seconds")
-                success = True
-            except Exception as e:
-                logger.error(f"Failed to create IVFFLAT index: {e}")
-
-                # Try plain index as fallback
-                try:
-                    logger.info("Creating plain index as fallback...")
-                    plain_sql = f"""
-                    CREATE INDEX IF NOT EXISTS {table_name}_plain_idx
-                    ON {table_name} (embedding vector_cosine_ops);
-                    """
-                    conn.execute(text(plain_sql))
-                    logger.info("✓ Created plain vector index")
-                    success = True
-                except Exception as e2:
-                    logger.error(f"Failed to create plain index: {e2}")
-
-    return success
+    if ann_indexes:
+        for row in ann_indexes:
+            logger.info(f"ANN index present: {row[0]}")
+        return True
+    raise RuntimeError(
+        f"No ANN index exists on {table_name}, and this script no longer creates "
+        "one: the only ANN path is the explicit 2560d candidate gate "
+        "(build_candidate_ann_index, run by scripts/qa_shift/ann_gate.py), and "
+        f"#812 owns the legacy {dimensions}d tables and their indexes."
+    )
 
 
 def main():
     """Main entry point for the script"""
     parser = argparse.ArgumentParser(
-        description="Create vector indexes for embedding tables"
+        description="Check that an ANN index exists on a model's embedding table"
     )
     parser.add_argument("--model", required=True, help="Model name")
     parser.add_argument("--db-url", help="Database URL")
@@ -235,10 +189,10 @@ def main():
     try:
         success = create_vector_indexes(args.model, args.db_url)
         if success:
-            print("\nVector index setup completed.")
+            print("\nANN index present.")
             return 0
         else:
-            print("\nFailed to create vector indexes.")
+            print("\nANN index check failed; see the log.")
             return 1
     except Exception as e:
         logger.error(f"Error creating vector indexes: {e}")
