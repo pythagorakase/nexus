@@ -9,11 +9,12 @@ Changes 3, and compares every record under docs/decisions/ with them: the file
 name, the front matter (status, sources in order with SOURCE_ADDITIONS
 appended, verified_commit, the 0030 to 0005 supersession), the title, Kind and
 Links lines, the Ruling lead-in lines, every Rejected Alternatives bullet and
-every Reopening Criteria bullet. Fixed
-bullets must be equal to the order's text. Quoted bullets must be equal to the
-whole sentence the order names, recomputed from a fresh `gh api` fetch. Quoted
-blocks are the quote audit's job (quote_audit.py); this check only requires
-that every other line of a section is a lead-in, a `Source:` line or a bullet.
+every Reopening Criteria bullet. Fixed bullets must be equal to the order's
+text. Quoted bullets must be equal to the whole sentence the order names,
+recomputed from a fresh `gh api` fetch. Quoted blocks are the quote audit's job
+(quote_audit.py); this check only requires that every other line of a section
+is a lead-in, a `Source:` line or a bullet. SOURCE_ADDITIONS holds the sources
+the coordinator's ruling on PR #1115 adds after the order table's list.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 import yaml
 
@@ -226,7 +228,8 @@ def check(root: Path, order_path: Path) -> list[str]:
         meta = yaml.safe_load(front)
         want = {
             "status": "superseded" if number == "0030" else "canonical",
-            "sources": [*row["sources"], *SOURCE_ADDITIONS.get(number, [])],
+            "sources": cast(list[str], row["sources"])
+            + SOURCE_ADDITIONS.get(number, []),
             "verified_commit": merge_base,
         }
         if number == "0030":
