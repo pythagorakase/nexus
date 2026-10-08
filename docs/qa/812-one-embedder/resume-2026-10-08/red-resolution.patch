@@ -1,0 +1,39 @@
+--- /Users/pythagor/nexus/.claude/worktrees/812-one-embedder/ir_eval/engine/run_executor.py
++++ /Users/pythagor/nexus/.claude/worktrees/812-one-embedder/ir_eval/engine/run_executor.py
+@@ -297,31 +297,11 @@
+             )
+ 
+     def create_run(self, config: EvalRunConfig) -> int:
+-        """Persist a run configuration and return its run ID.
+-
+-        The stored snapshot is the MEMNON section with ``models`` replaced by
+-        one resolved entry per selected model and, when reranking runs with a
+-        named candidate, that candidate as the reranker. Every name resolves
+-        before the row is written, so an unknown name writes nothing.
+-        """
+-        if config.settings_snapshot:
+-            raise ValueError(
+-                "create_run builds the settings snapshot itself; the incoming "
+-                "run config already carries one"
+-            )
+-        snapshot = copy.deepcopy(self.base_memnon_settings)
+-        snapshot["models"] = {
+-            model.model: self._resolve_embedding_model(model.model)
+-            for model in config.embedding_models
+-        }
+-        if config.cross_encoder_enabled and config.reranker_candidate:
+-            candidate = self._resolve_reranker_candidate(config.reranker_candidate)
+-            reranking = snapshot["retrieval"]["cross_encoder_reranking"]
+-            reranking["name"] = config.reranker_candidate
+-            reranking["model_path"] = candidate["local_path"]
+-            reranking["remote_path"] = candidate["remote_path"]
+-            reranking["api_type"] = candidate["api_type"]
+-        config = config.model_copy(update={"settings_snapshot": snapshot})
++        """Persist a run configuration and return its run ID."""
++        if not config.settings_snapshot:
++            config = config.model_copy(
++                update={"settings_snapshot": copy.deepcopy(self.base_memnon_settings)}
++            )
+         return self.store.create_run(config)
+ 
+     def execute_run(self, run_id: int) -> RunExecutionSummary:

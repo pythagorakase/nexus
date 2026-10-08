@@ -1,0 +1,183 @@
+ir_eval/engine/run_executor.py:281:89: E501 line too long (89 > 88 characters)
+ir_eval/runner.py:197:89: E501 line too long (93 > 88 characters)
+nexus/agents/memnon/memnon.py:16:89: E501 line too long (128 > 88 characters)
+nexus/agents/memnon/memnon.py:20:1: F401 'uuid' imported but unused
+nexus/agents/memnon/memnon.py:24:1: F401 'requests' imported but unused
+nexus/agents/memnon/memnon.py:25:1: F401 'typing.Set' imported but unused
+nexus/agents/memnon/memnon.py:25:1: F401 'typing.Tuple' imported but unused
+nexus/agents/memnon/memnon.py:25:1: F401 'typing.Union' imported but unused
+nexus/agents/memnon/memnon.py:26:1: F401 'datetime.datetime' imported but unused
+nexus/agents/memnon/memnon.py:26:1: F401 'datetime.date' imported but unused
+nexus/agents/memnon/memnon.py:27:1: F401 'pathlib.Path' imported but unused
+nexus/agents/memnon/memnon.py:30:1: F401 'sqlalchemy.Table' imported but unused
+nexus/agents/memnon/memnon.py:30:1: F401 'sqlalchemy.MetaData' imported but unused
+nexus/agents/memnon/memnon.py:30:1: F401 'sqlalchemy.or_' imported but unused
+nexus/agents/memnon/memnon.py:31:1: F401 'sqlalchemy.dialects.postgresql.UUID' imported but unused
+nexus/agents/memnon/memnon.py:31:1: F401 'sqlalchemy.dialects.postgresql.BYTEA' imported but unused
+nexus/agents/memnon/memnon.py:32:1: F401 'sqlalchemy.orm.Session' imported but unused
+nexus/agents/memnon/memnon.py:32:1: F401 'sqlalchemy.orm.sessionmaker' imported but unused
+nexus/agents/memnon/memnon.py:37:1: F401 '.utils.db_access.execute_vector_search' imported but unused
+nexus/agents/memnon/memnon.py:37:1: F401 '.utils.db_access.execute_hybrid_search' imported but unused
+nexus/agents/memnon/memnon.py:41:1: F401 '.utils.continuous_temporal_search.execute_time_aware_search' imported but unused
+nexus/agents/memnon/memnon.py:166:89: E501 line too long (92 > 88 characters)
+nexus/agents/memnon/memnon.py:176:89: E501 line too long (99 > 88 characters)
+nexus/agents/memnon/memnon.py:177:89: E501 line too long (95 > 88 characters)
+nexus/agents/memnon/memnon.py:360:89: E501 line too long (104 > 88 characters)
+nexus/agents/memnon/memnon.py:367:21: E722 do not use bare 'except'
+nexus/agents/memnon/memnon.py:376:25: F841 local variable 'col_type' is assigned to but never used
+nexus/agents/memnon/memnon.py:384:72: W291 trailing whitespace
+nexus/agents/memnon/memnon.py:385:48: W291 trailing whitespace
+nexus/agents/memnon/memnon.py:386:74: W291 trailing whitespace
+nexus/agents/memnon/memnon.py:395:25: E722 do not use bare 'except'
+nexus/agents/memnon/memnon.py:451:89: E501 line too long (93 > 88 characters)
+nexus/agents/memnon/memnon.py:547:89: E501 line too long (110 > 88 characters)
+nexus/agents/memnon/memnon.py:551:89: E501 line too long (97 > 88 characters)
+nexus/agents/memnon/memnon.py:554:89: E501 line too long (93 > 88 characters)
+nexus/agents/memnon/memnon.py:557:89: E501 line too long (98 > 88 characters)
+nexus/agents/memnon/memnon.py:560:89: E501 line too long (150 > 88 characters)
+nexus/agents/memnon/memnon.py:665:89: E501 line too long (109 > 88 characters)
+nexus/agents/memnon/memnon.py:705:89: E501 line too long (156 > 88 characters)
+nexus/agents/memnon/memnon.py:709:89: E501 line too long (100 > 88 characters)
+nexus/agents/memnon/memnon.py:715:60: W291 trailing whitespace
+nexus/agents/memnon/memnon.py:716:89: E501 line too long (90 > 88 characters)
+nexus/agents/memnon/memnon.py:718:89: E501 line too long (92 > 88 characters)
+nexus/agents/memnon/memnon.py:747:89: E501 line too long (100 > 88 characters)
+nexus/agents/memnon/memnon.py:751:89: E501 line too long (99 > 88 characters)
+nexus/agents/memnon/memnon.py:752:89: E501 line too long (92 > 88 characters)
+nexus/agents/memnon/memnon.py:915:89: E501 line too long (104 > 88 characters)
+nexus/agents/memnon/memnon.py:954:89: E501 line too long (100 > 88 characters)
+nexus/agents/memnon/memnon.py:1049:17: E722 do not use bare 'except'
+nexus/agents/memnon/memnon.py:1071:13: E722 do not use bare 'except'
+nexus/agents/memnon/memnon.py:1081:13: E722 do not use bare 'except'
+nexus/agents/memnon/memnon.py:1113:47: W291 trailing whitespace
+nexus/agents/memnon/memnon.py:1114:42: W291 trailing whitespace
+nexus/agents/memnon/memnon.py:1140:22: F541 f-string is missing placeholders
+nexus/agents/memnon/memnon.py:1141:23: F541 f-string is missing placeholders
+nexus/agents/memnon/memnon.py:1147:23: F541 f-string is missing placeholders
+nexus/agents/memnon/memnon.py:1152:23: F541 f-string is missing placeholders
+nexus/agents/memnon/memnon.py:1157:23: F541 f-string is missing placeholders
+nexus/agents/memnon/memnon.py:1166:89: E501 line too long (110 > 88 characters)
+nexus/agents/memnon/memnon.py:1170:31: F541 f-string is missing placeholders
+nexus/agents/memnon/memnon.py:1173:23: F541 f-string is missing placeholders
+nexus/agents/memnon/memnon.py:1208:24: F541 f-string is missing placeholders
+nexus/agents/memnon/memnon.py:1260:27: W291 trailing whitespace
+nexus/agents/memnon/memnon.py:1289:89: E501 line too long (104 > 88 characters)
+nexus/agents/memnon/memnon.py:1393:89: E501 line too long (91 > 88 characters)
+nexus/agents/memnon/memnon.py:1653:89: E501 line too long (100 > 88 characters)
+nexus/agents/memnon/memnon.py:1675:17: F841 local variable 'source' is assigned to but never used
+nexus/agents/memnon/memnon.py:1683:89: E501 line too long (113 > 88 characters)
+nexus/agents/memnon/utils/cross_encoder.py:780:89: E501 line too long (89 > 88 characters)
+nexus/config/settings_models.py:80:89: E501 line too long (89 > 88 characters)
+nexus/config/settings_models.py:127:89: E501 line too long (90 > 88 characters)
+nexus/config/settings_models.py:142:89: E501 line too long (101 > 88 characters)
+nexus/config/settings_models.py:150:89: E501 line too long (91 > 88 characters)
+nexus/config/settings_models.py:2498:89: E501 line too long (93 > 88 characters)
+nexus/config/settings_models.py:4479:89: E501 line too long (131 > 88 characters)
+scripts/create_vector_index.py:13:1: F401 'json' imported but unused
+scripts/create_vector_index.py:30:1: E402 module level import not at top of file
+scripts/create_vector_index.py:127:50: W291 trailing whitespace
+scripts/create_vector_index.py:139:42: W291 trailing whitespace
+scripts/create_vector_index.py:163:49: W291 trailing whitespace
+scripts/import_narratives.py:26:1: F401 'typing.Optional' imported but unused
+scripts/import_narratives.py:109:5: F401 'sqlalchemy.ForeignKey' imported but unused
+scripts/import_narratives.py:119:5: F401 'pgvector' imported but unused
+scripts/import_narratives.py:435:89: E501 line too long (103 > 88 characters)
+scripts/import_narratives.py:453:89: E501 line too long (98 > 88 characters)
+scripts/import_narratives.py:466:89: E501 line too long (95 > 88 characters)
+scripts/import_narratives.py:500:89: E501 line too long (95 > 88 characters)
+scripts/import_narratives.py:528:89: E501 line too long (139 > 88 characters)
+scripts/import_narratives.py:580:89: E501 line too long (102 > 88 characters)
+scripts/new_story_setup.py:7:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:51:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:64:89: E501 line too long (91 > 88 characters)
+scripts/new_story_setup.py:111:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:239:89: E501 line too long (96 > 88 characters)
+scripts/new_story_setup.py:355:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:575:89: E501 line too long (116 > 88 characters)
+scripts/query_narratives_vector.py:22:1: F401 'json' imported but unused
+scripts/query_narratives_vector.py:23:1: F401 'typing.Tuple' imported but unused
+scripts/query_narratives_vector.py:38:89: E501 line too long (95 > 88 characters)
+scripts/query_narratives_vector.py:120:5: F401 'sqlalchemy as sa' imported but unused
+scripts/query_narratives_vector.py:129:5: F401 'pgvector' imported but unused
+scripts/query_narratives_vector.py:130:5: F401 'pgvector.sqlalchemy.Vector' imported but unused
+scripts/query_narratives_vector.py:139:5: F401 'numpy as np' imported but unused
+scripts/query_narratives_vector.py:195:89: E501 line too long (92 > 88 characters)
+scripts/query_narratives_vector.py:288:23: W291 trailing whitespace
+scripts/query_narratives_vector.py:289:27: W291 trailing whitespace
+scripts/query_narratives_vector.py:295:21: W291 trailing whitespace
+scripts/query_narratives_vector.py:297:21: W291 trailing whitespace
+scripts/query_narratives_vector.py:303:25: W291 trailing whitespace
+scripts/query_narratives_vector.py:324:21: E722 do not use bare 'except'
+scripts/query_narratives_vector.py:366:23: W291 trailing whitespace
+scripts/query_narratives_vector.py:367:27: W291 trailing whitespace
+scripts/query_narratives_vector.py:372:21: W291 trailing whitespace
+scripts/query_narratives_vector.py:400:21: E722 do not use bare 'except'
+scripts/regenerate_embeddings.py:12:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:18:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:21:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:24:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:53:1: F401 'json' imported but unused
+scripts/regenerate_embeddings.py:57:1: F401 'typing.Union' imported but unused
+scripts/regenerate_embeddings.py:102:1: E402 module level import not at top of file
+scripts/regenerate_embeddings.py:149:5: F401 'sqlalchemy as sa' imported but unused
+scripts/regenerate_embeddings.py:158:5: F401 'pgvector' imported but unused
+scripts/regenerate_embeddings.py:159:5: F401 'pgvector.sqlalchemy.Vector' imported but unused
+scripts/regenerate_embeddings.py:306:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:329:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:333:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:372:43: W291 trailing whitespace
+scripts/regenerate_embeddings.py:373:38: W291 trailing whitespace
+scripts/regenerate_embeddings.py:386:21: E722 do not use bare 'except'
+scripts/regenerate_embeddings.py:391:89: E501 line too long (95 > 88 characters)
+scripts/regenerate_embeddings.py:398:29: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:409:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:424:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:442:89: E501 line too long (112 > 88 characters)
+scripts/regenerate_embeddings.py:488:36: W291 trailing whitespace
+scripts/regenerate_embeddings.py:489:38: W291 trailing whitespace
+scripts/regenerate_embeddings.py:530:62: W291 trailing whitespace
+scripts/regenerate_embeddings.py:539:89: E501 line too long (91 > 88 characters)
+scripts/regenerate_embeddings.py:546:41: W291 trailing whitespace
+scripts/regenerate_embeddings.py:557:89: E501 line too long (102 > 88 characters)
+scripts/regenerate_embeddings.py:560:89: E501 line too long (93 > 88 characters)
+scripts/regenerate_embeddings.py:596:89: E501 line too long (98 > 88 characters)
+scripts/regenerate_embeddings.py:611:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:647:89: E501 line too long (109 > 88 characters)
+scripts/regenerate_embeddings.py:650:89: E501 line too long (104 > 88 characters)
+scripts/regenerate_embeddings.py:664:41: W291 trailing whitespace
+scripts/regenerate_embeddings.py:665:57: W291 trailing whitespace
+scripts/regenerate_embeddings.py:692:49: W291 trailing whitespace
+scripts/regenerate_embeddings.py:693:65: W291 trailing whitespace
+scripts/regenerate_embeddings.py:694:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:721:89: E501 line too long (91 > 88 characters)
+scripts/regenerate_embeddings.py:763:89: E501 line too long (105 > 88 characters)
+scripts/regenerate_embeddings.py:786:89: E501 line too long (99 > 88 characters)
+scripts/regenerate_embeddings.py:792:25: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:792:89: E501 line too long (102 > 88 characters)
+scripts/regenerate_embeddings.py:835:89: E501 line too long (101 > 88 characters)
+scripts/regenerate_embeddings.py:865:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:911:89: E501 line too long (128 > 88 characters)
+scripts/regenerate_embeddings.py:918:46: W291 trailing whitespace
+scripts/regenerate_embeddings.py:948:89: E501 line too long (104 > 88 characters)
+scripts/regenerate_embeddings.py:952:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:955:25: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:955:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:971:89: E501 line too long (103 > 88 characters)
+scripts/regenerate_embeddings.py:976:89: E501 line too long (91 > 88 characters)
+scripts/regenerate_embeddings.py:979:89: E501 line too long (99 > 88 characters)
+scripts/regenerate_embeddings.py:1001:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:1095:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:1122:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:1137:40: W291 trailing whitespace
+scripts/regenerate_embeddings.py:1138:42: W291 trailing whitespace
+scripts/regenerate_embeddings.py:1210:89: E501 line too long (135 > 88 characters)
+scripts/regenerate_embeddings.py:1240:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:1394:89: E501 line too long (101 > 88 characters)
+scripts/regenerate_embeddings.py:1399:89: E501 line too long (98 > 88 characters)
+scripts/regenerate_embeddings.py:1486:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:1542:89: E501 line too long (95 > 88 characters)
+scripts/regenerate_embeddings.py:1544:23: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:1547:89: E501 line too long (91 > 88 characters)
+scripts/regenerate_embeddings.py:1549:23: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:1597:89: E501 line too long (102 > 88 characters)
+tests/test_memnon_embedding_cache.py:33:1: F401 'tests.pg_fixtures.sqlalchemy_url' imported but unused
