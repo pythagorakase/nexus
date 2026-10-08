@@ -27,6 +27,7 @@ from nexus.api.wizard_transcript import (
 )
 from nexus.config.loader import load_settings
 from nexus.config.settings_models import Settings
+from nexus.runtime.home import resolve_runtime_home
 
 logger = logging.getLogger("nexus.api.conversations")
 
@@ -37,7 +38,12 @@ HOSTED_CONVERSATIONS_PROVIDER = "openai"
 # The registry's mock provider keeps wizard history in process memory.
 MEMORY_CONVERSATIONS_PROVIDER = "test"
 
-_FILE_STORE_DIR = Path(__file__).parent.parent.parent / "temp" / "wizard_threads"
+WIZARD_THREADS_DIRNAME = "wizard_threads"
+
+
+def wizard_threads_dir(settings: Settings) -> Path:
+    """Locate file-backed wizard threads under state_dir (Decision 820-Q6)."""
+    return resolve_runtime_home(settings).state_dir / WIZARD_THREADS_DIRNAME
 
 
 class ConversationThreadNotFoundError(LookupError):
@@ -157,7 +163,7 @@ class ConversationsClient:
             self._memory_store = _MEMORY_STORE
             logger.info("[TEST MODE] ConversationsClient using in-memory storage")
         elif self._store_mode == "file":
-            self._file_store = _FileConversationStore()
+            self._file_store = _FileConversationStore(wizard_threads_dir(settings))
             logger.info(
                 "ConversationsClient using file storage for %s (provider %s)",
                 self.model,
@@ -433,8 +439,8 @@ _MEMORY_STORE = _MemoryConversationStore()
 class _FileConversationStore:
     """File-backed conversation store for providers without hosted storage."""
 
-    def __init__(self, base_dir: Optional[Path] = None) -> None:
-        self._base_dir = base_dir or _FILE_STORE_DIR
+    def __init__(self, base_dir: Path) -> None:
+        self._base_dir = base_dir
         self._base_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 

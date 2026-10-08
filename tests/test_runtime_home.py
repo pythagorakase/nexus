@@ -7,11 +7,15 @@ the rule is exercised from a known starting point.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
 from pathlib import Path
+import select
+import subprocess
 import sys
+import tempfile
 from typing import Any, Callable, Dict, Optional, Tuple, cast
 
 import pytest
@@ -20,7 +24,9 @@ import tomlkit
 from nexus import cli
 from nexus.agents.lore.lore import LORE
 from nexus.agents.memnon.utils.artifact_manifest import run_models_command
+from nexus.agents.memnon.utils.embedding_manager import load_local_model
 from nexus.api import asset_endpoints, local_inference, static_ui
+from nexus.api.conversations import wizard_threads_dir
 from nexus.api.route_capabilities import ROUTE_CAPABILITIES
 from nexus.api.settings_endpoints import _read_raw_settings
 from nexus.config import load_settings
@@ -32,10 +38,16 @@ from nexus.runtime.home import (
     UPLOADS_DIR,
     RuntimeHomeError,
     locate_runtime_home,
+    model_path_fields,
     repo_root,
     resolve_runtime_home,
 )
-from nexus.runtime.home_plan import HomePlan, HomePlanError, plan_home_move
+from nexus.runtime.home_plan import (
+    ChecksumProgress,
+    HomePlan,
+    HomePlanError,
+    plan_home_move,
+)
 from nexus.telemetry import usage
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -423,6 +435,136 @@ def test_upload_layout_matches_the_upload_endpoints_and_mounts() -> None:
     assert mounts == {f"/{name}" for name in UPLOAD_SUBDIRS}
 
 
+@pytest.mark.parametrize("locator", [RUNTIME_CONFIG_ENV, HOME_ENV])
+def test_relative_model_paths_anchor_once_at_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, locator: str
+) -> None:
+    """All model registries use the locator root, never cwd or the config parent."""
+    expected: Dict[str, str] = {"local_models.models_dir": "gguf"}
+
+    def edit(document: Any) -> None:
+        document["local_models"]["models_dir"] = "gguf"
+        for name, model in document["memnon"]["models"].items():
+            expected[f"memnon.models.{name}.local_path"] = f"models/{name}"
+            model["local_path"] = f"models/{name}"
+        document["memnon"]["retrieval"]["cross_encoder_reranking"][
+            "model_path"
+        ] = "models/reranker"
+        expected["memnon.retrieval.cross_encoder_reranking.model_path"] = (
+            "models/reranker"
+        )
+        for name, model in document["ir_eval"]["embedding_candidates"].items():
+            expected[f"ir_eval.embedding_candidates.{name}.local_path"] = (
+                f"models/{name}"
+            )
+            model["local_path"] = f"models/{name}"
+        candidates = document["ir_eval"]["reranker_candidates"]
+        values = (str(tmp_path / "abs"), "~/nexus-anchor-probe", "")
+        for name, value in zip(sorted(candidates), values):
+            candidates[name]["local_path"] = value
+            expected[f"ir_eval.reranker_candidates.{name}.local_path"] = value
+
+    home = tmp_path / "home"
+    config = _write_config(
+        (home if locator == HOME_ENV else tmp_path / "other") / "nexus.toml",
+        edit=edit,
+    )
+    monkeypatch.setenv(locator, str(home if locator == HOME_ENV else config))
+    root = home.resolve() if locator == HOME_ENV else REPO_ROOT
+    observed = []
+    for name in ("cwd-one", "cwd-two"):
+        cwd = tmp_path / name
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+        settings = load_settings()
+        assert settings.configured_model_paths == expected
+        values = {
+            key: getattr(owner, attr)
+            for key, owner, attr in model_path_fields(settings)
+        }
+        for key, raw in expected.items():
+            path = Path(raw).expanduser()
+            assert values[key] == (
+                "" if raw == "" else str(path if path.is_absolute() else root / path)
+            )
+        observed.append(values)
+        if locator == RUNTIME_CONFIG_ENV:
+            explicit = load_settings(config)
+            assert {
+                key: getattr(owner, attr)
+                for key, owner, attr in model_path_fields(explicit)
+            } == values
+    assert observed[0] == observed[1]
+
+
+def test_shipped_model_paths_are_unchanged_by_anchoring(
+    tmp_path: Path,
+) -> None:
+    """The shipped 14 paths and absolute symlink spelling are preserved."""
+    settings = load_settings()
+    fields = model_path_fields(settings)
+    assert len(fields) == 14
+    assert set(settings.configured_model_paths) == {key for key, _, _ in fields}
+    for key, model, attr in fields:
+        assert getattr(model, attr) == settings.configured_model_paths[key]
+    copied = settings.configured_model_paths
+    copied.clear()
+    assert len(settings.configured_model_paths) == 14
+    (tmp_path / "real").mkdir()
+    (tmp_path / "link").symlink_to(tmp_path / "real", target_is_directory=True)
+    configured = str(tmp_path / "link" / "m")
+
+    def edit(document: Any) -> None:
+        candidates = document["ir_eval"]["reranker_candidates"]
+        candidates[sorted(candidates)[0]]["local_path"] = configured
+
+    loaded = load_settings(_write_config(tmp_path / "nexus.toml", edit=edit))
+    assert loaded.ir_eval is not None
+    first = loaded.ir_eval.reranker_candidates[
+        sorted(loaded.ir_eval.reranker_candidates)[0]
+    ]
+    assert first.local_path == configured
+
+
+def test_model_readers_use_the_anchored_path_from_any_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real readers reject the missing home artifact despite an existing cwd decoy."""
+    home = tmp_path / "home"
+
+    def edit(document: Any) -> None:
+        document["local_models"]["models_dir"] = "gguf"
+        for model in document["memnon"]["models"].values():
+            model["local_path"] = "models/embedder"
+
+    _write_config(home / "nexus.toml", edit=edit)
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "gguf").mkdir(parents=True)
+    (elsewhere / "models" / "embedder").mkdir(parents=True)
+    monkeypatch.setenv(HOME_ENV, str(home))
+    monkeypatch.chdir(elsewhere)
+    assert local_inference._allowed_roots()[0] == (home / "gguf").resolve()
+    settings = load_settings()
+    name, model = next(iter(settings.memnon.models.items()))
+    with pytest.raises(RuntimeError) as raised:
+        load_local_model(name, model.model_dump())
+    assert f"local_path {home / 'models/embedder'} does not exist" in str(raised.value)
+
+
+@pytest.mark.parametrize("use_home", [False, True])
+def test_wizard_threads_resolve_under_the_state_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, use_home: bool
+) -> None:
+    """Wizard files use the base state directory independently of cwd and port."""
+    root = tmp_path / "home" if use_home else REPO_ROOT
+    if use_home:
+        _write_config(root / "nexus.toml")
+        monkeypatch.setenv(HOME_ENV, str(root))
+    monkeypatch.setenv(GATEWAY_PORT_ENV, "8931")
+    monkeypatch.chdir(tmp_path)
+    assert wizard_threads_dir(load_settings()) == root / ".nexus/runtime/wizard_threads"
+
+
 # ---------------------------------------------------------------------------
 # nexus home plan
 # ---------------------------------------------------------------------------
@@ -488,6 +630,140 @@ def _fake_checkout(tmp_path: Path) -> Tuple[Path, Path, Path]:
     _write(models_source / "Octen-Embedding-4B-dir" / "config.json", b"{}")
     _write(models_source / "Octen-Embedding-4B-dir" / "weights.bin", b"\x00" * 4096)
     return checkout, config, models_source
+
+
+def test_home_plan_rewrites_from_the_configured_strings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fake checkout's relative model paths remain relative in the move plan."""
+    checkout, config, _ = _fake_checkout(tmp_path)
+    _write_config(config, edit=_point_models(Path("models")))
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+    target = tmp_path / "target"
+    plan = plan_home_move(target, checkout=checkout)
+    model_files = [
+        entry
+        for entry in plan.entries
+        if entry.category == "models" and entry.kind == "file"
+    ]
+    assert model_files
+    for entry in model_files:
+        assert entry.status == "move"
+        assert entry.proposed == target / entry.current.relative_to(checkout)
+        assert entry.sha256 == _sha256(entry.current)
+    assert plan.rewrites == ()
+
+
+def test_home_plan_progress_counts_every_entry_and_byte(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Progress includes receipts, symlinks and chunks, with unchanged plan output."""
+    checkout, config, _ = _fake_checkout(tmp_path)
+    _write(checkout / ".nexus/receipts/failures.jsonl", b'{"failure": 1}\n')
+    _write(checkout / ".nexus/cache/large.bin", b"x" * (2 * 1024 * 1024 + 3))
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+    events: list[ChecksumProgress] = []
+    target = tmp_path / "target"
+    plan = plan_home_move(target, checkout=checkout, progress=events.append)
+    assert plan.as_dict() == plan_home_move(target, checkout=checkout).as_dict()
+    assert any(entry.category == "receipts" for entry in plan.entries)
+    assert events[0].entries_done == events[0].bytes_done == 0
+    assert [event.bytes_done for event in events] == sorted(
+        event.bytes_done for event in events
+    )
+    assert (
+        events[-1].entries_done
+        == events[-1].entries_total
+        == sum(entry.status != "missing" for entry in plan.entries)
+    )
+    assert events[-1].bytes_done == events[-1].bytes_total == plan.total_bytes()
+    assert {event.entries_total for event in events} == {events[-1].entries_total}
+    assert {event.bytes_total for event in events} == {events[-1].bytes_total}
+    assert any(
+        after.entries_done == before.entries_done
+        and after.bytes_done > before.bytes_done
+        for before, after in zip(events, events[1:])
+    )
+
+
+def test_home_plan_progress_only_on_a_terminal_and_never_with_json(
+    tmp_path: Path,
+) -> None:
+    """Actual CLI processes keep pipe/JSON stderr empty and text stdout stable."""
+    state = tmp_path / "state"
+    _write(state / "gateway.log", b"captured\n")
+    models = tmp_path / "model-store"
+    _write(models / "Octen-Embedding-4B-dir/weights.bin", b"x" * 4096)
+    config = _write_config(
+        tmp_path / "nexus.toml",
+        state_dir=str(state),
+        usage_dir=str(tmp_path / "ledger"),
+        edit=_point_models(models),
+    )
+    env = os.environ.copy()
+    for name in (HOME_ENV, GATEWAY_PORT_ENV, "NEXUS_API_URL"):
+        env.pop(name, None)
+    env[RUNTIME_CONFIG_ENV] = str(config)
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    command = [
+        sys.executable,
+        "-m",
+        "nexus.cli",
+        "home",
+        "plan",
+        "--to",
+        str(tmp_path / "target"),
+    ]
+    results = {}
+    for json_mode in (False, True):
+        argv = command + (["--json"] if json_mode else [])
+        pipe = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=60)
+        assert pipe.returncode == 0, pipe.stderr
+        assert pipe.stderr == ""
+        master, slave = os.openpty()
+        with tempfile.TemporaryFile(mode="w+t") as stdout:
+            process = subprocess.Popen(argv, env=env, stdout=stdout, stderr=slave)
+            os.close(slave)
+            chunks = []
+            try:
+                while True:
+                    assert select.select([master], [], [], 60)[0], "CLI stalled"
+                    try:
+                        chunk = os.read(master, 65536)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                assert process.wait(timeout=30) == 0
+            finally:
+                os.close(master)
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+            stdout.seek(0)
+            assert stdout.read() == pipe.stdout
+        terminal_error = b"".join(chunks).decode()
+        if json_mode:
+            assert terminal_error == ""
+            plan = json.loads(pipe.stdout)["home_plan"]
+            count = sum(entry["status"] != "missing" for entry in plan["entries"])
+        else:
+            assert "\r" in terminal_error and terminal_error.endswith("\n")
+        results[json_mode] = terminal_error
+    assert f"checksummed {count}/{count} entries" in results[False]
+
+
+def test_home_plan_has_no_no_hash_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Decision 820-Q8 keeps every checksum mandatory; this guard already passes."""
+    monkeypatch.setattr(
+        sys, "argv", ["nexus", "home", "plan", "--to", "unused", "--no-hash"]
+    )
+    with pytest.raises(SystemExit) as raised:
+        cli.main()
+    assert raised.value.code == 2
 
 
 def test_home_plan_inventories_checksums_and_maps_every_runtime_file(
