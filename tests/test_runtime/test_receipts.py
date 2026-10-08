@@ -227,6 +227,66 @@ def test_validation_receipt_keeps_loc_and_type_only(seam: Path, tmp_path: Path) 
     assert all(set(entry) == {"loc", "type"} for entry in details["errors"])
 
 
+@pytest.mark.parametrize("mapping_key", [PLANTED_SECRET, "default_slot"])
+def test_validation_receipt_redacts_identifier_mapping_keys(
+    seam: Path, tmp_path: Path, mapping_key: str
+) -> None:
+    """User keys redact even when they resemble identifiers or schema fields."""
+    text = REPO_CONFIG.read_text(encoding="utf-8")
+    text += (
+        f'\n[global.model.api_models."{mapping_key}"]\n'
+        'models = [{ id = "planted-model", label = "Planted", '
+        'context_window = "not-an-integer" }]\n'
+    )
+    path = tmp_path / "invalid-mapping.toml"
+    path.write_text(text, encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        load_settings(path)
+
+    lines = _receipt_lines(seam / "home")
+    assert len(lines) == 1
+    _assert_clean(lines[0])
+    errors = json.loads(lines[0])["details"]["errors"]
+    assert {
+        "loc": ["global", "model", "api_models", "?", "models", 0, "context_window"],
+        "type": "int_type",
+    } in errors
+    assert all(mapping_key not in entry["loc"] for entry in errors)
+
+
+def test_preferences_validation_uses_its_own_schema(seam: Path, tmp_path: Path) -> None:
+    """Preferences retain their declared font fields and redact unknown keys."""
+    settings = load_settings()
+    assert settings.runtime is not None
+    runtime = settings.runtime.model_copy(update={"state_dir": str(tmp_path / "state")})
+    settings = settings.model_copy(update={"runtime": runtime})
+    path = preferences_path(settings)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        'theme = "veil"\nwizard_model = "test:test-model"\n'
+        f'[fonts.veil]\nbody = 42\n{PLANTED_SECRET} = "{PLANTED_PROMPT}"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError):
+        load_preferences(settings)
+
+    lines = _receipt_lines(seam / "home")
+    assert len(lines) == 1
+    _assert_clean(lines[0])
+    details = json.loads(lines[0])["details"]
+    assert details["model"] == "PreferencesSettings"
+    assert {
+        "loc": ["fonts", "veil", "body"],
+        "type": "string_type",
+    } in details["errors"]
+    assert {
+        "loc": ["fonts", "veil", "?"],
+        "type": "extra_forbidden",
+    } in details["errors"]
+
+
 def test_preferences_failure_writes_a_receipt(seam: Path, tmp_path: Path) -> None:
     """A malformed preferences.toml records a ``config.preferences`` receipt."""
     settings = load_settings()
@@ -494,3 +554,30 @@ def test_home_equal_to_user_home_reads_each_receipt_once(
     assert document["groups"][0]["count"] == 1
     assert document["groups"][0]["roots"] == ["fallback"]
     assert len(_receipt_lines(receipts)) == 1
+
+
+def test_unreadable_receipt_file_is_a_read_error(seam: Path) -> None:
+    """A directory in place of a receipt file gives a diagnostic envelope."""
+    path = seam / "home" / "failures-2026-10-08.jsonl"
+    path.mkdir(parents=True)
+
+    with pytest.raises(ReceiptReadError, match=r":1: cannot read failure receipt"):
+        read_failure_groups({"home": seam / "home"})
+    completed = _run_cli("--json", "receipts")
+    assert completed.returncode == 1
+    envelope = _failure(completed)
+    assert envelope["code"] == "domain_failure"
+    assert str(path) in envelope["error"]
+    assert path.is_dir()
+
+
+def test_relative_receipt_seam_is_a_config_error(seam: Path) -> None:
+    """A misconfigured test seam fails through the CLI's config envelope."""
+    completed = _run_cli(
+        "--json", "receipts", env={TEST_RECEIPTS_ENV: "relative-receipts"}
+    )
+    assert completed.returncode == 1
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert f"{TEST_RECEIPTS_ENV} must be an absolute path" in envelope["error"]
+    assert not seam.exists()

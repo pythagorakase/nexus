@@ -4494,6 +4494,7 @@ def run_receipts(args: argparse.Namespace) -> int:
     reported.
     """
     from nexus.runtime.receipts import (
+        ReceiptConfigurationError,
         ReceiptReadError,
         fallback_receipts_dir,
         home_receipts_dir,
@@ -4503,14 +4504,19 @@ def run_receipts(args: argparse.Namespace) -> int:
     home_dir: Optional[Path]
     home_error: Optional[str] = None
     try:
-        home_dir = home_receipts_dir()
-    # The fallback root is still read, and the command exits with config_error.
+        try:
+            home_dir = home_receipts_dir()
+        # The fallback root is read, and the command exits with config_error.
+        except (
+            RuntimeHomeError
+        ):  # nexus-exception-disposition: degrade-read-only; reason=home; safety=exit1
+            home_dir = None
+            home_error = str(sys.exc_info()[1])
+        fallback_dir = fallback_receipts_dir()
     except (
-        RuntimeHomeError
-    ):  # nexus-exception-disposition: degrade-read-only; reason=no home; safety=exit 1
-        home_dir = None
-        home_error = str(sys.exc_info()[1])
-    fallback_dir = fallback_receipts_dir()
+        ReceiptConfigurationError
+    ) as exc:  # nexus-exception-disposition: fail; reason=bad seam; safety=exit 1
+        return _fail(args, "config_error", str(exc))
     roots = {"fallback": fallback_dir}
     # When NEXUS_HOME is the user's home, both labels name one directory;
     # reading it once keeps each receipt counted once.

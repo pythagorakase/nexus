@@ -527,12 +527,15 @@ original exception unchanged (issue #806):
 A receipt is one JSON line in an allowlisted envelope: schema version, UTC
 time, surface, process id, the configuration path, the exception's type and
 module, the innermost 64 traceback frames as file, line and function (a file
-under the checkout is checkout-relative), a details record, and a SHA-256
-fingerprint of the surface, the exception class and the frames. The details
+under the checkout is checkout-relative; other frame paths stay absolute),
+a details record, and a SHA-256 fingerprint of the surface, the exception
+class and the frames. The details
 are the position of a TOML parse error; the model, error count and the first
-20 errors' location and error type of a validation error, with an unknown
-key and any location part that is not identifier-shaped recorded as `?`; the
-collapsed message of a `RuntimeHomeError` (first 512 characters); or the
+20 errors' location and error type of a validation error. Locations retain
+declared fields and array indices from the validation model's JSON schema;
+mapping keys, unknown fields and unrecognized location parts become `?`.
+Other details are the collapsed message of a `RuntimeHomeError` (first 512
+characters) or the
 `errno` of an `OSError`. A receipt never records an exception message other
 than that `RuntimeHomeError` text, a source line, local variables, an input
 value or a configuration value, so a key or a prompt in a broken file cannot
@@ -542,8 +545,14 @@ Receipts go to the home's `receipts_dir` when the home can be located
 (`load_settings` with an explicit path included) and to the per-user
 fallback root `~/.nexus/receipts` when it cannot; a `runtime.home` receipt
 always goes to the fallback root. Each UTC day's receipts are appended to
-`failures-<YYYY-MM-DD>.jsonl` (directory mode `0700`, file mode `0600`);
-nothing prunes or rewrites them. A receipt that cannot be written prints
+`failures-<YYYY-MM-DD>.jsonl` (new leaf directory mode `0700`, new file mode
+`0600`; existing modes stay unchanged and parent directories follow the
+process umask). Every failure appends, even when its fingerprint repeats;
+there is no write deduplication, rate limit or pruning in this slice. A
+broken configuration keeps growing its day file until repaired. Frame and
+configuration paths retain machine details, including usernames; the
+sanitizer removes configuration contents, not filesystem identities.
+A receipt that cannot be written prints
 `receipt not written for <surface>: <exception type>` on stderr and never
 masks the original error.
 
@@ -554,8 +563,10 @@ configuration path, details and frames (`--json` prints `home_dir`,
 configuration. When the home cannot be located, locating it appends a
 `runtime.home` receipt to the fallback root; the command reads the fallback
 root, that receipt included, and exits with `config_error`. A line that is
-not a valid receipt fails the read as a `domain_failure` naming its file and
-line. The read never rewrites or deletes a file.
+not a valid receipt, or a file that cannot be read, fails the read as a
+`domain_failure` naming its file and line. An operator must repair the named
+line or archive the named file outside the receipt directory before retrying;
+the read never skips invalid lines, rewrites or deletes a file.
 
 Tests never write to the checkout's or the user's receipts.
 `tests/conftest.py` sets `NEXUS_TEST_RECEIPTS_DIR` to a temporary directory
@@ -564,7 +575,7 @@ its `home` subdirectory and fallback receipts to its `fallback`
 subdirectory, while the locator still runs. The session fails, with
 `receipt isolation: receipts changed (...)` in its summary, if either real
 receipt directory changed. The variable must be absolute and is not an
-owner setting.
+owner setting; a relative value makes `nexus receipts` return `config_error`.
 
 ## Model Backends Are Runtime Services
 

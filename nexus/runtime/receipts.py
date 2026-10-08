@@ -34,7 +34,7 @@ import re
 import sys
 import tomllib
 import traceback
-from typing import Annotated, Literal, Mapping, Optional, Union
+from typing import Annotated, Any, Literal, Mapping, Optional, Union
 
 from pydantic import (
     AwareDatetime,
@@ -57,7 +57,8 @@ SCHEMA_VERSION: Literal[1] = 1
 
 Surface = Literal["config.load_settings", "config.preferences", "runtime.home"]
 
-# A loc part or error type is kept only when it is plainly an identifier.
+# Error types and model names must be identifier-shaped. Location components
+# additionally require a declared schema field or an array index.
 _SAFE_TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 _TOML_POSITION = re.compile(r"\(at line (\d+), column (\d+)\)$")
 _REDACTED = "?"
@@ -65,6 +66,10 @@ _REDACTED = "?"
 
 class ReceiptReadError(ValueError):
     """A receipt file holds a line that is not a valid failure receipt."""
+
+
+class ReceiptConfigurationError(ValueError):
+    """The receipt test seam is configured with an invalid path."""
 
 
 class _Record(BaseModel):
@@ -167,7 +172,9 @@ def _seam_dir(subdirectory: str) -> Optional[Path]:
         return None
     root = Path(raw)
     if not root.is_absolute():
-        raise ValueError(f"{TEST_RECEIPTS_ENV} must be an absolute path, got {raw!r}")
+        raise ReceiptConfigurationError(
+            f"{TEST_RECEIPTS_ENV} must be an absolute path, got {raw!r}"
+        )
     return root / subdirectory
 
 
@@ -228,17 +235,74 @@ def _safe_token(value: str) -> str:
     return value if _SAFE_TOKEN.fullmatch(value) else _REDACTED
 
 
-def _validation_details(exc: ValidationError) -> ValidationDetails:
+def _validation_location(
+    location: tuple[Union[int, str], ...],
+    schema: dict[str, Any],
+    definitions: dict[str, Any],
+) -> list[Union[int, str]]:
+    """Keep declared field names and array indices; redact user mapping keys.
+
+    Resolve the public validation JSON schema, including aliases and nullable
+    fields. Unknown schema shapes redact the remaining path. For a union, a
+    component survives only if every non-null branch identifies it as safe.
+    """
+    if not location:
+        return []
+    if "$ref" in schema:
+        schema = definitions.get(schema["$ref"].removeprefix("#/$defs/"), {})
+    branches = schema.get("anyOf", schema.get("oneOf"))
+    if branches:
+        candidates = [
+            _validation_location(location, branch, definitions)
+            for branch in branches
+            if branch.get("type") != "null"
+        ]
+        if candidates:
+            return [
+                parts[0] if all(part == parts[0] for part in parts) else _REDACTED
+                for parts in zip(*candidates)
+            ]
+    part, *rest = location
+    properties = schema.get("properties", {})
+    kept: Union[int, str] = _REDACTED
+    next_schema: Any = {}
+    if isinstance(part, str) and part in properties:
+        kept = _safe_token(part)
+        next_schema = properties[part]
+    elif isinstance(part, int) and schema.get("type") == "array":
+        kept = part
+        prefix = schema.get("prefixItems", [])
+        next_schema = (
+            prefix[part] if 0 <= part < len(prefix) else schema.get("items", {})
+        )
+    elif schema.get("type") == "object":
+        next_schema = schema.get("additionalProperties", {})
+    if not isinstance(next_schema, dict):
+        next_schema = {}
+    return [kept, *_validation_location(tuple(rest), next_schema, definitions)]
+
+
+def _validation_details(exc: ValidationError, surface: Surface) -> ValidationDetails:
     """Locations and error types of the first errors; never messages or input."""
+    from nexus.config.settings_models import PreferencesSettings, Settings
+
+    models: dict[str, type[BaseModel]] = {
+        "config.load_settings": Settings,
+        "config.preferences": PreferencesSettings,
+    }
+    model = models.get(surface)
+    # Unknown model errors have no trusted schema: redact every loc component.
+    schema = (
+        model.model_json_schema()
+        if model is not None and exc.title == model.__name__
+        else {}
+    )
     entries = []
     for error in exc.errors(include_url=False, include_context=False)[
         :MAX_VALIDATION_ERRORS
     ]:
         error_type = str(error["type"])
-        parts: list[Union[int, str]] = [
-            part if isinstance(part, int) else _safe_token(str(part))
-            for part in error["loc"]
-        ]
+        parts = _validation_location(error["loc"], schema, schema.get("$defs", {}))
         if error_type == "extra_forbidden" and parts:
             # The unknown key is user-typed text.
             parts[-1] = _REDACTED
@@ -263,12 +327,12 @@ def _toml_details(exc: tomllib.TOMLDecodeError) -> TomlDetails:
     return TomlDetails(kind="toml", line=int(match[1]), column=int(match[2]))
 
 
-def _details(exc: BaseException) -> Optional[ReceiptDetails]:
+def _details(exc: BaseException, surface: Surface) -> Optional[ReceiptDetails]:
     """The allowlisted details of a known exception type, else None."""
     from nexus.runtime.home import RuntimeHomeError
 
     if isinstance(exc, ValidationError):
-        return _validation_details(exc)
+        return _validation_details(exc, surface)
     if isinstance(exc, tomllib.TOMLDecodeError):
         return _toml_details(exc)
     if isinstance(exc, RuntimeHomeError):
@@ -307,7 +371,7 @@ def build_receipt(
         exception_module=exception_module,
         frames=frames,
         frames_dropped=dropped,
-        details=_details(exc),
+        details=_details(exc, surface),
         fingerprint=_fingerprint(surface, exception_module, exception_type, frames),
     )
 
@@ -380,16 +444,23 @@ def _read_receipts(
         for path in sorted(directory.glob("failures-*.jsonl")):
             # Binary mode: undecodable bytes fail validation (json_invalid), so
             # they are reported by path and line like any other invalid line.
-            with path.open("rb") as stream:
-                for number, line in enumerate(stream, start=1):
-                    try:
-                        receipt = FailureReceipt.model_validate_json(line)
-                    except ValidationError as exc:
-                        raise ReceiptReadError(
-                            f"{path}:{number}: not a failure receipt "
-                            f"({exc.error_count()} validation errors)"
-                        ) from exc
-                    receipts.append((label, receipt))
+            number = 0
+            try:
+                with path.open("rb") as stream:
+                    for number, line in enumerate(stream, start=1):
+                        try:
+                            receipt = FailureReceipt.model_validate_json(line)
+                        except ValidationError as exc:
+                            raise ReceiptReadError(
+                                f"{path}:{number}: not a failure receipt "
+                                f"({exc.error_count()} validation errors)"
+                            ) from exc
+                        receipts.append((label, receipt))
+            except OSError as exc:
+                raise ReceiptReadError(
+                    f"{path}:{number + 1}: cannot read failure receipt "
+                    f"({type(exc).__name__}, errno={exc.errno})"
+                ) from exc
     return receipts
 
 
