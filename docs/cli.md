@@ -152,7 +152,8 @@ the remote profile itself: `up` and `status` probe the hosted runtime's
 check the profile of that file. `doctor` is exempt from the refusal and from
 the configuration check below: it diagnoses this machine's configuration and
 role itself, so it runs under any profile, and an invalid `nexus.toml` is its
-`config.valid` finding rather than a `config_error`.
+`config.valid` finding rather than a `config_error`. `receipts` is exempt in
+the same way: it reads this machine's receipts when no configuration loads.
 
 Only the host name decides: a LAN address, a Tailscale name, or `0.0.0.0`
 counts as remote even when it reaches this machine, so every `database` and
