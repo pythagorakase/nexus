@@ -239,8 +239,8 @@ Nothing is written. Each request's timeout is `[runtime.cli].inspect_timeout_sec
 | Verb | Routes | `data` |
 | --- | --- | --- |
 | `inspect slot` | `/api/slot/{slot}/state` | The slot state |
-| `inspect chunks --last N` | `/api/narrative/latest-chunk`, then `/api/narrative/chunks/{id}/adjacent` backwards | The newest N committed chunks, oldest first; `[]` for an unplayed story. One sequential request per chunk |
-| `inspect chunks --from A --to B` | `/api/narrative/chunks/{id}/adjacent` forwards from A | The committed chunks with ids A through B. `--from` may be left out (it starts at the first chunk); `--from` without `--to` is a usage error. One sequential request per chunk in the range, and one more when no committed chunk has id B |
+| `inspect chunks --last N` | `/api/narrative/chunks` | The newest N committed chunks, oldest first; `[]` for an unplayed story. The route answers newest first in pages of at most `[ui.reader].max_page_size`; the verb reverses them |
+| `inspect chunks --from A --to B` | `/api/narrative/chunks` | The committed chunks with ids A through B. `--from` may be left out (it starts at the first chunk); `--from` without `--to` is a usage error. Pages of at most `[ui.reader].max_page_size` chunks |
 | `inspect chunk ID` | `/api/narrative/chunks/{id}` | One committed chunk |
 | `inspect incubator` | `/api/narrative/incubator` | The pending draft, or `null` when none waits |
 | `inspect characters [ID]` | `/api/characters` (with `startId`/`endId` for one) | The list, or the one character |
@@ -263,6 +263,8 @@ serve exits 1 with `not_found`, a body the verb cannot pass through unchanged
 exits 1 with `invalid_response`, and nothing answering exits 4 with
 `api_unreachable`. Without `--json`, a record prints as one field per line, a
 list as one such block per record.
+
+The entity verbs print what `/api/characters`, `/api/places` and `/api/factions` serve, field for field. Those routes do not yet gate spoiler-bearing fields: a character's `personality`, `emotionalState`, `currentActivity`, `background` and `extraData`, and the `extraData` of places and factions, reach any player-plane caller. Gating belongs to the player DTOs of issue #769, at the serving boundary; the CLI adds no redaction of its own.
 
 Interactions, queues, settings, and secrets status have no inspect verb yet:
 they have no player-plane read route.

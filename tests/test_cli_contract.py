@@ -20,7 +20,7 @@ import socket
 import subprocess
 import sys
 from threading import Event, Thread
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -83,6 +83,9 @@ class Raw:
     headers: dict[str, str] = field(default_factory=dict)
 
 
+RouteReply = tuple[int, Any] | Callable[[dict[str, list[str]]], tuple[int, Any]]
+
+
 @dataclass
 class Gateway:
     """Routes a loopback gateway answers, and every request it received.
@@ -91,7 +94,7 @@ class Gateway:
     :class:`Raw` payload as given.
     """
 
-    routes: dict[tuple[str, str], tuple[int, Any]] = field(default_factory=dict)
+    routes: dict[tuple[str, str], RouteReply] = field(default_factory=dict)
     requests: list[tuple[str, str, Any]] = field(default_factory=list)
     # The parsed query string of each request, in the order of ``requests``.
     queries: list[dict[str, list[str]]] = field(default_factory=list)
@@ -119,8 +122,9 @@ def _serve(gateway: Gateway) -> Iterator[str]:
             if gateway.stall:
                 released.wait()
                 return
-            status, payload = gateway.routes.get(
-                (method, path), (404, {"detail": "Not Found"})
+            answer = gateway.routes.get((method, path), (404, {"detail": "Not Found"}))
+            status, payload = (
+                answer(parse_qs(url.query)) if callable(answer) else answer
             )
             if isinstance(payload, Raw):
                 body = payload.body.encode()
@@ -1255,20 +1259,31 @@ def _chunk(chunk_id: int) -> dict[str, Any]:
     }
 
 
-def _adjacent(
-    chunk_id: int, previous: Optional[int], following: Optional[int]
-) -> tuple[tuple[str, str], tuple[int, Any]]:
-    """The adjacent-chunks route of ``chunk_id`` in a story of those chunks."""
-    return (
-        ("GET", f"/api/narrative/chunks/{chunk_id}/adjacent"),
-        (
-            200,
-            {
-                "previous": _chunk(previous) if previous is not None else None,
-                "next": _chunk(following) if following is not None else None,
-            },
-        ),
-    )
+def _chunk_range_route(
+    ids: tuple[int, ...] = (10, 11, 12), page_bound: int = 2
+) -> Callable[[dict[str, list[str]]], tuple[int, Any]]:
+    """Serve sparse IDs through the bounded range contract over real HTTP."""
+
+    def answer(query: dict[str, list[str]]) -> tuple[int, Any]:
+        limit = min(int(query["limit"][0]), page_bound)
+        after = int(query["after"][0]) if "after" in query else None
+        before = int(query["before"][0]) if "before" in query else None
+        rows = sorted(
+            (
+                chunk_id
+                for chunk_id in ids
+                if (after is None or chunk_id > after)
+                and (before is None or chunk_id < before)
+            ),
+            reverse=query["order"] == ["desc"],
+        )
+        page = rows[:limit]
+        return 200, {
+            "chunks": [_chunk(chunk_id) for chunk_id in page],
+            "nextCursor": page[-1] if len(rows) > limit else None,
+        }
+
+    return answer
 
 
 DRAFT = {
@@ -1289,15 +1304,10 @@ PLACES = [
 ]
 FACTIONS = [{"id": 7, "name": "The Lamplighters", "summary": "Keepers of light."}]
 # A story whose committed chunks are 10, 11, and 12 (13 was never committed).
-INSPECT_ROUTES: dict[tuple[str, str], tuple[int, Any]] = dict(
+INSPECT_ROUTES: dict[tuple[str, str], RouteReply] = dict(
     [
-        (("GET", "/api/narrative/latest-chunk"), (200, _chunk(12))),
+        (("GET", "/api/narrative/chunks"), _chunk_range_route()),
         (("GET", "/api/narrative/chunks/12"), (200, _chunk(12))),
-        _adjacent(0, None, 10),
-        _adjacent(9, None, 10),
-        _adjacent(10, None, 11),
-        _adjacent(11, 10, 12),
-        _adjacent(12, 11, None),
         (("GET", "/api/narrative/incubator"), (200, DRAFT)),
         (("GET", "/api/characters"), (200, CHARACTERS)),
         (("GET", "/api/places"), (200, PLACES)),
@@ -1311,45 +1321,94 @@ INSPECT_CASES: dict[str, tuple[tuple[str, ...], Any, list[tuple[str, dict]]]] = 
     "chunks-last": (
         ("chunks", "--last", "2"),
         [_chunk(11), _chunk(12)],
-        [
-            ("/api/narrative/latest-chunk", SLOT_QUERY),
-            ("/api/narrative/chunks/12/adjacent", SLOT_QUERY),
-        ],
+        [("/api/narrative/chunks", {**SLOT_QUERY, "order": ["desc"], "limit": ["2"]})],
     ),
     "chunks-last-past-the-first": (
         ("chunks", "--last", "5"),
         [_chunk(10), _chunk(11), _chunk(12)],
         [
-            ("/api/narrative/latest-chunk", SLOT_QUERY),
-            ("/api/narrative/chunks/12/adjacent", SLOT_QUERY),
-            ("/api/narrative/chunks/11/adjacent", SLOT_QUERY),
-            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
+            (
+                "/api/narrative/chunks",
+                {**SLOT_QUERY, "order": ["desc"], "limit": ["5"]},
+            ),
+            (
+                "/api/narrative/chunks",
+                {**SLOT_QUERY, "order": ["desc"], "limit": ["3"], "before": ["11"]},
+            ),
         ],
     ),
     "chunks-range": (
         ("chunks", "--from", "10", "--to", "11"),
         [_chunk(10), _chunk(11)],
         [
-            ("/api/narrative/chunks/9/adjacent", SLOT_QUERY),
-            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
+            (
+                "/api/narrative/chunks",
+                {
+                    **SLOT_QUERY,
+                    "order": ["asc"],
+                    "after": ["9"],
+                    "before": ["12"],
+                    "limit": ["2"],
+                },
+            )
         ],
     ),
     "chunks-first-to": (
         ("chunks", "--to", "11"),
         [_chunk(10), _chunk(11)],
         [
-            ("/api/narrative/chunks/0/adjacent", SLOT_QUERY),
-            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
+            (
+                "/api/narrative/chunks",
+                {
+                    **SLOT_QUERY,
+                    "order": ["asc"],
+                    "after": ["0"],
+                    "before": ["12"],
+                    "limit": ["11"],
+                },
+            )
         ],
     ),
-    # No committed chunk has id 13: one more request finds the story's end.
     "chunks-range-past-the-last": (
         ("chunks", "--from", "11", "--to", "13"),
         [_chunk(11), _chunk(12)],
         [
-            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
-            ("/api/narrative/chunks/11/adjacent", SLOT_QUERY),
-            ("/api/narrative/chunks/12/adjacent", SLOT_QUERY),
+            (
+                "/api/narrative/chunks",
+                {
+                    **SLOT_QUERY,
+                    "order": ["asc"],
+                    "after": ["10"],
+                    "before": ["14"],
+                    "limit": ["3"],
+                },
+            )
+        ],
+    ),
+    "chunks-range-two-pages": (
+        ("chunks", "--from", "10", "--to", "12"),
+        [_chunk(10), _chunk(11), _chunk(12)],
+        [
+            (
+                "/api/narrative/chunks",
+                {
+                    **SLOT_QUERY,
+                    "order": ["asc"],
+                    "after": ["9"],
+                    "before": ["13"],
+                    "limit": ["3"],
+                },
+            ),
+            (
+                "/api/narrative/chunks",
+                {
+                    **SLOT_QUERY,
+                    "order": ["asc"],
+                    "after": ["11"],
+                    "before": ["13"],
+                    "limit": ["1"],
+                },
+            ),
         ],
     ),
     "chunk": (
@@ -1471,8 +1530,7 @@ def test_inspect_verbs_read_only_player_plane_routes() -> None:
         assert capability.slot_mode == "read", (key, capability)
         templates.add(key[1])
     assert templates == {
-        "/api/narrative/latest-chunk",
-        "/api/narrative/chunks/{chunk_id}/adjacent",
+        "/api/narrative/chunks",
         "/api/narrative/chunks/{chunk_id}",
         "/api/narrative/incubator",
         "/api/characters",
@@ -1501,44 +1559,14 @@ def test_inspect_incubator_reports_an_empty_incubator_as_null() -> None:
 
 
 def test_inspect_chunks_of_an_unplayed_story_is_an_empty_list() -> None:
-    """The latest-chunk route's "No chunks found" answer is an empty read."""
-    gateway = Gateway(
-        routes={
-            ("GET", "/api/narrative/latest-chunk"): (
-                404,
-                {"detail": "No chunks found"},
-            )
-        }
-    )
+    """The range route returns one empty page for an unplayed story."""
+    gateway = Gateway(routes={("GET", "/api/narrative/chunks"): _chunk_range_route(())})
     completed = _inspect(gateway, "chunks", "--last", "3")
 
     assert completed.returncode == ExitCode.OK, completed.stderr
     assert json.loads(completed.stdout) == {"ok": True, "data": []}
-
-
-def test_inspect_chunk_range_sends_no_request_past_its_last_chunk() -> None:
-    """``--from 10 --to 11`` costs exactly two requests, one per chunk.
-
-    The walk stops at the chunk with id ``--to``, so a failing read of chunk
-    11's neighbours, which could only find chunk 12 outside the range, cannot
-    discard the complete range.
-    """
-    routes = dict(INSPECT_ROUTES)
-    routes[("GET", "/api/narrative/chunks/11/adjacent")] = (
-        500,
-        {"detail": "Internal Server Error"},
-    )
-    gateway = Gateway(routes=routes)
-    completed = _inspect(gateway, "chunks", "--from", "10", "--to", "11")
-
-    assert completed.returncode == ExitCode.OK, completed.stderr
-    assert json.loads(completed.stdout) == {
-        "ok": True,
-        "data": [_chunk(10), _chunk(11)],
-    }
     assert [request[:2] for request in gateway.requests] == [
-        ("GET", "/api/narrative/chunks/9/adjacent"),
-        ("GET", "/api/narrative/chunks/10/adjacent"),
+        ("GET", "/api/narrative/chunks")
     ]
 
 
@@ -1587,8 +1615,47 @@ def test_inspect_missing_record_is_not_found(
         (("incubator",), ["not", "an", "object"]),
         (("incubator",), {"storyteller_text": "No session"}),
         (("chunks", "--last", "1"), [_chunk(12)]),
+        (("chunks", "--last", "2"), {"chunks": [_chunk(12)], "nextCursor": 11}),
+        (
+            ("chunks", "--last", "2"),
+            {"chunks": [_chunk(11), _chunk(12)], "nextCursor": None},
+        ),
+        (
+            ("chunks", "--last", "1"),
+            {"chunks": [_chunk(12), _chunk(11)], "nextCursor": None},
+        ),
+        (("chunks", "--last", "2"), {"chunks": [], "nextCursor": 12}),
+        (("chunks", "--last", "2"), {"chunks": [_chunk(1)], "nextCursor": True}),
+        (("chunks", "--last", "2"), {"chunks": [_chunk(12)], "nextCursor": 12.0}),
+        (
+            ("chunks", "--last", "2"),
+            {"chunks": [_chunk(12)], "nextCursor": None, "unexpected": True},
+        ),
+        (
+            ("chunks", "--from", "10", "--to", "11"),
+            {"chunks": [_chunk(12)], "nextCursor": None},
+        ),
+        (
+            ("chunks", "--from", "10", "--to", "11"),
+            {"chunks": [_chunk(9)], "nextCursor": None},
+        ),
     ],
-    ids=["list-shape", "record-id", "incubator-shape", "draft-session", "chunk"],
+    ids=[
+        "list-shape",
+        "record-id",
+        "incubator-shape",
+        "draft-session",
+        "chunk",
+        "cursor-not-last",
+        "descending-out-of-order",
+        "page-too-large",
+        "empty-cursor",
+        "boolean-cursor",
+        "float-cursor",
+        "unknown-page-key",
+        "range-upper-bound",
+        "range-lower-bound",
+    ],
 )
 def test_inspect_unusable_body_is_an_invalid_response(
     argv: tuple[str, ...], body: Any
@@ -1598,13 +1665,30 @@ def test_inspect_unusable_body_is_an_invalid_response(
         "characters": "/api/characters",
         "places": "/api/places",
         "incubator": "/api/narrative/incubator",
-        "chunks": "/api/narrative/latest-chunk",
+        "chunks": "/api/narrative/chunks",
     }[argv[0]]
     gateway = Gateway(routes={("GET", route): (200, body)})
     completed = _inspect(gateway, *argv)
 
     assert completed.returncode == ExitCode.DOMAIN_FAILURE
     assert _failure(completed)["code"] == "invalid_response"
+
+
+@pytest.mark.parametrize("argv", [("--last", "3"), ("--from", "10", "--to", "12")])
+def test_inspect_chunks_rejects_a_repeated_page(argv: tuple[str, ...]) -> None:
+    """A second page repeating its cursor exits after two real HTTP requests."""
+    gateway = Gateway(
+        routes={
+            ("GET", "/api/narrative/chunks"): (
+                200,
+                {"chunks": [_chunk(11)], "nextCursor": 11},
+            )
+        }
+    )
+    completed = _inspect(gateway, "chunks", *argv)
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    assert _failure(completed)["code"] == "invalid_response"
+    assert len(gateway.requests) == 2
 
 
 @pytest.mark.parametrize(

@@ -548,3 +548,40 @@ def test_feed_is_player_read_without_provider_effect() -> None:
         assert feed < shell
     response = TestClient(player).get("/api/narrative/feed", params={"slot": 9})
     assert response.status_code == 400
+
+
+def test_chunk_range_is_player_read_without_provider_effect() -> None:
+    """The bounded range is classified, projected, and precedes the SPA tail."""
+    key = ("GET", "/api/narrative/chunks")
+    capability = ROUTE_CAPABILITIES[key]
+    assert (
+        capability.plane,
+        capability.capability,
+        capability.slot_mode,
+        capability.provider_effect,
+        capability.destructive,
+    ) == (
+        "player",
+        "narrative.read",
+        "read",
+        False,
+        False,
+    )
+    assert classify_app(narrative.app) == []
+    player = build_player_app(narrative.app)
+    assert key in _keys(player)
+    for app in (narrative.app, player):
+        feed = next(i for i, route in enumerate(app.routes) if key in route_keys(route))
+        shell = next(
+            i
+            for i, route in enumerate(app.routes)
+            if any(
+                ROUTE_CAPABILITIES[k].capability == "ui.shell"
+                for k in route_keys(route)
+            )
+        )
+        assert feed < shell
+    response = TestClient(player).get(
+        "/api/narrative/chunks", params={"slot": 9, "order": "desc", "limit": 1}
+    )
+    assert response.status_code == 400
