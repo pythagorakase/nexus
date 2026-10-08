@@ -1,0 +1,202 @@
+diff --git a/docs/settings_scopes.md b/docs/settings_scopes.md
+index f1beb126..807a58cd 100644
+--- a/docs/settings_scopes.md
++++ b/docs/settings_scopes.md
+@@ -18,6 +18,18 @@ Player fields are `theme`, per-theme `fonts`, and `wizard_model`. First write ma
+ 
+ One rule, in `nexus/runtime/home.py`, selects the `nexus.toml` every reader uses, independent of the working directory. With `NEXUS_HOME` set, the active config is `$NEXUS_HOME/nexus.toml`; `NEXUS_RUNTIME_CONFIG` (set by the supervisor on every service it spawns) or `nexus up --config` may also name it, but naming a different file is refused with a `RuntimeError`, so two active configurations cannot exist. Without `NEXUS_HOME`, `--config` wins, then `NEXUS_RUNTIME_CONFIG`, then the checkout's `nexus.toml`. The same rule anchors relative runtime directories (`[runtime].state_dir`, `[usage].usage_dir`) at the home root. See The Runtime Home in `docs/runtime.md` for the layout and the `nexus home plan` dry run.
+ 
++`NEXUS_TEST_PROVIDER_DATABASE`, when set, overrides
++`[api.test_provider].database` before settings validation in every process,
++including services outside pytest. Child processes inherit it. An empty value,
++`save_NN` name or `NEXUS_template` is refused; without the variable the configured
++TEST-provider database applies (shipped default: `mock`). This selects only the
++TEST provider's wizard/bootstrap data source, not a story's slot database. Tests
++route it to a fixture-owned disposable database; their owner guards always
++protect the literal `mock` regardless of the override. The operator seeder's
++explicit `--dbname` selects its target instead of that default, but still uses
++the shared validated database connection configuration. `--help` needs no valid
++configuration and opens no database connection.
++
+ ## Resolution and Callers
+ 
+ `nexus/config/story_model.py::resolve_story_model` applies request override → slot pin → player preference (wizard only) → repository default. All selected models must exist in the registry before provider construction. Developer seats supply their existing configured model explicitly through the same resolver; this change does not move their tunables into player preferences.
+diff --git a/migrations/008_populate_mock_database.py b/migrations/008_populate_mock_database.py
+index cb4240ee..4b899588 100644
+--- a/migrations/008_populate_mock_database.py
++++ b/migrations/008_populate_mock_database.py
+@@ -348,7 +348,8 @@ def populate_post_transition_data(conn, cache: dict):
+                 ),
+             ),
+         )
+-        assert cur.rowcount == 1, "global_variables singleton row is missing"
++        if cur.rowcount != 1:
++            raise RuntimeError("global_variables singleton row is missing")
+ 
+     print("✓ Populated layers, zones, places, characters, global_variables")
+ 
+@@ -439,7 +440,8 @@ def populate_save_slot(conn):
+     """Mark the story transitioned and pin its model to TEST."""
+     with conn.cursor() as cur:
+         cur.execute("UPDATE global_variables SET new_story = FALSE WHERE id = TRUE")
+-        assert cur.rowcount == 1, "global_variables singleton row is missing"
++        if cur.rowcount != 1:
++            raise RuntimeError("global_variables singleton row is missing")
+         write_story_settings(cur, StorySettings(skald_model="TEST", gaia_model=None))
+     print("✓ Configured mock slot model (TEST)")
+ 
+@@ -468,21 +470,22 @@ def seed_test_provider_database(dbname: str) -> None:
+ 
+ 
+ def main():
+-    settings = load_settings()
+-    if settings.api is None:
+-        raise ValueError("nexus.toml is missing the [api] section")
+     parser = argparse.ArgumentParser(description="Seed a TEST provider database.")
+     parser.add_argument(
+         "--dbname",
+-        default=settings.api.test_provider.database,
+         help="TEST provider database to seed (default: [api.test_provider] database)",
+     )
+     dbname = parser.parse_args().dbname
++    if dbname is None:
++        settings = load_settings()
++        if settings.api is None:
++            raise ValueError("nexus.toml is missing the [api] section")
++        dbname = settings.api.test_provider.database
+ 
+     print(f"Loading wizard cache from {CACHE_FILE}...")
+     print(f"Seeding TEST provider database {dbname!r}...")
+     seed_test_provider_database(dbname)
+-    print("\n✅ Mock database populated successfully!")
++    print(f"\n✅ TEST provider database {dbname!r} populated successfully!")
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/tests/test_mock_openai.py b/tests/test_mock_openai.py
+index d0134160..bd5bcf47 100644
+--- a/tests/test_mock_openai.py
++++ b/tests/test_mock_openai.py
+@@ -403,6 +403,10 @@ def test_seeded_test_provider_database_holds_the_rows_the_provider_reads(
+ 
+     result = _run_test_provider_seeder(routed_test_provider_database)
+     assert result.returncode == 0, result.stderr
++    assert (
++        f"TEST provider database {routed_test_provider_database!r} "
++        "populated successfully!"
++    ) in result.stdout
+ 
+     cache = query_wizard_cache()
+     assert cache["base_timestamp"] is not None
+diff --git a/tests/test_test_provider_seeder.py b/tests/test_test_provider_seeder.py
+new file mode 100644
+index 00000000..23fd5b56
+--- /dev/null
++++ b/tests/test_test_provider_seeder.py
+@@ -0,0 +1,106 @@
++"""Real operator-CLI checks for TEST seeding and optimized Python guards."""
++
++from contextlib import closing
++import os
++from pathlib import Path
++import subprocess
++import sys
++
++import pytest
++
++from tests.pg_fixtures import connect, disposable_slot_database
++
++
++ROOT = Path(__file__).resolve().parents[1]
++SEEDER = ROOT / "migrations/008_populate_mock_database.py"
++
++
++def _run_seeder(
++    *args: str, config: Path | None = None
++) -> subprocess.CompletedProcess[str]:
++    """Run the actual operator under optimized Python with inherited guards."""
++    env = {**os.environ, "PYTHONPATH": str(ROOT)}
++    if config is not None:
++        env["NEXUS_RUNTIME_CONFIG"] = str(config)
++    return subprocess.run(
++        [sys.executable, "-O", str(SEEDER), *args],
++        cwd=ROOT,
++        env=env,
++        capture_output=True,
++        text=True,
++        timeout=60,
++    )
++
++
++def test_seeder_help_does_not_require_valid_settings(tmp_path: Path) -> None:
++    """An operator can discover CLI syntax while repairing malformed config."""
++    config = tmp_path / "invalid.toml"
++    config.write_text("[api\n")
++
++    result = _run_seeder("--help", config=config)
++
++    assert result.returncode == 0, result.stderr
++    assert "--dbname" in result.stdout
++    assert "Seeding TEST provider database" not in result.stdout
++
++
++def test_explicit_seeder_target_still_requires_connection_settings(
++    tmp_path: Path,
++) -> None:
++    """Naming a target must not bypass the shared validated DB configuration."""
++    config = tmp_path / "invalid.toml"
++    config.write_text("[api\n")
++
++    result = _run_seeder("--dbname", "qa640_816_never_created", config=config)
++
++    assert result.returncode != 0
++    assert "TOMLDecodeError" in result.stderr
++    assert "populated successfully" not in result.stdout
++
++
++@pytest.mark.requires_postgres
++@pytest.mark.parametrize("stage", ["post_transition", "save_slot"])
++def test_optimized_seeder_refuses_a_suppressed_singleton_update(stage: str) -> None:
++    """A real zero-row UPDATE refuses and rolls back even with asserts removed."""
++    # A BEFORE trigger suppresses exactly the operator's selected UPDATE.
++    # Everything else is real production SQL on a fixture-owned database.
++    condition = (
++        "NEW.user_character = 1"
++        if stage == "post_transition"
++        else "NEW.new_story IS FALSE"
++    )
++    with disposable_slot_database("qa640_816_singleton") as dbname:
++        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
++            cur.execute("SELECT row_to_json(g) FROM global_variables AS g")
++            before = cur.fetchall()
++            cur.execute("SELECT count(*) FROM assets.new_story_creator")
++            before_cache = cur.fetchone()
++            cur.execute(
++                f"""
++                CREATE FUNCTION qa640_suppress_singleton_update()
++                RETURNS trigger LANGUAGE plpgsql AS $$
++                BEGIN
++                    IF {condition} THEN
++                        RETURN NULL;
++                    END IF;
++                    RETURN NEW;
++                END;
++                $$;
++                CREATE TRIGGER qa640_suppress_singleton_update
++                BEFORE UPDATE ON global_variables
++                FOR EACH ROW EXECUTE FUNCTION qa640_suppress_singleton_update();
++                """
++            )
++
++        result = _run_seeder("--dbname", dbname)
++
++        assert result.returncode != 0, result.stdout
++        assert (
++            "RuntimeError: global_variables singleton row is missing" in result.stderr
++        )
++        assert "populated successfully" not in result.stdout
++        with closing(connect(dbname)) as conn, conn.cursor() as cur:
++            cur.execute("SELECT row_to_json(g) FROM global_variables AS g")
++            assert cur.fetchall() == before
++            cur.execute("SELECT count(*) FROM assets.new_story_creator")
++            assert cur.fetchone() == before_cache

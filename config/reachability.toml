@@ -174,13 +174,25 @@ reason = "The reranker artifact contract test imports a copy of the real cross-e
 source = "tests/test_regenerate_embeddings_truncate_pg.py:test_truncate_table_keeps_rows_when_the_model_artifact_is_missing"
 expression = "importlib.util.spec_from_file_location('regenerate_embeddings_probe', REPO_ROOT / 'scripts' / 'regenerate_embeddings.py')"
 target = "scripts/regenerate_embeddings.py"
-reason = "The truncate-safety PostgreSQL test imports the real script fresh after pointing NEXUS_RUNTIME_CONFIG at a registry whose local_path is missing, because the script reads its model registry at import time. This edge is test-only: the script (and scripts/utils/embedding_utils.py through it) still has no operator entry point and is import-era tooling for #811."
+reason = "The truncate-safety PostgreSQL test imports the real script fresh after pointing NEXUS_RUNTIME_CONFIG at a registry whose local_path is missing, because the script resolves its embedder registry when it loads a model. This edge is test-only: the script (and scripts/utils/embedding_utils.py through it) still has no operator entry point and is import-era tooling for #811."
 
 [[dynamic_edges]]
 source = "tests/test_config/test_ir_eval_golden_overrides.py:_merge_golden_overrides"
 expression = "importlib.util.spec_from_file_location('ir_eval_cli', REPO_ROOT / 'ir_eval' / 'ir_eval.py')"
 target = "ir_eval/ir_eval.py"
 reason = "The golden-query override test loads the V1 IR-evaluation CLI by file in a fresh interpreter to run its real override merge on the checked-in ir_eval/golden_queries.json. This edge is test-only: ir_eval/ir_eval.py (and the ir_eval/scripts modules it imports) still has no operator entry point."
+
+[[dynamic_edges]]
+source = "tests/pg_fixtures.py:disposable_test_provider_database"
+expression = "importlib.util.spec_from_file_location('migrations_008_populate_mock_database', _SEED_TEST_PROVIDER_SCRIPT)"
+target = "migrations/008_populate_mock_database.py"
+reason = "The fixture-owned TEST provider database is seeded through the existing 008 operator's production seeder (issue 816). The numbered script is loaded by file."
+
+[[dynamic_edges]]
+source = "tests/test_config/test_test_provider_database.py:_load_seeder"
+expression = "importlib.util.spec_from_file_location('migrations_008_populate_mock_database', SEEDER)"
+target = "migrations/008_populate_mock_database.py"
+reason = "The offline TEST database contract loads the 008 operator by file to prove story database names are refused before connecting (issue 816)."
 
 [[import_search_paths]]
 source = "scripts/*.py"

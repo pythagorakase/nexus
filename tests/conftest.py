@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, Optional
 
 import psycopg2
 import pytest
@@ -35,6 +37,9 @@ if "NEXUS_HOME" in os.environ:
 if "NEXUS_SLOT" in os.environ:
     del os.environ["NEXUS_SLOT"]
 
+from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
+from nexus.runtime.contract import FALLBACK_RECEIPTS_DIR, TEST_RECEIPTS_ENV
+from nexus.runtime.home import RECEIPTS_DIR, repo_root
 from nexus.telemetry import usage as usage_telemetry
 from nexus.util.secret_manager import (
     InMemorySecretBackend,
@@ -42,6 +47,40 @@ from nexus.util.secret_manager import (
     use_secret_backend,
 )
 from tests import dbname_audit, secret_store_guard
+
+ReceiptSnapshot = Optional[list[tuple[str, int]]]
+
+
+def _snapshot_receipts(directory: Path) -> ReceiptSnapshot:
+    """Sorted relative paths and sizes of every file below ``directory``."""
+    if not directory.exists():
+        return None
+    return sorted(
+        (path.relative_to(directory).as_posix(), path.stat().st_size)
+        for path in directory.rglob("*")
+        if path.is_file()
+    )
+
+
+# Failure receipts (#806) are written when a configuration fails to load, and
+# tests break configurations on purpose. The checkout's and the user's receipt
+# directories are snapshotted before anything can write a receipt, and every
+# receipt of this session and its child processes (which inherit the seam)
+# goes to a private temporary root instead. pytest_sessionfinish fails the
+# session if either real directory changed.
+_RECEIPT_ROOTS = (repo_root() / RECEIPTS_DIR, Path.home() / FALLBACK_RECEIPTS_DIR)
+_RECEIPT_SNAPSHOTS = {root: _snapshot_receipts(root) for root in _RECEIPT_ROOTS}
+_RECEIPT_SEAM = tempfile.mkdtemp(prefix="nexus-test-receipts-")
+os.environ[TEST_RECEIPTS_ENV] = _RECEIPT_SEAM
+_changed_receipt_roots: list[Path] = []
+
+# No test or child process reaches the owner's ``mock`` (issue #816): every
+# process this session spawns inherits this TEST provider database, which is
+# never created, so an unrouted read fails because the database does not
+# exist. A test that needs the TEST provider requests
+# ``routed_test_provider_database``.
+TEST_PROVIDER_UNROUTED_DATABASE = "qa640_816_test_provider_unrouted"
+os.environ[TEST_PROVIDER_DATABASE_ENV] = TEST_PROVIDER_UNROUTED_DATABASE
 
 # Guard the real secret-store backends before collection, so test-module
 # imports and session- or module-scoped fixtures are covered as well as test
@@ -189,6 +228,22 @@ def unreadable_secret_store(
         yield backend
 
 
+@pytest.fixture
+def routed_test_provider_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Route this process and its children to a seeded disposable TEST database.
+
+    The clone is seeded through migration 008's production path. List this
+    fixture before ``mock_openai_server`` (or any fixture that spawns a TEST
+    provider): fixtures run in parameter order, and a child inherits the
+    environment at spawn.
+    """
+    from tests import pg_fixtures
+
+    with pg_fixtures.disposable_test_provider_database() as dbname:
+        pg_fixtures.route_test_provider_database(monkeypatch.setenv, dbname)
+        yield dbname
+
+
 @pytest.fixture(autouse=True)
 def _isolate_provider_usage(
     monkeypatch: pytest.MonkeyPatch,
@@ -217,6 +272,23 @@ def pytest_configure(config: pytest.Config) -> None:
         config.pluginmanager.register(dbname_audit, name)
 
 
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Remove the session's temporary receipt root."""
+    shutil.rmtree(_RECEIPT_SEAM, ignore_errors=True)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Fail the session if a test wrote into a real receipt directory."""
+    _changed_receipt_roots[:] = [
+        root
+        for root in _RECEIPT_ROOTS
+        if _snapshot_receipts(root) != _RECEIPT_SNAPSHOTS[root]
+    ]
+    if _changed_receipt_roots:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 def pytest_report_header(config: pytest.Config) -> str:
     """Show the secret-store guard state at the top of every run."""
     return secret_store_guard.describe()
@@ -229,6 +301,13 @@ def pytest_terminal_summary(
 ) -> None:
     """Repeat the guard state after the run; ``-q`` hides the report header."""
     terminalreporter.write_line(secret_store_guard.describe())
+    if _changed_receipt_roots:
+        changed = ", ".join(str(root) for root in _changed_receipt_roots)
+        terminalreporter.write_line(f"receipt isolation: receipts changed ({changed})")
+    else:
+        terminalreporter.write_line(
+            "receipt isolation: checkout and user receipts untouched"
+        )
 
 
 def pytest_collection_finish(session: pytest.Session) -> None:

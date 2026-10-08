@@ -18,6 +18,18 @@ Player fields are `theme`, per-theme `fonts`, and `wizard_model`. First write ma
 
 One rule, in `nexus/runtime/home.py`, selects the `nexus.toml` every reader uses, independent of the working directory. With `NEXUS_HOME` set, the active config is `$NEXUS_HOME/nexus.toml`; `NEXUS_RUNTIME_CONFIG` (set by the supervisor on every service it spawns) or `nexus up --config` may also name it, but naming a different file is refused with a `RuntimeError`, so two active configurations cannot exist. Without `NEXUS_HOME`, `--config` wins, then `NEXUS_RUNTIME_CONFIG`, then the checkout's `nexus.toml`. The same rule anchors relative runtime directories (`[runtime].state_dir`, `[usage].usage_dir`) at the home root. See The Runtime Home in `docs/runtime.md` for the layout and the `nexus home plan` dry run.
 
+`NEXUS_TEST_PROVIDER_DATABASE`, when set, overrides
+`[api.test_provider].database` before settings validation in every process,
+including services outside pytest. Child processes inherit it. An empty value,
+`save_NN` name or `NEXUS_template` is refused; without the variable the configured
+TEST-provider database applies (shipped default: `mock`). This selects only the
+TEST provider's wizard/bootstrap data source, not a story's slot database. Tests
+route it to a fixture-owned disposable database; their owner guards always
+protect the literal `mock` regardless of the override. The operator seeder's
+explicit `--dbname` selects its target instead of that default, but still uses
+the shared validated database connection configuration. `--help` needs no valid
+configuration and opens no database connection.
+
 ## Resolution and Callers
 
 `nexus/config/story_model.py::resolve_story_model` applies request override → slot pin → player preference (wizard only) → repository default. All selected models must exist in the registry before provider construction. Developer seats supply their existing configured model explicitly through the same resolver; this change does not move their tunables into player preferences.

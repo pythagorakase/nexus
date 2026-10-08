@@ -31,7 +31,7 @@ sources:
   - nexus/agents/orrery/worker.py
   - nexus/agents/orrery/experience_embedding.py
   - nexus.toml
-verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
+verified_commit: "6f338c55c1d1f769633136f91c2cad1bc8ff99ae"
 ---
 
 # The Turn Cycle

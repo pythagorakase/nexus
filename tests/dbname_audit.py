@@ -26,8 +26,9 @@ connection this pytest process attempts:
   database, else ``PGDATABASE``) and again from asyncpg's resolved connection
   parameters, both before any socket opens.
 
-An owner target is ``NEXUS_template`` or a save slot (``save_NN``);
-``postgres``, ``template0``, and disposable databases are allowed. The plugin
+An owner target is ``NEXUS_template``, a save slot (``save_NN``), or the
+owner's TEST provider database ``mock``; ``postgres``, ``template0``, and
+disposable databases are allowed. The plugin
 refuses an owner target at connect time: it raises
 ``OwnerDatabaseConnectionRefused``, naming the target, the test, and the
 server, before libpq or asyncpg opens a connection.
@@ -99,7 +100,7 @@ from typing import Any
 import pytest
 
 ENVIRONMENT_FLAG = "NEXUS_DBNAME_AUDIT"
-OWNER_TARGET = re.compile(r"save_\d+|NEXUS_template")
+OWNER_TARGET = re.compile(r"save_\d+|NEXUS_template|mock")
 _DISPOSABLE_SUFFIX = re.compile(r"_[0-9a-f]{12}$")
 _OUTSIDE_TESTS = "<outside a test>"
 

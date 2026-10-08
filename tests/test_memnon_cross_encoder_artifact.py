@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import json
 import shutil
 import tomllib
 from pathlib import Path
@@ -30,16 +31,12 @@ from transformers.models.qwen3.modeling_qwen3 import Qwen3ForCausalLM
 
 from nexus.agents.memnon.utils import cross_encoder
 from nexus.agents.memnon.utils import embedding_manager
-from nexus.agents.memnon.utils.artifact_manifest import (
-    RERANKER_ROLE,
-    production_artifact_specs,
-)
+from nexus.agents.memnon.utils.artifact_manifest import RERANKER_ROLE
 from nexus.agents.memnon.utils.cross_encoder import (
     MODEL_PATH_SETTING,
     CrossEncoderReranker,
     Qwen3LMReranker,
     cross_encoder_kwargs,
-    reranker_repo_id,
 )
 from nexus.config import load_settings
 from nexus.config.settings_models import CrossEncoderReranking
@@ -184,21 +181,15 @@ def test_repository_is_derived_like_the_artifact_lock() -> None:
     """MEMNON names the repository nexus models lock records for the reranker."""
 
     settings = load_settings(REPO_ROOT / "nexus.toml")
-    (locked,) = [
-        spec
-        for spec in production_artifact_specs(settings)
-        if spec.role == RERANKER_ROLE
-    ]
+    lock = json.loads((REPO_ROOT / "config" / "model_artifacts.lock.json").read_text())
+    (locked,) = [entry for entry in lock["artifacts"] if entry["role"] == RERANKER_ROLE]
     # MEMNON reads its settings as this dump (see MEMNON.__init__).
     reranking = settings.memnon.model_dump(by_alias=True)["retrieval"][
         "cross_encoder_reranking"
     ]
 
-    derived = reranker_repo_id(reranking["model_path"], reranking["candidates"])
-
-    assert derived is not None
-    assert derived == locked.repo_id
-    assert reranker_repo_id("/elsewhere/reranker", reranking["candidates"]) is None
+    assert reranking["remote_path"] == locked["repo_id"]
+    assert reranking["name"] == locked["name"]
 
 
 def _write_qwen3_reranker(root: Path) -> Path:

@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Populate the mock database with test data for TEST model.
+Seed a TEST provider database with test data for the TEST model.
 
-This script loads data from temp/test_cache_wizard.json and inserts it into
-the mock database using the normalized schema. It also creates post-transition
-data (characters, places, etc.) and a bootstrap narrative chunk.
+This script loads data from tests/fixtures/test_cache_wizard.json and inserts
+it into a template-schema database using the normalized schema. It also creates
+post-transition data (characters, places, etc.) and a bootstrap narrative
+chunk. The target defaults to ``[api.test_provider] database`` in nexus.toml;
+story databases (``save_NN``, ``NEXUS_template``) are refused.
 
 Usage:
-    poetry run python migrations/008_populate_mock_database.py
+    poetry run python migrations/008_populate_mock_database.py [--dbname NAME]
 """
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -20,7 +23,12 @@ from psycopg2.extras import Json
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-MOCK_DB = "mock"
+from nexus.api.trait_compiler_schemas import canonical_trait_name  # noqa: E402
+from nexus.config import load_settings  # noqa: E402
+from nexus.config.settings_models import APITestProviderSettings  # noqa: E402
+from nexus.config.story_model import StorySettings, write_story_settings  # noqa: E402
+from nexus.database import connection_kwargs  # noqa: E402
+
 CACHE_FILE = (
     Path(__file__).parent.parent / "tests" / "fixtures" / "test_cache_wizard.json"
 )
@@ -80,13 +88,16 @@ def populate_wizard_cache(conn, cache: dict):
         # migration 010. Reset and repopulate the normalized rows.
         cur.execute("UPDATE assets.traits SET is_selected = FALSE, rationale = NULL")
         for trait_name in selected_traits:
+            # Rationales stay keyed by the fixture's name; the row is matched
+            # by its canonical storage name (migration 045 renamed reputation
+            # to fame).
             cur.execute(
                 """
                 UPDATE assets.traits
                 SET is_selected = TRUE, rationale = %s
                 WHERE name = %s AND id <= 10
                 """,
-                (trait_rationales.get(trait_name), trait_name),
+                (trait_rationales.get(trait_name), canonical_trait_name(trait_name)),
             )
             if cur.rowcount != 1:
                 raise ValueError(
@@ -220,9 +231,29 @@ def populate_post_transition_data(conn, cache: dict):
     concept = character.get("concept", {})
 
     with conn.cursor() as cur:
+        # TRUNCATE CASCADE clears all three source junctions, but migration
+        # 148's row triggers do not fire for TRUNCATE and the unified rows
+        # reference entities/chunks that survive. Clear that mirror in this
+        # same transaction; the operator also supports pre-148 databases.
+        cur.execute("SELECT to_regclass('public.chunk_entity_references')")
+        if cur.fetchone()[0] is not None:
+            cur.execute("DELETE FROM public.chunk_entity_references")
+
         # Clear existing data (CASCADE handles FKs)
         cur.execute("TRUNCATE layers CASCADE")
         cur.execute("TRUNCATE characters CASCADE")
+
+        # TRUNCATE characters CASCADE also empties global_variables (FK
+        # global_variables_user_character_fkey). The character insert below
+        # needs the story clock's base (trg_characters_need_state_init), so
+        # write it first.
+        cur.execute(
+            """
+            INSERT INTO global_variables (id, base_timestamp) VALUES (TRUE, %s)
+            ON CONFLICT (id) DO UPDATE SET base_timestamp = EXCLUDED.base_timestamp
+            """,
+            (base_timestamp,),
+        )
 
         # Insert layer (column is 'type' not 'layer_type')
         cur.execute(
@@ -296,11 +327,10 @@ def populate_post_transition_data(conn, cache: dict):
         )
 
         # Update global_variables
-        cur.execute("DELETE FROM global_variables WHERE id = TRUE")
         cur.execute(
             """
-            INSERT INTO global_variables (id, setting, user_character, base_timestamp)
-            VALUES (TRUE, %s, 1, %s)
+            UPDATE global_variables SET setting = %s, user_character = 1
+            WHERE id = TRUE
         """,
             (
                 Json(
@@ -316,9 +346,10 @@ def populate_post_transition_data(conn, cache: dict):
                         "title": f"Welcome to {setting.get('world_name', 'the World')}",
                     }
                 ),
-                base_timestamp,
             ),
         )
+        if cur.rowcount != 1:
+            raise RuntimeError("global_variables singleton row is missing")
 
     print("✓ Populated layers, zones, places, characters, global_variables")
 
@@ -406,41 +437,55 @@ Rain hammers against the hull above. Somewhere in the distance, the city's heart
 
 
 def populate_save_slot(conn):
-    """Set the mock database model to TEST in its legacy slot registry."""
+    """Mark the story transitioned and pin its model to TEST."""
     with conn.cursor() as cur:
         cur.execute("UPDATE global_variables SET new_story = FALSE WHERE id = TRUE")
-        cur.execute(
-            """
-            INSERT INTO assets.save_slots (slot_number, model)
-            VALUES (0, 'TEST')
-            ON CONFLICT (slot_number) DO UPDATE SET model = 'TEST'
-            """
-        )
+        if cur.rowcount != 1:
+            raise RuntimeError("global_variables singleton row is missing")
+        write_story_settings(cur, StorySettings(skald_model="TEST", gaia_model=None))
     print("✓ Configured mock slot model (TEST)")
 
 
-def main():
-    print(f"Loading wizard cache from {CACHE_FILE}...")
+def seed_test_provider_database(dbname: str) -> None:
+    """Seed ``dbname`` with the TEST provider's rows in one transaction.
+
+    The name is validated as the TEST provider setting validates it, so a
+    story database is refused before any connection opens. Any error rolls
+    the transaction back and propagates.
+    """
+    APITestProviderSettings(database=dbname)
     cache = load_wizard_cache()
-
-    print(f"Connecting to {MOCK_DB} database...")
-    conn = psycopg2.connect(host="localhost", database=MOCK_DB, user="pythagor")
-
+    conn = psycopg2.connect(**connection_kwargs(dbname))
     try:
         populate_wizard_cache(conn, cache)
         populate_post_transition_data(conn, cache)
         populate_bootstrap_narrative(conn)
         populate_save_slot(conn)
-
         conn.commit()
-        print("\n✅ Mock database populated successfully!")
-
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        print(f"\n❌ Error: {e}")
         raise
     finally:
         conn.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Seed a TEST provider database.")
+    parser.add_argument(
+        "--dbname",
+        help="TEST provider database to seed (default: [api.test_provider] database)",
+    )
+    dbname = parser.parse_args().dbname
+    if dbname is None:
+        settings = load_settings()
+        if settings.api is None:
+            raise ValueError("nexus.toml is missing the [api] section")
+        dbname = settings.api.test_provider.database
+
+    print(f"Loading wizard cache from {CACHE_FILE}...")
+    print(f"Seeding TEST provider database {dbname!r}...")
+    seed_test_provider_database(dbname)
+    print(f"\n✅ TEST provider database {dbname!r} populated successfully!")
 
 
 if __name__ == "__main__":

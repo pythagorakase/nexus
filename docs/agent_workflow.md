@@ -66,11 +66,11 @@ more specific instructions.
   before the plugin loaded is audited too. Targets are read from the DSN,
   URL, or keywords (or `PGDATABASE` when they name neither a database nor a
   service) before connecting; psycopg2 also records libpq's resolved
-  `dbname` (`conn.info.dbname`) after connecting. A `save_NN` or
-  `NEXUS_template` target is refused at connect time: the call raises
-  `OwnerDatabaseConnectionRefused`, naming the target and the test, before
-  libpq or asyncpg opens a connection (a `dbname` that only a libpq service
-  file supplies is refused just after connecting, with the connection
+  `dbname` (`conn.info.dbname`) after connecting. A `save_NN`,
+  `NEXUS_template`, or legacy TEST provider `mock` target is refused at connect
+  time: the call raises `OwnerDatabaseConnectionRefused`, naming the target and
+  the test, before libpq or asyncpg opens a connection (a `dbname` that only a
+  libpq service file supplies is refused just after connecting, with the connection
   closed). The session summary lists the targets and ends
   `dbname audit: owner targets: none`; any owner target, even one whose
   refusal a test caught, also fails the run (exit 1) naming each owner

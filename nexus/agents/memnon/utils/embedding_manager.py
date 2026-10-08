@@ -112,13 +112,14 @@ def load_local_model(
 ) -> SentenceTransformer:
     """Load one registered model from its local artifact directory or raise.
 
-    Serves the active production embedder and, for operator scripts, any
-    other ``[memnon.models]`` entry by its ``local_path``. There is no
-    download path: a missing ``local_path``, a missing folder, a file in its
-    place, or a folder that fails to load raises with the restore command.
+    Serves the production ``[memnon.models]`` embedder and, for offline
+    operator scripts, any ``[ir_eval.embedding_candidates]`` entry by its
+    ``local_path``. There is no download path: a missing ``local_path``, a
+    missing folder, a file in its place, or a folder that fails to load
+    raises with the restore command.
 
     Args:
-        model_name: The ``[memnon.models]`` entry name
+        model_name: The registered entry name
         model_config: That entry (``local_path`` and optional ``remote_path``)
         device: Device to place the model on; None lets sentence-transformers
             choose
