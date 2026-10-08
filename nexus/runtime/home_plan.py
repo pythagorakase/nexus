@@ -58,7 +58,16 @@ from nexus.runtime.home import (
 # Report order. Within one file tree the deepest directory claims a file
 # (the usage ledger sits inside the state directory); equal depths fall back
 # to this order, so state claims the captured logs that live beside it.
-CATEGORY_ORDER = ("config", "usage", "state", "logs", "cache", "backups", "uploads")
+CATEGORY_ORDER = (
+    "config",
+    "usage",
+    "state",
+    "logs",
+    "cache",
+    "backups",
+    "receipts",
+    "uploads",
+)
 MODELS_CATEGORY = "models"
 
 _READ_CHUNK_BYTES = 1024 * 1024
@@ -504,6 +513,7 @@ def plan_home_move(
         ("logs", source.logs_dir, target_home.logs_dir),
         ("cache", source.cache_dir, target_home.cache_dir),
         ("backups", source.backups_dir, target_home.backups_dir),
+        ("receipts", source.receipts_dir, target_home.receipts_dir),
         *(
             ("uploads", source.uploads_dir / name, target_home.uploads_dir / name)
             for name in UPLOAD_SUBDIRS

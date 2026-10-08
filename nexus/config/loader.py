@@ -269,20 +269,28 @@ def load_settings(path: Union[str, Path, None] = None) -> Settings:
         path = resolve_config_path()
     path = Path(path)
 
-    if not path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {path}")
+    try:
+        if not path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {path}")
 
-    # Load based on file extension
-    if path.suffix == ".toml":
-        return _load_from_toml(path)
-    elif path.suffix == ".json":
-        print(
-            "⚠️  WARNING: Loading settings from a legacy JSON file. "
-            "nexus.toml is the canonical configuration format."
-        )
-        return _load_from_json(path)
-    else:
-        raise ValueError(f"Unsupported configuration format: {path.suffix}")
+        # Load based on file extension
+        if path.suffix == ".toml":
+            return _load_from_toml(path)
+        elif path.suffix == ".json":
+            print(
+                "⚠️  WARNING: Loading settings from a legacy JSON file. "
+                "nexus.toml is the canonical configuration format."
+            )
+            return _load_from_json(path)
+        else:
+            raise ValueError(f"Unsupported configuration format: {path.suffix}")
+    except Exception as exc:
+        # Deferred import: the nexus.runtime package imports the supervisor,
+        # which imports nexus.config, so a module-level import would cycle.
+        from nexus.runtime.receipts import record_failure
+
+        record_failure("config.load_settings", exc, config_path=str(path))
+        raise
 
 
 def _load_from_toml(path: Path) -> Settings:

@@ -1,4 +1,8 @@
-"""Reader draft identity is per story: stable inside one, renewed on overwrite."""
+"""Reader draft identity is per story: stable inside one, renewed on overwrite.
+
+The slot state reports ``story_identity.story_uuid`` as ``story_id`` and the
+pre-#822 protagonist-derived id as ``legacy_story_id`` (issue #822).
+"""
 
 from contextlib import closing
 from datetime import timezone
@@ -9,6 +13,12 @@ from psycopg2.extras import RealDictCursor
 import pytest
 
 from nexus.api import slot_endpoints
+from nexus.api.slot_state import get_slot_state
+from nexus.api.story_identity import (
+    StoryIdentityError,
+    read_story_uuid,
+    replace_story_identity,
+)
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
@@ -18,6 +28,12 @@ from tests.pg_fixtures import (
 
 
 pytestmark = pytest.mark.requires_postgres
+
+
+def _story_uuid(dbname: str) -> str:
+    with closing(connect(dbname)) as conn:
+        with conn, conn.cursor() as cur:
+            return read_story_uuid(cur)
 
 
 def _expected_identity(dbname: str, player_id: int) -> str:
@@ -56,12 +72,14 @@ def test_reader_story_identity_is_stable_and_read_only(
                         )
             before = _snapshot(dbname, "global_variables", "id = true")
             player_before = _snapshot(dbname, "characters", f"id = {player_id}")
-            expected = _expected_identity(dbname, player_id)
+            expected = _story_uuid(dbname)
+            legacy = _expected_identity(dbname, player_id)
             with TestClient(app) as client:
                 for _ in range(2):
                     response = client.get("/api/slot/4/state")
                     assert response.status_code == 200
                     assert response.json()["story_id"] == expected
+                    assert response.json()["legacy_story_id"] == legacy
                     assert response.json()["current_chunk_id"] == 0
             assert _snapshot(dbname, "global_variables", "id = true") == before
             assert _snapshot(dbname, "characters", f"id = {player_id}") == player_before
@@ -88,16 +106,20 @@ def test_overwriting_an_occupied_slot_renews_the_story_identity(
         route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         first_player, _ = seed_protagonist(dbname)
         with TestClient(app) as client:
-            first = client.get("/api/slot/4/state").json()["story_id"]
+            first_state = client.get("/api/slot/4/state").json()
+        first = first_state["story_id"]
+        first_expected = _story_uuid(dbname)
         # Captured now: after the overwrite this id names the new protagonist.
-        first_expected = _expected_identity(dbname, first_player)
+        first_legacy = _expected_identity(dbname, first_player)
         slot_row = _snapshot(dbname, "global_variables", "id = true")
 
         # Mirror perform_transition on an occupied slot: the global_variables
         # row is retained, the entity tables are cleared, their sequences are
-        # reset, and a new protagonist is created for the replacement story.
+        # reset, the story identity is replaced, and a new protagonist is
+        # created for the replacement story.
         with closing(connect(dbname)) as conn:
             with conn, conn.cursor() as cur:
+                replace_story_identity(cur, origin="wizard")
                 cur.execute(
                     "UPDATE global_variables SET user_character = NULL WHERE id = true"
                 )
@@ -116,8 +138,27 @@ def test_overwriting_an_occupied_slot_renews_the_story_identity(
         assert after["slot_created_at"] == slot_row["slot_created_at"]
 
         with TestClient(app) as client:
-            second = client.get("/api/slot/4/state").json()["story_id"]
+            second_state = client.get("/api/slot/4/state").json()
+        second = second_state["story_id"]
         # The replacement story must not resolve to the first story's drafts.
         assert second != first
         assert first == first_expected
-        assert second == _expected_identity(dbname, second_player)
+        assert second == _story_uuid(dbname)
+        assert first_state["legacy_story_id"] == first_legacy
+        assert second_state["legacy_story_id"] == _expected_identity(
+            dbname, second_player
+        )
+
+
+def test_narrative_state_without_identity_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A narrative slot with no story_identity row raises; no derived fallback."""
+    with disposable_slot_database("qa951_no_identity") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        seed_protagonist(dbname)
+        with closing(connect(dbname)) as conn:
+            with conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM public.story_identity")
+        with pytest.raises(StoryIdentityError, match="holds 0 rows"):
+            get_slot_state(4)

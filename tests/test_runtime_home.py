@@ -625,6 +625,7 @@ def test_home_plan_orders_entries_by_category_then_path(
         "logs",
         "cache",
         "backups",
+        "receipts",
         "uploads",
         "models",
     )

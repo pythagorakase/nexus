@@ -12,12 +12,14 @@ from __future__ import annotations
 from nexus.api.db_pool import dispose_database
 from nexus.api.save_slots import is_slot_locked
 from nexus.api.slot_utils import slot_dbname
+from nexus.api.story_identity import record_fork, replace_story_identity
 
 from nexus.database import subprocess_env
 
 from nexus.database import connection_kwargs
 
 import argparse
+from contextlib import closing
 import logging
 import os
 from pathlib import Path
@@ -336,6 +338,17 @@ def initialize_slot_database(
     LOG.info("Applied %d migrations to %s", applied, target_db)
 
     _initialize_empty_idf_corpora(target_db)
+    # Initialization mints the story identity (822-Q13); a reset recreates
+    # the database and so mints a new one.
+    connection = _connect(target_db)
+    try:
+        with connection as conn, conn.cursor() as cur:
+            replace_story_identity(cur, origin="wizard")
+    finally:
+        if not USE_POOL:
+            # A direct connection's context manager commits or rolls back but
+            # never closes; a failed write must not hold target_db open.
+            connection.close()
     dispose_database(target_db)
     LOG.info("Database %s ready", target_db)
 
@@ -382,6 +395,7 @@ TEMPLATE_SEED_TABLES = (
     "public.pair_tags",
     "public.tag_category_registry",
     "assets.traits",
+    "public.natural_earth_features",
 )
 
 
@@ -463,16 +477,31 @@ def clone_slot_with_data(
     failing step (including one statement of the dump) raises.
     ``target_db`` defaults to the slot's database; tests pass a disposable name.
 
+    A clone is a fork (822-Q4): the copy gets a new ``story_uuid`` with origin
+    ``clone``, and when the source held an identity row, one ``story_lineage``
+    fork row names the source's ``story_uuid`` and ``source_db``. A source
+    without a row (the template, an unbackfilled database) gives a ``clone``
+    row and no lineage.
+
     Raises:
         ValueError: If ``slot`` is outside 1-5, or if ``target_db`` is locked
             (``default_transaction_read_only`` is on); nothing is dropped.
+        RuntimeError: If the source lacks either story-identity table or
+            holds multiple identities, before disposing or dropping the
+            target; run ``python scripts/migrate.py`` on a pre-146 source.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
     if target_db is None:
         target_db = slot_dbname(slot)
+    if source_db == target_db:
+        raise ValueError("Clone source and target must be different databases")
     tools = _postgres_tools("dropdb", "createdb", "pg_dump", "psql")
     _refuse_locked_target(target_db)
+    with closing(psycopg2.connect(**connection_kwargs(source_db))) as source_conn:
+        source_conn.set_session(readonly=True)
+        with source_conn, source_conn.cursor() as cur:
+            _clone_source_identity(cur, source_db)
     dispose_database(target_db)
 
     if force:
@@ -531,6 +560,27 @@ def clone_slot_with_data(
 
         _restore_plain_dump(target_db, dump_path, tools)
         _post_clone_cleanup(target_db)
+        # A clone is a fork (822-Q4): a new story_uuid with a parent link.
+        connection = _connect(target_db)
+        try:
+            with connection as conn, conn.cursor() as cur:
+                copied = _clone_source_identity(cur, target_db)
+                child = replace_story_identity(cur, origin="clone")
+                if copied:
+                    record_fork(
+                        cur,
+                        child_uuid=child,
+                        parent_uuid=copied,
+                        source_dbname=source_db,
+                        evidence=(
+                            f"clone_slot_with_data copied {source_db} into {target_db}"
+                        ),
+                    )
+        finally:
+            if not USE_POOL:
+                # As in initialize_slot_database: close the direct connection
+                # on every path so a refusal cannot hold target_db open.
+                connection.close()
         dispose_database(target_db)
         LOG.info("Cloned %s into %s (with data)", source_db, target_db)
     finally:
@@ -538,6 +588,28 @@ def clone_slot_with_data(
             os.remove(dump_path)
         except OSError:
             pass
+
+
+def _clone_source_identity(
+    cur: psycopg2.extensions.cursor, dbname: str
+) -> Optional[str]:
+    """Validate clone identity schema and return its optional singleton UUID."""
+    for table in ("story_identity", "story_lineage"):
+        cur.execute("SELECT to_regclass(%s) IS NULL", (f"public.{table}",))
+        row = cur.fetchone()
+        assert row is not None
+        if row[0]:
+            raise RuntimeError(
+                f"{dbname} has no public.{table} table. Run python "
+                f"scripts/migrate.py on {dbname}, then clone again."
+            )
+    cur.execute("SELECT story_uuid::text FROM public.story_identity")
+    rows = cur.fetchall()
+    if len(rows) > 1:
+        raise RuntimeError(
+            f"{dbname} holds {len(rows)} story_identity rows; at most one is allowed"
+        )
+    return rows[0][0] if rows else None
 
 
 def _post_clone_cleanup(target_db: str) -> None:

@@ -7,6 +7,8 @@ should import or mirror these rather than hardcoding strings.
 
 from __future__ import annotations
 
+from pathlib import PurePath
+
 # Reserved auth header for every client -> runtime request. Semantics:
 # an opaque bearer credential issued by the runtime operator. The local
 # profile ignores it entirely (no-op), but clients must send it from day one
@@ -35,6 +37,19 @@ RUNTIME_CONFIG_ENV = "NEXUS_RUNTIME_CONFIG"
 # that same file. Unset, the checkout is the home. nexus/runtime/home.py owns
 # the rule.
 HOME_ENV = "NEXUS_HOME"
+
+# Per-user failure-receipt root (issue #806, decision 806-Q12), resolved under
+# Path.home(). A receipt goes here when no runtime home can be located (a
+# RuntimeHomeError), because its home receipt directory is then unknown.
+FALLBACK_RECEIPTS_DIR = PurePath(".nexus", "receipts")
+
+# Test seam for failure receipts (issue #806). tests/conftest.py sets it for
+# the whole session, and child processes inherit it. When set and non-empty,
+# home receipts go to $NEXUS_TEST_RECEIPTS_DIR/home and fallback receipts to
+# $NEXUS_TEST_RECEIPTS_DIR/fallback; the runtime-home locator still runs, so
+# routing is unchanged. It must be an absolute path. It is not an owner
+# setting.
+TEST_RECEIPTS_ENV = "NEXUS_TEST_RECEIPTS_DIR"
 
 # Environment seam: run the gateway on an alternate port with isolated
 # runtime state (pidfiles/logs under a per-port subdirectory). This is the

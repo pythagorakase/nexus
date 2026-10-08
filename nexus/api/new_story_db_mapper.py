@@ -25,6 +25,7 @@ from nexus.api.new_story_schemas import (
 from nexus.api.config_utils import get_wizard_settings
 from nexus.api.db_pool import get_connection
 from nexus.api.new_story_cache import clear_cache
+from nexus.api.story_identity import replace_story_identity
 from nexus.api.trait_compiler import (
     apply_character_trait_compilation,
     persist_trait_compile_result,
@@ -597,6 +598,11 @@ class NewStoryDatabaseMapper:
                     """
                     )
                     logger.info("Truncated entity tables for clean slate")
+
+                    # Every story birth mints a new identity (822-Q20); it
+                    # commits or rolls back with the world, and the previous
+                    # story's lineage rows go with its identity row.
+                    replace_story_identity(cur, origin="wizard")
 
                     # Save setting (using shared cursor)
                     self.save_setting_to_globals(transition_data.setting, cursor=cur)

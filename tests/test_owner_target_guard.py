@@ -162,6 +162,14 @@ EXEMPTIONS: tuple[Exemption, ...] = (
         "the data clone's source_db is the module's own disposable idf_slot "
         "clone (qa762_*), not an owner slot",
     ),
+    Exemption(
+        "test_story_identity_pg.py",
+        RULE_DATA_CLONE,
+        'disposable_slot_database( "qa640_822_detach", source_db=source, '
+        "include_data=True )",
+        "the data clone's source_db is the test's own disposable slot clone "
+        "(qa640_822_detach_src_*), not an owner slot (issue 822)",
+    ),
 )
 
 

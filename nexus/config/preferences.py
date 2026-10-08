@@ -14,6 +14,7 @@ import tomlkit
 from nexus.config.loader import load_settings
 from nexus.config.settings_models import PreferencesSettings, Settings
 from nexus.runtime.home import resolve_runtime_home
+from nexus.runtime.receipts import record_failure
 
 _write_lock = threading.Lock()
 
@@ -30,8 +31,12 @@ def load_preferences(settings: Settings | None = None) -> PreferencesSettings:
     settings = settings or load_settings()
     path = preferences_path(settings)
     if path.exists():
-        with path.open("rb") as stream:
-            return PreferencesSettings.model_validate(tomllib.load(stream))
+        try:
+            with path.open("rb") as stream:
+                return PreferencesSettings.model_validate(tomllib.load(stream))
+        except Exception as exc:
+            record_failure("config.preferences", exc, config_path=str(path))
+            raise
     return PreferencesSettings(
         theme=settings.ui.theme,
         fonts=settings.ui.fonts,
