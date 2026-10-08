@@ -32,7 +32,7 @@ from nexus.agents.memnon.utils.embedding_tables import (
     supports_pgvector_ann_index,
     table_name_for_dimensions,
 )
-from nexus.config import load_settings
+from nexus.config import load_settings  # noqa: E402
 
 # Try to load settings using centralized config loader
 try:
