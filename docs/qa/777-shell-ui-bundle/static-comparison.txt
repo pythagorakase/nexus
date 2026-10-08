@@ -1,0 +1,4 @@
+flake8: branch=53; main=53; new=0
+mypy: branch=9; main=284; new=0
+Compared diagnostics by path, exact source-line text, and diagnostic text; line shifts ignored.
+Initial partial scratch mypy run lacked package context and is not the comparison. Full nexus/scripts/tests source archive supplies the main comparison.

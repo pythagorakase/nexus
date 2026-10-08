@@ -55,6 +55,7 @@ function makeEngine(slotState: SlotState): NarrativeEngine {
     skaldStatus: "READY",
     elapsedMs: 0,
     generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
+    toastedFailureSessionId: null,
     isGenerating: false,
     completedGenerations: 0,
     submitTurn: vi.fn(async () => true),

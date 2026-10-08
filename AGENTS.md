@@ -35,7 +35,7 @@ sources:
   - nexus/util/secret_manager.py
   - scripts/sync_secrets.py
   - nexus/api/slot_utils.py
-verified_commit: "9c8f10501389ffe14388b6d684ea060b2058781b"
+verified_commit: "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8"
 ---
 
 # Repository Guidelines

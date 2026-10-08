@@ -1,0 +1,142 @@
+[
+  {
+    "event": "scroll",
+    "time": 259.80000000447035,
+    "target": "set-scroller",
+    "scrollTop": 523,
+    "containsRow": true,
+    "focused": null,
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusout",
+    "time": 261.70000000298023,
+    "target": "font-chip on locked",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": null,
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusin",
+    "time": 261.80000000447035,
+    "target": "btn-soft",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": null,
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusout",
+    "time": 263.5,
+    "target": "btn-soft",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": null,
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusin",
+    "time": 263.5,
+    "target": "model-target-skald",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": "model-target-skald",
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusout",
+    "time": 265.30000000447035,
+    "target": "model-target-skald",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": null,
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusin",
+    "time": 265.30000000447035,
+    "target": "model-target-gaia",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": "model-target-gaia",
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusout",
+    "time": 266.80000000447035,
+    "target": "model-target-gaia",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": null,
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusin",
+    "time": 267,
+    "target": "lm-toggle-fixture",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": "lm-toggle-fixture",
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusout",
+    "time": 268.80000000447035,
+    "target": "lm-toggle-fixture",
+    "scrollTop": 0,
+    "containsRow": false,
+    "focused": null,
+    "state": "closed",
+    "rowTop": 875.1875
+  },
+  {
+    "event": "focusin",
+    "time": 268.80000000447035,
+    "target": "lm-quant-fixture-Q4",
+    "scrollTop": 0,
+    "containsRow": true,
+    "focused": "lm-quant-fixture-Q4",
+    "state": "closed",
+    "rowTop": 871.1875
+  },
+  {
+    "event": "state",
+    "time": 272,
+    "target": "lm-quant-fixture-Q4",
+    "scrollTop": 0,
+    "containsRow": true,
+    "focused": "lm-quant-fixture-Q4",
+    "state": "instant-open",
+    "rowTop": 871.1875
+  },
+  {
+    "event": "scroll",
+    "time": 276.70000000298023,
+    "target": "set-scroller",
+    "scrollTop": 527,
+    "containsRow": true,
+    "focused": "lm-quant-fixture-Q4",
+    "state": "instant-open",
+    "rowTop": 871.1875
+  },
+  {
+    "event": "state",
+    "time": 278.5,
+    "target": "lm-quant-fixture-Q4",
+    "scrollTop": 0,
+    "containsRow": true,
+    "focused": "lm-quant-fixture-Q4",
+    "state": "closed",
+    "rowTop": 871.1875
+  }
+]

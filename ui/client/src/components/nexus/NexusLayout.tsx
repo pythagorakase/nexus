@@ -3,7 +3,7 @@
  *
  * Composition (NEXUS IRIS design system):
  * - 52px top operator strip (wordmark + slot label / SKALD status)
- * - 60px left icon rail (Home, Narrative, Map, Characters, Settings)
+ * - 60px left icon rail; at 760px and below, a bottom row after content
  * - main pane router
  * - 320px right Session Ledger rail on the narrative tab only
  *
@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useDeveloperMode } from "@/contexts/DeveloperModeContext";
 import { useNarrativeEngine } from "@/hooks/useNarrativeEngine";
+import { useNarrowShell } from "@/hooks/useNarrowShell";
 import { getUserCharacter } from "@/lib/narrative-api";
 import { getActiveSlot } from "@/lib/active-slot";
 import type { SettingsPayload } from "@/types/settings";
@@ -27,6 +28,7 @@ import type { RecapSlotStates } from "./ReturnRecapCard";
 import { RightLedger } from "./RightLedger";
 import { CharactersPane } from "./CharactersPane";
 import { MapPane } from "./MapPane";
+import { MapViewProvider } from "./MapViewContext";
 import { SettingsPane } from "./SettingsPane";
 import { BackstageDrawer } from "./BackstageDrawer";
 import "./nexus-layout.css";
@@ -43,6 +45,7 @@ export function NexusLayout() {
   const [, setLocation] = useLocation();
   const { isVector } = useTheme();
   const { effectiveDeveloperMode } = useDeveloperMode();
+  const narrow = useNarrowShell();
   const [tab, setTab] = useState<NexusTab>(initialTab);
   const [backstageOpen, setBackstageOpen] = useState(false);
   const [slot] = useState<number | null>(getActiveSlot);
@@ -100,6 +103,16 @@ export function NexusLayout() {
   }, [tab]);
 
   const showLedger = tab === "narrative" && slot !== null;
+  const rail = (
+    <LeftRail
+      tab={tab}
+      onTabChange={setTab}
+      onHome={() => setLocation("/")}
+      showBackstage={effectiveDeveloperMode}
+      backstageOpen={backstageOpen}
+      onBackstageToggle={() => setBackstageOpen((open) => !open)}
+    />
+  );
 
   return (
     <div
@@ -111,50 +124,47 @@ export function NexusLayout() {
         characterName={userCharacter?.name ?? null}
         skaldStatus={engine.skaldStatus}
         failedGeneration={engine.failedGeneration}
+        toastedFailureSessionId={engine.toastedFailureSessionId}
         frontierClock={engine.slotState?.frontier_clock ?? null}
       />
       <div className={`nexus-main ${showLedger ? "" : "no-ledger"}`}>
-        <LeftRail
-          tab={tab}
-          onTabChange={setTab}
-          onHome={() => setLocation("/")}
-          showBackstage={effectiveDeveloperMode}
-          backstageOpen={backstageOpen}
-          onBackstageToggle={() => setBackstageOpen((open) => !open)}
-        />
-        <main className="nexus-content">
-          {tab === "narrative" &&
-            (slot === null ? (
-              <div className="pane-notice">
-                <span className="notice-text">[ NO ACTIVE SLOT ]</span>
-              </div>
-            ) : engine.slotStateError ? (
-              <div className="pane-notice">
-                <span className="notice-text">[ SLOT STATE UNAVAILABLE ]</span>
-                <span className="notice-detail">
-                  {engine.slotStateError.message}
-                </span>
-              </div>
-            ) : (
-              <NarrativePane
-                slot={slot}
-                engine={engine}
-                readingChunkId={readingChunkId}
-                onNavigate={setReadingChunkId}
-                recapState={recapState}
-              />
-            ))}
-          {tab === "map" && <MapPane slot={slot} />}
-          {tab === "characters" &&
-            (slot === null ? (
-              <div className="pane-notice">
-                <span className="notice-text">[ NO ACTIVE SLOT ]</span>
-              </div>
-            ) : (
-              <CharactersPane slot={slot} />
-            ))}
-          {tab === "settings" && <SettingsPane slot={slot} />}
-        </main>
+        {!narrow && rail}
+        <MapViewProvider>
+          <main className="nexus-content">
+            {tab === "narrative" &&
+              (slot === null ? (
+                <div className="pane-notice">
+                  <span className="notice-text">[ NO ACTIVE SLOT ]</span>
+                </div>
+              ) : engine.slotStateError ? (
+                <div className="pane-notice">
+                  <span className="notice-text">[ SLOT STATE UNAVAILABLE ]</span>
+                  <span className="notice-detail">
+                    {engine.slotStateError.message}
+                  </span>
+                </div>
+              ) : (
+                <NarrativePane
+                  slot={slot}
+                  engine={engine}
+                  readingChunkId={readingChunkId}
+                  onNavigate={setReadingChunkId}
+                  recapState={recapState}
+                />
+              ))}
+            {tab === "map" && <MapPane slot={slot} />}
+            {tab === "characters" &&
+              (slot === null ? (
+                <div className="pane-notice">
+                  <span className="notice-text">[ NO ACTIVE SLOT ]</span>
+                </div>
+              ) : (
+                <CharactersPane slot={slot} />
+              ))}
+            {tab === "settings" && <SettingsPane slot={slot} />}
+          </main>
+        </MapViewProvider>
+        {narrow && rail}
         {showLedger && (
           <RightLedger
             slot={slot as number}

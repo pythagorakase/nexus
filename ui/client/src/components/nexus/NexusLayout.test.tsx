@@ -1,5 +1,7 @@
+import { useEffect, useRef } from "react";
+import { useMapView } from "./MapViewContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -29,6 +31,7 @@ const engine = vi.hoisted(() => {
   };
   return { failedGeneration };
 });
+const mapViews = vi.hoisted(() => ({ boxes: [] as Array<{ x: number; y: number; width: number; height: number }> }));
 const topBar = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
 
 vi.mock("@/hooks/useNarrativeEngine", () => ({
@@ -41,6 +44,7 @@ vi.mock("@/hooks/useNarrativeEngine", () => ({
     elapsedMs: 0,
     generationError: null,
     failedGeneration: engine.failedGeneration,
+    toastedFailureSessionId: null,
     isGenerating: false,
     completedGenerations: 0,
     submitTurn: vi.fn(),
@@ -62,7 +66,17 @@ vi.mock("./NarrativePane", () => ({
 }));
 vi.mock("./RightLedger", () => ({ RightLedger: () => <aside /> }));
 vi.mock("./CharactersPane", () => ({ CharactersPane: () => <div /> }));
-vi.mock("./MapPane", () => ({ MapPane: () => <div /> }));
+vi.mock("./MapPane", () => ({
+  MapPane: () => {
+    const { viewBox, setViewBox } = useMapView();
+    const initial = useRef(viewBox);
+    useEffect(() => {
+      mapViews.boxes.push(initial.current);
+      setViewBox({ x: 15, y: 20, width: 300, height: 200 });
+    }, [setViewBox]);
+    return <div />;
+  },
+}));
 vi.mock("./SettingsPane", () => ({ SettingsPane: () => <div /> }));
 
 const PAYLOAD: BackstageTurnResponse = {
@@ -292,6 +306,47 @@ describe("NexusLayout operator strip", () => {
 
     const latest = topBar.props[topBar.props.length - 1];
     expect(latest.failedGeneration).toBe(engine.failedGeneration);
+    expect(latest.toastedFailureSessionId).toBeNull();
     expect(latest.skaldStatus).toBe("READY");
+  });
+});
+
+
+describe("NexusLayout pane ownership and rail order", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem("activeSlot", "4");
+    window.history.replaceState(null, "", "/nexus");
+    mapViews.boxes.length = 0;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+  });
+
+  it("keeps one map view owner across tab switches", () => {
+    renderLayout({ ui: { theme: "veil" } });
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "Characters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    expect(mapViews.boxes).toEqual([
+      { x: 0, y: 0, width: 800, height: 600 },
+      { x: 15, y: 20, width: 300, height: 200 },
+    ]);
+  });
+
+  it("puts the rail after the content at narrow width", () => {
+    let notify: (event: { matches: boolean }) => void = () => {};
+    vi.stubGlobal("matchMedia", vi.fn((media: string) => ({
+      matches: true,
+      media,
+      addEventListener: (_: string, listener: typeof notify) => { notify = listener; },
+      removeEventListener: vi.fn(),
+    })));
+    renderLayout({ ui: { theme: "veil" } });
+    const main = document.querySelector("main.nexus-content")!;
+    const nav = () => screen.getByRole("navigation", { name: "Primary navigation" });
+    expect(main.compareDocumentPosition(nav()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    act(() => notify({ matches: false }));
+    expect(main.compareDocumentPosition(nav()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    act(() => notify({ matches: true }));
+    expect(main.compareDocumentPosition(nav()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

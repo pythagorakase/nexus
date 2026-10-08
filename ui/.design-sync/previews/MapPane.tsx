@@ -1,4 +1,4 @@
-import { MapPane } from "nexus-ui";
+import { MapPane, MapViewProvider } from "nexus-ui";
 
 // The rebuilt PostGIS world map. The Natural Earth land outline is a BUNDLED
 // module (not a fetch), and the projection is a pure hook, so the map canvas
@@ -20,6 +20,6 @@ export const WorldMap = () => (
       border: "1px solid hsl(var(--border))",
     }}
   >
-    <MapPane slot={2} />
+    <MapViewProvider><MapPane slot={2} /></MapViewProvider>
   </div>
 );

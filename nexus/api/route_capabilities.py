@@ -154,6 +154,8 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         # preferences_endpoints: theme, fonts, next-story model.
         ("GET", "/api/preferences"): _player("preferences"),
         ("PATCH", "/api/preferences"): _player("preferences"),
+        # ui_config_endpoints: allowlisted display tunables (777-Q8).
+        ("GET", "/api/config/ui"): _player("ui.config"),
         # secrets_endpoints
         ("GET", "/api/secrets/status"): _operator("secrets"),
         ("PUT", "/api/secrets/{provider}"): _operator("secrets", destructive=True),

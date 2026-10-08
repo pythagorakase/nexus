@@ -50,6 +50,8 @@ export interface NarrativeEngine {
   generationError: string | null;
   /** The latest durable attempt ended in error and nothing has replaced it. */
   failedGeneration: GenerationSession | null;
+  /** The durable failure already reported by the assertive toast. */
+  toastedFailureSessionId: string | null;
   /** True until the first durable read, and while the frontier is re-read
    * after a terminal transition, so stale slot state never accepts input. */
   isRecoveryLoading: boolean;
@@ -70,6 +72,9 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
   const [phase, setPhase] = useState<NarrativePhase | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [failedGeneration, setFailedGeneration] = useState<GenerationSession | null>(null);
+  const [toastedFailureSessionId, setToastedFailureSessionId] = useState<
+    string | null
+  >(null);
   const [isRecoveryLoading, setIsRecoveryLoading] = useState(true);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [backendReachable, setBackendReachable] = useState(true);
@@ -160,6 +165,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     setPhase(null);
     setGenerationError(null);
     setFailedGeneration(null);
+    setToastedFailureSessionId(null);
     setIsRecoveryLoading(true);
     setReceiving(false);
     stopClock();
@@ -286,6 +292,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
                 state.error || state.error_class || "Narrative generation failed";
               setGenerationError(message);
               if (!parentArrived) {
+                setToastedFailureSessionId(state.session_id);
                 toast({
                   title: "Generation Failed",
                   description: message,
@@ -522,6 +529,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     elapsedMs,
     generationError: generationError ?? recoverySettingsError?.message ?? null,
     failedGeneration,
+    toastedFailureSessionId,
     isRecoveryLoading: isRecoveryLoading || slotStateUpdatedAt < frontierChangedAt,
     retryGeneration,
     isGenerating: isActivePhase(phase),

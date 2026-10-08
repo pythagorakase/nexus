@@ -1,0 +1,5 @@
+
+> nexus-ui@1.0.0 check
+> tsc && npm run check:design-sync
+
+client/src/components/nexus/MapPane.test.tsx(197,65): error TS2345: Argument of type '{ placeId: number; name: string; chunkId: number; }[]' is not assignable to parameter of type 'Updater<void | { [UNDEFINED_VOID_ONLY]: never; } | undefined, void | { [UNDEFINED_VOID_ONLY]: never; } | undefined>'.

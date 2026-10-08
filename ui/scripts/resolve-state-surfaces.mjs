@@ -67,7 +67,7 @@ const math = transformSync(readFileSync(resolve(ui, 'client/src/state-shades-mea
 const { ciede2000, deutanLinearLab } = await import('data:text/javascript;base64,' + Buffer.from(math).toString('base64'));
 if (media.unsupported.length) throw new Error(`Unemulatable at-rule/media preludes or declaration functions: ${media.unsupported.join('; ')}`);
 const html = resolve(scratch, 'fixture.html');
-writeFileSync(html, `<!doctype html><meta charset="utf-8"><style>${css}</style><div id="root"></div><script src="fixture.js"></script>`);
+writeFileSync(html, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>${css}</style><div id="root"></div><script src="fixture.js"></script>`);
 const base = execFileSync('git', ['show', `${START}:ui/client/src/index.css`], { cwd: root, encoding: 'utf8' });
 const shipped = readFileSync(resolve(ui, 'client/src/index.css'), 'utf8');
 const browser = await chromium.launch({ headless: true });
@@ -97,6 +97,15 @@ async function renderInventory(condition, theme, calibrating = false) {
       if (!await page.evaluate(([f, v]) => matchMedia(`(${f}: ${v})`).matches, [feature, value]))
         throw new Error(`Unemulatable media feature (${feature}: ${value}) in ${media.preludes.filter(p => p.includes(feature)).join('; ')}`);
     results.proof.matchedMedia ??= {}; results.proof.matchedMedia[condition.id] = matchedMedia;
+    const reachablePreludes = new Set(media.variants.flatMap(variant => variant.satisfied));
+    for (const [prelude, matches] of Object.entries(matchedMedia)) {
+      if (reachablePreludes.has(prelude) && matches !== condition.satisfied.includes(prelude))
+        throw new Error(`Media layout mismatch ${condition.id}: ${prelude} read ${matches}`);
+    }
+    for (const prelude of condition.satisfied) {
+      if (!Object.hasOwn(matchedMedia, prelude))
+        throw new Error(`Missing media readback ${condition.id}: ${prelude}`);
+    }
     // Finite transitions/animations finish. Infinite animations have no finished
     // promise: pause the actual browser effect at its start and trough, separately.
     // Preserve the existing Playwright waitFor settle bound (30 seconds),

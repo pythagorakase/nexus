@@ -75,12 +75,12 @@ import {
   type DragSession,
   type LabelCandidate,
   type PanBounds,
-  type ViewBox,
 } from "@/lib/map-geometry";
 import { getCurrentPlace, getPlaces, getZones } from "@/lib/narrative-api";
 import { worldOutline } from "@/lib/world-outline";
 import type { CurrentPlace, Place, Zone } from "@shared/schema";
 import { MapPlaceDialog } from "./MapPlaceDialog";
+import { useMapView } from "./MapViewContext";
 
 interface MapPaneProps {
   slot: number | null;
@@ -177,19 +177,11 @@ export function MapPane({ slot }: MapPaneProps) {
 
   // ── Local state ─────────────────────────────────────────────────────
   const [hoveredId, setHoveredId] = useState<number | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [expandedZones, setExpandedZones] = useState<Set<number>>(new Set());
-  const [mapDimensions, setMapDimensions] = useState({
-    width: 800,
-    height: 600,
-  });
-  const [viewBox, setViewBox] = useState<ViewBox>({
-    x: 0,
-    y: 0,
-    width: 800,
-    height: 600,
-  });
+  const {
+    selectedId, setSelectedId, expandedZones, setExpandedZones,
+    mapDimensions, setMapDimensions, viewBox, setViewBox, centeredOnRef,
+  } = useMapView();
   const [isDragging, setIsDragging] = useState(false);
 
   const svgRef = useRef<SVGSVGElement>(null);
@@ -319,11 +311,6 @@ export function MapPane({ slot }: MapPaneProps) {
         mapBounds.maxLat,
       ].join(",")
     : null;
-  const centeredOnRef = useRef<{
-    slot: number | null;
-    placeId: number;
-    boundsKey: string | null;
-  } | null>(null);
   useEffect(() => {
     if (firstCurrentPlaceId === undefined) return;
     const last = centeredOnRef.current;
