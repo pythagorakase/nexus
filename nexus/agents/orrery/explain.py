@@ -32,6 +32,7 @@ from nexus.agents.orrery.evidence import resolve_evidence
 from nexus.agents.orrery.resolver import _materialize_project_delta
 from nexus.agents.orrery.substrate import (
     Bindings,
+    Branch,
     BranchSelection,
     CompoundCondition,
     Condition,
@@ -97,6 +98,8 @@ class BranchTrace:
     label: str
     magnitude: float
     promotable: bool
+    attention: str
+    deviation: bool
     considered: bool
     result: bool
     selected: bool
@@ -108,6 +111,8 @@ class BranchTrace:
             "label": self.label,
             "magnitude": self.magnitude,
             "promotable": self.promotable,
+            "attention": self.attention,
+            "deviation": self.deviation,
             "considered": self.considered,
             "result": self.result,
             "selected": self.selected,
@@ -144,6 +149,7 @@ class TemplateExplanation:
     state_delta: Mapping[str, Any] = field(default_factory=dict)
     changed_fields: Tuple[str, ...] = ()
     scene_pressure_stub: Optional[str] = None
+    attention: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         # Payload hygiene: a non-fired template's magnitude/event_type are
@@ -163,6 +169,7 @@ class TemplateExplanation:
             "branches": [branch.to_dict() for branch in self.branches],
             "magnitude": self.magnitude if self.fired else None,
             "promotable": self.promotable if self.fired else None,
+            "attention": self.attention if self.fired else None,
             "event_type": self.event_type if self.fired else None,
             "signal_event_type": self.signal_event_type if self.fired else None,
             "narrative_stub": self.narrative_stub,
@@ -285,6 +292,7 @@ def explain_template(
 
     branch_traces: List[BranchTrace] = []
     chosen_branch: Optional[str] = None
+    chosen: Optional[Branch] = None
     if gate_passed:
         chosen, considered_flags = select_branch(
             template,
@@ -320,6 +328,8 @@ def explain_template(
                         label=branch.label,
                         magnitude=branch.magnitude,
                         promotable=branch.promotable,
+                        attention=branch.attention.value,
+                        deviation=branch.deviation,
                         considered=False,
                         result=False,
                         selected=False,
@@ -346,6 +356,8 @@ def explain_template(
                     label=branch.label,
                     magnitude=branch.magnitude,
                     promotable=branch.promotable,
+                    attention=branch.attention.value,
+                    deviation=branch.deviation,
                     considered=True,
                     result=passes,
                     selected=chosen is not None and branch.label == chosen.label,
@@ -394,6 +406,7 @@ def explain_template(
         state_delta=dict(_materialize_project_delta(truth, state)),
         changed_fields=truth.changed_fields,
         scene_pressure_stub=truth.scene_pressure_stub,
+        attention=chosen.attention.value if chosen is not None else None,
     )
     if verify_at_completion and binding_hash(bindings) != digest:
         raise RuntimeError(

@@ -120,6 +120,7 @@ class BackstageOrreryRow(BaseModel):
     branch_label: Optional[str] = None
     event_type: Optional[str] = None
     drive_band: Optional[str] = None
+    attention: Optional[str] = None
     proposal_id: Optional[str] = None
     position: Optional[int] = None
     binding_names: dict[str, str] = Field(default_factory=dict)
@@ -539,6 +540,11 @@ def _orrery(
     band_by_template = {
         template.id: template.drive_band.value for template in BUILTIN_TEMPLATES
     }
+    attention_by_branch = {
+        (template.id, branch.label): branch.attention.value
+        for template in BUILTIN_TEMPLATES
+        for branch in template.branches
+    }
     rows = (
         session.execute(
             text(
@@ -626,6 +632,9 @@ def _orrery(
             branch_label=row["branch_label"],
             event_type=row["event_type"],
             drive_band=band_by_template.get(str(row["template_id"])),
+            attention=attention_by_branch.get(
+                (str(row["template_id"]), row["branch_label"])
+            ),
             proposal_id=row["proposal_id"],
             position=row.get("position"),
             binding_names=row.get("binding_names", {}),

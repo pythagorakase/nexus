@@ -298,6 +298,19 @@ async def test_card_exposure_rank_joint_and_backstage_parity(
             assert [row.position for row in backstage.inventory] == list(
                 range(proposal.resolution_count)
             )
+            attention_by_branch = {
+                (template.id, branch.label): branch.attention.value
+                for template in BUILTIN_TEMPLATES
+                for branch in template.branches
+            }
+            for row in backstage.inventory:
+                assert row.proposal_id is not None
+                card = cards[row.proposal_id]
+                assert row.attention is not None
+                assert (
+                    row.attention
+                    == attention_by_branch[(card["template_id"], card["branch_label"])]
+                )
             for beat in proposal.joint_beats[:1]:
                 for actor in (beat.entity_a, beat.entity_b):
                     trace = cognition_trace(

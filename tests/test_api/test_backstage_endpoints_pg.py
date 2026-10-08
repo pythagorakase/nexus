@@ -536,6 +536,7 @@ def test_payload_assembles_every_committed_stream(
             "branch_label": "danger closes in",
             "event_type": "threat_issued",
             "drive_band": "crisis_constraint",
+            "attention": None,
             "proposal_id": "evade_pursuers:resolution-binding",
             "position": None,
             "binding_names": {},

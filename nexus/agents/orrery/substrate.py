@@ -65,6 +65,17 @@ class DriveBand(str, Enum):
     PROJECT_IDENTITY = "project_identity"
 
 
+class AttentionClass(str, Enum):
+    """Authored attention class of a package branch.
+
+    Server-authored metadata, never on a model wire.
+    """
+
+    BACKGROUND = "background"
+    MEANINGFUL = "meaningful"
+    URGENT = "urgent"
+
+
 Bindings = Dict[Slot, Any]
 Condition = Callable[["WorldState", Bindings], bool]
 ContactKind = Literal["lodging", "social", "intimate"]
@@ -2588,8 +2599,8 @@ class Branch:
     # event_type. Signals feed other packages' gates without disturbing the
     # emitting package's cooldowns.
     signal_event_type: Optional[str] = None
-    # Routine project maintenance can opt out of the promotion queue even
-    # when package priority or branch magnitude clears a generic threshold.
+    # Decides only whether the resolution is inserted pending or skipped;
+    # independent of attention.
     promotable: bool = True
     # Lifecycle-terminal branches (a state transition like grief completing)
     # must fire the tick they become eligible in EVERY selection mode;
@@ -2597,6 +2608,25 @@ class Branch:
     # state machines. Preemptive branches are checked first, in authored
     # order, before any mode-specific selection runs.
     preemptive: bool = False
+    # Background marks ordinary activity authored as safe to keep out of the
+    # storyteller's card set; independent of promotable.
+    attention: AttentionClass = AttentionClass.MEANINGFUL
+    # A background outcome authored as a departure from routine.
+    deviation: bool = False
+
+
+def branch_declares_milestone(branch: Branch) -> bool:
+    """Whether the branch authors a project lifecycle milestone."""
+    return any(
+        isinstance(branch.state_delta.get(key), Mapping)
+        and bool(branch.state_delta[key].get("milestone"))
+        for key in (
+            "project.start",
+            "project.advance",
+            "project.abandon",
+            "project.complete",
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -2648,6 +2678,34 @@ class Template:
         if isinstance(self.drive_band, str):
             object.__setattr__(self, "drive_band", DriveBand(self.drive_band))
 
+        for branch in self.branches:
+            if branch.attention is AttentionClass.BACKGROUND:
+                reason = None
+                if self.drive_band is DriveBand.CRISIS_CONSTRAINT:
+                    reason = "a crisis_constraint drive band"
+                elif branch_declares_milestone(branch):
+                    reason = "a project milestone"
+                elif any(
+                    key.startswith("entity_pair_tags") for key in branch.state_delta
+                ) or any(
+                    field == "entity_pair_tags"
+                    or field.startswith("character_relationships.")
+                    for field in branch.changed_fields
+                ):
+                    reason = "a relationship effect"
+                elif any(key.startswith("status.") for key in branch.state_delta):
+                    reason = "a status effect"
+                if reason is not None:
+                    raise ValueError(
+                        f"Template {self.id!r}: background branch {branch.label!r} "
+                        f"cannot carry {reason}"
+                    )
+            if branch.deviation and branch.attention is not AttentionClass.BACKGROUND:
+                raise ValueError(
+                    f"Template {self.id!r}: branch {branch.label!r} declares "
+                    "deviation but is not background"
+                )
+
         if self.present_target_policy is PresentTargetPolicy.STORYTELLER_PRESSURE:
             missing = [
                 branch.label
@@ -2677,17 +2735,10 @@ def configure_project_magnitudes(
         changed = False
         branches: list[Branch] = []
         for branch in template.branches:
-            milestone = any(
-                isinstance(branch.state_delta.get(key), Mapping)
-                and bool(branch.state_delta[key].get("milestone"))
-                for key in (
-                    "project.start",
-                    "project.advance",
-                    "project.abandon",
-                    "project.complete",
-                )
-            )
-            if milestone and branch.magnitude != policy.milestone_magnitude:
+            if (
+                branch_declares_milestone(branch)
+                and branch.magnitude != policy.milestone_magnitude
+            ):
                 branch = dataclass_replace(branch, magnitude=policy.milestone_magnitude)
                 changed = True
             branches.append(branch)

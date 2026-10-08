@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, List, Mapping, Tuple
 
 from nexus.agents.orrery.substrate import (
+    AttentionClass,
     Branch,
     CompoundCondition,
     Template,
@@ -706,6 +707,10 @@ def _render_branch(idx: int, branch: Branch) -> List[str]:
     markers = []
     if branch.preemptive:
         markers.append("**preemptive**")
+    if branch.attention is not AttentionClass.MEANINGFUL:
+        markers.append(f"**{branch.attention.value}**")
+    if branch.deviation:
+        markers.append("**deviation**")
     if not branch.promotable:
         markers.append("**not promotable**")
     marker = f" · {' · '.join(markers)}" if markers else ""
@@ -1037,6 +1042,10 @@ def render_catalog(templates: Iterable[Template]) -> str:
         "or project/identity pressure. Static priority still decides resolver "
         "order; any lower-band package that outranks a higher-band package should "
         "carry an explicit rationale.",
+        "",
+        "Attention class is authored per branch. A **background** branch is "
+        "ordinary activity authored as safe to keep out of the storyteller's "
+        "card set; an unmarked branch is meaningful.",
         "",
         "**Source-of-truth:** `nexus/agents/orrery/templates.py` "
         "(`BUILTIN_TEMPLATES`).  ",

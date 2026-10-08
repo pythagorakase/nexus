@@ -207,6 +207,7 @@ def _tally_report(
                             "template_id": item.template_id,
                             "drive_band": item.drive_band,
                             "promotable": item.promotable,
+                            "attention": item.attention,
                         }
                     )
                 if item.template_id in {
@@ -452,6 +453,14 @@ def analyze_coverage(
             "branch_chosen": dict(tally.branch_chosen),
             "branch_promotable": {
                 branch.label: branch.promotable
+                for branch in next(
+                    template
+                    for template in templates_tuple
+                    if template.id == template_id
+                ).branches
+            },
+            "branch_attention": {
+                branch.label: branch.attention.value
                 for branch in next(
                     template
                     for template in templates_tuple
