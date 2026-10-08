@@ -34,6 +34,7 @@ from nexus.cli_contract import (
     ENVELOPE_COMMANDS,
     ERROR_CODES,
     FLAG_TRANSPORTS,
+    REFUSED_REMOTE_TRANSPORTS,
     REMOTE_PROFILE_TRANSPORTS,
     RUNTIME_CONFIG_COMMANDS,
     SELF_DIAGNOSTIC_COMMANDS,
@@ -59,6 +60,33 @@ SLOT_STATE = {
     "model": "slot-pinned-model",
     "recovery": None,
 }
+SETTINGS_PAYLOAD = {
+    "global": {"model": {"default_model": "fixture-model"}},
+    "settings_meta": {"models": [], "apex_allowed_providers": []},
+}
+SECRET_STATUSES = [
+    {
+        "provider": "openai",
+        "account": "openai",
+        "present": True,
+        "last4": "WXYZ",
+        "required": False,
+        "required_by": [],
+    },
+    {
+        "provider": "anthropic",
+        "account": "anthropic",
+        "present": False,
+        "last4": None,
+        "required": True,
+        "required_by": [{"seat": "skald", "model": "fixture-model"}],
+    },
+]
+OPERATOR_ROUTES = {
+    ("GET", "/api/settings"): (200, SETTINGS_PAYLOAD),
+    ("GET", "/api/secrets/status"): (200, SECRET_STATUSES),
+}
+CREDENTIAL = "sk-815s5-sentinel-credential-WXYZ"
 # Environment the CLI must not inherit from the developer's shell.
 _ISOLATED_ENV = (
     "NEXUS_API_URL",
@@ -1395,7 +1423,7 @@ def _inspect(
 
 
 def test_inspect_family_registers_every_verb_as_an_http_envelope_command() -> None:
-    """Every inspect verb is an HTTP, JSON-first, slot-checked command."""
+    """Story inspect verbs remain HTTP, JSON-first, slot-checked commands."""
     registered = {
         path for path in iter_command_paths(cli.build_parser()) if " " in path
     }
@@ -1408,11 +1436,211 @@ def test_inspect_family_registers_every_verb_as_an_http_envelope_command() -> No
         "inspect characters",
         "inspect places",
         "inspect factions",
+        "inspect settings",
+        "inspect secrets",
     }
-    for verb in verbs:
+    for verb in verbs - {"inspect settings", "inspect secrets"}:
         assert COMMAND_TRANSPORTS[verb] == "http", verb
         assert verb in ENVELOPE_COMMANDS, verb
         assert verb in cli._SLOT_COMMANDS, verb
+
+
+def test_operator_inspect_verbs_are_operator_api_envelope_commands() -> None:
+    """Operator reads have their own refused-remotely transport and slot policy."""
+    for verb in ("inspect settings", "inspect secrets"):
+        assert COMMAND_TRANSPORTS[verb] == "operator_api"
+        assert verb in ENVELOPE_COMMANDS
+    assert "inspect secrets" in cli._SLOT_COMMANDS
+    assert "inspect settings" not in cli._SLOT_COMMANDS
+    assert "operator_api" in REFUSED_REMOTE_TRANSPORTS
+
+
+@pytest.mark.parametrize(
+    ("argv", "payload", "route", "query"),
+    [
+        (("settings",), SETTINGS_PAYLOAD, "/api/settings", {}),
+        (("secrets",), SECRET_STATUSES, "/api/secrets/status", {}),
+        (
+            ("secrets", "--slot", "4"),
+            SECRET_STATUSES,
+            "/api/secrets/status",
+            {"slot": ["4"]},
+        ),
+    ],
+)
+def test_operator_inspect_verb_prints_the_route_body_in_the_envelope(
+    argv: tuple[str, ...], payload: Any, route: str, query: dict[str, list[str]]
+) -> None:
+    """One declared, non-destructive operator GET returns its unchanged body."""
+    gateway = Gateway(routes=dict(OPERATOR_ROUTES))
+    with _serve(gateway) as base_url:
+        completed = _run("inspect", *argv, "--json", env={"NEXUS_API_URL": base_url})
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert completed.stderr == ""
+    assert json.loads(completed.stdout) == {"ok": True, "data": payload}
+    assert gateway.requests == [("GET", route, None)]
+    assert gateway.queries == [query]
+    assert {_route_template(path) for _method, path in OPERATOR_ROUTES} == {
+        ("GET", "/api/settings"),
+        ("GET", "/api/secrets/status"),
+    }
+    for method, path, _body in gateway.requests:
+        assert method == "GET"
+        key = _route_template(path)
+        assert key is not None, f"{path} is not a declared route"
+        capability = ROUTE_CAPABILITIES[key]
+        assert capability.plane == "operator", (key, capability)
+        assert not capability.destructive, (key, capability)
+        assert not capability.provider_effect, (key, capability)
+
+
+@pytest.mark.parametrize("verb", ["settings", "secrets"])
+@pytest.mark.parametrize("cause", ["profile", "api_url"])
+def test_remote_runtime_refuses_operator_inspect_before_any_request(
+    tmp_path: Path, verb: str, cause: str
+) -> None:
+    """Neither a remote profile nor a non-loopback override reaches operator reads."""
+    gateway = Gateway(routes=dict(OPERATOR_ROUTES))
+    with _serve(gateway) as base_url:
+        if cause == "profile":
+            config = _config(tmp_path, profile="remote", base_url=base_url)
+            env = {"NEXUS_RUNTIME_CONFIG": str(config)}
+            reason = "[runtime] profile is 'remote'"
+        else:
+            env = {"NEXUS_API_URL": "https://nexus.example.invalid"}
+            reason = "NEXUS_API_URL targets https://nexus.example.invalid"
+        completed = _run("inspect", verb, "--json", env=env)
+    assert completed.returncode == ExitCode.TRANSPORT_REFUSED, completed.stderr
+    envelope = _failure(completed)
+    assert envelope["code"] == "transport_refused"
+    assert envelope["partial"] == {}
+    assert (
+        f"'nexus inspect {verb}' uses the operator_api transport" in envelope["error"]
+    )
+    assert reason in envelope["error"]
+    assert gateway.requests == []
+
+
+def test_remote_profile_keeps_existing_operator_route_commands(tmp_path: Path) -> None:
+    """Decision 815-Q3 preserves existing remote operator-write behavior."""
+    gateway = Gateway(
+        routes={
+            ("POST", "/api/slot/5/lock"): (200, {}),
+            ("POST", "/api/slot/5/unlock"): (200, {}),
+        }
+    )
+    with _serve(gateway) as base_url:
+        config = _config(tmp_path, profile="remote", base_url=base_url)
+        for command in ("lock", "unlock"):
+            completed = _run(
+                command,
+                "--slot",
+                "5",
+                "--json",
+                env={"NEXUS_RUNTIME_CONFIG": str(config)},
+            )
+            assert completed.returncode == ExitCode.OK, completed.stderr
+            assert completed.stderr == ""
+    assert [request[:2] for request in gateway.requests] == [
+        ("POST", "/api/slot/5/lock"),
+        ("POST", "/api/slot/5/unlock"),
+    ]
+    for command in ("clear", "lock", "unlock"):
+        assert COMMAND_TRANSPORTS[command] == "http"
+    assert FLAG_TRANSPORTS["model"] == (
+        ("list", "local_operator"),
+        ("set", "http"),
+        ("clear", "http"),
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        [{**SECRET_STATUSES[0], "last4": CREDENTIAL}],
+        [{**SECRET_STATUSES[0], "key": CREDENTIAL}],
+        [
+            {
+                **SECRET_STATUSES[0],
+                "required_by": [
+                    {"seat": "skald", "model": "fixture-model", "key": CREDENTIAL}
+                ],
+            }
+        ],
+        {"openai": CREDENTIAL},
+    ],
+    ids=["full-last4", "extra-record-field", "extra-required-by-field", "not-list"],
+)
+def test_inspect_secrets_refuses_an_unmasked_status_without_printing_it(
+    body: Any,
+) -> None:
+    """A malformed successful response never leaks its values into either output."""
+    gateway = Gateway(routes={("GET", "/api/secrets/status"): (200, body)})
+    with _serve(gateway) as base_url:
+        for output in (("--json",), ()):
+            completed = _run(
+                "inspect", "secrets", *output, env={"NEXUS_API_URL": base_url}
+            )
+            assert completed.returncode == ExitCode.DOMAIN_FAILURE
+            assert CREDENTIAL not in completed.stdout
+            assert CREDENTIAL not in completed.stderr
+            if output:
+                assert _failure(completed)["code"] == "invalid_response"
+            else:
+                assert completed.stdout == ""
+                assert completed.stderr.startswith("Error: GET /api/secrets/status")
+
+
+def test_inspect_settings_refuses_a_secrets_section() -> None:
+    """Settings reject a secrets section before JSON or text can print its values."""
+    body = {**SETTINGS_PAYLOAD, "secrets": {"providers": {"openai": CREDENTIAL}}}
+    gateway = Gateway(routes={("GET", "/api/settings"): (200, body)})
+    with _serve(gateway) as base_url:
+        for output in (("--json",), ()):
+            completed = _run(
+                "inspect", "settings", *output, env={"NEXUS_API_URL": base_url}
+            )
+            assert completed.returncode == ExitCode.DOMAIN_FAILURE
+            assert CREDENTIAL not in completed.stdout
+            assert CREDENTIAL not in completed.stderr
+            if output:
+                assert _failure(completed)["code"] == "invalid_response"
+            else:
+                assert completed.stdout == ""
+                assert completed.stderr.startswith("Error: GET /api/settings")
+
+
+def test_inspect_secrets_rejects_an_out_of_range_slot_before_any_request() -> None:
+    """The optional story-pin slot uses the existing slot usage error."""
+    gateway = Gateway(routes=dict(OPERATOR_ROUTES))
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "inspect",
+            "secrets",
+            "--slot",
+            "9",
+            "--json",
+            env={"NEXUS_API_URL": base_url},
+        )
+    assert completed.returncode == ExitCode.USAGE
+    envelope = _failure(completed)
+    assert envelope["code"] == "usage_error"
+    assert envelope["error"] == "Slot must be between 1 and 5"
+    assert gateway.requests == []
+
+
+def test_inspect_secrets_prints_each_status_without_json() -> None:
+    """Masked statuses use the existing one-record-per-block text rendering."""
+    gateway = Gateway(routes=dict(OPERATOR_ROUTES))
+    with _serve(gateway) as base_url:
+        completed = _run("inspect", "secrets", env={"NEXUS_API_URL": base_url})
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert completed.stderr == ""
+    assert "last4: WXYZ" in completed.stdout
+    records = completed.stdout.strip().split("\n\n")
+    assert len(records) == 2
+    assert "provider: openai" in records[0]
+    assert "provider: anthropic" in records[1]
 
 
 @pytest.mark.parametrize("case", sorted(INSPECT_CASES))
@@ -1452,7 +1680,7 @@ def _route_template(path: str) -> Optional[tuple[str, str]]:
 
 
 def test_inspect_verbs_read_only_player_plane_routes() -> None:
-    """No inspect verb reaches an operator route (issue #815's plane split)."""
+    """No story inspect verb reaches an operator route (issue #815's plane split)."""
     gateway = Gateway(routes=dict(INSPECT_ROUTES))
     with _serve(gateway) as base_url:
         for argv, _data, _sent in INSPECT_CASES.values():

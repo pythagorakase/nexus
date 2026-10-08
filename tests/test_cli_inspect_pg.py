@@ -21,6 +21,7 @@ import sys
 from typing import Any
 
 import pytest
+import requests
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from tests.pg_fixtures import (
@@ -40,6 +41,7 @@ pytestmark = pytest.mark.requires_postgres
 ROOT = Path(__file__).resolve().parents[1]
 PENDING_TEXT = "The pending fixture turn waits for the player's choice."
 CAST = ("Mara Quill", "Oren Vale")
+CREDENTIAL = "sk-815s5-sentinel-credential-WXYZ"
 
 
 def _nexus(*argv: str) -> tuple[subprocess.CompletedProcess[str], Any]:
@@ -68,6 +70,31 @@ def _envelope(*argv: str) -> Any:
     assert set(envelope) == {"ok", "data"}
     assert envelope["ok"] is True
     return envelope["data"]
+
+
+def _operator_envelope(*argv: str) -> tuple[subprocess.CompletedProcess[str], Any]:
+    """Run an operator inspection without forcing the optional story-pin slot."""
+    completed, envelope = _nexus("inspect", *argv, "--json")
+    assert set(envelope) == {"ok", "data"}
+    assert envelope["ok"] is True
+    return completed, envelope["data"]
+
+
+def _nexus_text(*argv: str) -> str:
+    """Run an operator inspection through the routed child with text output."""
+    completed = subprocess.run(
+        [sys.executable, "-m", "tests.slot_routed_cli", "inspect", *argv],
+        cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": str(ROOT), **routed_child_environment()},
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert completed.stderr == ""
+    assert CREDENTIAL not in completed.stdout
+    assert CREDENTIAL not in completed.stderr
+    return completed.stdout
 
 
 def test_continue_waits_then_inspect_reads_the_played_clone(
@@ -155,3 +182,45 @@ def test_continue_waits_then_inspect_reads_the_played_clone(
             assert [(row["id"], row["name"]) for row in listed_factions] == factions
             assert factions == [(faction_id, "The Lamplighters")]
             assert _envelope("factions", str(faction_id)) == listed_factions[0]
+
+
+def test_operator_inspect_reads_the_live_gateway_masked(
+    monkeypatch, tmp_path, mock_openai_server, in_memory_secret_store  # noqa: F811
+) -> None:
+    """The real gateway serves private settings and only in-memory masked keys."""
+    configure_test(tmp_path, mock_openai_server, monkeypatch)
+    with disposable_slot_database("qa640_815s5_operator") as dbname:
+        route_slot(monkeypatch, dbname)
+        in_memory_secret_store.write("openai", CREDENTIAL)
+        with gateway_lane(monkeypatch) as scheduler:
+            scheduler.stop()
+            base_url = os.environ["NEXUS_API_URL"]
+            settings_run, settings = _operator_envelope("settings")
+            assert (
+                settings == requests.get(f"{base_url}/api/settings", timeout=30).json()
+            )
+            assert "secrets" not in settings
+            assert (
+                settings["global"]["model"]["api_models"]["test"]["base_url"]
+                == mock_openai_server
+            )
+            secrets_run, statuses = _operator_envelope("secrets")
+            assert (
+                statuses
+                == requests.get(f"{base_url}/api/secrets/status", timeout=30).json()
+            )
+            openai = next(row for row in statuses if row["provider"] == "openai")
+            assert openai["present"] is True
+            assert openai["last4"] == "WXYZ"
+            slot_run, slot_statuses = _operator_envelope("secrets", "--slot", "4")
+            assert (
+                slot_statuses
+                == requests.get(
+                    f"{base_url}/api/secrets/status", params={"slot": 4}, timeout=30
+                ).json()
+            )
+            for completed in (settings_run, secrets_run, slot_run):
+                assert CREDENTIAL not in completed.stdout
+                assert CREDENTIAL not in completed.stderr
+            for argv in (("settings",), ("secrets",), ("secrets", "--slot", "4")):
+                assert CREDENTIAL not in _nexus_text(*argv)
