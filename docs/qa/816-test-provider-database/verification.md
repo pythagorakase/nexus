@@ -434,4 +434,50 @@ The freshness check passes in the 96-test run above.
   returned no rows after the proofs. The unrouted sentinel database was never
   created. Fixture-owned children and clones were cleaned up by their fixtures.
 
+## Integration Repair: Reseeding After Migration 148
+
+Cross-slice review found that 008's `TRUNCATE layers CASCADE` clears all three
+source junctions, including factions through their place foreign key, while
+`entities` and `narrative_chunks` survive. Migration 148's row triggers do not
+fire for TRUNCATE, so previously mirrored references remained stale after a
+successful reseed. 008 now checks for `public.chunk_entity_references` and
+clears it in the same transaction before the existing truncates. The table
+check preserves seeding support for current-schema targets predating 148.
+
+`test_reseeding_test_provider_preserves_reference_parity` uses the actual
+migration when present: a production roster write creates one character,
+place and faction reference, the parity tool proves the starting rows, and two
+real 008 CLI reseeds must leave zero junction/unified references while retaining
+the original chunk and all three entities. It skips only when the checkout does
+not contain migration 148; when that migration file exists, a missing live table
+is an assertion failure rather than a skip. No synthetic schema is used.
+
+Before integration, this 816 branch contains migrations through 145. With
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT`, `NEXUS_RUN_LIVE_LLM` unset:
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH="$PWD" nice -n 15 "$PY" -m pytest -q -rs \
+  -p tests.dbname_audit \
+  tests/test_mock_openai.py::test_seeded_test_provider_database_holds_the_rows_the_provider_reads \
+  tests/test_mock_openai.py::test_seeder_trait_mismatch_rolls_back_every_write \
+  tests/test_mock_openai.py::test_reseeding_test_provider_preserves_reference_parity
+```
+
+The seeded-row proof now includes a successful real CLI reseed, proving the
+new optional-table check against pre-148 schema. Tail:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+SKIPPED [1] tests/test_mock_openai.py:501: cross-slice reseed proof requires the real migration 148
+2 passed, 1 skipped in 3.94s
+```
+
+Black passes both edited Python files; mypy reports no issues in either.
+Flake8 retains exactly the same thirteen existing seeder line-length diagnostics
+as `origin/main`, with none in the test file and no new messages. Diff whitespace
+passes. The real migration-148 regression and its deliberate old-code failure
+are pending the coordinator's merge into the combined checkout; these results
+are not yet a claim that the cross-slice defect is proved repaired.
+
 Codex — GPT-6

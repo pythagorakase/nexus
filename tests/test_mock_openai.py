@@ -40,10 +40,14 @@ from nexus.api.mock_openai import (
 )
 from nexus.api.native_structured_output import openai_response_text_format
 from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
+from nexus.presence.roster import PresenceRoster, RosterEntry, write_roster
+from scripts.entity_reference_parity import run as reference_parity
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     route_test_provider_database,
+    seed_committed_chunk,
+    seed_faction,
 )
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
@@ -395,7 +399,10 @@ async def test_mock_responses_routes_bootstrap_schema_as_native_text_format() ->
 def test_seeded_test_provider_database_holds_the_rows_the_provider_reads(
     routed_test_provider_database: str,
 ) -> None:
-    """Migration 008 seeds every row the TEST provider reads, on a clone."""
+    """Migration 008 seeds and reseeds the provider, including pre-148 schema."""
+
+    result = _run_test_provider_seeder(routed_test_provider_database)
+    assert result.returncode == 0, result.stderr
 
     cache = query_wizard_cache()
     assert cache["base_timestamp"] is not None
@@ -449,7 +456,6 @@ def test_missing_test_provider_rows_raise(
 @pytest.mark.requires_postgres
 def test_seeder_trait_mismatch_rolls_back_every_write() -> None:
     """A legacy trait spelling refuses the CLI seed and rolls back earlier writes."""
-    root = Path(__file__).resolve().parents[1]
     with disposable_slot_database("qa640_816_legacy_trait") as dbname:
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
@@ -460,19 +466,7 @@ def test_seeder_trait_mismatch_rolls_back_every_write() -> None:
             assert cur.rowcount == 1
             cur.execute("INSERT INTO assets.new_story_creator (id) VALUES (TRUE)")
 
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(root / "migrations/008_populate_mock_database.py"),
-                "--dbname",
-                dbname,
-            ],
-            cwd=root,
-            env={**os.environ, "PYTHONPATH": str(root)},
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        result = _run_test_provider_seeder(dbname)
         assert result.returncode != 0
         assert "selected unknown trait 'reputation'" in result.stderr
         assert "populated successfully" not in result.stdout
@@ -484,6 +478,87 @@ def test_seeder_trait_mismatch_rolls_back_every_write() -> None:
             assert cur.fetchone() == (True, "preserve this rationale")
             cur.execute("SELECT count(*) FROM assets.new_story_creator")
             assert cur.fetchone() == (1,)
+
+
+def _run_test_provider_seeder(dbname: str) -> subprocess.CompletedProcess[str]:
+    """Run the production 008 operator against one explicit disposable target."""
+    root = Path(__file__).resolve().parents[1]
+    return subprocess.run(
+        [
+            sys.executable,
+            str(root / "migrations/008_populate_mock_database.py"),
+            "--dbname",
+            dbname,
+        ],
+        cwd=root,
+        env={**os.environ, "PYTHONPATH": str(root)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.skipif(
+    not (
+        Path(__file__).resolve().parents[1]
+        / "migrations/148_chunk_entity_references.sql"
+    ).exists(),
+    reason="cross-slice reseed proof requires the real migration 148",
+)
+def test_reseeding_test_provider_preserves_reference_parity(
+    routed_test_provider_database: str,
+) -> None:
+    """Reseeding clears every mirrored kind while its chunk/entities survive."""
+    dbname = routed_test_provider_database
+    chunk_id = seed_committed_chunk(dbname, raw_text="Keep this provider chunk.")
+    faction_id, faction_entity = seed_faction(dbname, name="Provider Faction")
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.chunk_entity_references')")
+        assert cur.fetchone()[0] is not None, "migration 148 was not applied"
+        cur.execute("SELECT id, name, entity_id FROM characters WHERE id = 1")
+        character_id, character_name, character_entity = cur.fetchone()
+        cur.execute("SELECT id, name, entity_id FROM places WHERE id = 1")
+        place_id, place_name, place_entity = cur.fetchone()
+        character = RosterEntry(kind="character", id=character_id, name=character_name)
+        place = RosterEntry(kind="place", id=place_id, name=place_name)
+        faction = RosterEntry(kind="faction", id=faction_id, name="Provider Faction")
+        write_roster(
+            conn,
+            chunk_id,
+            PresenceRoster(
+                present={character.key: character},
+                setting={place.key: place},
+                referenced={faction.key: faction},
+            ),
+        )
+    original_entities = [character_entity, place_entity, faction_entity]
+    before = reference_parity(dbname, target="chunk_entity_references")
+    assert before["parity"], before["kinds"]
+    assert {kind: rows["target"] for kind, rows in before["kinds"].items()} == {
+        "character": 1,
+        "place": 1,
+        "faction": 1,
+    }
+
+    for _ in range(2):
+        result = _run_test_provider_seeder(dbname)
+        assert result.returncode == 0, result.stderr
+        after = reference_parity(dbname, target="chunk_entity_references")
+        assert after["parity"], after["kinds"]
+        assert all(
+            rows["expected"] == rows["target"] == 0 for rows in after["kinds"].values()
+        ), after["kinds"]
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT raw_text FROM narrative_chunks WHERE id = %s", (chunk_id,)
+            )
+            assert cur.fetchone() == ("Keep this provider chunk.",)
+            cur.execute(
+                "SELECT count(*) FROM entities WHERE id = ANY(%s)",
+                (original_entities,),
+            )
+            assert cur.fetchone() == (3,)
 
 
 def _post_bootstrap_request(base_url: str) -> requests.Response:
