@@ -618,7 +618,6 @@ Model IDs and their component `uses` live in `[global.model.api_models]`. Runtim
 **MEMNON**
 - `nexus/agents/memnon/memnon.py:1486` — `get_recent_chunks` (warm slice; `narrative_chunks`-only)
 - `nexus/agents/memnon/memnon.py::query_memory` and `SearchManager` — warm-slice retrieval must remain disjoint from `offscreen_narrations`
-- `nexus/agents/memnon/memnon.py::execute_readonly_sql` — whitelist exposes public Orrery tables; internal queue/raw tables excluded
 
 **Schema sources**
 - `nexus/agents/logon/apex_schema.py:631` — `StateUpdates` Pydantic models (source for `changed_fields` vocab)

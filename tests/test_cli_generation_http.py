@@ -65,11 +65,24 @@ class GenerationScenario:
     stage_poll_seconds: float = 0.02
     # The stage each status read served ("502" for a failed read).
     stages_read: list[str] = field(default_factory=list)
-    # Status reads answered before the transition was posted.
+    # Status reads answered before the transition was posted: the CLI's
+    # snapshot, plus any interval read its stage poller takes before the
+    # transition POST is sent (the poller starts first).
     snapshot_reads: int = 0
+    # The record each of those reads served. The gateway always serves
+    # stage_before there, so this guards the fake gateway, not the CLI.
+    snapshot_served: list[dict[str, Any]] = field(default_factory=list)
+    # Interval reads the transition POST waits for before it counts as
+    # received, which forces the early read a slow host can produce.
+    interval_reads_before_post: int = 0
+    pre_post_reads_seen: Event = field(default_factory=Event)
     scripted_reads: int = 0
-    # Ordinals (from 0) of the status reads answered with a 502.
-    failed_reads: set[int] = field(default_factory=set)
+    # Ordinals (from 0) of the status reads answered with a 502, counted among
+    # the reads answered before the transition was posted (0 is the snapshot)
+    # and, separately, among those answered after it, so an early interval
+    # read cannot move a failure onto a different read.
+    failed_reads_before_post: set[int] = field(default_factory=set)
+    failed_reads_after_post: set[int] = field(default_factory=set)
     stages_served: Event = field(default_factory=Event)
     transition_error: str | None = None
     # Detail of a refused strangeness save; None echoes the saved level.
@@ -137,6 +150,10 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     }
                 )
             elif self.path == "/api/story/new/transition":
+                if scenario.interval_reads_before_post:
+                    assert scenario.pre_post_reads_seen.wait(
+                        timeout=10
+                    ), "interval read never arrived"
                 scenario.transition_posted = True
                 if scenario.result == "transition_drop":
                     # The gateway dies while transitioning: no answer at all.
@@ -212,9 +229,23 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     self._respond({"detail": "Explicit test slot required"}, 422)
                     return
                 script = scenario.stage_script
-                if not scenario.transition_posted:
+                posted = scenario.transition_posted
+                # A failed read's ordinal counts the reads on its side of the post.
+                if posted:
+                    ordinal = len(scenario.stages_read) - scenario.snapshot_reads
+                    failed = ordinal in scenario.failed_reads_after_post
+                else:
+                    ordinal = scenario.snapshot_reads
+                    failed = ordinal in scenario.failed_reads_before_post
+                if not posted:
                     scenario.snapshot_reads += 1
                     payload = scenario.stage_before
+                    scenario.snapshot_served.append(payload)
+                    if (
+                        scenario.snapshot_reads
+                        >= 1 + scenario.interval_reads_before_post
+                    ):
+                        scenario.pre_post_reads_seen.set()
                 elif scenario.outcome_recorded and scenario.stage_outcome:
                     payload = scenario.stage_outcome
                 elif script:
@@ -228,7 +259,6 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                         scenario.stages_served.set()
                 else:
                     payload = scenario.stage_before
-                failed = len(scenario.stages_read) in scenario.failed_reads
                 scenario.stages_read.append("502" if failed else payload["stage"])
                 if failed:
                     self._respond({"detail": "Gateway worker restarted"}, 502)
@@ -724,14 +754,23 @@ def _stage_lines(stdout: str) -> list[str]:
     return [line for line in stdout.splitlines() if line.startswith("Genesis stage")]
 
 
+# "unforced" (0) leaves the order of reads and the post to the host's timing,
+# so early reads are still possible there.
+@pytest.mark.parametrize(
+    "interval_reads_before_post", [0, 1], ids=["unforced", "interval-read-first"]
+)
 @pytest.mark.parametrize("ready", [False, True], ids=["seed-confirm", "ready-resume"])
 def test_cli_prints_each_genesis_stage_once_while_transition_runs(
-    tmp_path: Path, ready: bool
+    tmp_path: Path, ready: bool, interval_reads_before_post: int
 ) -> None:
     """Human output names each Retrograde stage once, in order, through done."""
 
     scenario = GenerationScenario(
-        seed=not ready, ready=ready, stage_script=GENESIS_SCRIPT, stage_outcome=DONE
+        seed=not ready,
+        ready=ready,
+        stage_script=GENESIS_SCRIPT,
+        stage_outcome=DONE,
+        interval_reads_before_post=interval_reads_before_post,
     )
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 0, (stdout, stderr)
@@ -745,8 +784,17 @@ def test_cli_prints_each_genesis_stage_once_while_transition_runs(
         "Genesis stage: done",
     ]
     scripted = [payload["stage"] for payload in GENESIS_SCRIPT]
-    assert scenario.snapshot_reads == 1
-    assert scenario.stages_read[: len(scripted) + 1] == ["idle", *scripted]
+    # The stage poller starts before the transition is posted, so an interval
+    # read can precede the post; each such read serves the previous record.
+    # "interval-read-first" holds the post until one has been answered.
+    before = scenario.snapshot_reads
+    assert before >= 1 + interval_reads_before_post
+    # A guard on the fake gateway: it serves stage_before to every such read.
+    assert scenario.snapshot_served == [scenario.stage_before] * before
+    assert scenario.stages_read[: before + len(scripted)] == [
+        *(["idle"] * before),
+        *scripted,
+    ]
     # "done" is terminal: it is read once, and no read follows it.
     assert scenario.stages_read.count("done") == 1
     assert scenario.stages_read[-1] == "done"
@@ -754,20 +802,32 @@ def test_cli_prints_each_genesis_stage_once_while_transition_runs(
     assert stdout.index("Genesis stage: done") < stdout.index(NARRATIVE)
 
 
+@pytest.mark.parametrize(
+    "interval_reads_before_post", [0, 1], ids=["unforced", "interval-read-first"]
+)
 def test_cli_stops_reading_at_a_finished_stage_read_before_the_answer(
-    tmp_path: Path,
+    tmp_path: Path, interval_reads_before_post: int
 ) -> None:
     """A "done" read while the transition is in flight ends the reads."""
 
-    scenario = GenerationScenario(stage_script=[IDLE, _stage("packet"), DONE])
+    scenario = GenerationScenario(
+        stage_script=[IDLE, _stage("packet"), DONE],
+        interval_reads_before_post=interval_reads_before_post,
+    )
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 0, (stdout, stderr)
     assert _stage_lines(stdout) == ["Genesis stage: packet", "Genesis stage: done"]
-    assert scenario.stages_read == ["idle", "idle", "packet", "done"]
+    # Every read before the post serves the idle record of no run.
+    before = scenario.snapshot_reads
+    assert before >= 1 + interval_reads_before_post
+    assert scenario.stages_read == [*(["idle"] * before), "idle", "packet", "done"]
 
 
+@pytest.mark.parametrize(
+    "interval_reads_before_post", [0, 1], ids=["unforced", "interval-read-first"]
+)
 def test_cli_prints_the_failed_genesis_stage_and_the_transition_error(
-    tmp_path: Path,
+    tmp_path: Path, interval_reads_before_post: int
 ) -> None:
     """The failure recorded as the transition answers is named once."""
 
@@ -776,6 +836,7 @@ def test_cli_prints_the_failed_genesis_stage_and_the_transition_error(
         stage_outcome=PERSISTENCE_FAILED,
         stage_poll_seconds=ANSWER_ONLY_POLL_SECONDS,
         transition_error="Retrograde persistence blocked: 2 unresolved refs",
+        interval_reads_before_post=interval_reads_before_post,
     )
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 1, (stdout, stderr)
@@ -784,7 +845,14 @@ def test_cli_prints_the_failed_genesis_stage_and_the_transition_error(
         "Genesis stage: expansion",
         "Genesis stage: failed (persistence)",
     ]
-    assert scenario.stages_read == ["idle", "packet", "expansion", "failed"]
+    before = scenario.snapshot_reads
+    assert before >= 1 + interval_reads_before_post
+    assert scenario.stages_read == [
+        *(["idle"] * before),
+        "packet",
+        "expansion",
+        "failed",
+    ]
     assert "the narrative transition failed" in stderr
     assert not any(
         request[:2] == ("POST", "/api/narrative/continue")
@@ -792,7 +860,12 @@ def test_cli_prints_the_failed_genesis_stage_and_the_transition_error(
     )
 
 
-def test_cli_reads_past_the_previous_runs_failure_record(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "interval_reads_before_post", [0, 1], ids=["unforced", "interval-read-first"]
+)
+def test_cli_reads_past_the_previous_runs_failure_record(
+    tmp_path: Path, interval_reads_before_post: int
+) -> None:
     """A retry's reads can precede its reset; the old failure is not news."""
 
     scenario = GenerationScenario(
@@ -803,11 +876,24 @@ def test_cli_reads_past_the_previous_runs_failure_record(tmp_path: Path) -> None
             _stage("packet"),
         ],
         stage_outcome=DONE,
+        interval_reads_before_post=interval_reads_before_post,
     )
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 0, (stdout, stderr)
     assert _stage_lines(stdout) == ["Genesis stage: packet", "Genesis stage: done"]
-    assert scenario.stages_read[:4] == ["failed", "failed", "idle", "packet"]
+    before = scenario.snapshot_reads
+    assert before >= 1 + interval_reads_before_post
+    # Every read before the post served the previous run's failure record.
+    # Under "interval-read-first" one of them is the stage poller's own read,
+    # which the CLI skips as the previous run's: no stage line names it.
+    assert scenario.snapshot_served == [PREVIOUS_RUN_FAILED] * before
+    assert "Genesis stage: failed" not in stdout
+    assert scenario.stages_read[: before + 3] == [
+        *(["failed"] * before),
+        "failed",
+        "idle",
+        "packet",
+    ]
     assert scenario.stages_read[-1] == "done"
 
 
@@ -836,14 +922,20 @@ def test_cli_prints_a_terminal_stage_recorded_before_its_first_interval_read(
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 1, (stdout, stderr)
     assert _stage_lines(stdout) == ["Genesis stage: failed (persistence)"]
-    # One read before the post, one after the answer; no interval read.
-    assert scenario.snapshot_reads == 1
+    # The snapshot count is loosened to match the genesis-stage test; at this
+    # 60 s interval the exact stages_read below still pins one read before the
+    # post and one after the answer, with no interval read.
+    assert scenario.snapshot_reads >= 1
+    assert scenario.snapshot_served == [before] * scenario.snapshot_reads
     assert scenario.stages_read == [before["stage"], "failed"]
     assert "the narrative transition failed" in stderr
 
 
+@pytest.mark.parametrize(
+    "interval_reads_before_post", [0, 1], ids=["unforced", "interval-read-first"]
+)
 def test_cli_names_no_stage_when_the_transition_is_refused_before_it_runs(
-    tmp_path: Path,
+    tmp_path: Path, interval_reads_before_post: int
 ) -> None:
     """A refused transition leaves the previous run's record; none is printed."""
 
@@ -852,35 +944,65 @@ def test_cli_names_no_stage_when_the_transition_is_refused_before_it_runs(
         stage_script=[PREVIOUS_RUN_FAILED],
         stage_poll_seconds=ANSWER_ONLY_POLL_SECONDS,
         transition_error="Confirm the setting and character before starting the story.",
+        interval_reads_before_post=interval_reads_before_post,
     )
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 1, (stdout, stderr)
     assert _stage_lines(stdout) == []
-    # One read before the post, one while it was held, one after it answered.
-    assert scenario.stages_read == ["failed", "failed", "failed"]
+    # The reads before the post, one while it was held, one after it answered.
+    before = scenario.snapshot_reads
+    assert before >= 1 + interval_reads_before_post
+    assert scenario.stages_read == ["failed"] * (before + 2)
     assert "the narrative transition failed" in stderr
 
 
+# "before-the-post" fails the snapshot read, which settles the stage reader
+# before its poller starts: no interval read can precede the post, so that
+# case takes no forced read.
 @pytest.mark.parametrize(
-    ("script", "failed_read", "read"),
-    [([], 0, ["502"]), ([_stage("packet")], 1, ["idle", "502"])],
-    ids=["before-the-post", "while-in-flight"],
+    ("script", "failed_before_post", "failed_after_post", "interval_reads_before_post"),
+    [
+        pytest.param([], {0}, set(), 0, id="before-the-post"),
+        pytest.param([_stage("packet")], set(), {0}, 0, id="while-in-flight-unforced"),
+        pytest.param(
+            [_stage("packet")],
+            set(),
+            {0},
+            1,
+            id="while-in-flight-interval-read-first",
+        ),
+    ],
 )
 def test_cli_reports_an_unreadable_genesis_stage_and_keeps_the_transition(
-    tmp_path: Path, script: list[dict[str, Any]], failed_read: int, read: list[str]
+    tmp_path: Path,
+    script: list[dict[str, Any]],
+    failed_before_post: set[int],
+    failed_after_post: set[int],
+    interval_reads_before_post: int,
 ) -> None:
     """A failed stage read is reported once; the transition outcome stands."""
 
     scenario = GenerationScenario(
-        stage_script=script, stage_outcome=DONE, failed_reads={failed_read}
+        stage_script=script,
+        stage_outcome=DONE,
+        failed_reads_before_post=failed_before_post,
+        failed_reads_after_post=failed_after_post,
+        interval_reads_before_post=interval_reads_before_post,
     )
     code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
     assert code == 0, (stdout, stderr)
     assert _stage_lines(stdout) == []
     assert stderr.count("Genesis stage unavailable:") == 1
     assert "502" in stderr
-    # No read follows the failed one, not even after the transition answers.
-    assert scenario.stages_read == read
+    before = scenario.snapshot_reads
+    assert before >= 1 + interval_reads_before_post
+    # Each read before the post served the idle record of no run unless it
+    # failed. No read follows the failed one, not even after the transition
+    # answers.
+    read_before = [
+        "502" if ordinal in failed_before_post else "idle" for ordinal in range(before)
+    ]
+    assert scenario.stages_read == [*read_before, *(["502"] * len(failed_after_post))]
     assert NARRATIVE in stdout
 
 

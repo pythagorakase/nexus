@@ -46,7 +46,12 @@ from sqlalchemy.engine import URL, make_url
 from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.api import db_pool
 from nexus.api.slot_utils import all_slots, slot_dbname
-from nexus.config.story_model import StorySettings, write_story_settings
+from nexus.config import load_settings
+from nexus.config.story_model import (
+    StorySettings,
+    resolve_seat,
+    write_story_settings,
+)
 from nexus.database import (
     asyncpg_kwargs as contract_asyncpg_kwargs,
     connection_kwargs,
@@ -142,6 +147,81 @@ def assert_one_target(dbname: str) -> None:
         )
 
 
+# Migration 126 freezes queued and leased jobs' models from the story pin it
+# finds. Its JOB_SEATS maps each job table it backfills to the seat that
+# resolves that table's model.
+SEAT_BACKFILL_MIGRATION = "126"
+
+
+def seat_backfill_job_seats() -> dict[str, str]:
+    """Return migration 126's ``JOB_SEATS`` (job table to model seat).
+
+    The mapping is read from the migration module itself, loaded through
+    ``scripts.migrate``'s importlib loader, so the guard below cannot drift
+    from the tables the migration backfills.
+    """
+
+    paths = [
+        path
+        for version, _, path in migrate.discover_migrations()
+        if version == SEAT_BACKFILL_MIGRATION
+    ]
+    if len(paths) != 1:
+        raise RuntimeError(
+            f"Expected one migration {SEAT_BACKFILL_MIGRATION}, found {paths!r}"
+        )
+    module = migrate._load_python_migration(paths[0])
+    return dict(module.JOB_SEATS)
+
+
+def _has_migration_stamp(dbname: str, version: str) -> bool:
+    """Return whether ``dbname``'s ``schema_migrations`` records ``version``."""
+
+    with closing(_connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.schema_migrations') IS NOT NULL")
+        if not cur.fetchone()[0]:
+            return False
+        cur.execute("SELECT 1 FROM schema_migrations WHERE version = %s", (version,))
+        return cur.fetchone() is not None
+
+
+def _refuse_source_pin_backfill(dbname: str, story_pin: str) -> None:
+    """Raise when migration 126 froze a job to a model the clone's pin would not pick.
+
+    A data clone migrates before it is pinned, so migration 126 resolves its
+    queued and leased jobs under the source's story pin, and that resolution
+    is immutable across repins. Only a seat whose policy follows the story can
+    resolve differently under the clone's pin; a fixed seat resolves to its
+    configured default under any pin. The guard therefore refuses only
+    backfilled rows whose frozen model differs from what ``story_pin`` resolves
+    for the table's seat: a worker would route those jobs to the source's
+    model.
+    """
+
+    settings = load_settings()
+    story = StorySettings(skald_model=story_pin, gaia_model=None)
+    with closing(_connect(dbname)) as conn, conn.cursor() as cur:
+        for table, seat in seat_backfill_job_seats().items():
+            expected = resolve_seat(seat, settings=settings, story=story).model
+            cur.execute(
+                sql.SQL(
+                    "SELECT count(*), array_agg(DISTINCT resolved_model) FROM {} "
+                    "WHERE state IN ('queued', 'leased') "
+                    "AND resolved_source = 'migration_backfill' "
+                    "AND resolved_model IS DISTINCT FROM %s"
+                ).format(sql.Identifier(table)),
+                (expected,),
+            )
+            frozen, models = cur.fetchone()
+            if frozen:
+                raise RuntimeError(
+                    f"Data clone {dbname}: migration 126 froze {frozen} active "
+                    f"{table} rows to {models!r} under the source's story pin; "
+                    f"the {story_pin!r} pin resolves seat {seat} to {expected!r} "
+                    "and cannot replace the frozen model"
+                )
+
+
 @contextmanager
 def disposable_slot_database(
     prefix: str,
@@ -155,9 +235,22 @@ def disposable_slot_database(
     ``include_data`` snapshots a source corpus with pg_dump, restores it into
     the disposable target, and migrates only that clone. It never disconnects,
     unlocks, or changes the source database. Default cloning copies seed data
-    only, suitable for tests that create their own stories. Clones are pinned
-    to TEST before corpus migrations so backfilled work is also safe. Preserving
-    the source pin requires the explicit live-LLM opt-in.
+    only, suitable for tests that create their own stories. A data clone is
+    brought to the current migration stamp before the TEST pin is written,
+    because the pin names columns that a source behind the current stamp may
+    lack (``global_variables.gaia_model`` arrives in migration 117; issue
+    #1083). Migrations call no provider, and the fixture yields only after the
+    pin, so ``global_variables`` reads the TEST pin. Migration 126 is the one
+    exception the pin cannot reach: it freezes ``resolved_model`` on queued and
+    leased jobs from the pin it finds, which for a data clone is the source's
+    pin, and a later repin does not change it. That matters only for seats
+    whose policy follows the story; a fixed seat resolves to its configured
+    default under any pin. When the clone crosses 126 under a TEST pin, the
+    fixture fails loudly instead of yielding if any backfilled job
+    (``resolved_source = 'migration_backfill'``) carries a model other than
+    the one the TEST pin resolves for its seat. Jobs the source already
+    resolved before the clone keep their models. Preserving the source pin
+    requires the explicit live-LLM opt-in.
 
     Fails loudly when the admin connection is unavailable; opting into the
     PostgreSQL gate means PostgreSQL is required.
@@ -230,12 +323,20 @@ def disposable_slot_database(
                     text=True,
                     env=subprocess_env(),
                 )
-            pin_clone()
+            crosses_seat_backfill = not _has_migration_stamp(
+                dbname, SEAT_BACKFILL_MIGRATION
+            )
+            # Migrate before pinning: the pin's UPDATE names columns (such as
+            # global_variables.gaia_model) that a source behind the current
+            # stamp does not have yet.
             _, failed = migrate.migrate_database(dbname, skip_locked=False)
             if failed:
                 raise RuntimeError(
                     f"Corpus clone {dbname} has {failed} failed migrations"
                 )
+            if story_pin is not None and crosses_seat_backfill:
+                _refuse_source_pin_backfill(dbname, story_pin)
+            pin_clone()
         else:
             new_story_setup.initialize_slot_database(dbname, source_db=source_db)
             pin_clone()
@@ -594,12 +695,52 @@ def route_slot_from_environment(
     return slot, dbname
 
 
+DEFAULT_BASE_TIMESTAMP = "2100-01-01T00:00:00+00:00"
+
+
+def set_story_base(cur: Any, base_timestamp: str | datetime) -> None:
+    """Set ``global_variables.base_timestamp`` on ``cur``'s open transaction.
+
+    This is the one base path for fixtures. Call it before any
+    ``chunk_metadata`` row exists, as the wizard transition does: the refresh
+    trigger raises on a chunk write while the base is NULL or its row is
+    missing (migration 144 removed the wall-clock fallback), and
+    ``trg_global_variables_base_timestamp_fixed`` refuses to change the base
+    once ``chunk_metadata`` holds a row, because stored event times would keep
+    the old clock. The helper upserts the singleton row and checks nothing
+    else; the guard is the database's.
+    """
+
+    cur.execute(
+        "INSERT INTO global_variables (id, base_timestamp) VALUES (true, %s) "
+        "ON CONFLICT (id) DO UPDATE SET base_timestamp = EXCLUDED.base_timestamp",
+        (base_timestamp,),
+    )
+    assert cur.rowcount == 1
+
+
+def seed_story_base(
+    dbname: str, *, base_timestamp: str | datetime = DEFAULT_BASE_TIMESTAMP
+) -> None:
+    """Seed the story clock's base on a disposable save before any chunk.
+
+    A chunk written before the base raises (migration 144: no wall-clock
+    fallback), and the base cannot change once a chunk exists, so tests that
+    insert chunks without a protagonist call this first. Writes through
+    ``set_story_base`` on one connection.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        set_story_base(cur, base_timestamp)
+
+
 def seed_protagonist(
     dbname: str,
     *,
     name: str = "Fixture Player",
     summary: str = "Canonical player for PostgreSQL coverage.",
-    base_timestamp: str = "2100-01-01T00:00:00+00:00",
+    base_timestamp: str = DEFAULT_BASE_TIMESTAMP,
     current_location: int | None = None,
 ) -> tuple[int, int]:
     """Bind a fixture-owned player to the save and return character/entity IDs.
@@ -607,18 +748,10 @@ def seed_protagonist(
     Sets ``global_variables.base_timestamp`` before the character insert, which
     satisfies the need-clock anchor (migration 100); ``seed_story_clock`` can
     then add a head chunk after it. Refuses to move a clock that is already
-    set (for example by ``seed_story_clock``): resetting ``base_timestamp``
-    under stored chunks would desynchronize their ``world_time`` from the
-    summed primary-layer deltas until the next ``chunk_metadata`` write
-    re-stamps them.
-
-    When the clock is first set under chunks that already exist, those chunks
-    carry wall-clock ``world_time`` stamps (the refresh trigger falls back to
-    ``now()`` while ``base_timestamp`` is NULL). The helper re-stamps them
-    through the ``UPDATE OF time_delta`` statement trigger and asserts the
-    head clock is ``base_timestamp`` plus the summed primary-layer deltas
-    before the character insert, so need clocks never anchor to wall time
-    (#640/#645).
+    set (for example by ``seed_story_clock``): once ``chunk_metadata`` holds a
+    row, ``trg_global_variables_base_timestamp_fixed`` (migration 144) refuses
+    any change to ``base_timestamp``, and before the first chunk a second,
+    different base would contradict the clock a caller already seeded.
     """
 
     require_disposable_target(dbname)
@@ -634,13 +767,7 @@ def seed_protagonist(
                 f"{requested}; run it before seed_story_clock, or pass the "
                 "clock already set"
             )
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                (base_timestamp,),
-            )
-            assert cur.rowcount == 1
-            if row[0] is None:
-                cur.execute("UPDATE chunk_metadata SET time_delta = time_delta")
+            set_story_base(cur, base_timestamp)
             _require_need_clock_anchor(cur, "seed_protagonist")
             cur.execute(
                 "INSERT INTO entities (kind, is_active) "
@@ -682,8 +809,9 @@ def seed_committed_chunk(
     otherwise; an explicit value passes through unchanged. The
     statement-level ``trg_chunk_metadata_refresh_world_time`` trigger stamps
     ``chunk_metadata.world_time`` as ``base_timestamp`` plus the cumulative
-    primary-layer deltas, so the chunk's clock is exact only once
-    ``base_timestamp`` is set.
+    primary-layer deltas; the insert raises while ``base_timestamp`` is NULL,
+    so seed it first (``seed_story_base``, ``seed_protagonist``, or
+    ``seed_story_clock``).
 
     The chunk carries no ``authorial_directives``, so it satisfies
     ``playable_narrative_predicate`` (reconstruction.py) and counts toward the
@@ -731,8 +859,7 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     ``MAX(chunk_metadata.world_time)``, then at ``base_timestamp``. The anchor
     is exact only when ``base_timestamp`` is set and, if chunks exist, the head
     ``world_time`` equals ``base_timestamp`` plus the summed primary-layer
-    deltas. Chunks stamped while ``base_timestamp`` was NULL carry wall-clock
-    ``world_time`` and fail here rather than seeding wall-clock need clocks.
+    deltas.
     """
 
     cur.execute(
@@ -762,8 +889,8 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     assert chunk_count == 0 or head_world_time == expected_head, (
         f"{helper} found a wall-clock need-clock anchor: head world_time "
         f"{head_world_time} is not base_timestamp {base_timestamp} plus the "
-        f"summed primary-layer deltas ({expected_head}); re-stamp "
-        "chunk_metadata after setting base_timestamp"
+        f"summed primary-layer deltas ({expected_head}); seed "
+        "base_timestamp through set_story_base before any chunk"
     )
 
 
@@ -804,11 +931,7 @@ def seed_story_clock(
         row = cur.fetchone()
         assert row is not None, f"{dbname} has no global_variables row"
         if row[0] is None:
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                (world_time,),
-            )
-            assert cur.rowcount == 1
+            set_story_base(cur, world_time)
         else:
             cur.execute("SELECT EXISTS (SELECT 1 FROM chunk_metadata)")
             if not cur.fetchone()[0]:
@@ -2503,7 +2626,7 @@ def seed_played_story(
     *,
     turns: int,
     protagonist_name: str = "Fixture Player",
-    base_timestamp: str = "2100-01-01T00:00:00+00:00",
+    base_timestamp: str = DEFAULT_BASE_TIMESTAMP,
     time_delta: timedelta = timedelta(minutes=5),
     cast: tuple[str, ...] = (),
     correspondence: bool = False,

@@ -224,9 +224,14 @@ def test_recalled_render_clocks_come_from_narrative_view() -> None:
     from sqlalchemy.orm import Session
 
     from nexus.agents.lore.utils.scene_order import hydrate_recalled_clocks
-    from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
+    from tests.pg_fixtures import (
+        disposable_slot_database,
+        seed_story_base,
+        sqlalchemy_url,
+    )
 
     with disposable_slot_database("qa640_scene_clock") as dbname:
+        seed_story_base(dbname)
         engine = create_engine(sqlalchemy_url(dbname))
         try:
             with engine.begin() as conn:
@@ -283,9 +288,14 @@ def test_assembly_hydrates_only_selected_recalled_entries_with_null_clocks() -> 
     from sqlalchemy import create_engine, event, text
     from sqlalchemy.orm import sessionmaker
 
-    from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
+    from tests.pg_fixtures import (
+        disposable_slot_database,
+        seed_story_base,
+        sqlalchemy_url,
+    )
 
     with disposable_slot_database("qa640_scene_null_clock") as dbname:
+        seed_story_base(dbname)
         engine = create_engine(sqlalchemy_url(dbname))
         try:
             with engine.begin() as conn:

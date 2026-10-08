@@ -154,13 +154,15 @@ python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 
 ## Two Clocks
 
-PostgreSQL comments define both clocks; read them with `\d+ chunk_metadata`, `\df+ refresh_world_time_from_chunk*` and `\dd trg_chunk_metadata_refresh_world_time`. The story clock is `chunk_metadata.world_time`, recomputed by `refresh_world_time_from_chunk()` from `global_variables.base_timestamp` and primary-layer `time_delta` after every insert and every `time_delta` or `world_layer` update; event occurrence time is `world_events.world_time`. Diegetic state belongs on the story clock. The tick clock is the accepted chunk in each `tick_chunk_id` column; it serves ordering, replay, exposure fairness, habituation, and narration cadence.
+PostgreSQL comments define both clocks; read them with `\d+ chunk_metadata`, `\df+ refresh_world_time_from_chunk*` and `\dd trg_chunk_metadata_refresh_world_time`. The story clock is `chunk_metadata.world_time`, recomputed by `refresh_world_time_from_chunk()` from `global_variables.base_timestamp` and primary-layer `time_delta` after every insert and every `time_delta` or `world_layer` update; event occurrence time is `world_events.world_time`. A `chunk_metadata` write raises while `base_timestamp` is NULL, and `base_timestamp` cannot change once `chunk_metadata` holds a row. Diegetic state belongs on the story clock. The tick clock is the accepted chunk in each `tick_chunk_id` column; it serves ordering, replay, exposure fairness, habituation, and narration cadence.
 
 ## Schema Documentation
 
-PostgreSQL comments are the schema reference (`\d+` in psql or
-`MEMNON.get_schema_summary`); add a non-empty `COMMENT ON` with each new table,
-table column, enum, function, and view. The PostgreSQL-gated
+PostgreSQL comments are the schema reference; read them with
+`psql -d save_NN -c '\d+ <table>'`, because `MEMNON.get_schema_summary` lists
+only the column names of populated tables and returns no comments. Add a
+non-empty `COMMENT ON` with each new table, table column, enum,
+function, and view. The PostgreSQL-gated
 `tests/test_schema_documentation_pg.py` ratchet checks five object kinds that
 NEXUS owns in `public` and `assets`: tables (`table:<schema>.<name>`), table
 columns (`column:<schema>.<table>.<name>`), enums (`enum:<schema>.<name>`),
