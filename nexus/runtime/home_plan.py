@@ -312,13 +312,6 @@ def _model_references(settings: Settings) -> List[Tuple[str, str]]:
     references.append(
         ("memnon.retrieval.cross_encoder_reranking.model_path", reranking.model_path)
     )
-    references.extend(
-        (
-            f"memnon.retrieval.cross_encoder_reranking.candidates.{name}.local_path",
-            candidate.local_path,
-        )
-        for name, candidate in sorted(reranking.candidates.items())
-    )
     return references
 
 

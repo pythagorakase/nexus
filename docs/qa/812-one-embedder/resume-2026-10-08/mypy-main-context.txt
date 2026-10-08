@@ -1,0 +1,142 @@
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases ir_eval/engine/run_executor.py ir_eval/runner.py nexus/agents/memnon/memnon.py nexus/agents/memnon/utils/artifact_manifest.py nexus/agents/memnon/utils/cross_encoder.py nexus/agents/memnon/utils/embedding_manager.py nexus/config/settings_models.py nexus/runtime/home_plan.py scripts/create_vector_index.py scripts/import_narratives.py scripts/new_story_setup.py scripts/query_narratives_vector.py scripts/regenerate_embeddings.py tests/config/test_settings_parity.py tests/test_embedding_artifacts.py tests/test_lore/test_runtime_config.py tests/test_memnon_cross_encoder_artifact.py tests/test_memnon_embedding_cache.py tests/test_memnon_embedding_contract.py tests/test_memnon_script_model_loaders.py tests/test_model_artifact_lock_committed.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_runtime_home.py
+nexus/config/settings_models.py:130: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:130: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:131: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:131: error: Unsupported operand types for < ("int" and "None")  [operator]
+nexus/config/settings_models.py:131: error: Unsupported left operand type for > ("None")  [operator]
+nexus/config/settings_models.py:131: note: Both left and right operands are unions
+nexus/config/settings_models.py:138: error: Unsupported operand types for + ("int" and "None")  [operator]
+nexus/config/settings_models.py:138: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:138: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4444: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4444: note: Right operand is of type "int | None"
+scripts/create_vector_index.py:93: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/create_vector_index.py:93: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/create_vector_index.py:93: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:58: error: Library stubs not installed for "tqdm"  [import-untyped]
+scripts/regenerate_embeddings.py:58: note: Hint: "python3 -m pip install types-tqdm"
+scripts/regenerate_embeddings.py:157: error: Skipping analyzing "pgvector": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/regenerate_embeddings.py:158: error: Skipping analyzing "pgvector.sqlalchemy": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/regenerate_embeddings.py:284: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:284: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:284: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:374: error: Need type annotation for "other_models" (hint: "other_models: list[<type>] = ...")  [var-annotated]
+scripts/regenerate_embeddings.py:377: error: Incompatible types in assignment (expression has type "Sequence[Row[Any]]", variable has type "list[Any]")  [assignment]
+scripts/regenerate_embeddings.py:548: error: "Result[Any]" has no attribute "rowcount"  [attr-defined]
+scripts/regenerate_embeddings.py:650: error: Incompatible types in assignment (expression has type "str", target has type "int")  [assignment]
+scripts/regenerate_embeddings.py:983: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:983: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:983: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1076: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1076: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1076: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1115: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1219: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1219: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1219: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1246: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1292: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1292: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1292: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/query_narratives_vector.py:125: error: Skipping analyzing "pgvector": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/query_narratives_vector.py:126: error: Skipping analyzing "pgvector.sqlalchemy": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/query_narratives_vector.py:148: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/query_narratives_vector.py:148: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/query_narratives_vector.py:148: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/import_narratives.py:115: error: Skipping analyzing "pgvector": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/import_narratives.py:116: error: Skipping analyzing "pgvector.sqlalchemy": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/import_narratives.py:128: error: Variable "scripts.import_narratives.Base" is not valid as a type  [valid-type]
+scripts/import_narratives.py:128: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/import_narratives.py:128: error: Invalid base class "Base"  [misc]
+scripts/import_narratives.py:154: error: Variable "scripts.import_narratives.Base" is not valid as a type  [valid-type]
+scripts/import_narratives.py:154: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/import_narratives.py:154: error: Invalid base class "Base"  [misc]
+scripts/import_narratives.py:165: error: Need type annotation for "embedding"  [var-annotated]
+scripts/import_narratives.py:176: error: Variable "scripts.import_narratives.Base" is not valid as a type  [valid-type]
+scripts/import_narratives.py:176: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/import_narratives.py:176: error: Invalid base class "Base"  [misc]
+scripts/import_narratives.py:187: error: Need type annotation for "embedding"  [var-annotated]
+scripts/import_narratives.py:196: error: Variable "scripts.import_narratives.Base" is not valid as a type  [valid-type]
+scripts/import_narratives.py:196: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/import_narratives.py:196: error: Invalid base class "Base"  [misc]
+scripts/import_narratives.py:204: error: Need type annotation for "world_layer"  [var-annotated]
+scripts/import_narratives.py:232: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/import_narratives.py:232: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/import_narratives.py:232: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/import_narratives.py:545: error: Incompatible types in assignment (expression has type "Any | None", variable has type "int")  [assignment]
+nexus/agents/memnon/memnon.py:24: error: Library stubs not installed for "requests"  [import-untyped]
+nexus/agents/memnon/memnon.py:24: note: Hint: "python3 -m pip install types-requests"
+nexus/agents/memnon/memnon.py:24: note: (or run "mypy --install-types" to install all missing stub packages)
+nexus/agents/memnon/memnon.py:24: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+nexus/agents/memnon/memnon.py:76: error: Variable "nexus.agents.memnon.memnon.Base" is not valid as a type  [valid-type]
+nexus/agents/memnon/memnon.py:76: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+nexus/agents/memnon/memnon.py:76: error: Invalid base class "Base"  [misc]
+nexus/agents/memnon/memnon.py:87: error: Variable "nexus.agents.memnon.memnon.Base" is not valid as a type  [valid-type]
+nexus/agents/memnon/memnon.py:87: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+nexus/agents/memnon/memnon.py:87: error: Invalid base class "Base"  [misc]
+nexus/agents/memnon/memnon.py:102: error: Need type annotation for "keywords"  [var-annotated]
+nexus/agents/memnon/memnon.py:103: error: Need type annotation for "characters"  [var-annotated]
+nexus/agents/memnon/memnon.py:106: error: Variable "nexus.agents.memnon.memnon.Base" is not valid as a type  [valid-type]
+nexus/agents/memnon/memnon.py:106: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+nexus/agents/memnon/memnon.py:106: error: Invalid base class "Base"  [misc]
+nexus/agents/memnon/memnon.py:123: error: Variable "nexus.agents.memnon.memnon.Base" is not valid as a type  [valid-type]
+nexus/agents/memnon/memnon.py:123: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+nexus/agents/memnon/memnon.py:123: error: Invalid base class "Base"  [misc]
+nexus/agents/memnon/memnon.py:128: error: Need type annotation for "type"  [var-annotated]
+nexus/agents/memnon/memnon.py:133: error: Need type annotation for "inhabitants"  [var-annotated]
+nexus/agents/memnon/memnon.py:154: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+nexus/agents/memnon/memnon.py:154: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py:154: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+nexus/agents/memnon/memnon.py:155: error: Incompatible default for argument "model_id" (default has type "None", argument has type "str")  [assignment]
+nexus/agents/memnon/memnon.py:155: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py:155: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+nexus/agents/memnon/memnon.py:156: error: Incompatible default for argument "model_path" (default has type "None", argument has type "str")  [assignment]
+nexus/agents/memnon/memnon.py:156: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py:156: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+nexus/agents/memnon/memnon.py:157: error: Incompatible default for argument "debug" (default has type "None", argument has type "bool")  [assignment]
+nexus/agents/memnon/memnon.py:157: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py:157: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+nexus/agents/memnon/memnon.py:449: error: Incompatible default for argument "filters" (default has type "None", argument has type "dict[str, Any]")  [assignment]
+nexus/agents/memnon/memnon.py:449: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py:449: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+nexus/agents/memnon/memnon.py:449: error: Incompatible default for argument "top_k" (default has type "None", argument has type "int")  [assignment]
+nexus/agents/memnon/memnon.py:689: error: Incompatible default for argument "filters" (default has type "None", argument has type "dict[str, Any]")  [assignment]
+nexus/agents/memnon/memnon.py:689: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py:689: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+nexus/agents/memnon/memnon.py:861: error: Incompatible default for argument "filters" (default has type "None", argument has type "dict[str, Any]")  [assignment]
+nexus/agents/memnon/memnon.py:861: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py:861: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+nexus/agents/memnon/memnon.py:873: error: Incompatible default for argument "glob_pattern" (default has type "None", argument has type "str")  [assignment]
+nexus/agents/memnon/memnon.py:873: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py:873: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+nexus/agents/memnon/memnon.py:1082: error: Incompatible types in assignment (expression has type "int", target has type "Collection[str]")  [assignment]
+nexus/agents/memnon/memnon.py:1099: error: Need type annotation for "model_counts" (hint: "model_counts: dict[<type>, <type>] = ...")  [var-annotated]
+nexus/agents/memnon/memnon.py:1521: error: "object" has no attribute "append"  [attr-defined]
+nexus/agents/memnon/memnon.py:1535: error: "object" has no attribute "append"  [attr-defined]
+nexus/agents/memnon/memnon.py:1546: error: Argument "query_text" to "perform_hybrid_search" of "SearchManager" has incompatible type "str | dict[str, Any] | int | Any | None"; expected "str"  [arg-type]
+nexus/agents/memnon/memnon.py:1547: error: Argument "filters" to "perform_hybrid_search" of "SearchManager" has incompatible type "str | dict[str, Any] | int | Any | None"; expected "dict[str, Any] | None"  [arg-type]
+nexus/agents/memnon/memnon.py:1548: error: Argument "top_k" to "perform_hybrid_search" of "SearchManager" has incompatible type "str | dict[str, Any] | int | Any | None"; expected "int | None"  [arg-type]
+nexus/agents/memnon/memnon.py:1557: error: Argument "query_text" to "query_vector_search" of "SearchManager" has incompatible type "str | dict[str, Any] | int | Any | None"; expected "str"  [arg-type]
+nexus/agents/memnon/memnon.py:1559: error: Argument "filters" to "query_vector_search" of "SearchManager" has incompatible type "str | dict[str, Any] | int | Any | None"; expected "dict[str, Any]"  [arg-type]
+nexus/agents/memnon/memnon.py:1560: error: Argument "top_k" to "query_vector_search" of "SearchManager" has incompatible type "str | dict[str, Any] | int | Any | None"; expected "int"  [arg-type]
+nexus/agents/memnon/memnon.py:1596: error: "object" has no attribute "append"  [attr-defined]
+ir_eval/engine/run_executor.py:163: error: Missing positional argument "db_url" in call to "QueryAnalyzer"  [call-arg]
+ir_eval/engine/run_executor.py:336: error: Argument "filters" to "query_vector_search" of "SearchManager" has incompatible type "None"; expected "dict[str, Any]"  [arg-type]
+ir_eval/engine/run_executor.py:362: error: Argument "model_path" to "rerank_results" has incompatible type "str | None"; expected "str"  [arg-type]
+tests/test_memnon_embedding_cache.py:92: error: Value of type "Item | Container" is not indexable  [index]
+tests/test_memnon_embedding_cache.py:92: error: Item "Item" of "Any | Item | Container" has no attribute "items"  [union-attr]
+tests/test_memnon_embedding_cache.py:243: error: "Pool" has no attribute "checkedin"  [attr-defined]
+tests/test_memnon_embedding_cache.py:246: error: "Pool" has no attribute "checkedin"  [attr-defined]
+tests/test_memnon_embedding_cache.py:266: error: Incompatible types in assignment (expression has type "object", variable has type "LogonUtility | None")  [assignment]
+tests/test_memnon_embedding_cache.py:268: error: "None" has no attribute "embedding_manager"  [attr-defined]
+tests/test_memnon_embedding_cache.py:276: error: "None" has no attribute "embedding_manager"  [attr-defined]
+tests/test_lore/test_runtime_config.py:204: error: Unsupported target for indexed assignment ("Item | Container")  [index]
+tests/test_lore/test_runtime_config.py:205: error: Value of type "Item | Container" is not indexable  [index]
+tests/test_lore/test_runtime_config.py:205: error: Unsupported target for indexed assignment ("Any | Item | Container")  [index]
+tests/test_lore/test_runtime_config.py:208: error: Value of type "Item | Container" is not indexable  [index]
+tests/test_lore/test_runtime_config.py:208: error: Value of type "Any | Item | Container" is not indexable  [index]
+tests/test_lore/test_runtime_config.py:208: error: Unsupported target for indexed assignment ("Any | Item | Container")  [index]
+tests/test_lore/test_runtime_config.py:226: error: "None" has no attribute "settings"  [attr-defined]
+Found 90 errors in 9 files (checked 23 source files)
+
+exit 1

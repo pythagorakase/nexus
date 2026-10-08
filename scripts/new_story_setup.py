@@ -253,9 +253,19 @@ def initialize_slot_database(
     subprocess.run([tools["createdb"], target_db], check=True, env=subprocess_env())
     LOG.info("Created database %s", target_db)
 
-    # Dump both public and assets schemas from template
-    dump_cmd = [tools["pg_dump"], "-s", "-n", "public", "-n", "assets", source_db]
-    LOG.info("Dumping schema (public + assets) from %s", source_db)
+    # Copy every application schema covered by the template's migration stamps.
+    dump_cmd = [
+        tools["pg_dump"],
+        "-s",
+        "-n",
+        "public",
+        "-n",
+        "assets",
+        "-n",
+        "ir_eval",
+        source_db,
+    ]
+    LOG.info("Dumping schema (public + assets + ir_eval) from %s", source_db)
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
         subprocess.run(dump_cmd, check=True, stdout=tmp, env=subprocess_env())
         tmp_path = tmp.name
@@ -282,9 +292,14 @@ def initialize_slot_database(
                 and not line.strip().startswith("ALTER SCHEMA public")
                 and not line.strip().startswith("CREATE SCHEMA assets")
                 and not line.strip().startswith("ALTER SCHEMA assets")
+                and not line.strip().startswith("CREATE SCHEMA ir_eval")
+                and not line.strip().startswith("ALTER SCHEMA ir_eval")
             ]
-        # Add CREATE SCHEMA assets (since we filter it out but need it)
-        sql_lines.insert(0, "CREATE SCHEMA IF NOT EXISTS assets;\n")
+        # Recreate the filtered application schemas before restoring their objects.
+        sql_lines[:0] = [
+            "CREATE SCHEMA IF NOT EXISTS assets;\n",
+            "CREATE SCHEMA IF NOT EXISTS ir_eval;\n",
+        ]
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.writelines(sql_lines)
 

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from nexus.config import load_settings_as_dict
 from nexus.database import resolved_database_url
-from nexus.agents.memnon.utils.cross_encoder import rerank_results, reranker_repo_id
+from nexus.agents.memnon.utils.cross_encoder import rerank_results
 from nexus.agents.memnon.utils.embedding_manager import EmbeddingManager
 from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary
 from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -47,6 +47,19 @@ class RunExecutor:
         self.base_memnon_settings = copy.deepcopy(
             self.settings_dict["Agent Settings"]["MEMNON"]
         )
+        ir_eval_settings = self.settings_dict["ir_eval"]
+        if ir_eval_settings is None:
+            raise ValueError(
+                "nexus.toml declares no [ir_eval] section; ir_eval runs resolve "
+                "their candidates from [ir_eval.embedding_candidates] and "
+                "[ir_eval.reranker_candidates]."
+            )
+        self.embedding_candidates: Dict[str, Dict[str, Any]] = copy.deepcopy(
+            ir_eval_settings["embedding_candidates"]
+        )
+        self.reranker_candidates: Dict[str, Dict[str, Any]] = copy.deepcopy(
+            ir_eval_settings["reranker_candidates"]
+        )
 
         self.db_url = resolved_database_url(db_url)
 
@@ -62,6 +75,32 @@ class RunExecutor:
         return {
             model.model: (model.weight / total) for model in config.embedding_models
         }
+
+    def _resolve_embedding_model(self, name: str) -> Dict[str, Any]:
+        """Return a copy of the embedder entry an ir_eval ``--model`` names.
+
+        The one ``[memnon.models]`` entry (the production embedder) or an
+        ``[ir_eval.embedding_candidates]`` entry; any other name raises.
+        """
+        (production,) = self.base_memnon_settings["models"]
+        if name == production:
+            return copy.deepcopy(self.base_memnon_settings["models"][production])
+        if name in self.embedding_candidates:
+            return copy.deepcopy(self.embedding_candidates[name])
+        raise ValueError(
+            f"Embedding model '{name}' is neither the production [memnon.models] "
+            f"entry ({production}) nor an [ir_eval.embedding_candidates] entry "
+            f"(known: {sorted(self.embedding_candidates)})."
+        )
+
+    def _resolve_reranker_candidate(self, name: str) -> Dict[str, Any]:
+        """Return a copy of the ``[ir_eval.reranker_candidates]`` entry ``name``."""
+        if name not in self.reranker_candidates:
+            raise ValueError(
+                f"Reranker '{name}' is not an [ir_eval.reranker_candidates] entry "
+                f"(known: {sorted(self.reranker_candidates)})."
+            )
+        return copy.deepcopy(self.reranker_candidates[name])
 
     def _build_run_memnon_settings(
         self,
@@ -79,16 +118,16 @@ class RunExecutor:
         selected_model_weights = self._normalize_model_weights(config)
         model_configs = run_settings.get("models", {})
 
-        for model_name in selected_model_weights:
-            if model_name not in model_configs:
-                raise ValueError(
-                    f"Run references model '{model_name}', but it is not configured in MEMNON settings"
-                )
-
-        # Disable all models first, then activate selected ones with normalized weights.
+        # create_run stores exactly the selected models in the snapshot, so
+        # every snapshot model runs; nothing is switched off.
+        if set(model_configs) != set(selected_model_weights):
+            raise ValueError(
+                f"Run snapshot models {sorted(model_configs)} differ from the "
+                f"selected models {sorted(selected_model_weights)}"
+            )
         for model_name, model_config in model_configs.items():
-            model_config["is_active"] = model_name in selected_model_weights
-            model_config["weight"] = selected_model_weights.get(model_name, 0.0)
+            model_config["is_active"] = True
+            model_config["weight"] = selected_model_weights[model_name]
 
         retrieval = run_settings.setdefault("retrieval", {})
         hybrid = retrieval.setdefault("hybrid_search", {})
@@ -258,11 +297,31 @@ class RunExecutor:
             )
 
     def create_run(self, config: EvalRunConfig) -> int:
-        """Persist a run configuration and return its run ID."""
-        if not config.settings_snapshot:
-            config = config.model_copy(
-                update={"settings_snapshot": copy.deepcopy(self.base_memnon_settings)}
+        """Persist a run configuration and return its run ID.
+
+        The stored snapshot is the MEMNON section with ``models`` replaced by
+        one resolved entry per selected model and, when reranking runs with a
+        named candidate, that candidate as the reranker. Every name resolves
+        before the row is written, so an unknown name writes nothing.
+        """
+        if config.settings_snapshot:
+            raise ValueError(
+                "create_run builds the settings snapshot itself; the incoming "
+                "run config already carries one"
             )
+        snapshot = copy.deepcopy(self.base_memnon_settings)
+        snapshot["models"] = {
+            model.model: self._resolve_embedding_model(model.model)
+            for model in config.embedding_models
+        }
+        if config.cross_encoder_enabled and config.reranker_candidate:
+            candidate = self._resolve_reranker_candidate(config.reranker_candidate)
+            reranking = snapshot["retrieval"]["cross_encoder_reranking"]
+            reranking["name"] = config.reranker_candidate
+            reranking["model_path"] = candidate["local_path"]
+            reranking["remote_path"] = candidate["remote_path"]
+            reranking["api_type"] = candidate["api_type"]
+        config = config.model_copy(update={"settings_snapshot": snapshot})
         return self.store.create_run(config)
 
     def execute_run(self, run_id: int) -> RunExecutionSummary:
@@ -292,32 +351,15 @@ class RunExecutor:
             "cross_encoder_reranking", {}
         )
 
-        # Resolve which reranker to use. Skip entirely when reranking is
-        # disabled — a run can legitimately carry a stale `reranker_candidate`
-        # while running with `--no-cross-encoder` and shouldn't fail validation
-        # on a field that won't be consulted.
+        # The snapshot already holds the run's reranker: create_run wrote any
+        # named candidate into it. Skip entirely when reranking is disabled.
         reranker_model_path: Optional[str] = None
         reranker_repo: Optional[str] = None
         reranker_api_type: str = "cross_encoder"
         if run_config.cross_encoder_enabled:
-            candidates = cross_encoder_settings.get("candidates", {}) or {}
-            if run_config.reranker_candidate:
-                candidate = candidates.get(run_config.reranker_candidate)
-                if candidate is None:
-                    raise ValueError(
-                        f"Reranker candidate '{run_config.reranker_candidate}' is not registered "
-                        f"in [memnon.retrieval.cross_encoder_reranking.candidates]. "
-                        f"Known: {sorted(candidates.keys())}"
-                    )
-                reranker_model_path = str(candidate["local_path"])
-                reranker_repo = str(candidate.get("remote_path") or "") or None
-                reranker_api_type = str(candidate.get("api_type", "cross_encoder"))
-            else:
-                reranker_model_path = str(cross_encoder_settings["model_path"])
-                reranker_repo = reranker_repo_id(reranker_model_path, candidates)
-                reranker_api_type = str(
-                    cross_encoder_settings.get("api_type", "cross_encoder")
-                )
+            reranker_model_path = str(cross_encoder_settings["model_path"])
+            reranker_repo = cross_encoder_settings["remote_path"] or None
+            reranker_api_type = str(cross_encoder_settings["api_type"])
 
         try:
             for query in queries:

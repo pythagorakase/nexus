@@ -184,14 +184,14 @@ def test_regenerate_embeddings_loader_raises_for_a_missing_folder(
 
 
 def test_regenerate_embeddings_refuses_an_unregistered_model(tmp_path: Path) -> None:
-    """A model name with no [memnon.models] entry is never tried on the Hub."""
+    """A model name with no registered entry is never tried on the Hub."""
 
     outcome = _probe("scripts/regenerate_embeddings.py", "load_unregistered", tmp_path)
 
     assert outcome["type"] == "builtins.RuntimeError", outcome
     assert outcome["message"].startswith(
         "Embedding model 'example-org/unregistered' is not registered in "
-        "[memnon.models]"
+        "[memnon.models] or [ir_eval.embedding_candidates]"
     )
     assert outcome["cached"] == 0
 
