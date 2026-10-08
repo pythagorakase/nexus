@@ -1,0 +1,12 @@
+--- nexus/cli.py
++++ nexus/cli.py
+@@ -1559,8 +1559,7 @@
+             last_id=after,
+         )
+         chunks.extend(page)
+-        if cursor is None:
+-            break
++        break
+         after = cursor
+     return chunks
+ 

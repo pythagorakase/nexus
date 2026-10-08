@@ -151,7 +151,6 @@
     "nexus/cli.py|_confirm_wizard_artifact_and_introduce|3252244bb5f971cc5dda3543130daa399ab87e3d03d20f2997215ca3d2257551|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "nexus/cli.py|_dispatch|f5b6ee770b0eff950d38917043840c42127a312c75daa4dcda72747a69d7ff88|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "nexus/cli.py|_get_next_phase|489da708bbcbc410fb31ed5dfbce85104c4aed252b3ba734ad9c81d8997c1e14|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
-    "nexus/cli.py|_inspect_chunks|e4bcef6ba89efbed878149ed9cb4e246fa2e7a8e6073ea30d56e47006b5476ac|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "nexus/cli.py|_introduce_accepted_phase|846b120f5e5a9f715ba3d0195ab06818e622572f3e6dd8b59db630ead0113c31|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "nexus/cli.py|_usage_error|bc031c96ab265db073d5a8ba45030098c5afc0b570bfa7284c0a9255b6374f70|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "nexus/cli.py|_usage_error|bc031c96ab265db073d5a8ba45030098c5afc0b570bfa7284c0a9255b6374f70|2": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
