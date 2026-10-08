@@ -35,6 +35,7 @@ from tests.pg_fixtures import (
     route_slot_to_disposable,
     seed_character,
     seed_committed_chunk,
+    seed_story_base,
     seed_story_clock,
     sqlalchemy_url,
 )
@@ -74,6 +75,8 @@ def seed_source(
         cur.execute("SELECT coalesce(max(scene), 0) + 1 FROM chunk_metadata")
         scene = int(cur.fetchone()[0])
     if spec is CHUNK_SOURCE:
+        # The base precedes the first chunk; an identical re-seed passes.
+        seed_story_base(dbname)
         return seed_committed_chunk(dbname, raw_text=text, scene=scene)
     summary_id = _insert_retrograde_summaries(dbname, [text])[0]
     if spec is RETROGRADE_SUMMARY_SOURCE:

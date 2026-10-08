@@ -20,7 +20,7 @@ from nexus.jobs.embeddings import enqueue_embedding
 from nexus.jobs.narrative_jobs import require_lease
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.telemetry import usage
-from tests.pg_fixtures import connect, seed_committed_chunk
+from tests.pg_fixtures import connect, seed_committed_chunk, seed_story_base
 from tests.scheduler_helpers import test_provider_config as configure_test
 from tests.test_api.test_acceptance_staging_pg import (
     acceptance_slot,
@@ -232,6 +232,7 @@ def test_embedding_job_names_the_embedder_restore_command(
         f"Restore it with `hf download {repo} --revision {revision} "
         f"--local-dir {folder}`, then run `nexus models verify`."
     )
+    seed_story_base(offline_gate_db)
     chunk_id = seed_committed_chunk(offline_gate_db, raw_text="the bell")
     with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
         enqueue_embedding(cur, chunk_id)

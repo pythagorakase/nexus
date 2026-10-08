@@ -19,7 +19,7 @@ from nexus.agents.memnon.utils.db_access import execute_multi_model_hybrid_searc
 from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary, IDFStateError
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.database import database_url
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import connect, disposable_slot_database, seed_story_base
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -58,6 +58,7 @@ def _metadata(cursor: Any, chunk_id: int) -> None:
 @pytest.fixture()
 def idf_slot() -> Iterator[str]:
     with disposable_slot_database("qa762_idf") as dbname:
+        seed_story_base(dbname)
         yield dbname
 
 
@@ -96,6 +97,7 @@ def test_slot_and_corpus_isolation(
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     with disposable_slot_database("qa762_other") as other:
+        seed_story_base(other)
         with closing(connect(other)) as conn, conn:
             with conn.cursor() as cur:
                 cur.execute("DROP FUNCTION maintain_memory_idf() CASCADE")
@@ -497,6 +499,7 @@ def test_fresh_slot_from_migrated_source_has_empty_own_state(idf_slot: str) -> N
     with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
         _insert(cur, "Source dragon vocabulary")
     with disposable_slot_database("qa762_fresh", source_db=idf_slot) as fresh:
+        seed_story_base(fresh)
         reader = IDFDictionary(_url(fresh))
         assert reader.build_dictionary() == {}
         assert reader.total_docs == 0

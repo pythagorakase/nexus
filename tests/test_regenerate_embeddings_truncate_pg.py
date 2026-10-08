@@ -28,7 +28,12 @@ from nexus.agents.memnon.utils.embedding_tables import (
     table_name_for_dimensions,
 )
 from nexus.database import database_url
-from tests.pg_fixtures import connect, disposable_slot_database, seed_committed_chunk
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_committed_chunk,
+    seed_story_base,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODEL = "bge-large"
@@ -40,6 +45,7 @@ def seeded_slot() -> Iterator[str]:
     """A disposable slot holding two stored bge-large embeddings."""
 
     with disposable_slot_database("qa640_regen_truncate") as dbname:
+        seed_story_base(dbname)
         chunk_ids = [
             seed_committed_chunk(dbname, raw_text=text, scene=scene)
             for scene, text in enumerate(("the bell", "the lintel"), start=1)
