@@ -24,7 +24,7 @@ reason = "Read-only identity census documented in docs/qa/799-identity-before-mi
 
 [[operators]]
 target = "scripts/load_natural_earth.py:main"
-reason = "Natural Earth reference loader named by docs/database.md and CLAUDE.md; loads the vendored, checksummed 10m files into natural_earth_features (issue 840)."
+reason = "Natural Earth reference loader named by docs/database.md; loads the vendored, checksummed 10m files into natural_earth_features (issue 840)."
 
 [[operators]]
 target = "scripts/measure_place_coordinate_costs.py:main"

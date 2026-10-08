@@ -83,6 +83,10 @@ class NaturalEarthFeatureCountError(ValueError):
     """ogr2ogr read a feature count other than the manifest's."""
 
 
+class NaturalEarthReadError(RuntimeError):
+    """ogr2ogr could not read a vendored shapefile; carries GDAL's own message."""
+
+
 class NaturalEarthValidityError(RuntimeError):
     """The invalid source features differ from the manifest's repairs."""
 
@@ -138,10 +142,14 @@ def _read_features(ogr2ogr: str, zip_path: Path, shapefile: str) -> list[Any]:
             "/vsistdout/",
             f"/vsizip/{zip_path.resolve()}/{shapefile}",
         ],
-        check=True,
         capture_output=True,
         env=subprocess_env(),
     )
+    if result.returncode != 0:
+        raise NaturalEarthReadError(
+            f"{zip_path}: ogr2ogr exited {result.returncode} reading {shapefile}: "
+            f"{result.stderr.decode(errors='replace').strip()}"
+        )
     return list(json.loads(result.stdout)["features"])
 
 
@@ -166,6 +174,7 @@ def read_reference_files(manifest_path: Path = MANIFEST_PATH) -> ReferenceFiles:
 
     Raises before any database work: ``NaturalEarthChecksumError`` on a
     digest mismatch, ``NaturalEarthReleaseError`` on a VERSION.txt mismatch,
+    ``NaturalEarthReadError`` with GDAL's message when ``ogr2ogr`` fails,
     ``NaturalEarthFeatureCountError`` on a feature-count mismatch.
     """
     manifest_path = Path(manifest_path)

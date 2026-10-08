@@ -254,7 +254,11 @@ self-intersections), repairs them with
 `ST_Multi(ST_CollectionExtract(ST_MakeValid(geom, 'method=structure'), 3))`,
 proves every row valid, and commits; any error before COMMIT rolls back. A
 connection lost during COMMIT is reported as `commit_unknown` (outcome
-unknown; rerunning replaces the rows) and exits 1.
+unknown) and exits 1, never as a rollback. Like the IDF rebuild above, this
+load is an exception to the never-replay rule: rerunning it after
+`AmbiguousCommit` is safe because one transaction deletes every row and
+inserts the same pinned, checksummed files, so a replay is idempotent whether
+or not the lost COMMIT landed.
 
 ```bash
 python scripts/load_natural_earth.py --all                      # Template + unlocked slots

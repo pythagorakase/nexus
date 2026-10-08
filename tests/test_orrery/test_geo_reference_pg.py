@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import closing
 from dataclasses import dataclass
 import json
+import logging
 from pathlib import Path
 import shutil
 import time
@@ -25,11 +26,14 @@ from nexus.agents.orrery.geo_reference import (
     point_on_land,
     require_valid_polygon,
 )
+from nexus.database import AmbiguousCommit
 from scripts import load_natural_earth, new_story_setup
 from scripts.load_natural_earth import (
     NaturalEarthChecksumError,
+    NaturalEarthReadError,
     NaturalEarthValidityError,
     load_reference,
+    read_reference_files,
 )
 from tests.pg_fixtures import connect, disposable_slot_database
 
@@ -323,3 +327,78 @@ def test_fresh_slot_copies_reference(
             f"initialize_slot_database from loaded clone {from_loaded[0]:.2f}s, "
             f"from empty clone {from_empty[0]:.2f}s"
         )
+
+
+def test_ogr2ogr_failure_carries_gdal_message() -> None:
+    # The refusal must show GDAL's own stderr, not only an exit status.
+    ogr2ogr = new_story_setup._postgres_tools("ogr2ogr")["ogr2ogr"]
+    land_zip = MANIFEST_PATH.parent / "ne_10m_land.zip"
+    with pytest.raises(NaturalEarthReadError) as raised:
+        load_natural_earth._read_features(ogr2ogr, land_zip, "qa840_missing.shp")
+    message = str(raised.value)
+    assert str(land_zip) in message
+    assert "ogr2ogr exited 1 reading qa840_missing.shp" in message
+    assert "Unable to open datasource" in message
+
+
+def _drop_connection_at_commit(dbname: str) -> None:
+    """Make every commit that inserted reference rows lose its connection.
+
+    A deferred constraint trigger fires inside COMMIT and terminates its own
+    backend, so the driver itself raises a connection-loss OperationalError
+    from ``conn.commit()``. Nothing in the client is replaced.
+    """
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE FUNCTION qa840_drop_connection() RETURNS trigger
+            LANGUAGE plpgsql AS $$
+            BEGIN
+                PERFORM pg_terminate_backend(pg_backend_pid());
+                RETURN NULL;
+            END $$;
+            CREATE CONSTRAINT TRIGGER qa840_drop_connection
+            AFTER INSERT ON natural_earth_features
+            DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+            EXECUTE FUNCTION qa840_drop_connection();
+            """
+        )
+
+
+def test_connection_lost_at_commit_is_commit_unknown(
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A connection lost during COMMIT reports an unknown outcome, never a rollback."""
+    files = read_reference_files()
+    # Its own clone: the trigger poisons every commit that inserts a row.
+    with disposable_slot_database("qa640_840_commit") as dbname:
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM natural_earth_features")
+        _drop_connection_at_commit(dbname)
+
+        with pytest.raises(AmbiguousCommit, match=dbname):
+            load_reference(dbname)
+
+        caplog.clear()
+        with caplog.at_level(logging.ERROR, logger="nexus.load_natural_earth"):
+            assert load_natural_earth._load_target(
+                dbname, files, write_locked_slot=False
+            ) == ("commit_unknown", None)
+            assert load_natural_earth.main(["--dbname", dbname]) == 1
+        assert f"{dbname}: commit_unknown" in capsys.readouterr().out
+        logged = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno >= logging.ERROR
+        ]
+        assert sum("outcome unknown" in message for message in logged) == 2
+        assert not any("rolled back" in message for message in logged)
+
+        # This fault ends the backend before the commit record, so nothing
+        # landed; the rerun the docs allow replaces the rows.
+        assert _counts(dbname) == {}
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("DROP TRIGGER qa840_drop_connection ON natural_earth_features")
+        assert load_natural_earth.main(["--dbname", dbname]) == 0
+        assert _counts(dbname) == EXPECTED_COUNTS
