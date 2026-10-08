@@ -1,0 +1,26 @@
+{
+  "baseline_head": "725011c128ab02d1468f0b2178b3c8fac27f2d6a",
+  "baseline_snapshot": "/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-810-static-final-drxglhto",
+  "tools": {
+    "flake8": {
+      "arguments": [],
+      "branch_exit": 1,
+      "baseline_exit": 1,
+      "branch_diagnostics": 53,
+      "baseline_diagnostics": 54,
+      "new": {}
+    },
+    "mypy": {
+      "arguments": [
+        "--explicit-package-bases",
+        "--follow-imports=silent",
+        "--no-incremental"
+      ],
+      "branch_exit": 1,
+      "baseline_exit": 1,
+      "branch_diagnostics": 27,
+      "baseline_diagnostics": 27,
+      "new": {}
+    }
+  }
+}

@@ -2,6 +2,14 @@
 
 Refs #810. Order: `810-S3.md`, including Decisions 810-Q3, Q4 and Q9.
 
+## PR Review Follow-Up
+
+PR #1121 review identified a late ANN check that could occur after model loading
+and vector deletion. The check now precedes both, including chunk and resume
+paths. Final focused proof on main `be9ce348` plus the repair: **139 passed**.
+[Review fix, red/green proof, CLI failure behavior, static comparison and limits](review-2026-10-08/verification.md).
+The evidence below records the earlier resume before this review correction.
+
 ## Resumed State and Scope
 
 Claude's saved implementation was clean at `9b90bc88`. On 2026-10-08, Codex
