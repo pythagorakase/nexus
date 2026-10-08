@@ -2,6 +2,7 @@
 status: canonical
 sources:
   - nexus/config/story_model.py
+  - nexus.toml
 verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
 ---
 

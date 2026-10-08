@@ -6,9 +6,10 @@ The work order defaults to order_817_S3.md next to this script: the order's
 "Required Changes" section, committed so that the check runs from the branch
 alone. Parses the work order's record table and the fixed text of its Required
 Changes 3, and compares every record under docs/decisions/ with them: the file
-name, the front matter (status, sources in order, verified_commit, the 0030 to
-0005 supersession), the title, Kind and Links lines, the Ruling lead-in lines,
-every Rejected Alternatives bullet and every Reopening Criteria bullet. Fixed
+name, the front matter (status, sources in order with SOURCE_ADDITIONS
+appended, verified_commit, the 0030 to 0005 supersession), the title, Kind and
+Links lines, the Ruling lead-in lines, every Rejected Alternatives bullet and
+every Reopening Criteria bullet. Fixed
 bullets must be equal to the order's text. Quoted bullets must be equal to the
 whole sentence the order names, recomputed from a fresh `gh api` fetch. Quoted
 blocks are the quote audit's job (quote_audit.py); this check only requires
@@ -35,6 +36,33 @@ BOLD_LABEL = re.compile(r"^- \*\*(.+?)\*\* ")
 QUOTED = re.compile(r'^- "(.*)"\.? (Reason: "(.*)"|No reason recorded\.)$')
 RELAY_ROWS = [f"{n:04d}" for n in [13, 14, 15, *range(30, 56)]]
 _cache: dict[str, dict] = {}
+# Sources the coordinator's ruling on PR #1115 (Astra review at 6df5115a) adds
+# after the order table's own list: a record names every file its ruling
+# governs or its reasoning explicitly cites. The order's sources stay first.
+SOURCE_ADDITIONS: dict[str, list[str]] = {
+    "0009": ["nexus.toml", "nexus/cli.py"],
+    "0010": ["nexus.toml"],
+    "0019": [
+        "ui/client/src/components/nexus/NarrativePane.tsx",
+        "nexus/agents/lore/logon_utility.py",
+    ],
+    "0020": ["migrations/091_backstory_secrets.sql"],
+    "0023": ["prompts/storyteller_core.md"],
+    "0024": [
+        "nexus.toml",
+        "docs/orrery_retrograde_spec.md",
+        "docs/orrery_design_plan.md",
+    ],
+    "0025": ["docs/dead_retrieval_subtraction.md"],
+    "0026": ["docs/dead_retrieval_subtraction.md"],
+    "0027": ["docs/dead_retrieval_subtraction.md"],
+    "0028": ["docs/dead_retrieval_subtraction.md"],
+    "0029": [
+        "docs/dead_retrieval_subtraction.md",
+        "nexus/agents/memnon/utils/db_access.py",
+    ],
+    "0034": ["nexus.toml"],
+}
 
 
 def gh(path: str) -> dict:
@@ -198,7 +226,7 @@ def check(root: Path, order_path: Path) -> list[str]:
         meta = yaml.safe_load(front)
         want = {
             "status": "superseded" if number == "0030" else "canonical",
-            "sources": row["sources"],
+            "sources": [*row["sources"], *SOURCE_ADDITIONS.get(number, [])],
             "verified_commit": merge_base,
         }
         if number == "0030":

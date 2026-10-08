@@ -2,6 +2,8 @@
 status: canonical
 sources:
   - config/schema_docs_baseline.json
+  - docs/dead_retrieval_subtraction.md
+  - nexus/agents/memnon/utils/db_access.py
 verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
 ---
 

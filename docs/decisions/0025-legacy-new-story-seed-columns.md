@@ -4,6 +4,7 @@ sources:
   - config/schema_docs_baseline.json
   - migrations/007_normalize_new_story_creator.sql
   - nexus/api/new_story_cache.py
+  - docs/dead_retrieval_subtraction.md
 verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
 ---
 
