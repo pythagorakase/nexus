@@ -102,6 +102,7 @@ def _state(
             1: frozenset({"meeting", "urban_dense"}),
             2: frozenset({"dwelling"}),
         },
+        charted_place_ids=frozenset({1, 2}),
         pair_tags=({(HUNTER, ACTOR): frozenset({"hunting"})} if hunted else {}),
         travel_states={ACTOR: TravelState(status=travel_status)},
         project_states={

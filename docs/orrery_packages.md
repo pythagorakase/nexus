@@ -1100,7 +1100,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 - **AND:**
   - actor `plan_relocation` project passes `scouting_without_target` due-state
-  - actor can resolve a destination with place class `dwelling,haven,urban_sparse,urban_dense`
+  - actor can resolve a routable destination with place class `dwelling,haven,urban_sparse,urban_dense`
 
 **Does:** applies project `advance` transition
 **Event:** `relocation_plan_progressed`
@@ -2049,7 +2049,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has `work` routine anchor
   - actor's `work` routine is due now (weekdays 0=Monday; empty schedule always due)
   - actor is away from `work` anchor
-  - actor's `work` routine can resolve a destination
+  - actor's `work` routine can resolve a routable destination
 
 **Does:** activity → "commuting to work"; starts planned travel
 **Event:** `travel_departed`
@@ -2064,7 +2064,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has `home` routine anchor
   - actor's `home` routine is due now (weekdays 0=Monday; empty schedule always due)
   - actor is away from `home` anchor
-  - actor's `home` routine can resolve a destination
+  - actor's `home` routine can resolve a routable destination
 
 **Does:** activity → "commuting home"; starts planned travel
 **Event:** `travel_departed`
@@ -2564,7 +2564,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
       - actor is in `place_open` place class
   - actor can plausibly move through public flow
   - actor's own fame is narrower than `renowned`
-  - actor can resolve a destination with place class `commerce,entertainment,meeting,place_open`
+  - actor can resolve a routable destination with place class `commerce,entertainment,meeting,place_open`
 
 **Does:** activity → "seeking company after isolation"; starts travel toward a `commerce`, `entertainment`, `meeting`, `place_open` destination
 **Event:** `social_travel_departed`
@@ -2607,7 +2607,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
       - actor is in `place_open` place class
   - actor can plausibly move through public flow
   - actor's own fame is narrower than `renowned`
-  - actor can resolve a destination with place class `commerce,entertainment,meeting,place_open`
+  - actor can resolve a routable destination with place class `commerce,entertainment,meeting,place_open`
 
 **Does:** activity → "seeking public company"; starts travel toward a `commerce`, `entertainment`, `meeting`, `place_open` destination
 **Event:** `social_travel_departed`

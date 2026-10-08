@@ -9,6 +9,7 @@ import pytest
 
 from nexus.agents.orrery.events import _route_estimate_from_distance, _travel_mode
 from nexus.agents.orrery.routing import RouteGraphEdge, shortest_route
+from nexus.config import load_settings
 from nexus.config.loader import settings_path_scope
 from scripts.import_orrery_route_graph import _mode, _validate_edge_count
 
@@ -127,10 +128,15 @@ def test_route_estimate_reads_configured_speed_and_detour(tmp_path: Path) -> Non
         risk="low",
     )
 
-    assert shipped["distance_m"] == pytest.approx(1350.0, abs=1e-6)
-    assert shipped["duration_minutes"] == pytest.approx(16.2, abs=1e-6)
-    assert shipped["metadata"]["detour_factor"] == 1.35
-    assert shipped["metadata"]["speed_kmh"] == 5.0
+    orrery = load_settings().orrery
+    assert orrery is not None
+    travel = orrery.travel
+    detour = travel.detour_factor.walking
+    speed = travel.speed_kmh.walking
+    assert shipped["distance_m"] == pytest.approx(1000.0 * detour, abs=1e-6)
+    assert shipped["duration_minutes"] == pytest.approx(detour / speed * 60.0, abs=1e-6)
+    assert shipped["metadata"]["detour_factor"] == detour
+    assert shipped["metadata"]["speed_kmh"] == speed
 
 
 def test_travel_mode_rejects_unconfigured_mode() -> None:

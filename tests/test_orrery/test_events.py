@@ -78,6 +78,7 @@ class RecordingCursor:
         routine_anchors=None,
         location_class_destinations=None,
         place_zones=None,
+        charted_places=None,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -102,6 +103,7 @@ class RecordingCursor:
         self.routine_anchors = dict(routine_anchors or {})
         self.location_class_destinations = list(location_class_destinations or [])
         self.place_zones = dict(place_zones or {})
+        self.charted_places = dict(charted_places or {})
         self.executed = []
         self.clearance_log_rows = []
         self.rowcount = 1
@@ -277,7 +279,12 @@ class RecordingCursor:
                 )
             if edge_limit is not None:
                 self._fetchall = self._fetchall[:edge_limit]
-        elif "FROM orrery_travel_edges" in normalized:
+        elif "/* orrery:route_known */" in normalized:
+            self._fetchone = {"route_known": self.route_known(*params)}
+        elif (
+            "FROM orrery_travel_edges" in normalized
+            and "LEFT JOIN places origin ON origin.id" not in normalized
+        ):
             (
                 origin_place_id,
                 destination_place_id,
@@ -352,7 +359,9 @@ class RecordingCursor:
             candidates = []
             for destination in self.location_class_destinations:
                 place_id = destination["id"]
-                if place_id == excluded_place_id:
+                if place_id == excluded_place_id or not self.route_known(
+                    origin_place_id, place_id
+                ):
                     continue
                 classes = set(destination.get("classes", ()))
                 if not (classes & requested):
@@ -403,6 +412,24 @@ class RecordingCursor:
             if (entity_id, tag) in self.current_tags:
                 self._fetchall = [{"id": tag_id + 1000}]
 
+    def route_known(self, origin: int, destination: int) -> bool:
+        """Evaluate the chooser's duration rule against this fixture's places."""
+        if origin == destination:
+            return False
+        if self.charted_places.get(origin) and self.charted_places.get(destination):
+            return True
+        for edge in self.authored_route_edges:
+            if edge.get("route_method", "authored_edge") != "authored_edge":
+                continue
+            if edge.get("duration_minutes") is None:
+                continue
+            pair = (edge["from_place_id"], edge["to_place_id"])
+            if pair == (origin, destination):
+                return True
+            if edge.get("bidirectional", False) and pair == (destination, origin):
+                return True
+        return False
+
     def fetchone(self):
         return self._fetchone
 
@@ -429,18 +456,31 @@ class AsyncRoutineConn:
         routine_anchors=None,
         zone_destination=None,
         class_destination=None,
+        charted_places=None,
+        authored_route_edges=None,
     ):
         self.routine_anchors = dict(routine_anchors or {})
         self.zone_destination = zone_destination
         self.class_destination = class_destination
+        self.routes = RecordingCursor(
+            charted_places=charted_places, authored_route_edges=authored_route_edges
+        )
 
     async def fetchrow(self, _sql, actor_entity_id, anchor_type):
         return self.routine_anchors.get((actor_entity_id, anchor_type))
 
     async def fetchval(self, sql, *params):
+        if "/* orrery:route_known */" in str(sql):
+            return self.routes.route_known(*params)
         if "LEFT JOIN places origin ON origin.id" in str(sql):
-            return self.class_destination
-        return self.zone_destination
+            destination, origin = self.class_destination, params[0]
+        else:
+            destination, origin = self.zone_destination, params[3]
+        return (
+            destination
+            if destination is not None and self.routes.route_known(origin, destination)
+            else None
+        )
 
 
 class SignalEventCursor:
@@ -1570,6 +1610,7 @@ def test_commit_orrery_tick_resolves_travel_destination_by_place_class() -> None
     cursor = RecordingCursor(
         current_location=99,
         place_zones={99: 1},
+        charted_places={99: True, 77: True, 42: True},
         location_class_destinations=[
             {"id": 77, "classes": {"meeting"}, "zone": 2},
             {"id": 42, "classes": {"commerce"}, "zone": 1},
@@ -1623,6 +1664,7 @@ def test_commit_orrery_tick_resolves_travel_destination_anchor() -> None:
     )
     cursor = RecordingCursor(
         current_location=99,
+        charted_places={99: True, 7: True},
         routine_anchors={
             (1, "home"): {
                 "place_id": 7,
@@ -1676,6 +1718,7 @@ def test_commit_orrery_tick_resolves_work_from_home_anchor() -> None:
     )
     cursor = RecordingCursor(
         current_location=99,
+        charted_places={99: True, 7: True},
         routine_anchors={
             (1, "work"): {
                 "place_id": None,
@@ -1720,6 +1763,7 @@ def test_sync_malformed_home_work_from_home_anchor_fails_closed() -> None:
             actor_entity_id=1,
             anchor_type="home",
             current_world_time=cursor.world_time,
+            origin_place_id=99,
         )
         is None
     )
@@ -1730,6 +1774,7 @@ async def test_async_routine_anchor_destination_resolves_work_from_home() -> Non
     """Async travel start helper matches sync work-from-home resolution."""
 
     conn = AsyncRoutineConn(
+        charted_places={99: True, 7: True, 42: True},
         routine_anchors={
             (1, "work"): {
                 "place_id": None,
@@ -1741,13 +1786,14 @@ async def test_async_routine_anchor_destination_resolves_work_from_home() -> Non
                 "zone_id": None,
                 "mobility_policy": "fixed_place",
             },
-        }
+        },
     )
 
     destination = await orrery_events._routine_anchor_destination_async(
         conn,
         actor_entity_id=1,
         anchor_type="work",
+        origin_place_id=99,
         current_world_time=None,
     )
 
@@ -1759,6 +1805,7 @@ async def test_async_routine_anchor_destination_resolves_zone() -> None:
     """Async zone-resolved anchors use the preferred-place query result."""
 
     conn = AsyncRoutineConn(
+        charted_places={99: True, 7: True, 42: True},
         routine_anchors={
             (1, "home"): {
                 "place_id": None,
@@ -1773,6 +1820,7 @@ async def test_async_routine_anchor_destination_resolves_zone() -> None:
         conn,
         actor_entity_id=1,
         anchor_type="home",
+        origin_place_id=99,
         current_world_time=None,
     )
 
@@ -1783,7 +1831,7 @@ async def test_async_routine_anchor_destination_resolves_zone() -> None:
 async def test_async_location_class_destination_resolves_place() -> None:
     """Async class-based destinations use the matching-place query result."""
 
-    conn = AsyncRoutineConn(class_destination=42)
+    conn = AsyncRoutineConn(class_destination=42, charted_places={99: True, 42: True})
 
     destination = await orrery_events._location_class_destination_async(
         conn,
@@ -1800,19 +1848,21 @@ async def test_async_malformed_home_work_from_home_anchor_fails_closed() -> None
     """Async helper avoids recursive home->home work-from-home loops."""
 
     conn = AsyncRoutineConn(
+        charted_places={99: True, 7: True, 42: True},
         routine_anchors={
             (1, "home"): {
                 "place_id": None,
                 "zone_id": None,
                 "mobility_policy": "works_from_home",
             },
-        }
+        },
     )
 
     destination = await orrery_events._routine_anchor_destination_async(
         conn,
         actor_entity_id=1,
         anchor_type="home",
+        origin_place_id=99,
         current_world_time=None,
     )
 
@@ -2189,8 +2239,8 @@ def test_commit_orrery_tick_uses_mixed_authored_edge_for_concrete_mode() -> None
     assert route_metadata["edge_travel_mode"] == "mixed"
 
 
-def test_commit_orrery_tick_allows_authored_route_without_duration() -> None:
-    """Incomplete authored estimates still preserve route provenance."""
+def test_commit_orrery_tick_refuses_authored_route_without_duration() -> None:
+    """An authored route without duration cannot write a travel row or NULL ETA."""
 
     cursor = RecordingCursor(
         current_location=99,
@@ -2206,26 +2256,19 @@ def test_commit_orrery_tick_allows_authored_route_without_duration() -> None:
         ],
     )
 
-    commit_orrery_tick_sync(
-        RecordingConn(cursor),
-        _travel_start_proposal(mode="vehicle"),
-        tick_chunk_id=100,
-        slot=5,
-        world_layer="primary",
+    with pytest.raises(
+        ValueError, match=r"has no route duration \(authored_edge\); no ETA exists"
+    ):
+        commit_orrery_tick_sync(
+            RecordingConn(cursor),
+            _travel_start_proposal(mode="vehicle"),
+            tick_chunk_id=100,
+            slot=5,
+            world_layer="primary",
+        )
+    assert not any(
+        "INSERT INTO character_travel_states" in sql for sql, _ in cursor.executed
     )
-
-    travel_params = next(
-        params
-        for sql, params in cursor.executed
-        if "INSERT INTO character_travel_states" in sql
-    )
-    route_metadata = json.loads(travel_params[-1])
-
-    assert travel_params[4] == "authored_edge"
-    assert travel_params[8] == pytest.approx(12345)
-    assert travel_params[9] is None
-    assert travel_params[12] is None
-    assert route_metadata["route_edge_id"] == 19
 
 
 def test_commit_orrery_tick_uses_bidirectional_authored_edge_in_reverse() -> None:
