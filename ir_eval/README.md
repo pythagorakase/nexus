@@ -33,6 +33,8 @@ python -m ir_eval.runner --db-url postgresql://pythagor@localhost/NEXUS create-r
   --top-k 10
 ```
 
+`--model` names the production `[memnon.models]` entry or an `[ir_eval.embedding_candidates]` entry, and `--reranker` names an `[ir_eval.reranker_candidates]` entry (the production reranker when omitted); `create-run` resolves both before it writes the run.
+
 4. Execute and inspect:
 
 ```bash

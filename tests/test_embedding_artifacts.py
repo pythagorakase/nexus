@@ -59,17 +59,12 @@ def _production() -> Production:
     memnon = tomllib.loads((REPO_ROOT / "nexus.toml").read_text())["memnon"]
     (embedder,) = [n for n, m in memnon["models"].items() if m["is_active"]]
     reranking = memnon["retrieval"]["cross_encoder_reranking"]
-    (reranker,) = [
-        n
-        for n, c in reranking["candidates"].items()
-        if c["local_path"] == reranking["model_path"]
-    ]
     return Production(
         embedder=embedder,
         embedder_repo=str(memnon["models"][embedder]["remote_path"]),
         dimensions=int(memnon["models"][embedder]["dimensions"]),
-        reranker=reranker,
-        reranker_repo=str(reranking["candidates"][reranker]["remote_path"]),
+        reranker=str(reranking["name"]),
+        reranker_repo=str(reranking["remote_path"]),
     )
 
 
@@ -147,7 +142,6 @@ def _write_config(
     if dimensions is not None:
         embedder["dimensions"] = dimensions
     reranking = memnon["retrieval"]["cross_encoder_reranking"]
-    reranking["candidates"][PRODUCTION.reranker]["local_path"] = str(reranker_dir)
     reranking["model_path"] = str(reranker_dir)
     memnon["artifacts"]["lock_file"] = str(lock)
     path = tmp_path / f"{name}.toml"

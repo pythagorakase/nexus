@@ -1,0 +1,190 @@
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m flake8 temp/codex-812-resume/main-static/ir_eval/engine/run_executor.py temp/codex-812-resume/main-static/ir_eval/runner.py temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py temp/codex-812-resume/main-static/nexus/agents/memnon/utils/artifact_manifest.py temp/codex-812-resume/main-static/nexus/agents/memnon/utils/cross_encoder.py temp/codex-812-resume/main-static/nexus/agents/memnon/utils/embedding_manager.py temp/codex-812-resume/main-static/nexus/config/settings_models.py temp/codex-812-resume/main-static/nexus/runtime/home_plan.py temp/codex-812-resume/main-static/scripts/create_vector_index.py temp/codex-812-resume/main-static/scripts/import_narratives.py temp/codex-812-resume/main-static/scripts/new_story_setup.py temp/codex-812-resume/main-static/scripts/query_narratives_vector.py temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py temp/codex-812-resume/main-static/tests/config/test_settings_parity.py temp/codex-812-resume/main-static/tests/test_embedding_artifacts.py temp/codex-812-resume/main-static/tests/test_lore/test_runtime_config.py temp/codex-812-resume/main-static/tests/test_memnon_cross_encoder_artifact.py temp/codex-812-resume/main-static/tests/test_memnon_embedding_cache.py temp/codex-812-resume/main-static/tests/test_memnon_embedding_contract.py temp/codex-812-resume/main-static/tests/test_memnon_script_model_loaders.py temp/codex-812-resume/main-static/tests/test_model_artifact_lock_committed.py temp/codex-812-resume/main-static/tests/test_regenerate_embeddings_truncate_pg.py temp/codex-812-resume/main-static/tests/test_runtime_home.py
+temp/codex-812-resume/main-static/ir_eval/engine/run_executor.py:85:89: E501 line too long (103 > 88 characters)
+temp/codex-812-resume/main-static/ir_eval/engine/run_executor.py:242:89: E501 line too long (89 > 88 characters)
+temp/codex-812-resume/main-static/ir_eval/engine/run_executor.py:308:89: E501 line too long (98 > 88 characters)
+temp/codex-812-resume/main-static/ir_eval/runner.py:173:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/ir_eval/runner.py:174:89: E501 line too long (94 > 88 characters)
+temp/codex-812-resume/main-static/ir_eval/runner.py:192:89: E501 line too long (93 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:16:89: E501 line too long (128 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:20:1: F401 'uuid' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:24:1: F401 'requests' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:25:1: F401 'typing.Set' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:25:1: F401 'typing.Tuple' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:25:1: F401 'typing.Union' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:26:1: F401 'datetime.datetime' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:26:1: F401 'datetime.date' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:27:1: F401 'pathlib.Path' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:30:1: F401 'sqlalchemy.Table' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:30:1: F401 'sqlalchemy.MetaData' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:30:1: F401 'sqlalchemy.or_' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:31:1: F401 'sqlalchemy.dialects.postgresql.UUID' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:31:1: F401 'sqlalchemy.dialects.postgresql.BYTEA' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:32:1: F401 'sqlalchemy.orm.Session' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:32:1: F401 'sqlalchemy.orm.sessionmaker' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:37:1: F401 '.utils.db_access.execute_vector_search' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:37:1: F401 '.utils.db_access.execute_hybrid_search' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:41:1: F401 '.utils.continuous_temporal_search.execute_time_aware_search' imported but unused
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:166:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:176:89: E501 line too long (99 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:177:89: E501 line too long (95 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:362:89: E501 line too long (104 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:369:21: E722 do not use bare 'except'
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:378:25: F841 local variable 'col_type' is assigned to but never used
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:386:72: W291 trailing whitespace
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:387:48: W291 trailing whitespace
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:388:74: W291 trailing whitespace
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:397:25: E722 do not use bare 'except'
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:453:89: E501 line too long (93 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:549:89: E501 line too long (110 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:553:89: E501 line too long (97 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:556:89: E501 line too long (93 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:559:89: E501 line too long (98 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:562:89: E501 line too long (150 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:667:89: E501 line too long (109 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:707:89: E501 line too long (156 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:711:89: E501 line too long (100 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:717:60: W291 trailing whitespace
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:718:89: E501 line too long (90 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:720:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:749:89: E501 line too long (100 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:753:89: E501 line too long (99 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:754:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:917:89: E501 line too long (104 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:956:89: E501 line too long (100 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1051:17: E722 do not use bare 'except'
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1073:13: E722 do not use bare 'except'
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1083:13: E722 do not use bare 'except'
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1115:47: W291 trailing whitespace
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1116:42: W291 trailing whitespace
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1142:22: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1143:23: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1149:23: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1154:23: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1159:23: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1168:89: E501 line too long (110 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1172:31: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1175:23: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1210:24: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1262:27: W291 trailing whitespace
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1291:89: E501 line too long (104 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1395:89: E501 line too long (91 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1657:89: E501 line too long (100 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1679:17: F841 local variable 'source' is assigned to but never used
+temp/codex-812-resume/main-static/nexus/agents/memnon/memnon.py:1687:89: E501 line too long (113 > 88 characters)
+temp/codex-812-resume/main-static/nexus/agents/memnon/utils/cross_encoder.py:808:89: E501 line too long (89 > 88 characters)
+temp/codex-812-resume/main-static/nexus/config/settings_models.py:79:89: E501 line too long (89 > 88 characters)
+temp/codex-812-resume/main-static/nexus/config/settings_models.py:126:89: E501 line too long (90 > 88 characters)
+temp/codex-812-resume/main-static/nexus/config/settings_models.py:141:89: E501 line too long (101 > 88 characters)
+temp/codex-812-resume/main-static/nexus/config/settings_models.py:149:89: E501 line too long (91 > 88 characters)
+temp/codex-812-resume/main-static/nexus/config/settings_models.py:2497:89: E501 line too long (93 > 88 characters)
+temp/codex-812-resume/main-static/nexus/config/settings_models.py:4446:89: E501 line too long (131 > 88 characters)
+temp/codex-812-resume/main-static/scripts/create_vector_index.py:13:1: F401 'json' imported but unused
+temp/codex-812-resume/main-static/scripts/create_vector_index.py:30:1: E402 module level import not at top of file
+temp/codex-812-resume/main-static/scripts/create_vector_index.py:123:50: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/create_vector_index.py:135:42: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/create_vector_index.py:159:49: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/import_narratives.py:26:1: F401 'typing.Optional' imported but unused
+temp/codex-812-resume/main-static/scripts/import_narratives.py:105:5: F401 'sqlalchemy.ForeignKey' imported but unused
+temp/codex-812-resume/main-static/scripts/import_narratives.py:115:5: F401 'pgvector' imported but unused
+temp/codex-812-resume/main-static/scripts/import_narratives.py:431:89: E501 line too long (103 > 88 characters)
+temp/codex-812-resume/main-static/scripts/import_narratives.py:449:89: E501 line too long (98 > 88 characters)
+temp/codex-812-resume/main-static/scripts/import_narratives.py:462:89: E501 line too long (95 > 88 characters)
+temp/codex-812-resume/main-static/scripts/import_narratives.py:496:89: E501 line too long (95 > 88 characters)
+temp/codex-812-resume/main-static/scripts/import_narratives.py:524:89: E501 line too long (139 > 88 characters)
+temp/codex-812-resume/main-static/scripts/import_narratives.py:576:89: E501 line too long (102 > 88 characters)
+temp/codex-812-resume/main-static/scripts/new_story_setup.py:7:89: E501 line too long (101 > 88 characters)
+temp/codex-812-resume/main-static/scripts/new_story_setup.py:51:89: E501 line too long (90 > 88 characters)
+temp/codex-812-resume/main-static/scripts/new_story_setup.py:64:89: E501 line too long (91 > 88 characters)
+temp/codex-812-resume/main-static/scripts/new_story_setup.py:111:89: E501 line too long (101 > 88 characters)
+temp/codex-812-resume/main-static/scripts/new_story_setup.py:239:89: E501 line too long (96 > 88 characters)
+temp/codex-812-resume/main-static/scripts/new_story_setup.py:340:89: E501 line too long (90 > 88 characters)
+temp/codex-812-resume/main-static/scripts/new_story_setup.py:560:89: E501 line too long (116 > 88 characters)
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:22:1: F401 'json' imported but unused
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:23:1: F401 'typing.Tuple' imported but unused
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:38:89: E501 line too long (95 > 88 characters)
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:116:5: F401 'sqlalchemy as sa' imported but unused
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:125:5: F401 'pgvector' imported but unused
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:126:5: F401 'pgvector.sqlalchemy.Vector' imported but unused
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:135:5: F401 'numpy as np' imported but unused
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:190:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:283:23: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:284:27: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:290:21: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:292:21: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:298:25: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:319:21: E722 do not use bare 'except'
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:361:23: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:362:27: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:367:21: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/query_narratives_vector.py:395:21: E722 do not use bare 'except'
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:12:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:18:89: E501 line too long (90 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:21:89: E501 line too long (108 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:24:89: E501 line too long (96 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:53:1: F401 'json' imported but unused
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:57:1: F401 'typing.Union' imported but unused
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:102:1: E402 module level import not at top of file
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:148:5: F401 'sqlalchemy as sa' imported but unused
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:157:5: F401 'pgvector' imported but unused
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:158:5: F401 'pgvector.sqlalchemy.Vector' imported but unused
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:302:89: E501 line too long (96 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:325:89: E501 line too long (89 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:329:89: E501 line too long (89 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:368:43: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:369:38: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:382:21: E722 do not use bare 'except'
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:387:89: E501 line too long (95 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:394:29: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:405:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:420:89: E501 line too long (96 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:438:89: E501 line too long (112 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:484:36: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:485:38: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:526:62: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:535:89: E501 line too long (91 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:542:41: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:553:89: E501 line too long (102 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:556:89: E501 line too long (93 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:592:89: E501 line too long (98 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:607:89: E501 line too long (108 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:643:89: E501 line too long (109 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:646:89: E501 line too long (104 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:660:41: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:661:57: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:688:49: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:689:65: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:690:89: E501 line too long (108 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:717:89: E501 line too long (91 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:759:89: E501 line too long (105 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:782:89: E501 line too long (99 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:788:25: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:788:89: E501 line too long (102 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:831:89: E501 line too long (101 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:861:89: E501 line too long (90 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:907:89: E501 line too long (128 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:914:46: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:944:89: E501 line too long (104 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:948:89: E501 line too long (90 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:951:25: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:951:89: E501 line too long (89 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:967:89: E501 line too long (103 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:972:89: E501 line too long (91 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:975:89: E501 line too long (99 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:997:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1091:89: E501 line too long (92 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1118:89: E501 line too long (89 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1133:40: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1134:42: W291 trailing whitespace
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1206:89: E501 line too long (135 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1236:89: E501 line too long (90 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1390:89: E501 line too long (101 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1395:89: E501 line too long (98 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1482:89: E501 line too long (89 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1538:89: E501 line too long (95 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1540:23: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1543:89: E501 line too long (91 > 88 characters)
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1545:23: F541 f-string is missing placeholders
+temp/codex-812-resume/main-static/scripts/regenerate_embeddings.py:1593:89: E501 line too long (102 > 88 characters)
+temp/codex-812-resume/main-static/tests/test_memnon_embedding_cache.py:33:1: F401 'tests.pg_fixtures.sqlalchemy_url' imported but unused
+
+exit 1

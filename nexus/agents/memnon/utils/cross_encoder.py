@@ -16,7 +16,7 @@ one is known.
 import logging
 import textwrap
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -29,34 +29,6 @@ logger = logging.getLogger("nexus.memnon.cross_encoder")
 
 # The nexus.toml key that names the production reranker folder.
 MODEL_PATH_SETTING = "[memnon.retrieval.cross_encoder_reranking].model_path"
-
-
-def reranker_repo_id(
-    model_path: str, candidates: Mapping[str, Mapping[str, Any]]
-) -> Optional[str]:
-    """Return the Hugging Face repository of the reranker folder ``model_path``.
-
-    The repository is the ``remote_path`` of the one
-    ``[memnon.retrieval.cross_encoder_reranking.candidates]`` entry whose
-    ``local_path`` is ``model_path``: the match ``nexus models lock`` uses to
-    name the production reranker. None when no single entry matches or the
-    entry names no repository.
-
-    Args:
-        model_path: The reranker folder that will be loaded
-        candidates: The candidate registry, keyed by candidate name
-
-    Returns:
-        The repository id, or None when it cannot be derived
-    """
-    matches = [
-        candidate
-        for candidate in candidates.values()
-        if Path(str(candidate["local_path"])) == Path(model_path)
-    ]
-    if len(matches) != 1:
-        return None
-    return str(matches[0].get("remote_path") or "") or None
 
 
 def _reranker_remedy(path: Path, repo_id: Optional[str]) -> str:

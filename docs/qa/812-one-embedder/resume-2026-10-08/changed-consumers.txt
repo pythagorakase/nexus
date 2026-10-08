@@ -1,0 +1,46 @@
+........................................................................ [ 32%]
+........................................................................ [ 64%]
+........................................................................ [ 96%]
+.......                                                                  [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_memnon_cross_encoder_artifact.py::test_qwen3_loads_its_local_folder_and_scores
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/tokenization_utils_base.py:2718: UserWarning: `max_length` is ignored when `padding`=`True` and there is no truncation strategy. To pad to max length, use `padding='max_length'`.
+    warnings.warn(
+
+tests/test_memnon_embedding_cache.py::test_memnon_close_disposes_engine
+tests/test_memnon_embedding_cache.py::test_per_turn_lore_stacks_share_embedder_and_close
+tests/test_lore/test_runtime_config.py::test_lore_honors_runtime_config_for_both_storyteller_seats
+  /Users/pythagor/nexus/.claude/worktrees/812-one-embedder/nexus/agents/memnon/utils/cross_encoder.py:145: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+    elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
+
+tests/test_memnon_embedding_cache.py::test_memnon_close_disposes_engine
+tests/test_memnon_embedding_cache.py::test_per_turn_lore_stacks_share_embedder_and_close
+tests/test_lore/test_runtime_config.py::test_lore_honors_runtime_config_for_both_storyteller_seats
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/convert_slow_tokenizer.py:559: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 8 targets: postgres, qa_model_cache_* x2, qa_runtime_config_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+223 passed, 14 warnings in 74.61s (0:01:14)

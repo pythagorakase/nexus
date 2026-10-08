@@ -1,0 +1,1 @@
+mypy same-module comparison: branch 82 errors, main 90 errors; new messages 0
