@@ -1,0 +1,91 @@
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import time
+import urllib.error
+import urllib.request
+import tomlkit
+from manual_common import EVIDENCE, ROOT, SCRATCH, PY, proof_env
+
+cleanup=[]
+for path in (SCRATCH/'fetch/reranker', SCRATCH/'fetch/hf-home'):
+    if path.exists():
+        if path.is_symlink() or not path.is_dir():
+            raise RuntimeError(f'Unexpected cleanup target shape: {path}')
+        shutil.rmtree(path)
+    cleanup.append({'path':str(path),'absent':not os.path.lexists(path)})
+(EVIDENCE/'manual-download-cleanup.json').write_text(json.dumps(cleanup,indent=2)+'\n')
+boot=SCRATCH/'boot'
+if os.path.lexists(boot):
+    raise RuntimeError(f'Refusing to reuse {boot}')
+boot.mkdir()
+bad=boot/'bad-reranker'
+bad.mkdir()
+(bad/'proof.txt').write_text('This is deliberately not a model artifact.\n')
+document=tomlkit.parse((ROOT/'nexus.toml').read_text())
+document['memnon']['retrieval']['cross_encoder_reranking']['model_path']=str(bad)
+config=boot/'bad-nexus.toml'
+config.write_text(tomlkit.dumps(document))
+records=[]
+
+def vacant(label):
+    probe=subprocess.run(['lsof','-nP','-iTCP:8013','-sTCP:LISTEN'],capture_output=True,text=True)
+    (EVIDENCE/f'{label}-lsof.stdout.log').write_text(probe.stdout)
+    (EVIDENCE/f'{label}-lsof.stderr.log').write_text(probe.stderr)
+    if probe.returncode != 1 or probe.stdout.strip() or probe.stderr.strip():
+        raise RuntimeError('Port8013 admission failed; no listener will be touched')
+    return {'returncode':probe.returncode,'stdout':probe.stdout,'stderr':probe.stderr}
+
+for label,valid in [('manual-good-boot',True),('manual-bad-boot',False)]:
+    if os.getloadavg()[0] >= 24:
+        raise RuntimeError('Load cap reached')
+    admission=vacant(label+'-before')
+    env=proof_env()
+    if not valid:
+        env['NEXUS_RUNTIME_CONFIG']=str(config)
+    command=['nice','-n','15',PY,'-m','uvicorn','nexus.api.narrative:app','--host','127.0.0.1','--port','8013']
+    start=time.monotonic()
+    logpath=EVIDENCE/f'{label}.log'
+    with logpath.open('w') as log:
+        process=subprocess.Popen(command,cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT)
+        record={'label':label,'command':command,'pid':process.pid,'admission':admission}
+        try:
+            if valid:
+                deadline=time.monotonic()+60
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        raise RuntimeError('Good boot exited before health')
+                    try:
+                        with urllib.request.urlopen('http://127.0.0.1:8013/health',timeout=1) as response:
+                            record['health_status']=response.status
+                            record['health_body']=response.read().decode()
+                        break
+                    except urllib.error.URLError:
+                        time.sleep(.25)
+                else:
+                    raise RuntimeError('Good boot did not become healthy')
+                if record['health_status'] != 200:
+                    raise RuntimeError('Expected health200')
+            else:
+                result=process.wait(timeout=60)
+                record['startup_returncode']=result
+                if result == 0 or 'The gateway will not start' not in logpath.read_text():
+                    raise RuntimeError('Bad boot did not refuse with the artifact diagnostic')
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=15)
+            record['process_returncode']=process.returncode
+            record['elapsed_seconds']=round(time.monotonic()-start,3)
+            record['listener_after']=vacant(label+'-after')
+            records.append(record)
+            (EVIDENCE/'manual-boot-results.json').write_text(json.dumps(records,indent=2)+'\n')
+            print(json.dumps(record),flush=True)
+shutil.rmtree(bad)
+print('Both owned processes exited; listener8013 absent; scratch bad artifact removed.',flush=True)

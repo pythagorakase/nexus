@@ -3,8 +3,8 @@
 Implementation of frozen 812-S3 + S6 on `claude/812-models-plan-fetch`,
 starting from main `4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8` and the
 committed 820 path contract `4fffb85b6008e76c3d14ce750666cf73bc802c6e`.
-Refs #812. Focused validation passed; manual proof and the coordinator's
-combined gate remain pending, so this file does not yet claim landing readiness.
+Refs #812. Focused and ordered manual validation passed. The coordinator's combined gate
+and PR publication remain pending; this is not a whole-suite result.
 
 ## Contract and Current Shape
 
@@ -90,9 +90,88 @@ logs ([boot](red-boot-call.log), [marker](red-test-marker.log),
 in `finally`; all 12 Python source hashes match the original green snapshot.
 The heavy test slot was then released, with no process left running.
 
-Read-only owner-artifact timings, one free isolated pinned download, and
-owned-port 8013 startup proofs await the next serial proof slot. No whole-suite
-result is claimed; the coordinator owns the combined gate.
+## Ordered Manual Proof
+
+The next serial slot started at load 5.12. Before preparation, all three
+absolute targets beneath this worktree's `scratchpad/812-S3` were confirmed
+absent with `lexists`: `fetch`, `boot`, and `manual-receipts`. All child commands
+used `nice -n 15`, the shared interpreter and exact worktree `PYTHONPATH`.
+The [environment harness](manual_common.py.txt) clears ambient `HF_*` and
+`HUGGINGFACE_*` variables (including token, Hub, XET and asset-cache overrides),
+`TRANSFORMERS_CACHE`, `TRANSFORMERS_OFFLINE`, runtime routing/home overrides,
+TEST-provider overrides and live-call flags. It sets a private `HF_HOME`,
+`HF_HUB_DISABLE_IMPLICIT_TOKEN=1`, `HF_DEBUG=0`, `NEXUS_KEYRING_DISABLE=1`, and
+private receipt routing. The legacy spelling `HUGGING_FACE_HUB_TOKEN`, which
+does not match those prefixes, was absent in the launcher environment; a
+[presence-only record](manual-token-env-presence.json) verifies that without
+reading a value. The private HF token path held no token. Read-only commands
+run with Hub offline; only the single ordered download invocation enables
+network access. No owner token or token file was read.
+
+[Exact commands and timings](manual-results.jsonl):
+
+| Command | Exit | Seconds |
+|---|---:|---:|
+| `check_artifacts_at_boot(load_settings())` | 0 | 0.505 |
+| `models plan` | 0 | 0.511 |
+| `models verify` | 0 | 3.921 |
+| `doctor --json` | 1 | 4.844 |
+| `models plan --config <scratch-fetch-config>` | 0 | 0.459 |
+| `models fetch --config <scratch-fetch-config>` | 0 | 60.925 |
+| `models verify --config <scratch-fetch-config>` | 0 | 4.102 |
+
+The owner's configured embedder and reranker passed the cheap and full
+checks. [Doctor's artifact entry](manual-doctor-models-artifacts.json) is
+`pass`, with `observed` ending in `(sha256)`. Doctor's overall exit 1 is
+retained accurately: this feature worktree has no UI build, and its deliberately
+disabled Keychain provides no OpenAI key. Those are its only two failures;
+all database/schema/identity/IDF checks and the new model check passed. No
+owner services were started, secrets fetched, or doctor remedies executed.
+
+The private fetch config changes only the direct production reranker's
+`model_path`. Plan reported the owner's embedder present and the private
+reranker absent: 1,742,869,078 download bytes, 50,658,877,440 free bytes.
+The [single invocation](manual-fetch.stdout.log) fetched exactly ten locked
+files from `naver/trecdl22-crossencoder-debertav3` at
+`24f6a61d11707432d5780a1d5cf4e3af25cfaddb`. Its internal verification and the
+separate full verify both passed. There was no unexpected-file or hash error,
+and no retry. The existing embedder was reported as already matching and
+was only read. The [download cleanup](manual-download-cleanup.json) confirms
+that the proof reranker and private Hub/XET cache were removed.
+
+The [startup records](manual-boot-results.json) show:
+
+- Good checkout configuration: owned PID 135 served `/health` with HTTP 200
+  and `{"status":"healthy","service":"narrative_api"}`, then was terminated
+  and reaped; 1.517 seconds including cleanup.
+- Bad private configuration: its fresh reranker folder held only `proof.txt`.
+  Owned PID 148 exited 3 in 1.098 seconds, logging `The gateway will not start`,
+  the ten missing files and the deliberately unexpected `proof.txt`. This
+  intentional boot-negative diagnostic is separate from the successful real
+  download, which produced no unexpected-file finding.
+- Before and after each launch, `lsof -nP -iTCP:8013 -sTCP:LISTEN` returned 1
+  with empty stdout and stderr. Both owned processes were reaped, the listener
+  is absent, and the private bad artifact was removed. No slot or TEST-only
+  marker was set for either gateway; only `/health` was requested.
+
+The two exact configs and [single-key checks](manual-config-records.json),
+all stdout/stderr logs, launch/cleanup records and the executed harness source
+copies are retained in this directory (the harness expects its original
+`scratchpad/812-S3` location). [Final cleanup](manual-final-cleanup.json)
+confirms that all Python bytes still match the focused green snapshot and
+no manual receipt directory was created. The heavy slot was released after
+all subprocesses finished. The artifact lock, `nexus.toml`, owner model folders
+and original 820 branch remain unchanged. No whole-suite result is claimed;
+the coordinator owns the combined gate.
+
+## Landing Notes
+
+Run `nexus models verify` before the next gateway restart: drift now refuses
+startup before scheduling. QA-kit gateways launched outside pytest also run
+this check. There is no schema/fleet application or UI rebuild. The prepared
+[tokenizer issue](tokenizer-followup-draft.md) will be deduplicated again and
+published with the PR after the combined gate; its final URL remains a
+coordinator publication dependency, not a missing implementation decision.
 
 ## Static Comparison
 

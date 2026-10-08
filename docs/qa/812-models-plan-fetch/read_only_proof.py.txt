@@ -1,0 +1,16 @@
+import json
+from manual_common import EVIDENCE, run
+
+commands=[
+    ('manual-boot-check',['-c','from nexus.config.loader import load_settings; from nexus.agents.memnon.utils.artifact_manifest import check_artifacts_at_boot; print(check_artifacts_at_boot(load_settings()))']),
+    ('manual-plan',['-m','nexus.cli','models','plan']),
+    ('manual-verify',['-m','nexus.cli','models','verify']),
+    ('manual-doctor',['-m','nexus.cli','doctor','--json']),
+]
+for label,args in commands:
+    result=run(label,args)
+    if label != 'manual-doctor' and result.returncode != 0:
+        raise RuntimeError(label+' failed; see retained transcript')
+    if label == 'manual-doctor':
+        report=json.loads((EVIDENCE/f'{label}.stdout.log').read_text())
+        print(json.dumps(report),flush=True)
