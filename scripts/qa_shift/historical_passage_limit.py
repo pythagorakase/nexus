@@ -22,11 +22,11 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.api import slot_utils
+from nexus.api.story_identity import detach_clone_identity
 from nexus.config import load_settings
 from nexus.config.story_model import StorySettings
 from nexus.database import connection_kwargs
 from nexus.memory import ContextMemoryManager
-from nexus.api.story_identity import detach_clone_identity
 from scripts.new_story_setup import _postgres_tools
 
 ROOT = Path(__file__).resolve().parents[2]

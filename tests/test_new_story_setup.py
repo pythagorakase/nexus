@@ -113,6 +113,30 @@ def template_db() -> Generator[str, None, None]:
                         corpus_epoch BIGINT NOT NULL DEFAULT 0,
                         document_count BIGINT NOT NULL DEFAULT 0
                     );
+                    CREATE TABLE public.story_identity (
+                        id boolean PRIMARY KEY DEFAULT TRUE CHECK (id),
+                        story_uuid uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+                        title text,
+                        origin text NOT NULL
+                            CONSTRAINT story_identity_origin_check
+                            CHECK (origin IN ('wizard', 'clone', 'import', 'backfill')),
+                        created_at timestamptz NOT NULL DEFAULT now()
+                    );
+                    CREATE TABLE public.story_lineage (
+                        child_uuid uuid NOT NULL
+                            REFERENCES public.story_identity (story_uuid)
+                            ON DELETE CASCADE,
+                        parent_uuid uuid NOT NULL,
+                        relation text NOT NULL
+                            CONSTRAINT story_lineage_relation_check
+                            CHECK (relation = 'fork'),
+                        source_dbname text NOT NULL,
+                        evidence text NOT NULL,
+                        recorded_at timestamptz NOT NULL DEFAULT now(),
+                        PRIMARY KEY (child_uuid, parent_uuid),
+                        CONSTRAINT story_lineage_not_self
+                            CHECK (child_uuid <> parent_uuid)
+                    );
                     """
                 )
                 cur.executemany(
