@@ -378,7 +378,17 @@ chunk-metadata writer writes into a story that already has a base. That is
 false: three writers can import into an empty slot without the wizard and
 without reading the base. The writers below were found with
 `grep -rnE "INSERT INTO (public\.)?chunk_metadata|UPDATE (public\.)?chunk_metadata|insert_chunk_metadata_sync|ChunkMetadata\(" --include='*.py' nexus scripts`
-and read at `7e32be25`.
+and read at `7e32be25`. Review round 3 widened the search to table names
+held in a constant and interpolated by an f-string:
+`grep -rnE "(INSERT INTO|UPDATE) +(public\.)?(chunk_metadata|\{CHUNK_METADATA_TABLE\})|insert_chunk_metadata_sync|ChunkMetadata\(" --include='*.py' nexus scripts`,
+plus `grep -rnE "(INSERT INTO|UPDATE) +\{" --include='*.py' nexus scripts`
+for any other interpolated target. The first adds
+`scripts/map_builder_legacy.py:1358,1373` and
+`scripts/process_characters.py:858,875` (listed under Other Writers). Every
+other interpolated target the second finds is an embedding, asset, job,
+place or character table, not `chunk_metadata`. Round 3 read these at
+`bbf46429`; it changes only this file and the PR body, and the production
+files it cites are identical at `7e32be25`.
 
 What fires: `trg_chunk_metadata_refresh_world_time` runs
 `refresh_world_time_from_chunk()` once per statement after an INSERT, or
@@ -416,9 +426,11 @@ not check. The guard is unchanged; this is reported only. The other
 ### Chunk-Metadata Writers That Raise Loudly
 
 - `nexus/api/commit_handler_sync.py:124,134` (`insert_chunk_metadata_sync`,
-  called at `:578` in the turn commit). The commit path has no handler, so
-  the turn commit fails with the raise. It runs only after the transition
-  has set the base.
+  called at `:578` in the turn commit). `commit_incubator_to_database_sync`
+  rolls back and re-raises (`:887-890`). Its callers roll back and re-raise
+  the error as HTTP 500 `Failed to commit narrative: Story clock has no base
+  ...` (`nexus/api/narrative.py:763-769`, `:1415-1417`), so the turn fails
+  loudly. It runs only after the transition has set the base.
 - `nexus/agents/orrery/retrograde_persistence.py:2575`
   (`_ensure_prologue_metadata`), inside the transition's transaction after
   the base write. `perform_transition` re-raises
@@ -477,6 +489,15 @@ the wizard or reads the base. The writer probe below ran the first three.
   `scripts/fix_chunks.py:81` and the resequencing UPDATEs in
   `scripts/simple_update.py:712,723` set only `scene`, `season` and
   `episode`, or `id`, so the refresh trigger does not fire.
+- `scripts/map_builder_legacy.py:1358` (UPDATE) and `:1373` (INSERT), and
+  `scripts/process_characters.py:858` (UPDATE) and `:875` (INSERT), each in
+  its `update_chunk_metadata` (`scripts/map_builder_legacy.py:1331`,
+  `scripts/process_characters.py:788`): they write the columns `place` and
+  `characters`, which `chunk_metadata` does not have (the read-only column
+  listing above), so each statement fails with `UndefinedColumn` before the
+  trigger runs, whatever the base. Each inner handler rolls back and
+  returns False (`scripts/map_builder_legacy.py:1386-1391`,
+  `scripts/process_characters.py:890-895`).
 - `scripts/qa_shift/card_identity_probe.py:334` copies an anchor's metadata
   inside a `save_04` data clone (`:304-306`), whose base is set.
 
