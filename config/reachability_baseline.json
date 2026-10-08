@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#822 S1 and #806 S1: story_identity and receipts join production_reachable through slot_state and runtime.home respectively",
+  "reason": "#823 S1: staging builds import nexus/runtime/slot_operations.py, scripts/rebuild_memory_idf.py and scripts/replay_state.py (with nexus/agents/orrery/replay.py) from the setup script",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -133,6 +133,7 @@
     "nexus/agents/orrery/reciprocal.py",
     "nexus/agents/orrery/reconstruction.py",
     "nexus/agents/orrery/relationship_provenance.py",
+    "nexus/agents/orrery/replay.py",
     "nexus/agents/orrery/resolver.py",
     "nexus/agents/orrery/retrograde_embedding.py",
     "nexus/agents/orrery/retrograde_expansion.py",
@@ -263,6 +264,7 @@
     "nexus/runtime/readiness.py",
     "nexus/runtime/receipts.py",
     "nexus/runtime/remote_auth.py",
+    "nexus/runtime/slot_operations.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",
     "nexus/telemetry/attempt_manifest.py",
@@ -282,6 +284,8 @@
     "scripts/database_targets.py",
     "scripts/migrate.py",
     "scripts/new_story_setup.py",
+    "scripts/rebuild_memory_idf.py",
+    "scripts/replay_state.py",
     "scripts/summarize_narrative.py"
   ]
 }

@@ -56,6 +56,7 @@ from nexus.agents.memnon.utils.idf_dictionary import ANALYZER_KEY_SQL  # noqa: E
 from nexus.agents.orrery.reconstruction import (  # noqa: E402
     playable_narrative_predicate,
 )
+from nexus.api.db_pool import MaintenanceTarget  # noqa: E402
 from nexus.database import (  # noqa: E402
     AmbiguousCommit,
     maintenance_connection,
@@ -319,7 +320,15 @@ def _observe(
     return reports
 
 
-def _dry_run(dbname: str, report: DatabaseReport) -> None:
+def _dry_run(
+    dbname: str,
+    report: DatabaseReport,
+    maintenance_target: MaintenanceTarget | None = None,
+) -> None:
+    if maintenance_target is not None:
+        from nexus.runtime.slot_operations import require_authorized
+
+        require_authorized(maintenance_target)
     conn = maintenance_connection(dbname, operation="idf_rebuild_dry_run")
     with closing(conn):
         conn.set_session(readonly=True)
@@ -333,7 +342,16 @@ def _dry_run(dbname: str, report: DatabaseReport) -> None:
     report.status = "dry_run"
 
 
-def _rebuild(dbname: str, report: DatabaseReport, write_locked_slot: bool) -> None:
+def _rebuild(
+    dbname: str,
+    report: DatabaseReport,
+    write_locked_slot: bool,
+    maintenance_target: MaintenanceTarget | None = None,
+) -> None:
+    if maintenance_target is not None:
+        from nexus.runtime.slot_operations import require_authorized
+
+        require_authorized(maintenance_target)
     conn = maintenance_connection(
         dbname, write_locked_slot=write_locked_slot, operation="idf_rebuild"
     )
@@ -385,7 +403,11 @@ def commit_unknown_message(exc: AmbiguousCommit) -> str:
 
 
 def rebuild_database(
-    dbname: str, *, dry_run: bool = False, write_locked_slot: bool = False
+    dbname: str,
+    *,
+    dry_run: bool = False,
+    write_locked_slot: bool = False,
+    maintenance_target: MaintenanceTarget | None = None,
 ) -> DatabaseReport:
     """Rebuild (or, with ``dry_run``, inspect) one database's IDF state.
 
@@ -395,6 +417,8 @@ def rebuild_database(
     the database is left exactly as it was. A connection lost during COMMIT
     is ``commit_unknown``, never reported as a rollback.
     """
+    if maintenance_target is not None and maintenance_target.dbname != dbname:
+        raise ValueError("Maintenance target does not match IDF rebuild database")
     report = DatabaseReport(dbname=dbname, status="failed")
     if not db_exists(dbname):
         LOG.warning("Database %s does not exist, skipping", dbname)
@@ -411,9 +435,9 @@ def rebuild_database(
         return report
     try:
         if dry_run:
-            _dry_run(dbname, report)
+            _dry_run(dbname, report, maintenance_target)
         else:
-            _rebuild(dbname, report, write_locked_slot)
+            _rebuild(dbname, report, write_locked_slot, maintenance_target)
     except AmbiguousCommit as exc:
         report.status = "commit_unknown"
         report.error = commit_unknown_message(exc)

@@ -1,0 +1,14 @@
+{
+  "base_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "scope": "tracked Markdown front matter source intersections with changed paths",
+  "records": [
+    {
+      "path": "docs/decisions/0040-story-bundles.md",
+      "changed_sources": [
+        "scripts/new_story_setup.py"
+      ],
+      "verified_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "ruling_changed": false
+    }
+  ]
+}

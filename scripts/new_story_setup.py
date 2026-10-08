@@ -9,7 +9,11 @@ Actions:
 
 from __future__ import annotations
 
-from nexus.api.db_pool import dispose_database
+from nexus.api.db_pool import (
+    MaintenanceTarget,
+    dispose_database,
+    get_maintenance_connection,
+)
 from nexus.api.save_slots import is_slot_locked
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.story_identity import record_fork, replace_story_identity
@@ -27,10 +31,17 @@ import re
 import shutil
 import subprocess
 import tempfile
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Sequence
 
 import psycopg2
 
+from nexus.runtime.slot_operations import (
+    SlotOperation,
+    StagingRefused,
+    open_operation,
+    sweep_staging,
+    validate_staging,
+)
 from scripts.migrate import migrate_database
 
 LOG = logging.getLogger("nexus.new_story_setup")
@@ -44,7 +55,7 @@ except ImportError:
     USE_POOL = False
 
 
-def _connect(dbname: Optional[str] = None):
+def _connect(dbname: str | MaintenanceTarget | None = None):
     """
     Get database connection, using pool if available.
 
@@ -52,6 +63,8 @@ def _connect(dbname: Optional[str] = None):
         dbname: Explicit database name. For slot databases, use save_01 through save_05.
                 If not provided, uses PGDATABASE env var (no automatic fallback to NEXUS).
     """
+    if isinstance(dbname, MaintenanceTarget):
+        return get_maintenance_connection(dbname)
     if USE_POOL:
         # This is a context manager that returns the connection
         # Note: callers must be updated to handle this properly
@@ -66,6 +79,11 @@ def _connect(dbname: Optional[str] = None):
                 "or pass dbname explicitly. Valid slot databases: save_01 through save_05."
             )
         return psycopg2.connect(**connection_kwargs(resolved_dbname))
+
+
+def _target_name(target: str | MaintenanceTarget) -> str:
+    """Use the database name for subprocesses while queries retain authorization."""
+    return target.dbname if isinstance(target, MaintenanceTarget) else target
 
 
 def require_assets_tables(dbname: Optional[str] = None) -> None:
@@ -94,7 +112,7 @@ def _get_default_slot_model() -> str:
     return load_settings().global_.model.default_slot_model
 
 
-def ensure_global_variables(dbname: str) -> None:
+def ensure_global_variables(dbname: str | MaintenanceTarget) -> None:
     """Ensure singleton row exists with new_story and default model."""
     default_model = _get_default_slot_model()
     with _connect(dbname) as conn, conn.cursor() as cur:
@@ -107,7 +125,7 @@ def ensure_global_variables(dbname: str) -> None:
             )
             LOG.info(
                 "Inserted default global_variables row in %s (model=%s)",
-                dbname,
+                _target_name(dbname),
                 default_model,
             )
 
@@ -242,6 +260,36 @@ def initialize_slot_database(
         )
         LOG.warning("Dropped database %s if it existed", target_db)
 
+    _build_from_template(target_db, source_db, tools, migrations_dir)
+    # Initialization mints the story identity (822-Q13); a reset recreates
+    # the database and so mints a new one.
+    connection = _connect(target_db)
+    try:
+        with connection as conn, conn.cursor() as cur:
+            replace_story_identity(cur, origin="wizard")
+    finally:
+        if not USE_POOL:
+            # A direct connection's context manager commits or rolls back but
+            # never closes; a failed write must not hold target_db open.
+            connection.close()
+    dispose_database(target_db)
+    LOG.info("Database %s ready", target_db)
+
+
+def _build_from_template(
+    target: str | MaintenanceTarget,
+    source_db: str,
+    tools: dict[str, str],
+    migrations_dir: Path | None,
+    *,
+    failure_guidance: str = (
+        "The partial database was left in place; "
+        "after fixing the failing migration, recreate it with --force "
+        "(force=True)."
+    ),
+) -> None:
+    """Copy the canonical schema and seed image, then migrate and seed empty IDF."""
+    target_db = _target_name(target)
     subprocess.run([tools["createdb"], target_db], check=True, env=subprocess_env())
     LOG.info("Created database %s", target_db)
 
@@ -302,50 +350,35 @@ def initialize_slot_database(
             env=subprocess_env(),
         )
     finally:
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
+        Path(tmp_path).unlink(missing_ok=True)
 
     # Copy template data: seed/vocab rows plus schema_migrations stamps.
     _copy_template_data(source_db, target_db, tools)
-    _require_migration_stamps(source_db, target_db)
+    _require_migration_stamps(source_db, target)
 
     # Ensure global_variables row exists
-    ensure_global_variables(target_db)
+    ensure_global_variables(target)
 
     # Apply only migrations newer than the template's stamped baseline. The
     # runner logs which migration failed; this refuses to call the slot ready.
     LOG.info("Running migrations on %s...", target_db)
     applied, unapplied = migrate_database(
-        target_db, skip_locked=False, migrations_dir=migrations_dir
+        target_db,
+        skip_locked=False,
+        migrations_dir=migrations_dir,
+        maintenance_target=target if isinstance(target, MaintenanceTarget) else None,
     )
     if unapplied:
         raise RuntimeError(
             f"Migrations failed on {target_db}: {applied} applied, "
-            f"{unapplied} unapplied. The partial database was left in place; "
-            "after fixing the failing migration, recreate it with --force "
-            "(force=True)."
+            f"{unapplied} unapplied. {failure_guidance}"
         )
     LOG.info("Applied %d migrations to %s", applied, target_db)
 
-    _initialize_empty_idf_corpora(target_db)
-    # Initialization mints the story identity (822-Q13); a reset recreates
-    # the database and so mints a new one.
-    connection = _connect(target_db)
-    try:
-        with connection as conn, conn.cursor() as cur:
-            replace_story_identity(cur, origin="wizard")
-    finally:
-        if not USE_POOL:
-            # A direct connection's context manager commits or rolls back but
-            # never closes; a failed write must not hold target_db open.
-            connection.close()
-    dispose_database(target_db)
-    LOG.info("Database %s ready", target_db)
+    _initialize_empty_idf_corpora(target)
 
 
-def _initialize_empty_idf_corpora(dbname: str) -> None:
+def _initialize_empty_idf_corpora(dbname: str | MaintenanceTarget) -> None:
     """Seed fresh corpus identities without copying a source story's counters."""
     with _connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
@@ -418,7 +451,9 @@ def _copy_template_data(source_db: str, target_db: str, tools: dict[str, str]) -
             pass
 
 
-def _require_migration_stamps(source_db: str, target_db: str) -> None:
+def _require_migration_stamps(
+    source_db: str, target_db: str | MaintenanceTarget
+) -> None:
     """Fail loudly if the new database has no schema_migrations baseline.
 
     Without stamps, the next migrate.py run would replay every migration
@@ -431,7 +466,8 @@ def _require_migration_stamps(source_db: str, target_db: str) -> None:
         count = cur.fetchone()[0]
     if count == 0:
         raise RuntimeError(
-            f"{target_db} has an empty schema_migrations table after cloning "
+            f"{_target_name(target_db)} has an empty schema_migrations table "
+            "after cloning "
             f"{source_db}. The template must carry migration stamps (and seed "
             "data); refresh it per CLAUDE.md before creating slots."
         )
@@ -504,6 +540,38 @@ def clone_slot_with_data(
         )
         LOG.warning("Dropped database %s if it existed", target_db)
 
+    _restore_clone(target_db, source_db, tools)
+    _post_clone_cleanup(target_db)
+    # A clone is a fork (822-Q4): a new story_uuid with a parent link.
+    connection = _connect(target_db)
+    try:
+        with connection as conn, conn.cursor() as cur:
+            copied = _clone_source_identity(cur, target_db)
+            child = replace_story_identity(cur, origin="clone")
+            if copied:
+                record_fork(
+                    cur,
+                    child_uuid=child,
+                    parent_uuid=copied,
+                    source_dbname=source_db,
+                    evidence=(
+                        f"clone_slot_with_data copied {source_db} into {target_db}"
+                    ),
+                )
+    finally:
+        if not USE_POOL:
+            # As in initialize_slot_database: close the direct connection
+            # on every path so a refusal cannot hold target_db open.
+            connection.close()
+    dispose_database(target_db)
+    LOG.info("Cloned %s into %s (with data)", source_db, target_db)
+
+
+def _restore_clone(
+    target: str | MaintenanceTarget, source_db: str, tools: dict[str, str]
+) -> None:
+    """Restore the existing full-data public/assets dump into one target name."""
+    target_db = _target_name(target)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".sql") as tmp:
         dump_path = tmp.name
 
@@ -551,35 +619,8 @@ def clone_slot_with_data(
             f.writelines(filtered)
 
         _restore_plain_dump(target_db, dump_path, tools)
-        _post_clone_cleanup(target_db)
-        # A clone is a fork (822-Q4): a new story_uuid with a parent link.
-        connection = _connect(target_db)
-        try:
-            with connection as conn, conn.cursor() as cur:
-                copied = _clone_source_identity(cur, target_db)
-                child = replace_story_identity(cur, origin="clone")
-                if copied:
-                    record_fork(
-                        cur,
-                        child_uuid=child,
-                        parent_uuid=copied,
-                        source_dbname=source_db,
-                        evidence=(
-                            f"clone_slot_with_data copied {source_db} into {target_db}"
-                        ),
-                    )
-        finally:
-            if not USE_POOL:
-                # As in initialize_slot_database: close the direct connection
-                # on every path so a refusal cannot hold target_db open.
-                connection.close()
-        dispose_database(target_db)
-        LOG.info("Cloned %s into %s (with data)", source_db, target_db)
     finally:
-        try:
-            os.remove(dump_path)
-        except OSError:
-            pass
+        Path(dump_path).unlink(missing_ok=True)
 
 
 def _clone_source_identity(
@@ -604,17 +645,148 @@ def _clone_source_identity(
     return rows[0][0] if rows else None
 
 
-def _post_clone_cleanup(target_db: str) -> None:
+def _post_clone_cleanup(target_db: str | MaintenanceTarget) -> None:
     """Normalize cloned DB: ensure new_story is true."""
     with _connect(target_db) as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE public.global_variables SET new_story = TRUE WHERE id = TRUE;"
         )
     ensure_global_variables(target_db)
-    LOG.info("Post-clone cleanup completed for %s", target_db)
+    LOG.info("Post-clone cleanup completed for %s", _target_name(target_db))
 
 
-def main():
+_STAGING_FAILURE_GUIDANCE = (
+    "The staging database was left in place; drop it with --sweep-staging "
+    "after fixing the cause."
+)
+
+
+def _align_slot_number(target: MaintenanceTarget, slot: int) -> None:
+    """Align only the staged singleton with the eventual destination slot."""
+    with _connect(target) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE public.global_variables SET slot_number = %s WHERE id = TRUE",
+            (slot,),
+        )
+        if cur.rowcount != 1:
+            raise RuntimeError(f"{target.dbname} has no singleton global_variables row")
+
+
+def stage_slot_from_template(
+    slot: int,
+    *,
+    source_db: str | None = None,
+    journal_dir: Path | None = None,
+    uploads_dir: Path | None = None,
+    migrations_dir: Path | None = None,
+) -> SlotOperation:
+    """Build and validate a fresh staged story without touching its destination."""
+    tools = _postgres_tools("createdb", "pg_dump", "psql")
+    source_db = source_db or "NEXUS_template"
+    handle = open_operation(
+        "stage_template", slot=slot, source_db=source_db, journal_dir=journal_dir
+    )
+    try:
+        handle.advance("building")
+        target = handle.target
+        _build_from_template(
+            target,
+            source_db,
+            tools,
+            migrations_dir,
+            failure_guidance=_STAGING_FAILURE_GUIDANCE,
+        )
+        # Landed 822 initialization also mints an identity in template staging.
+        with _connect(target) as conn, conn.cursor() as cur:
+            replace_story_identity(cur, origin="wizard")
+        _align_slot_number(target, slot)
+        handle.advance("built")
+        refusals = validate_staging(
+            target, slot=slot, uploads_dir=uploads_dir, migrations_dir=migrations_dir
+        )
+        if refusals:
+            handle.advance("refused", refusals=refusals)
+            raise StagingRefused(handle.record, handle.path)
+        handle.advance("validated")
+        return handle.record
+    except BaseException as exc:
+        if handle.record.phase in {"building", "built"}:
+            handle.advance("failed", error=" ".join(str(exc).split()))
+        raise
+    finally:
+        handle.close()
+
+
+def stage_slot_clone(
+    slot: int,
+    source_db: str,
+    *,
+    journal_dir: Path | None = None,
+    uploads_dir: Path | None = None,
+    migrations_dir: Path | None = None,
+) -> SlotOperation:
+    """Restore, upgrade and validate a clone while retaining every staged outcome."""
+    tools = _postgres_tools("createdb", "pg_dump", "psql")
+    handle = open_operation(
+        "stage_clone", slot=slot, source_db=source_db, journal_dir=journal_dir
+    )
+    try:
+        handle.advance("building")
+        target = handle.target
+        _restore_clone(target, source_db, tools)
+        _require_migration_stamps(source_db, target)
+        applied, unapplied = migrate_database(
+            target.dbname,
+            skip_locked=False,
+            migrations_dir=migrations_dir,
+            maintenance_target=target,
+        )
+        if unapplied:
+            raise RuntimeError(
+                f"Migrations failed on {target.dbname}: {applied} applied, "
+                f"{unapplied} unapplied. {_STAGING_FAILURE_GUIDANCE}"
+            )
+        _post_clone_cleanup(target)
+        # Read the copied identity after migrations, then replace its lineage.
+        with _connect(target) as conn, conn.cursor() as cur:
+            copied = _clone_source_identity(cur, target.dbname)
+            child = replace_story_identity(cur, origin="clone")
+            if copied:
+                record_fork(
+                    cur,
+                    child_uuid=child,
+                    parent_uuid=copied,
+                    source_dbname=source_db,
+                    evidence=(
+                        f"stage_slot_clone copied {source_db} into {target.dbname}"
+                    ),
+                )
+        _align_slot_number(target, slot)
+        from scripts.rebuild_memory_idf import rebuild_database
+
+        report = rebuild_database(target.dbname, maintenance_target=target)
+        if report.status != "rebuilt":
+            raise RuntimeError(
+                f"IDF rebuild {report.status} on {target.dbname}: {report.error}"
+            )
+        handle.advance("built")
+        refusals = validate_staging(
+            target, slot=slot, uploads_dir=uploads_dir, migrations_dir=migrations_dir
+        )
+        if refusals:
+            handle.advance("refused", refusals=refusals)
+            raise StagingRefused(handle.record, handle.path)
+        handle.advance("validated")
+        return handle.record
+    except BaseException as exc:
+        if handle.record.phase in {"building", "built"}:
+            handle.advance("failed", error=" ".join(str(exc).split()))
+        raise
+    finally:
+        handle.close()
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     """Run slot setup from the command line.
 
     Logging is configured here, not at import, so a library importer (the
@@ -649,10 +821,59 @@ def main():
             "a locked slot is refused"
         ),
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--stage",
+        action="store_true",
+        help="Build and validate beside the slot, without replacing it",
+    )
+    parser.add_argument(
+        "--sweep-staging",
+        action="store_true",
+        help="Drop unlocked staging databases owned by operation journals",
+    )
+    args = parser.parse_args(argv)
+
+    if args.sweep_staging:
+        if (
+            args.slot is not None
+            or args.source is not None
+            or args.create_assets
+            or args.force
+            or args.stage
+            or args.mode == "clone"
+        ):
+            parser.error("--sweep-staging takes no other option")
+        report = sweep_staging()
+        for label, names in (
+            ("dropped", report.dropped),
+            ("in use", report.in_use),
+            ("unowned", report.unowned),
+        ):
+            for name in names:
+                print(f"{label} {name}")
+        return
+    if args.stage and (args.force or args.create_assets):
+        parser.error("--stage cannot be combined with --force or --create-assets")
+    if args.stage and args.slot is None:
+        parser.error("--stage requires --slot")
 
     if not args.create_assets and not args.slot:
         parser.error("Specify --create-assets and/or --slot")
+
+    if args.stage:
+        if args.mode == "clone":
+            if not args.source:
+                parser.error("--source is required when --mode=clone")
+            operation = stage_slot_clone(args.slot, args.source)
+        else:
+            operation = stage_slot_from_template(args.slot, source_db=args.source)
+        from nexus.runtime.slot_operations import default_journal_dir
+
+        print(
+            f"{operation.staging_db} validated for slot {args.slot} "
+            f"(journal {default_journal_dir() / (operation.operation_id + '.json')})"
+        )
+        return
 
     if args.create_assets:
         require_assets_tables()
