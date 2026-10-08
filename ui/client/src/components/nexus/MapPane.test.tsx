@@ -11,7 +11,7 @@
  * wiring are all the real ones.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { geoEquirectangular } from "d3-geo";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/map-geometry";
 import type { CurrentPlace, Place, Zone } from "@shared/schema";
 import { MapPane } from "./MapPane";
+import { MapViewProvider } from "./MapViewContext";
 
 const SLOT = 5;
 
@@ -104,14 +105,15 @@ function renderPane() {
   for (const place of PLACES) {
     client.setQueryData(["/api/places", place.id, "images", SLOT], []);
   }
-  render(
+  const tree = (visible: boolean) => (
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <MapPane slot={SLOT} />
+        <MapViewProvider>{visible && <MapPane slot={SLOT} />}</MapViewProvider>
       </ThemeProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return client;
+  const view = render(tree(true));
+  return { client, setVisible: (visible: boolean) => view.rerender(tree(visible)) };
 }
 
 function readViewBox() {
@@ -163,6 +165,47 @@ afterEach(() => {
 });
 
 describe("MapPane", () => {
+  it("restores the last view, selection and zones after a tab switch", () => {
+    const { setVisible } = renderPane();
+    resizeCanvas(1000, 600);
+    fireEvent.click(screen.getByTestId("map-zone-1"));
+    fireEvent.click(screen.getByTestId("map-place-row-101"));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    const svg = screen.getByTestId("map-svg");
+    for (let tick = 0; tick < 3; tick++) {
+      fireEvent.wheel(svg, { deltaY: -100, clientX: 850, clientY: 120 });
+    }
+    const before = readViewBox();
+    setVisible(false);
+    setVisible(true);
+    resizeCanvas(1000, 600);
+    expect(readViewBox()).toEqual(before);
+    expect(screen.getByTestId("map-place-row-101")).toHaveClass("on");
+    expect(screen.getByTestId("map-place-row-102")).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("still recenters on a new current place after a return", async () => {
+    const { client, setVisible } = renderPane();
+    resizeCanvas(1000, 600);
+    fireEvent.wheel(screen.getByTestId("map-svg"), {
+      deltaY: -100, clientX: 850, clientY: 120,
+    });
+    setVisible(false);
+    setVisible(true);
+    resizeCanvas(1000, 600);
+    act(() => {
+      client.setQueryData<CurrentPlace[]>(["/api/current-place", SLOT], [
+        { placeId: 101, name: "Bryggen Wharf", chunkId: 2 },
+      ]);
+    });
+    await waitFor(() => {
+      const center = viewCenterLngLat(1000, 600);
+      expect(center.longitude).toBeCloseTo(5.3242, 9);
+      expect(center.latitude).toBeCloseTo(60.3975, 9);
+    });
+  });
+
   it("keeps pan and zoom across a canvas resize", () => {
     renderPane();
     resizeCanvas(1000, 600);
@@ -190,7 +233,7 @@ describe("MapPane", () => {
   });
 
   it("keeps the pan when a places refetch keeps the extent", async () => {
-    const client = renderPane();
+    const { client } = renderPane();
     resizeCanvas(1000, 600);
     const svg = screen.getByTestId("map-svg");
     for (let tick = 0; tick < 3; tick++) {

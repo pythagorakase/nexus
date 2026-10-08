@@ -1,0 +1,20 @@
+- banner:
+  - text: NEXUS SLOT 4
+  - status
+- main:
+  - list:
+    - listitem:
+      - button "Fixture 4"
+  - img: Place 4
+  - text: 1.00× Place 4
+- navigation "Primary navigation":
+  - button "Home":
+    - img
+  - button "Narrative":
+    - img
+  - button "Map" [pressed]:
+    - img
+  - button "Characters":
+    - img
+  - button "Settings":
+    - img

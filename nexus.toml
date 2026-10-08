@@ -159,6 +159,10 @@ roster_limit = 6
 default_page_size = 50
 max_page_size = 200
 
+[ui.announcer]
+# How long the generation announcer keeps a message before clearing the live region.
+hold_ms = 5000
+
 # Per-theme font slot choices (NEXUS IRIS keeper matrix). The display slot is
 # the marquee font — reserved for the NEXUS wordmark and locked in the UI.
 [ui.fonts.veil]
