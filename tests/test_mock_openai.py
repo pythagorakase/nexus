@@ -403,6 +403,10 @@ def test_seeded_test_provider_database_holds_the_rows_the_provider_reads(
 
     result = _run_test_provider_seeder(routed_test_provider_database)
     assert result.returncode == 0, result.stderr
+    assert (
+        f"TEST provider database {routed_test_provider_database!r} "
+        "populated successfully!"
+    ) in result.stdout
 
     cache = query_wizard_cache()
     assert cache["base_timestamp"] is not None
