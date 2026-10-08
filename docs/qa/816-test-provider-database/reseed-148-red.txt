@@ -1,0 +1,73 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_reseeding_test_provider_preserves_reference_parity ____________
+
+routed_test_provider_database = 'qa640_816_test_provider_117571cb0c26'
+
+    @pytest.mark.requires_postgres
+    @pytest.mark.skipif(
+        not (
+            Path(__file__).resolve().parents[1]
+            / "migrations/148_chunk_entity_references.sql"
+        ).exists(),
+        reason="cross-slice reseed proof requires the real migration 148",
+    )
+    def test_reseeding_test_provider_preserves_reference_parity(
+        routed_test_provider_database: str,
+    ) -> None:
+        """Reseeding clears every mirrored kind while its chunk/entities survive."""
+        dbname = routed_test_provider_database
+        chunk_id = seed_committed_chunk(dbname, raw_text="Keep this provider chunk.")
+        faction_id, faction_entity = seed_faction(dbname, name="Provider Faction")
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.chunk_entity_references')")
+            assert cur.fetchone()[0] is not None, "migration 148 was not applied"
+            cur.execute("SELECT id, name, entity_id FROM characters WHERE id = 1")
+            character_id, character_name, character_entity = cur.fetchone()
+            cur.execute("SELECT id, name, entity_id FROM places WHERE id = 1")
+            place_id, place_name, place_entity = cur.fetchone()
+            character = RosterEntry(kind="character", id=character_id, name=character_name)
+            place = RosterEntry(kind="place", id=place_id, name=place_name)
+            faction = RosterEntry(kind="faction", id=faction_id, name="Provider Faction")
+            write_roster(
+                conn,
+                chunk_id,
+                PresenceRoster(
+                    present={character.key: character},
+                    setting={place.key: place},
+                    referenced={faction.key: faction},
+                ),
+            )
+        original_entities = [character_entity, place_entity, faction_entity]
+        before = reference_parity(dbname, target="chunk_entity_references")
+        assert before["parity"], before["kinds"]
+        assert {kind: rows["target"] for kind, rows in before["kinds"].items()} == {
+            "character": 1,
+            "place": 1,
+            "faction": 1,
+        }
+    
+        for _ in range(2):
+            result = _run_test_provider_seeder(dbname)
+            assert result.returncode == 0, result.stderr
+            after = reference_parity(dbname, target="chunk_entity_references")
+>           assert after["parity"], after["kinds"]
+E           AssertionError: {'character': {'expected': 0, 'extra': {'count': 1, 'examples': [{'chunk_id': 1, 'entity_id': 2, 'evidence': None, 'ki...: []}, 'subtype_has_no_entity': {'count': 0, 'examples': []}}, 'count': 0}, 'junction': 'place_chunk_references', ...}}
+E           assert False
+
+tests/test_mock_openai.py:548: AssertionError
+
+[Elided 2138 captured setup lines; raw local log: /tmp/816-reseed-148-red.log]
+
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 2 targets: postgres, qa640_816_test_provider_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 failed in 2.46s
