@@ -2,12 +2,21 @@
 Mock OpenAI server for TEST model.
 
 Impersonates OpenAI API at /v1/chat/completions and /v1/responses.
-Queries mock database for test data - no inline caching.
+Queries the TEST provider database for test data - no inline caching.
 
-The mock database mirrors save_* schemas and contains:
+The database is named by ``[api.test_provider] database`` in nexus.toml
+(default ``mock``); the ``NEXUS_TEST_PROVIDER_DATABASE`` environment variable
+overrides it before validation, so tests route a parent and its child
+processes to one disposable clone. A story database (``save_NN``,
+``NEXUS_template``) is refused. Seed one with
+``python migrations/008_populate_mock_database.py --dbname <name>``.
+
+The database mirrors save_* schemas and contains:
 - assets.new_story_creator: Wizard phase data
 - characters, layers, zones, places: Post-transition data
 - incubator: Bootstrap narrative
+
+A reader that finds no rows raises; there is no placeholder response.
 
 Usage:
     python -m nexus.api.mock_openai
@@ -38,8 +47,6 @@ from nexus.config import Settings, load_settings
 
 logger = logging.getLogger("nexus.api.mock_openai")
 
-MOCK_DB = "mock"
-
 
 def _parse_pg_array(value: Any) -> List[str]:
     """Parse PostgreSQL array literal to Python list.
@@ -69,16 +76,30 @@ app.add_middleware(
 
 
 def get_mock_connection() -> psycopg2.extensions.connection:
-    """Get connection to mock database."""
+    """Connect to the TEST provider database named by the settings."""
     settings = load_settings()
     if settings.api is None:
         raise ValueError("nexus.toml is missing the [api] section")
 
-    return psycopg2.connect(**connection_kwargs(MOCK_DB), cursor_factory=RealDictCursor)
+    return psycopg2.connect(
+        **connection_kwargs(settings.api.test_provider.database),
+        cursor_factory=RealDictCursor,
+    )
+
+
+def _missing_rows_error(
+    conn: psycopg2.extensions.connection, table: str
+) -> RuntimeError:
+    """Name the TEST provider database that lacks ``table`` rows."""
+    dbname = conn.info.dbname
+    return RuntimeError(
+        f"TEST provider database {dbname!r} has no {table} rows; seed it with "
+        f"python migrations/008_populate_mock_database.py --dbname {dbname}"
+    )
 
 
 def query_wizard_cache() -> Dict[str, Any]:
-    """Query wizard cache from mock.assets.new_story_creator."""
+    """Query the wizard cache row from assets.new_story_creator."""
     with get_mock_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -109,11 +130,13 @@ def query_wizard_cache() -> Dict[str, Any]:
             """
             )
             row = cast(Optional[Dict[str, Any]], cur.fetchone())
-            return row or {}
+            if row is None:
+                raise _missing_rows_error(conn, "assets.new_story_creator")
+            return row
 
 
 def query_traits() -> List[Dict[str, Any]]:
-    """Query all traits from mock.assets.traits."""
+    """Query all traits from assets.traits."""
     with get_mock_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -123,11 +146,14 @@ def query_traits() -> List[Dict[str, Any]]:
                 ORDER BY id
             """
             )
-            return cast(List[Dict[str, Any]], cur.fetchall())
+            rows = cast(List[Dict[str, Any]], cur.fetchall())
+            if not rows:
+                raise _missing_rows_error(conn, "assets.traits")
+            return rows
 
 
 def query_bootstrap_narrative() -> Dict[str, Any]:
-    """Query bootstrap narrative from mock.incubator."""
+    """Query the bootstrap narrative row from incubator."""
     with get_mock_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -139,7 +165,9 @@ def query_bootstrap_narrative() -> Dict[str, Any]:
             """
             )
             row = cast(Optional[Dict[str, Any]], cur.fetchone())
-            return row or {}
+            if row is None:
+                raise _missing_rows_error(conn, "incubator")
+            return row
 
 
 def build_setting_arguments(cache: Dict[str, Any]) -> Dict[str, Any]:
@@ -1067,7 +1095,7 @@ def _responses_payload(
 
 def get_cached_bootstrap_narrative() -> Dict[str, Any]:
     """
-    Get bootstrap narrative from mock database.
+    Get bootstrap narrative from the TEST provider database.
 
     Queries incubator and transforms to StorytellerResponseBootstrap format
     (narrative + choices, extra fields forbidden).
@@ -1076,13 +1104,6 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
     Extended-shaped payload this function used to emit.
     """
     row = query_bootstrap_narrative()
-
-    if not row:
-        logger.warning("[MOCK] No bootstrap narrative found in mock.incubator")
-        return {
-            "narrative": "[TEST MODE] No mock data available",
-            "choices": ["Continue", "Wait"],
-        }
 
     # Extract choices from choice_object
     choice_obj = row.get("choice_object") or {}

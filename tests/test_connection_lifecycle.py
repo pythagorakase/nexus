@@ -1,7 +1,9 @@
 """Two-server isolation through the real CLI, gateway, and TEST provider.
 
 The fixture owns every database on its two temporary clusters, including the
-normal save_04 and mock names required by production entry points. The owner's
+normal save_04 name required by production entry points and the TEST provider
+database qa640_816_lifecycle_test_provider, which the fixture routes to the
+gateway and the mock through NEXUS_TEST_PROVIDER_DATABASE. The owner's
 NEXUS_template is read only to export schema and vocabulary; no fleet writes.
 """
 
@@ -30,11 +32,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from nexus.api import db_pool
+from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
 from nexus.database import connection_kwargs, database_url
 from tests.pg_fixtures import admit_disposable_database
 from tests.test_database_contract import two_clusters  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
+# The TEST provider database on both private clusters (issue #816: never the
+# owner's ``mock``).
+LIFECYCLE_TEST_PROVIDER_DATABASE = "qa640_816_lifecycle_test_provider"
 pytestmark = pytest.mark.requires_postgres
 RuntimeFixture = tuple[
     Callable[..., dict[str, Any]], dict[str, Any], dict[str, Any], Path
@@ -185,7 +191,7 @@ def lifecycle_runtime(
         admin = psycopg2.connect(dbname="postgres", **_cluster_params(cluster))
         admin.autocommit = True
         try:
-            for dbname in ("save_04", "mock"):
+            for dbname in ("save_04", LIFECYCLE_TEST_PROVIDER_DATABASE):
                 with admin.cursor() as cur:
                     cur.execute(
                         sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname))
@@ -261,16 +267,22 @@ def lifecycle_runtime(
     monkeypatch.setenv("PYTHONPATH", str(ROOT))
     for key, value in _cluster_params(other).items():
         monkeypatch.setenv(f"PG{key.upper()}", str(value))
-    admit_disposable_database(monkeypatch.setattr, "mock")
+    monkeypatch.setenv(TEST_PROVIDER_DATABASE_ENV, LIFECYCLE_TEST_PROVIDER_DATABASE)
+    admit_disposable_database(monkeypatch.setattr, LIFECYCLE_TEST_PROVIDER_DATABASE)
     db_pool.close_all_pools()
-    for dbname in ("save_04", "mock"):
+    for dbname in ("save_04", LIFECYCLE_TEST_PROVIDER_DATABASE):
         ensure_global_variables(dbname)
         _initialize_empty_idf_corpora(dbname)
     cache = json.loads(
         (ROOT / "tests/fixtures/golden_path_wizard_cache.json").read_text()
     )
-    write_cache(**{**cache, "target_slot": 4, "dbname": "mock"})
-    with db_pool.get_connection("mock") as conn, conn.cursor() as cur:
+    write_cache(
+        **{**cache, "target_slot": 4, "dbname": LIFECYCLE_TEST_PROVIDER_DATABASE}
+    )
+    with (
+        db_pool.get_connection(LIFECYCLE_TEST_PROVIDER_DATABASE) as conn,
+        conn.cursor() as cur,
+    ):
         cur.execute(
             "INSERT INTO incubator (parent_chunk_id, storyteller_text, choice_object) "
             "VALUES (0, %s, %s)",

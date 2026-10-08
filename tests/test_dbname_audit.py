@@ -772,11 +772,13 @@ def test_constructors_imported_before_the_audit_are_audited(
         ("save_01", True),
         ("save_05", True),
         ("NEXUS_template", True),
+        ("mock", True),
         ("postgres", False),
         ("template0", False),
         ("qa640_mig091_0123456789ab", False),
         ("qa640_save_05_clone", False),
         ("nexus_template", False),
+        ("qa640_mock_x", False),
     ],
 )
 def test_owner_filter_matches_whole_names_only(name: str, owner: bool) -> None:

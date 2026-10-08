@@ -1,0 +1,437 @@
+# TEST Provider Database Isolation — Verification
+
+Verified 2026-10-08 on `claude/816-test-provider-database`, resumed from Claude's
+saved WIP `25d6a01a`. Merge base / fetched `origin/main` is
+`afd034f360e625f8bc4ffa8a717dda28422b19c7`; `git merge origin/main` reported
+`Already up to date.` This completes 816-Q3 and 816-Q4 from the
+[September 30 decisions](https://github.com/pythagorakase/nexus/issues/816#issuecomment-5915949753).
+Refs #816; Q1/Q2 and the CI tiers remain outside this slice.
+
+## Behavior and Source Evidence
+
+- The old provider hardcoded `MOCK_DB = "mock"`; two singleton readers returned
+  `{}` and cached bootstrap returned `[TEST MODE] No mock data available` when
+  rows were absent. The production wizard consumes these same readers in
+  process (`nexus/api/wizard_chat.py:730`).
+- The new route is `[api.test_provider] database` (`nexus.toml:232`), default
+  `mock`, with validated `NEXUS_TEST_PROVIDER_DATABASE` overlay
+  (`nexus/config/loader.py:40`, `:305`). `APITestProviderSettings`
+  (`nexus/config/settings_models.py:3985`) rejects an empty value, `save_NN`,
+  and `NEXUS_template` before connection. It accepts `mock` and disposable names.
+- `nexus/api/mock_openai.py:78` connects to the configured database. Readers
+  (`:101`, `:138`, `:155`) raise a `RuntimeError` naming the actual database,
+  missing table, and explicit `--dbname` seeding command. Cached bootstrap
+  (`:1096`) propagates that error. No non-data TEST fallback was changed.
+- `migrations/008_populate_mock_database.py:439` exposes the production seeder:
+  validate before connecting, use `connection_kwargs`, load the unchanged
+  JSON fixture, run all four populate steps in one transaction, commit once,
+  roll back and propagate every failure, and close the connection. The CLI
+  (`:462`) takes `--dbname`, defaulting to the configured provider database.
+- Tests unconditionally start on the never-created
+  `qa640_816_test_provider_unrouted` (`tests/conftest.py:52`); an unrouted parent
+  or child read fails instead of reaching `mock`. The routed function fixture
+  (`:202`) uses the production seeder through
+  `disposable_test_provider_database` (`tests/pg_fixtures.py:451`) and the
+  owner-refusing environment route helper (`:473`). The seeder's two dynamic
+  imports are registered in `config/reachability.toml:178` and `:184`; the
+  existing `008:main` operator root remains at `:137`.
+- `mock` is protected independently by the runtime dbname audit
+  (`tests/dbname_audit.py:103`), the AST owner-target guard
+  (`tests/test_owner_target_guard.py:63`), and shared seed/route refusal
+  (`tests/pg_fixtures.py:421`). Owner-refusal tables cover both new experience
+  seeds in `tests/test_pg_disposable_target.py`.
+- Shared `ExperienceCandidatesSeed` / `ExperienceRenderJobSeed`
+  (`tests/pg_fixtures.py:2859`) describe the new seed results.
+  `seed_experience_candidates` (`:2926`) requires a clock, inserts the scene,
+  actors and event roles, and runs the production experience sweep.
+  `seed_experience_render_job` (`:2994`) queues through the production scene
+  enqueue path and reads the resulting job. Chunk times come from the save's
+  `base_timestamp`. Four private-builder callers now use this shared seed;
+  the other direct builders remain unchanged.
+
+## 008 Current-Schema Fixes and Owner Decision
+
+1. The selected fixture trait `reputation` matches canonical `fame` through
+   `canonical_trait_name`; rationale lookup keeps the fixture spelling
+   (`008:100`). The fixture JSON is unchanged.
+2. After the character/layer truncations, the base clock is written before
+   character insertion (`008:244`). The remaining story settings update the
+   singleton (`:324`) instead of deleting the clock-bearing row. This satisfies
+   the real character need-clock trigger on current schema.
+3. The retired `assets.save_slots` write is removed. `populate_save_slot`
+   (`008:430`) asserts the singleton update and pins
+   `StorySettings(skald_model="TEST", gaia_model=None)` through
+   `write_story_settings`, which writes the current story model column.
+
+The coordinator explicitly received the owner's approval on October 8:
+**“Keep the planned change; seed current-schema databases with an explicit
+--dbname.”** The compatibility decision is resolved; legacy support is not
+added. With unchanged default configuration, the old bare 008 command still
+selects `mock`, but the owner's legacy database lacks canonical `fame` and the
+`global_variables.model` column. It will raise and roll back, so operators seed
+a current-schema database with an explicit target instead.
+
+Read-only owner inspection used:
+
+```sh
+PGOPTIONS='-c default_transaction_read_only=on' psql -d mock -At -c \
+"SELECT current_setting('transaction_read_only');
+ SELECT id,name FROM assets.traits WHERE id=6;
+ SELECT column_name FROM information_schema.columns
+ WHERE table_schema='public' AND table_name='global_variables' AND column_name='model';
+ SELECT to_regclass('public.schema_migrations'),to_regclass('assets.save_slots');"
+```
+
+Output was `on`, `6|reputation`, and `|assets.save_slots`, with no model-column
+row. The owner database was never seeded or written. A disposable current-schema
+clone with the legacy trait spelling proves the real CLI errors without its
+success message and rolls back both trait resets and the earlier cache write
+(`tests/test_mock_openai.py:450`).
+
+## Consumer and Child-Environment Audit
+
+The two in-process bootstrap tests now request the routed provider fixture.
+`test_set_designer_failure.py` routes its source clone through the shared helper.
+The connection lifecycle test creates/seeds `qa640_816_lifecycle_test_provider`
+on its own registered private cluster and exports that name before starting
+its provider. Its `save_04` databases are admitted only on those registered
+private clusters (ports 55222 and 55223), not on the owner server.
+
+The real child sentinel proof writes a UUID narrative to the routed clone and
+receives exactly that narrative through the child HTTP API
+(`tests/test_mock_openai.py:504`). The unrouted child returns HTTP 500 and its
+log identifies the never-created database (`:527`). No further hidden reader
+required routing in the focused supervisor, recovery, lifecycle, bootstrap,
+manifest, scheduler, or seat-policy consumers. The coordinator's combined gate
+must still check the rest of the tree.
+
+The complete output of `git grep -nE 'env=\{|env=dict\(' -- tests` is preserved
+in [child-environment-sites.txt](child-environment-sites.txt). Each hit was
+traced to the actual spawn, including helper-built environments:
+
+- Ordinary literal expansions and `dict(os.environ)` inherit the route. This
+  covers scheduler helpers, the mock integration server, delayed recovery
+  provider, lifecycle provider, supervisor children, acceptance staging,
+  genesis ledger, CLI choice/inspect, embedding tools, golden overrides,
+  parity/registry/token/prompt/prose tools and travel proofs.
+- `tests/test_cli_contract.py:232` and `test_cli_session_wait.py:389` construct
+  child environments from `os.environ` before applying the callers' small
+  `env={...}` dictionaries. Their isolated-key lists do not remove the provider
+  route. `test_slot_routed_entrypoints.py:125` likewise starts with
+  `dict(os.environ)`; the filtered embedding-artifact child environment removes
+  only its runtime-config override. These retain the provider database route.
+- `tests/test_qa_shift.py:348` deliberately supplies only PATH and an owner-home
+  sentinel to `bash -c '. "$1" && env -0'`. That child prints its environment;
+  it launches no provider, imports no application code, and opens no database.
+  The parent later constructs a supervisor without spawning it in this test.
+- The explicit/minimal environments in `tests/test_secret_store_guard.py`
+  (including `:626`, its `env=minimal` forms and store-access forms) run only the
+  inline `CHILD_REPORT` script. It imports `os, sys` and writes the guard flag
+  to a temporary report; it cannot read the TEST database.
+- The new 008 CLI rollback child uses `{**os.environ, "PYTHONPATH": root}` and
+  explicitly passes its disposable `--dbname`.
+
+These environment exceptions need no provider route. The dbname audit itself
+does not instrument arbitrary subprocesses, so the inherited route and real
+sentinel/refusal tests provide the separate child-process evidence.
+
+## Focused Commands and Tails
+
+All runs used `/Users/pythagor/nexus/.venv/bin/python` (`PY` below),
+`PYTHONPATH=$PWD` from this worktree, and `nice -n 15`. Import provenance printed
+this worktree's `nexus/__init__.py`. Before each PostgreSQL run, `uptime` showed
+one-minute load below 24 (no load wait needed); only one pytest ran in this lane
+at a time. The common PostgreSQL prefix was:
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT \
+  -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH="$PWD" \
+  nice -n 15 "$PY" -m pytest
+```
+
+### Experience Count Before and After
+
+The pre-conversion test file was read with
+`git show origin/main:tests/test_orrery/test_character_experiences_pg.py` into a
+temporary `tests/test_orrery/_816_experience_baseline.py`, run under the current
+branch's shared fixtures/runtime, and removed in `finally`. This is a count
+and behavior comparison of the original test file, **not** a claim that a clean
+main checkout was gated. The coordinator approved that constrained comparison.
+The original and converted files both run the same 28 cases.
+
+### Original Experience Test File
+
+PostgreSQL prefix above:
+
+```sh
+-q -p tests.dbname_audit tests/test_orrery/_816_experience_baseline.py
+```
+
+```text
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 30 targets: postgres, qa640_wizard_drain_* x3, qa_wt724_experience_* x26
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+28 passed, 2 warnings in 33.10s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+### Converted Experience Test File
+
+PostgreSQL prefix above:
+
+```sh
+-q -p tests.dbname_audit tests/test_orrery/test_character_experiences_pg.py
+```
+
+```text
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 30 targets: postgres, qa640_wizard_drain_* x3, qa_wt724_experience_* x26
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+28 passed, 2 warnings in 34.51s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+### Initial Contract and Guard Proof
+
+PostgreSQL prefix above:
+
+```sh
+-q -p tests.dbname_audit tests/test_mock_openai.py \
+  tests/test_config/test_test_provider_database.py tests/test_pg_experience_seeds.py \
+  tests/test_logon_mock_integration.py tests/test_pg_disposable_target.py \
+  tests/test_dbname_audit.py tests/test_owner_target_guard.py
+```
+
+```text
+........................................................................ [ 69%]
+................................................................         [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 10 targets: postgres, qa640_816_empty_*, qa640_816_experience_seed_* x2, qa640_816_test_provider_* x4, qa735_slot_model_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+208 passed in 25.03s
+```
+
+This first run preceded the additional traits missing-row case and CLI rollback
+proof. Those additions are covered in the next consumer run.
+
+### Updated Consumers and Rollback Proof
+
+PostgreSQL prefix above:
+
+```sh
+-q -p tests.dbname_audit tests/test_mock_openai.py \
+  tests/test_orrery/test_character_experiences_pg.py \
+  tests/test_api/test_set_designer_failure.py tests/test_connection_lifecycle.py \
+  tests/test_orrery/test_card_identity.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 48 targets: postgres, qa640_816_empty_* x4, qa640_816_legacy_trait_*, qa640_816_lifecycle_test_provider, qa640_816_test_provider_* x4, qa640_840s3a_slot_* x2, qa640_840s3a_source_* x2, qa640_885_ren_replay_* x4, qa640_wizard_drain_* x3, qa_wt724_experience_* x26
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:55222 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:55223 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:55222 (psycopg2), save_04@local:55223 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+65 passed, 2 skipped, 7 warnings in 90.56s (0:01:30)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+The two skips are the pre-existing `requires_corpus` exposure-rank probes.
+
+### Five Current #964 Nodes
+
+PostgreSQL prefix above:
+
+```sh
+-vv -p tests.dbname_audit \
+  tests/test_mock_openai.py::test_mock_responses_routes_bootstrap_schema_as_final_result_tool \
+  tests/test_mock_openai.py::test_mock_responses_routes_bootstrap_schema_as_native_text_format \
+  tests/test_api/test_attempt_manifest_pg.py::test_manifest_real_test_turn_and_child_job_correlation \
+  tests/test_api/test_scheduler_corpus_pg.py::test_scheduler_live_turn_starts_before_queued_render \
+  tests/test_api/test_seat_policy_jobs_pg.py::test_accept_repin_and_scheduler_use_literal_seat_models
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 6 targets: postgres, qa640_764_turn_*, qa640_800_turn_*, qa640_814_seats_*, qa640_816_test_provider_* x2
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+======================== 5 passed, 9 warnings in 41.55s ========================
+```
+
+```text
+tests/test_mock_openai.py::test_mock_responses_routes_bootstrap_schema_as_final_result_tool PASSED [ 20%]
+tests/test_mock_openai.py::test_mock_responses_routes_bootstrap_schema_as_native_text_format PASSED [ 40%]
+tests/test_api/test_attempt_manifest_pg.py::test_manifest_real_test_turn_and_child_job_correlation PASSED [ 60%]
+tests/test_api/test_scheduler_corpus_pg.py::test_scheduler_live_turn_starts_before_queued_render PASSED [ 80%]
+tests/test_api/test_seat_policy_jobs_pg.py::test_accept_repin_and_scheduler_use_literal_seat_models PASSED [100%]
+```
+
+The former manifest `[async]` / `[sync]` pair is now this one unparametrized
+node because #1012 retired async mode; the coordinator can record all five
+current node results in #964.
+
+### Additional Child Consumers and Initial Reachability Failure
+
+PostgreSQL prefix above:
+
+```sh
+-q -p tests.dbname_audit tests/test_runtime/test_supervisor_live.py \
+  tests/test_api/test_scheduler_recovery_pg.py tests/test_doc_front_matter.py \
+  tests/test_reachability.py tests/test_pg_target_contract.py
+```
+
+```text
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 13 targets: postgres, qa640_800_kill_*, qa640_800_renew_* x4, qa640_offline_gate_* x5, qa804_fixture_target, qa885_supervisor_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_reachability.py::test_repository_reachability_ratchet - ass...
+FAILED tests/test_reachability.py::test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app
+2 failed, 226 passed, 7 warnings in 135.56s (0:02:15)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+Both failures were the two new file-based 008 imports missing dynamic-edge
+registrations. Added exactly those two entries; the operator root and
+reachability rule remain intact. All child consumers in this run passed.
+
+### Reachability and Canonical Documents After Repair
+
+Offline command:
+
+```sh
+PYTHONPATH="$PWD" nice -n 15 "$PY" -m pytest -q \
+  tests/test_reachability.py tests/test_doc_front_matter.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+96 passed, 5 warnings in 15.68s
+```
+
+### Deliberate Missing-Row Fallback Mutation
+
+Temporarily replaced only the wizard/bootstrap readers' raise blocks with
+`return row or {}` and restored the old cached-bootstrap placeholder branch.
+Each missing-row assertion has a separate parametrized case. The scratch
+wrapper required exit 1 and restored the entire source file in `finally`, then
+verified byte-for-byte equality with its pre-plant contents. The three planted
+fallbacks failed exactly as expected; the untouched traits refusal passed.
+
+### Red Control
+
+PostgreSQL prefix above:
+
+```sh
+-q -p tests.dbname_audit tests/test_mock_openai.py::test_missing_test_provider_rows_raise
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_816_empty_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_mock_openai.py::test_missing_test_provider_rows_raise[wizard]
+FAILED tests/test_mock_openai.py::test_missing_test_provider_rows_raise[bootstrap]
+FAILED tests/test_mock_openai.py::test_missing_test_provider_rows_raise[cached-bootstrap]
+3 failed, 1 passed in 5.22s
+```
+
+### Restored Source
+
+PostgreSQL prefix above:
+
+```sh
+-q -p tests.dbname_audit tests/test_mock_openai.py::test_missing_test_provider_rows_raise
+```
+
+```text
+....                                                                     [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_816_empty_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+4 passed in 4.88s
+```
+
+## Static Checks and Canonical Freshness
+
+The [changed Python list](files.txt) contains 16 files. Black reports all 16
+unchanged. Flake8 and mypy compared those files with the 14 pre-existing files
+exported from `origin/main` into a scratch directory; the two new test files
+are also checked on the branch. Exact invocations (from the appropriate root):
+
+```sh
+PYTHONPATH="$PWD" nice -n 15 "$PY" -m black --check <files>
+PYTHONPATH="$PWD" nice -n 15 "$PY" -m flake8 --config=<worktree>/.flake8 <files>
+PYTHONPATH=<worktree> MYPYPATH=<worktree> nice -n 15 "$PY" -m mypy --explicit-package-bases <files>
+PYTHONPATH="$PWD" nice -n 15 "$PY" -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+PYTHONPATH="$PWD" nice -n 15 "$PY" scripts/check_model_drift.py
+git diff --check
+```
+
+Exception dispositions, model drift and diff whitespace checks passed.
+
+Pre-existing diagnostics, with **zero new diagnostics** after normalizing source
+line/column shifts (and the old lifecycle F811's embedded `from line` number):
+
+- Flake8: 29 output lines / 28 distinct normalized diagnostics on each tree;
+  [main](flake8-main.txt), [branch](flake8-branch.txt).
+- Mypy: `Found 48 errors in 4 files` on each tree (14 main files, 16 branch
+  files); [main](mypy-main.txt), [branch](mypy-branch.txt). Errors are on unchanged
+  lines, and the two added test files introduce none.
+
+Re-verified `AGENTS.md` against its changed source declarations (`nexus.toml`,
+`tests/conftest.py`, `tests/pg_fixtures.py`, and the owner-audit wording in
+`docs/agent_workflow.md`), and `docs/turn_flow_sequence.md` against its declared
+`nexus.toml`. Their architecture/turn-flow statements remain accurate. Both
+`verified_commit` values now name merge base `afd034f360e625f8bc4ffa8a717dda28422b19c7`.
+The freshness check passes in the 96-test run above.
+
+## Landing and Remaining Gate
+
+- The coordinator owns the one combined whole-tree PostgreSQL gate and offline
+  gate; neither is claimed here. No new PR is opened until that combined gate
+  passes. This branch is ready for that integration review/gate.
+- No numbered schema migration, template/fleet application, owner save reset,
+  owner-data write, paid call, or owner-service restart occurred. The production
+  default continues to read `mock`; the explicit-target seeder compatibility
+  change is approved above.
+- Product runtime files changed, so gateway and mock-provider restarts are owed
+  when the coordinator next starts the services. No UI files changed; no UI
+  rebuild is needed.
+- Read-only cleanup check on `postgres`:
+  `SELECT datname FROM pg_database WHERE datname LIKE 'qa640_816_%' ORDER BY datname`
+  returned no rows after the proofs. The unrouted sentinel database was never
+  created. Fixture-owned children and clones were cleaned up by their fixtures.
+
+Codex — GPT-6
