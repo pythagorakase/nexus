@@ -60,7 +60,12 @@ from nexus.config import load_settings_as_dict
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.memory.manager import empty_pass2_baseline
 from scripts import new_story_setup
-from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_experience_render_job,
+    sqlalchemy_url,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -619,73 +624,6 @@ class _TimelineDriftingProvider(_SceneProvider):
         finally:
             conn.close()
         return super().get_structured_completion(prompt, schema)
-
-
-def _enqueue_render_job(
-    conn: Any, *, settings: dict[str, Any], label: str, seed_count: int = 2
-) -> list[int]:
-    with conn:
-        with conn.cursor() as cur:
-            scene_end_chunk_id = _insert_chunk(cur, f"{label} scene")
-            for ordinal in range(seed_count):
-                _character_id, entity_id = _insert_character(
-                    cur,
-                    f"{label} Actor {ordinal}",
-                    summary=f"{label} actor {ordinal} has a complete dossier.",
-                    background="Present for a verified event role.",
-                )
-                cur.execute(
-                    """
-                    INSERT INTO world_events (
-                        event_type, tick_chunk_id, actor_entity_id,
-                        world_layer, source, changed_fields, payload
-                    ) VALUES (
-                        'slept', %s, %s, 'primary', 'resolver',
-                        '{}', '{}'::jsonb
-                    ) RETURNING id
-                    """,
-                    (scene_end_chunk_id, entity_id),
-                )
-                event_id = int(cur.fetchone()[0])
-                cur.execute(
-                    """
-                    INSERT INTO world_event_entities (event_id, entity_id, role)
-                    VALUES (%s, %s, 'actor')
-                    """,
-                    (event_id, entity_id),
-                )
-    assert (
-        seed_character_experiences_sync(
-            conn,
-            anchor_chunk_id=scene_end_chunk_id,
-            settings=settings,
-        )
-        == seed_count
-    )
-    with conn:
-        with conn.cursor() as cur:
-            boundary_chunk_id = _insert_chunk(cur, f"{label} boundary")
-        assert (
-            enqueue_scene_experience_job_sync(
-                conn,
-                boundary_chunk_id=boundary_chunk_id,
-                scene_end_chunk_id=scene_end_chunk_id,
-                world_layer="primary",
-                slot=736,
-                settings=settings,
-            )
-            == 1
-        )
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            """
-            SELECT experience_ids
-            FROM character_experience_jobs
-            WHERE boundary_chunk_id = %s
-            """,
-            (boundary_chunk_id,),
-        )
-        return [int(value) for value in cur.fetchone()["experience_ids"]]
 
 
 def test_owner_complete_backfill_and_owner_aware_sweep(
@@ -2325,9 +2263,9 @@ def test_default_config_due_job_on_wizard_phase_slot_still_raises() -> None:
                         (datetime(2196, 7, 6, 23, 0, tzinfo=timezone.utc),),
                     )
                     assert cur.rowcount == 1
-            seeded_ids = _enqueue_render_job(
-                conn, settings=opt_in_settings, label="Wizard Phase 1027"
-            )
+            seeded_ids = seed_experience_render_job(
+                dbname, settings=opt_in_settings, label="Wizard Phase 1027", slot=736
+            ).experience_ids
             assert (
                 len(seeded_ids) == 2
             ), f"expected the two Wizard Phase 1027 actor seeds, got {seeded_ids}"
@@ -3570,12 +3508,13 @@ def test_fresh_duplicate_render_job_is_stale_rejected() -> None:
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
-            seed_ids = _enqueue_render_job(
-                conn,
+            seed_ids = seed_experience_render_job(
+                dbname,
                 settings=settings,
                 label="Duplicate Render Job",
+                slot=736,
                 seed_count=1,
-            )
+            ).experience_ids
             with conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -3643,9 +3582,9 @@ def test_render_validation_persists_siblings_and_retries_only_rejections() -> No
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
-            first_ids = _enqueue_render_job(
-                conn, settings=settings, label="Partial Persistence"
-            )
+            first_ids = seed_experience_render_job(
+                dbname, settings=settings, label="Partial Persistence", slot=736
+            ).experience_ids
             first_provider = _RejectLastSceneProvider()
 
             assert drain_experience_render_jobs_sync(
@@ -3758,9 +3697,9 @@ def test_render_validation_persists_siblings_and_retries_only_rejections() -> No
                 "last_error": None,
             }
 
-            exhausted_ids = _enqueue_render_job(
-                conn, settings=settings, label="Partial Exhaustion"
-            )
+            exhausted_ids = seed_experience_render_job(
+                dbname, settings=settings, label="Partial Exhaustion", slot=736
+            ).experience_ids
             exhausted_provider = _RejectLastSceneProvider()
             assert drain_experience_render_jobs_sync(
                 slot=736,

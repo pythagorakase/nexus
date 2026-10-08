@@ -4008,11 +4008,30 @@ class APIUploadsSettings(BaseModel):
 
 
 class APITestProviderSettings(BaseModel):
-    """Deterministic TEST provider timing for interruption proofs."""
+    """TEST provider database and deterministic timing for interruption proofs."""
 
     model_config = ConfigDict(extra="forbid")
+    database: str = Field(
+        default="mock",
+        min_length=1,
+        description=(
+            "Database the TEST provider reads its wizard and bootstrap rows "
+            "from; NEXUS_TEST_PROVIDER_DATABASE overrides it before validation."
+        ),
+    )
     experience_response_delay_seconds: float = Field(default=0, ge=0)
     writer_response_delay_seconds: float = Field(default=0, ge=0)
+
+    @field_validator("database")
+    @classmethod
+    def _refuse_story_database(cls, value: str) -> str:
+        """A story database is never the TEST provider's database."""
+        if re.fullmatch(r"save_\d+|NEXUS_template", value):
+            raise ValueError(
+                f"TEST provider database {value!r} is a story database; "
+                "name a seeded TEST database instead"
+            )
+        return value
 
 
 class APISettings(BaseModel):

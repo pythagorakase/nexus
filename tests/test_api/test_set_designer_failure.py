@@ -45,6 +45,7 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     route_slot_to_disposable,
+    route_test_provider_database,
 )
 from tests.scheduler_helpers import gateway_lane
 from tests.scheduler_helpers import test_provider_config as configure_test
@@ -185,7 +186,7 @@ def design_gateway(
                 setting, design = _seed_source(source)
             route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
             monkeypatch.setenv("NEXUS_SLOT", "4")
-            monkeypatch.setattr(mock_openai, "MOCK_DB", source)
+            route_test_provider_database(monkeypatch.setenv, source)
             model = load_settings().wizard.default_model
             assert load_settings().is_test_model(model)
             client = ConversationsClient(model=model)
