@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -26,13 +27,16 @@ from nexus import cli
 from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
 from nexus.api.secrets_endpoints import required_secret_accounts
 from nexus.config import load_settings
+from nexus.runtime import readiness
 from nexus.runtime.contract import (
     GATEWAY_PORT_ENV,
     HOME_ENV,
     NEXUS_AUTH_HEADER,
     RUNTIME_CONFIG_ENV,
     RUNTIME_STATUS_PATH,
+    TEST_RECEIPTS_ENV,
 )
+from nexus.runtime.receipts import FailureReceipt
 from nexus.runtime.readiness import (
     REGISTRY,
     REQUIRED_EXTENSIONS,
@@ -234,6 +238,116 @@ def test_required_extensions_match_the_migrations() -> None:
 # ---------------------------------------------------------------------------
 # Runner semantics on real checks
 # ---------------------------------------------------------------------------
+
+
+def test_runner_reports_an_import_failure_as_a_failed_check(tmp_path: Path) -> None:
+    """A missing import fails its check and skips dependents without escaping."""
+
+    def absent_import(_ctx: ReadinessContext) -> Outcome:
+        __import__("nexus_803_absent_module")
+        return Outcome(True, "unexpectedly imported the absent probe module")
+
+    def dependent(_ctx: ReadinessContext) -> Outcome:
+        raise AssertionError("a dependent of an import failure must not run")
+
+    registry = (
+        _spec("probe.import", targets=("ci-runner",), run=absent_import),
+        _spec(
+            "probe.dependent",
+            ("probe.import",),
+            targets=("ci-runner",),
+            run=dependent,
+        ),
+    )
+    report = run_readiness(
+        "ci-runner", ReadinessContext(ui_dist_dir=tmp_path), registry=registry
+    )
+    root, skipped = report.checks
+    assert root.id == "probe.import"
+    assert root.status == "fail"
+    assert "nexus_803_absent_module" in root.observed
+    assert root.id in root.observed
+    assert root.remediation == readiness.INSTALL_REMEDIATION
+    assert skipped.id == "probe.dependent"
+    assert skipped.status == "skip"
+    assert skipped.observed == "probe.import failed"
+    assert report.ok is False
+
+
+def test_doctor_json_reports_a_broken_install(tmp_path: Path) -> None:
+    """The real CLI returns a report and retains its private failure receipt."""
+
+    stub = tmp_path / "stub"
+    package = stub / "pydantic_ai"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text(
+        "raise ModuleNotFoundError(\"No module named 'opentelemetry._events'\", "
+        'name="opentelemetry._events")\n',
+        encoding="utf-8",
+    )
+    receipts = tmp_path / "receipts"
+    # Allow only OS process basics; inherited routing, libpq, provider tokens,
+    # live flags and pytest plugin/selection overrides cannot enter this child.
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key
+        in {
+            "HOME",
+            "PATH",
+            "TMPDIR",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "SYSTEMROOT",
+            "WINDIR",
+        }
+    }
+    environment.update(
+        PYTHONPATH=f"{stub}{os.pathsep}{REPO_ROOT}",
+        PYTHONDONTWRITEBYTECODE="1",
+        NEXUS_KEYRING_DISABLE="1",
+        NEXUS_TEST_PROVIDER_ONLY="1",
+    )
+    environment[TEST_RECEIPTS_ENV] = str(receipts)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nexus.cli",
+            "--json",
+            "doctor",
+            "--target",
+            "ci-runner",
+            "--config",
+            str(REPO_CONFIG),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 1, completed.stderr
+    assert "Traceback" not in completed.stderr, completed.stderr
+    report = ReadinessReport.model_validate_json(completed.stdout)
+    assert report.ok is False
+    config = _by_id(report)["config.valid"]
+    assert config.status == "fail"
+    assert "opentelemetry._events" in config.observed
+    assert "config.valid" in config.observed
+    assert config.remediation == readiness.INSTALL_REMEDIATION
+    assert _by_id(report)["reachability.gate"].status == "skip"
+    recorded = [
+        FailureReceipt.model_validate_json(line)
+        for path in receipts.glob("failures-*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert any(
+        receipt.surface == "config.load_settings"
+        and receipt.exception_type == "ModuleNotFoundError"
+        for receipt in recorded
+    )
 
 
 def test_config_valid_passes_on_the_checkout_config() -> None:
