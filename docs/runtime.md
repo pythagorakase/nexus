@@ -387,6 +387,7 @@ is the second.
 | `ui.bundle` | owner-host | — | `ui/dist/public/index.html` exists |
 | `secrets.seat_providers` | owner-host | `config.valid` | every key the model seats in use read is present (Required Keys and Headless Hosts); each account is listed as present, missing, or unreadable, and an unreadable store (a locked or unresponsive Keychain, or no `security` on `PATH`) fails the check with that store's remediation |
 | `runtime.log_writers` | owner-host | `config.valid` | no live supervised service runs without the log writer its pidfile records; a dead writer names `nexus restart <service>` (restart the service by name) |
+| `models.artifacts` | owner-host | `config.valid` | the configured production embedder and reranker match the artifact lock by file list, size, revision and sha256; failures name the fetch or configuration remedy |
 | `gateway.reachable` | owner-client | `config.valid` | the profile's gateway answers `/runtime/status` with the runtime's auth headers |
 | `gateway.version` | owner-client | `gateway.reachable` | client and runtime report the same `nexus` version |
 | `reachability.gate` | ci-runner | `config.valid` | `python -S scripts/check_reachability.py` passes |
@@ -632,6 +633,11 @@ hosts. Consequences for deployment:
   API boundary.
 - A hosted runtime carries its own weights; nothing model-related crosses
   the client contract.
+- The gateway refuses to start before its scheduler when production artifacts
+  differ from the lock by file list, size or revision, or when `nexus.toml`
+  names other models. `nexus models verify` and the doctor's `models.artifacts`
+  check also compare sha256. A process with `NEXUS_TEST_PROVIDER_ONLY=1` does
+  not run the boot check.
 
 ## Secrets per Profile
 

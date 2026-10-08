@@ -1,0 +1,61 @@
+nexus/agents/memnon/utils/artifact_manifest.py:602:89: E501 line too long (90 > 88 characters)
+nexus/agents/memnon/utils/artifact_manifest.py:876:89: E501 line too long (97 > 88 characters)
+nexus/agents/memnon/utils/cross_encoder.py:786:89: E501 line too long (89 > 88 characters)
+nexus/api/narrative.py:8:1: F401 'frontmatter' imported but unused
+nexus/api/narrative.py:15:1: F401 'typing.Literal' imported but unused
+nexus/api/narrative.py:16:1: F401 'pathlib.Path' imported but unused
+nexus/api/narrative.py:30:1: F401 'pydantic.BaseModel' imported but unused
+nexus/api/narrative.py:30:1: F401 'pydantic.Field' imported but unused
+nexus/api/narrative.py:34:1: F401 'nexus.agents.lore.logon_utility.LogonUtility' imported but unused
+nexus/api/narrative.py:35:1: F401 'nexus.agents.lore.lore.LORE' imported but unused
+nexus/api/narrative.py:40:1: F401 'nexus.api.lore_adapter.response_to_incubator' imported but unused
+nexus/api/narrative.py:40:1: F401 'nexus.api.lore_adapter.validate_incubator_data' imported but unused
+nexus/api/narrative.py:49:1: F401 'nexus.api.conversations.ConversationsClient' imported but unused
+nexus/api/narrative.py:50:1: F401 'nexus.api.new_story_flow.start_setup' imported but unused
+nexus/api/narrative.py:50:1: F401 'nexus.api.new_story_flow.resume_setup' imported but unused
+nexus/api/narrative.py:50:1: F401 'nexus.api.new_story_flow.record_drafts' imported but unused
+nexus/api/narrative.py:50:1: F401 'nexus.api.new_story_flow.reset_setup' imported but unused
+nexus/api/narrative.py:50:1: F401 'nexus.api.new_story_flow.activate_slot' imported but unused
+nexus/api/narrative.py:58:1: F401 'nexus.api.slot_utils.all_slots' imported but unused
+nexus/api/narrative.py:58:1: F401 'nexus.api.slot_utils.slot_dbname' imported but unused
+nexus/api/narrative.py:60:1: F401 'nexus.api.narrative_generation.get_chunk_info' imported but unused
+nexus/api/narrative.py:60:1: F401 'nexus.api.narrative_generation.write_to_incubator' imported but unused
+nexus/api/narrative.py:60:1: F401 'nexus.api.narrative_generation.generate_bootstrap_narrative' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.ChoiceSelection' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.StartSetupRequest' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.RecordDraftRequest' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.ResetSetupRequest' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.SelectSlotRequest' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.TraitMenuItemResponse' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.SlotStateResponse' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.SlotContinueRequest' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.SlotContinueResponse' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.SlotUndoResponse' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.SlotModelRequest' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.SlotModelResponse' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.SlotLockResponse' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.ChatRequest' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.TransitionRequest' imported but unused
+nexus/api/narrative.py:319:1: F401 'nexus.api.narrative_schemas.TransitionResponse' imported but unused
+nexus/api/narrative.py:319:1: E402 module level import not at top of file
+nexus/api/narrative.py:395:89: E501 line too long (97 > 88 characters)
+nexus/api/narrative.py:1235:89: E501 line too long (96 > 88 characters)
+nexus/api/narrative.py:1330:89: E501 line too long (94 > 88 characters)
+nexus/api/narrative.py:1342:9: F811 redefinition of unused 'slot_dbname' from line 58
+nexus/api/narrative.py:1372:89: E501 line too long (96 > 88 characters)
+nexus/api/narrative.py:1517:89: E501 line too long (96 > 88 characters)
+nexus/api/narrative.py:1536:89: E501 line too long (102 > 88 characters)
+nexus/api/narrative.py:1571:89: E501 line too long (112 > 88 characters)
+nexus/api/narrative.py:1622:13: F841 local variable 'data' is assigned to but never used
+nexus/cli.py:981:89: E501 line too long (92 > 88 characters)
+nexus/cli.py:4335:89: E501 line too long (93 > 88 characters)
+nexus/cli.py:4831:89: E501 line too long (113 > 88 characters)
+nexus/cli.py:4860:89: E501 line too long (118 > 88 characters)
+nexus/cli.py:4900:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:4985:89: E501 line too long (151 > 88 characters)
+nexus/cli.py:5011:89: E501 line too long (94 > 88 characters)
+nexus/cli.py:5012:89: E501 line too long (103 > 88 characters)
+nexus/cli.py:5031:89: E501 line too long (101 > 88 characters)
+nexus/runtime/readiness.py:1084:89: E501 line too long (93 > 88 characters)
+tests/test_embedding_artifacts.py:1168:89: E501 line too long (112 > 88 characters)
+tests/test_embedding_artifacts.py:1172:89: E501 line too long (117 > 88 characters)

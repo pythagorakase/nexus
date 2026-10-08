@@ -110,10 +110,20 @@ async def recover_active_choice_on_startup() -> None:
 @asynccontextmanager
 async def gateway_lifespan(app: FastAPI):
     """Recover the active slot and own its deferred-work loop until shutdown."""
-    from nexus.api.choice_recovery import recover_active_slot_choice
+    from nexus.agents.memnon.utils.artifact_manifest import check_artifacts_at_boot
     from nexus.api.slot_utils import get_active_slot
+    from nexus.config.loader import load_settings
+    from nexus.config.provider_guard import TEST_PROVIDER_ONLY_ENV
     from nexus.jobs.scheduler import SlotScheduler
 
+    if os.environ.get(TEST_PROVIDER_ONLY_ENV) == "1":
+        logger.info(
+            "Model artifact boot check not run: "
+            "NEXUS_TEST_PROVIDER_ONLY=1 marks a test process"
+        )
+    else:
+        summary = await asyncio.to_thread(check_artifacts_at_boot, load_settings())
+        logger.info(summary)
     scheduler = None
     if os.environ.get("NEXUS_SLOT") is not None:
         slot = get_active_slot()

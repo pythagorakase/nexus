@@ -1,4 +1,4 @@
-"""Production model artifact lock behind ``nexus models lock|verify``.
+"""Production artifact lock and ``nexus models lock|verify|plan|fetch``.
 
 The runtime loads exactly one embedder (the single ``is_active`` entry in
 ``[memnon.models]``) and, while reranking is enabled, the cross-encoder at
@@ -12,8 +12,10 @@ the lock, and any drift between nexus.toml and the lock, with the command that
 repairs it. Every ``hf download`` restore command, here and in the loaders,
 pins ``--revision`` whenever the lock or the folder records one.
 
-Neither command downloads anything. ``lock`` runs on the host that already
-holds the artifacts (issue #812).
+``plan`` reports missing or drifted artifacts without hashing or downloading.
+``fetch`` downloads only absent, pinned artifacts, then verifies their hashes;
+it refuses existing drifted folders and never replaces them or rewrites the
+lock. ``lock`` runs on the host that already holds the artifacts (issue #812).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,11 +85,22 @@ class VerifyReport:
 
     problems: List[str]
     remediation: List[str]
+    config_problems: List[str]
 
     @property
     def ok(self) -> bool:
         """True when nexus.toml agrees with the lock and every file matches."""
         return not self.problems
+
+
+@dataclass(frozen=True)
+class ArtifactCheck:
+    """One production configuration and lock with their verification result."""
+
+    lock_path: Path
+    specs: List[ArtifactSpec]
+    manifest: Dict[str, Any]
+    report: VerifyReport
 
 
 def production_artifact_specs(settings: Settings) -> List[ArtifactSpec]:
@@ -531,7 +545,9 @@ def _well_formed_artifacts(artifacts: Any) -> bool:
     )
 
 
-def _verify_files(spec: ArtifactSpec, entry: Dict[str, Any]) -> List[str]:
+def _verify_files(
+    spec: ArtifactSpec, entry: Dict[str, Any], *, hash_files: bool
+) -> List[str]:
     """Compare one artifact directory with its locked file list."""
 
     root = spec.local_path
@@ -551,7 +567,7 @@ def _verify_files(spec: ArtifactSpec, entry: Dict[str, Any]) -> List[str]:
                 f"{relative} is {size} bytes; the lock records "
                 f"{locked[relative]['size']}"
             )
-        elif _sha256(path) != locked[relative]["sha256"]:
+        elif hash_files and _sha256(path) != locked[relative]["sha256"]:
             problems.append(f"{relative} sha256 differs from the lock")
     problems.extend(
         f"unexpected file {relative} is not in the lock"
@@ -560,8 +576,71 @@ def _verify_files(spec: ArtifactSpec, entry: Dict[str, Any]) -> List[str]:
     return problems
 
 
+def _artifact_problems(
+    spec: ArtifactSpec, entry: Dict[str, Any], *, hash_files: bool
+) -> List[str]:
+    """Compare one folder's files and revision with its locked artifact."""
+    problems = _verify_files(spec, entry, hash_files=hash_files)
+    if spec.local_path.is_dir():
+        revision, source = artifact_revision(spec.local_path)
+        if revision is not None and revision != entry.get("revision"):
+            problems.append(
+                f"{source} revision {revision!r} differs from the "
+                f"locked {entry.get('revision')!r}"
+            )
+    return problems
+
+
+def fetch_remedy(spec: ArtifactSpec) -> str:
+    """Explain how to fetch a pinned artifact without replacing existing data."""
+    if not os.path.lexists(spec.local_path):
+        return (
+            f"Run `nexus models fetch` to download {spec.label} into {spec.local_path}."
+        )
+    return (
+        f"Move {spec.local_path} aside (`nexus models fetch` never replaces an "
+        "existing folder), then run `nexus models fetch` to download "
+        f"{spec.label} again."
+    )
+
+
+def fetch_remedy_for(
+    repo_id: Optional[str], local_path: Union[str, Path]
+) -> Optional[str]:
+    """Return a fetch remedy only for the configured, locked production artifact."""
+    if not repo_id:
+        return None
+    settings = load_settings()
+    specs = production_artifact_specs(settings)
+    for spec in specs:
+        if spec.local_path != Path(local_path) or spec.repo_id != repo_id:
+            continue
+        path = lock_file_path(settings)
+        if not path.exists():
+            return None
+        for entry in read_manifest(path)["artifacts"]:
+            if (
+                entry["role"] == spec.role
+                and entry.get("name") == spec.name
+                and entry.get("repo_id") == repo_id
+                and entry.get("revision")
+            ):
+                return fetch_remedy(spec)
+    return None
+
+
+def _drift_remedy(spec: ArtifactSpec, entry: Dict[str, Any]) -> str:
+    """Use fetch for pinned production artifacts and the old hint otherwise."""
+    if spec.repo_id and entry.get("revision"):
+        return fetch_remedy(spec)
+    folder_revision = (
+        artifact_revision(spec.local_path)[0] if spec.local_path.is_dir() else None
+    )
+    return _restore_hint(spec, entry.get("revision") or folder_revision, "verify")
+
+
 def verify_manifest(
-    specs: Sequence[ArtifactSpec], manifest: Dict[str, Any]
+    specs: Sequence[ArtifactSpec], manifest: Dict[str, Any], *, hash_files: bool
 ) -> VerifyReport:
     """Check nexus.toml and the local artifact directories against the lock.
 
@@ -570,13 +649,16 @@ def verify_manifest(
 
     problems: List[str] = []
     remediation: List[str] = []
+    config_problems: List[str] = []
     locked = {entry["role"]: entry for entry in manifest["artifacts"]}
     config_drift = False
     file_drift = False
     for spec in specs:
         entry = locked.pop(spec.role, None)
         if entry is None:
-            problems.append(f"{spec.label} is configured but absent from the lock")
+            problem = f"{spec.label} is configured but absent from the lock"
+            problems.append(problem)
+            config_problems.append(problem)
             config_drift = True
             continue
         drifted = [
@@ -589,34 +671,28 @@ def verify_manifest(
             if entry.get(field) != configured
         ]
         for field in drifted:
-            problems.append(
+            problem = (
                 f"{spec.label}: nexus.toml {field} {getattr(spec, field)!r} "
                 f"differs from the locked {entry.get(field)!r}"
             )
+            problems.append(problem)
+            config_problems.append(problem)
             config_drift = True
         if {"name", "repo_id"} & set(drifted):
             # A different model is configured; its files cannot match.
             continue
-        file_problems = _verify_files(spec, entry)
-        folder_revision: Optional[str] = None
-        if spec.local_path.is_dir():
-            folder_revision, source = artifact_revision(spec.local_path)
-            if folder_revision is not None and folder_revision != entry.get("revision"):
-                file_problems.append(
-                    f"{source} revision {folder_revision!r} differs from the "
-                    f"locked {entry.get('revision')!r}"
-                )
+        file_problems = _artifact_problems(spec, entry, hash_files=hash_files)
         if file_problems:
             problems.extend(f"{spec.label}: {problem}" for problem in file_problems)
-            remediation.append(
-                _restore_hint(spec, entry.get("revision") or folder_revision, "verify")
-            )
+            remediation.append(_drift_remedy(spec, entry))
             file_drift = True
     for role, entry in sorted(locked.items()):
-        problems.append(
+        problem = (
             f"the lock records {role} '{entry.get('name')}', which nexus.toml "
             "no longer configures"
         )
+        problems.append(problem)
+        config_problems.append(problem)
         config_drift = True
     if file_drift:
         remediation.append(
@@ -629,7 +705,209 @@ def verify_manifest(
             "on the host that holds the artifacts and commit the lock; otherwise "
             "revert nexus.toml."
         )
-    return VerifyReport(problems=problems, remediation=remediation)
+    return VerifyReport(
+        problems=problems, remediation=remediation, config_problems=config_problems
+    )
+
+
+def verify_artifacts(settings: Settings, *, hash_files: bool) -> ArtifactCheck:
+    """Read and verify the configured artifacts without writing or repairing them."""
+    path = lock_file_path(settings)
+    specs = production_artifact_specs(settings)
+    manifest = read_manifest(path)
+    report = verify_manifest(specs, manifest, hash_files=hash_files)
+    return ArtifactCheck(path, specs, manifest, report)
+
+
+def _mismatch_lines(report: VerifyReport) -> List[str]:
+    """Render problem and remediation lines, leaving the header to the caller."""
+    return [
+        *(f"  - {problem}" for problem in report.problems),
+        "Remediation:",
+        *(f"  - {step}" for step in report.remediation),
+    ]
+
+
+def check_artifacts_at_boot(settings: Settings) -> str:
+    """Refuse gateway boot on file-list, size, revision or configuration drift."""
+    check = verify_artifacts(settings, hash_files=False)
+    if not check.report.ok:
+        raise ArtifactLockError(
+            "\n".join(
+                [
+                    "The gateway will not start: model artifacts do not match "
+                    f"{check.lock_path} by file list, size and revision:",
+                    *_mismatch_lines(check.report),
+                ]
+            )
+        )
+    verified = ", ".join(f"{spec.role} {spec.name}" for spec in check.specs)
+    return (
+        f"Model artifacts match {check.lock_path} by file list, size and revision: "
+        f"{verified}; nexus models verify also compares sha256."
+    )
+
+
+def _unpinned_problem(spec: ArtifactSpec, entry: Dict[str, Any]) -> Optional[str]:
+    """Name the missing repository or locked revision that prevents a fetch."""
+    if spec.repo_id and entry.get("revision"):
+        return None
+    missing = "repository" if not spec.repo_id else "revision"
+    return (
+        f"{spec.label}: fetch runs only a pinned download, and the lock records "
+        f"no {missing} for it"
+    )
+
+
+def _failed_artifact_command(
+    command: str, check: ArtifactCheck, report: VerifyReport
+) -> Dict[str, Any]:
+    return {
+        "success": False,
+        "lock_file": str(check.lock_path),
+        "problems": report.problems,
+        "error": "\n".join(
+            [
+                f"Model artifact {command} refused for {check.lock_path}:",
+                *_mismatch_lines(report),
+            ]
+        ),
+    }
+
+
+def _plan_artifacts(check: ArtifactCheck) -> Dict[str, Any]:
+    """Describe fetch eligibility without hashing, downloading or writing."""
+    if check.report.config_problems:
+        return _failed_artifact_command("plan", check, check.report)
+    locked = {entry["role"]: entry for entry in check.manifest["artifacts"]}
+    plan: List[Dict[str, Any]] = []
+    lines = []
+    for spec in check.specs:
+        entry = locked[spec.role]
+        download_bytes = free_bytes = None
+        if os.path.lexists(spec.local_path):
+            problems = _artifact_problems(spec, entry, hash_files=False)
+            state = "drifted" if problems else "present"
+            detail = (
+                "; ".join(problems) + ". " + _drift_remedy(spec, entry)
+                if problems
+                else "nexus models verify also compares sha256."
+            )
+        elif (problem := _unpinned_problem(spec, entry)) is not None:
+            state, problems = "unpinned", [problem]
+            detail = problem + ". " + _restore_hint(spec, None, "verify")
+        else:
+            state, problems = "absent", []
+            download_bytes = entry["total_size"]
+            ancestor = spec.local_path.parent
+            while not ancestor.exists():
+                ancestor = ancestor.parent
+            free_bytes = shutil.disk_usage(ancestor).free
+            detail = f"fetch downloads {download_bytes} bytes; {free_bytes} bytes free."
+        plan.append(
+            {
+                "role": spec.role,
+                "name": spec.name,
+                "local_path": str(spec.local_path),
+                "state": state,
+                "repo_id": spec.repo_id,
+                "revision": entry.get("revision"),
+                "download_bytes": download_bytes,
+                "free_bytes": free_bytes,
+                "problems": problems,
+            }
+        )
+        lines.append(f"{spec.label}: {state} at {spec.local_path}; {detail}")
+    success = all(item["state"] not in ("drifted", "unpinned") for item in plan)
+    return {
+        "success": success,
+        "lock_file": str(check.lock_path),
+        "plan": plan,
+        "message" if success else "error": "\n".join(lines),
+    }
+
+
+def _fetch_artifacts(check: ArtifactCheck) -> Dict[str, Any]:
+    """Fetch absent pinned artifacts only after every existing folder verifies."""
+    if check.report.config_problems:
+        return _failed_artifact_command("fetch", check, check.report)
+    locked = {entry["role"]: entry for entry in check.manifest["artifacts"]}
+    problems: List[str] = []
+    remediation: List[str] = []
+    absent: List[ArtifactSpec] = []
+    for spec in check.specs:
+        entry = locked[spec.role]
+        if os.path.lexists(spec.local_path):
+            drift = _artifact_problems(spec, entry, hash_files=True)
+            if drift:
+                problems.extend(f"{spec.label}: {problem}" for problem in drift)
+                remediation.append(_drift_remedy(spec, entry))
+        elif (problem := _unpinned_problem(spec, entry)) is not None:
+            problems.append(problem)
+            remediation.append(_restore_hint(spec, None, "verify"))
+        else:
+            absent.append(spec)
+    if problems:
+        return _failed_artifact_command(
+            "fetch", check, VerifyReport(problems, remediation, [])
+        )
+    from huggingface_hub import snapshot_download
+
+    lines = []
+    for spec in check.specs:
+        entry = locked[spec.role]
+        if spec not in absent:
+            lines.append(f"{spec.label}: already matching {check.lock_path}")
+            continue
+        if os.path.lexists(spec.local_path):
+            raise ArtifactLockError(
+                f"{spec.local_path} appeared before download; fetch never writes "
+                "into an existing folder. Run nexus models verify first."
+            )
+        if spec.repo_id is None:
+            raise ArtifactLockError(f"{spec.label} has no pinned repository")
+        try:
+            snapshot_download(
+                repo_id=spec.repo_id,
+                revision=entry["revision"],
+                local_dir=str(spec.local_path),
+            )
+        except (
+            OSError
+        ) as exc:  # nexus-exception-disposition: fail; reason=hub; safety=failed result
+            problem = (
+                f"{spec.label}: download of {spec.repo_id} @ {entry['revision']} "
+                f"failed: {exc}"
+            )
+            remedy = (
+                f"{spec.local_path} may hold a partial download; nothing was removed. "
+                "Move it aside before running nexus models fetch again."
+                if os.path.lexists(spec.local_path)
+                else fetch_remedy(spec)
+            )
+            return _failed_artifact_command(
+                "fetch", check, VerifyReport([problem], [remedy], [])
+            )
+        drift = _artifact_problems(spec, entry, hash_files=True)
+        if drift:
+            return _failed_artifact_command(
+                "fetch",
+                check,
+                VerifyReport(
+                    [f"{spec.label}: {problem}" for problem in drift],
+                    [fetch_remedy(spec)],
+                    [],
+                ),
+            )
+        lines.append(
+            f"{spec.label}: downloaded {spec.repo_id} @ {entry['revision']} "
+            f"into {spec.local_path}"
+        )
+    return {
+        "success": True,
+        "lock_file": str(check.lock_path),
+        "message": "\n".join(lines),
+    }
 
 
 def _format_size(size: int) -> str:
@@ -657,7 +935,7 @@ def _lock_summary(manifest: Dict[str, Any], path: Path) -> str:
 
 
 def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, Any]:
-    """Run ``nexus models lock`` or ``nexus models verify`` for the CLI.
+    """Run ``nexus models lock|verify|plan|fetch`` for the CLI.
 
     ``config_path`` is ``--config``; without it, :func:`load_settings` owns the
     fallback chain (an active settings scope, then the runtime-home locator
@@ -666,7 +944,7 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
     or an ``error`` naming every problem and its remediation on failure.
     """
 
-    if command not in ("lock", "verify"):
+    if command not in ("lock", "verify", "plan", "fetch"):
         raise ValueError(f"Unknown models command: {command!r}")
     try:
         settings = load_settings(config_path or None)
@@ -681,8 +959,8 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
         return {"success": False, "error": str(exc)}
     lock_path = lock_file_path(settings)
     try:
-        specs = production_artifact_specs(settings)
         if command == "lock":
+            specs = production_artifact_specs(settings)
             manifest = build_manifest(specs, lock_path)
             write_manifest(manifest, lock_path)
             return {
@@ -690,7 +968,12 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
                 "lock_file": str(lock_path),
                 "message": _lock_summary(manifest, lock_path),
             }
-        report = verify_manifest(specs, read_manifest(lock_path))
+        check = verify_artifacts(settings, hash_files=command == "verify")
+        if command == "plan":
+            return _plan_artifacts(check)
+        if command == "fetch":
+            return _fetch_artifacts(check)
+        specs, report = check.specs, check.report
     except ArtifactLockError as exc:
         return {"success": False, "error": str(exc)}
     if report.ok:
@@ -701,9 +984,7 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
             "message": f"Model artifacts match {lock_path}: {verified}",
         }
     lines = [f"Model artifacts do not match {lock_path}:"]
-    lines.extend(f"  - {problem}" for problem in report.problems)
-    lines.append("Remediation:")
-    lines.extend(f"  - {step}" for step in report.remediation)
+    lines.extend(_mismatch_lines(report))
     return {
         "success": False,
         "lock_file": str(lock_path),
