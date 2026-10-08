@@ -3,7 +3,7 @@ status: canonical
 sources:
   - nexus/agents/orrery/substrate.py
   - migrations/087_seek_redemption_projects.sql
-verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
+verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
 ---
 
 # 0042: Durable Intentions

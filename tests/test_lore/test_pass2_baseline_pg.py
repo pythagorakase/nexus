@@ -40,6 +40,7 @@ from tests.pg_fixtures import (
     disposable_slot_database,
     route_slot_to_disposable,
     seed_protagonist,
+    seed_story_base,
 )
 from tests.settings_helpers import settings_with
 
@@ -1089,6 +1090,7 @@ def test_evaluation_database_baseline_stamp_uses_story_settings() -> None:
     from nexus.config.story_model import read_story_settings, story_context_settings
 
     with disposable_slot_database("qa640_settings_stamp") as dbname:
+        seed_story_base(dbname)
         with _connect(dbname) as conn:
             tail_id = _seed_parent(conn, "Evaluation tail.")
             with conn.cursor() as cur:

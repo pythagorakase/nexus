@@ -28,7 +28,12 @@ from nexus.agents.orrery.worker import (
     drain_narration_outbox_sync,
     promote_pending_resolutions_sync,
 )
-from tests.pg_fixtures import connect, sqlalchemy_url
+from tests.pg_fixtures import (
+    DEFAULT_BASE_TIMESTAMP,
+    connect,
+    set_story_base,
+    sqlalchemy_url,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -91,6 +96,12 @@ def _disposable_narration_db() -> Iterator[str]:
 
         _, failed = migrate_database(dbname, skip_locked=False)
         assert failed == 0
+        conn = _connect(dbname)
+        try:
+            with conn, conn.cursor() as cur:
+                set_story_base(cur, DEFAULT_BASE_TIMESTAMP)
+        finally:
+            conn.close()
         yield dbname
     finally:
         if admin is not None:

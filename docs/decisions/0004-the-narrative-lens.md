@@ -2,7 +2,7 @@
 status: canonical
 sources:
   - prompts/storyteller_core.md
-verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
+verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
 ---
 
 # 0004: The Narrative Lens

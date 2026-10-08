@@ -20,7 +20,7 @@ from nexus.config import load_settings
 from nexus.api import narrative, narrative_lease, slot_state
 from nexus.api.choice_recovery import recover_orphaned_choice
 from nexus.api.narrative_schemas import RetryNarrativeRequest
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import connect, disposable_slot_database, seed_story_base
 from tests.test_api.test_narrative_continue_validation import _reset_to_committed_parent
 
 pytestmark = pytest.mark.requires_postgres
@@ -33,6 +33,7 @@ ACTION = (
 def recovery_db(monkeypatch):
     """Create a committed player action and its failed continuation."""
     with disposable_slot_database("nexus_test_retry") as dbname:
+        seed_story_base(dbname)
         parent = _reset_to_committed_parent(dbname)
         failed = str(uuid.uuid4())
         with connect(dbname) as conn, conn.cursor() as cur:

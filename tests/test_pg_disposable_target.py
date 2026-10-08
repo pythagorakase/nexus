@@ -66,6 +66,7 @@ OWNER_DATABASES = (
 # none of these values reaches a database.
 SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
     "seed_protagonist": (pg_fixtures.seed_protagonist, {}),
+    "seed_story_base": (pg_fixtures.seed_story_base, {}),
     "seed_committed_chunk": (
         pg_fixtures.seed_committed_chunk,
         {"raw_text": "Refused."},

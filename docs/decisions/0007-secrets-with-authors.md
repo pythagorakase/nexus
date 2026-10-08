@@ -3,7 +3,7 @@ status: canonical
 sources:
   - nexus/agents/orrery/epistemics.py
   - nexus/agents/orrery/retrograde_expansion.py
-verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
+verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
 ---
 
 # 0007: Secrets With Authors

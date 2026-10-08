@@ -5,7 +5,7 @@ sources:
   - migrations/007_normalize_new_story_creator.sql
   - nexus/api/new_story_cache.py
   - docs/dead_retrieval_subtraction.md
-verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
+verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
 ---
 
 # 0025: Legacy New-Story Seed and Zone Columns
@@ -21,7 +21,7 @@ Source: https://github.com/pythagorakase/nexus/issues/819#issuecomment-591595041
 
 > - Decision: The routing of the 29 baseline entries without evidence goes into #813's manifest (`docs/dead_retrieval_subtraction.md`), and each baseline reason points at it.
 
-Source: config/schema_docs_baseline.json at b0da93eaedb4d1661af50742440e7988c7e48185.
+Source: config/schema_docs_baseline.json at afd034f360e625f8bc4ffa8a717dda28422b19c7.
 
 > column:assets.new_story_creator.seed_initial_mystery: Current cache writers clear this legacy field to NULL; no current reader consumes it, including the row-to-cache and selected-seed reconstruction paths. Routed as #813 debt: docs/dead_retrieval_subtraction.md, section "Legacy Columns Without Evidence".
 > column:assets.new_story_creator.seed_potential_obstacles: Current cache writers clear this legacy field to NULL; no current reader consumes it, including the row-to-cache and selected-seed reconstruction paths. Routed as #813 debt: docs/dead_retrieval_subtraction.md, section "Legacy Columns Without Evidence".

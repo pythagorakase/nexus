@@ -4,7 +4,7 @@ sources:
   - config/schema_docs_baseline.json
   - docs/dead_retrieval_subtraction.md
   - nexus/agents/memnon/utils/db_access.py
-verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
+verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
 ---
 
 # 0029: Legacy Vector-Helper Functions
@@ -20,7 +20,7 @@ Source: https://github.com/pythagorakase/nexus/issues/819#issuecomment-591595041
 
 > - Decision: The routing of the 29 baseline entries without evidence goes into #813's manifest (`docs/dead_retrieval_subtraction.md`), and each baseline reason points at it.
 
-Source: config/schema_docs_baseline.json at b0da93eaedb4d1661af50742440e7988c7e48185.
+Source: config/schema_docs_baseline.json at afd034f360e625f8bc4ffa8a717dda28422b19c7.
 
 > function:public.hybrid_search(query_text text, query_embedding bytea, vector_weight double precision, text_weight double precision, k integer, model_name text): Legacy SQL search overload; no code under nexus/ or scripts/ calls it (MEMNON's execute_hybrid_search delegates to execute_multi_model_hybrid_search, which builds its own SQL; nexus/agents/memnon/utils/db_access.py:581), and no reader/writer evidence establishes its contract yet. Routed: docs/dead_retrieval_subtraction.md, section "Deferred Vector-Helper Function Manifest" (deferred to #812).
 > function:public.hybrid_search(query_text text, query_embedding vector, vector_weight double precision, text_weight double precision, k integer, model_name text): Legacy SQL search overload; no code under nexus/ or scripts/ calls it (MEMNON's execute_hybrid_search delegates to execute_multi_model_hybrid_search, which builds its own SQL; nexus/agents/memnon/utils/db_access.py:581), and no reader/writer evidence establishes its contract yet. Routed: docs/dead_retrieval_subtraction.md, section "Deferred Vector-Helper Function Manifest" (deferred to #812).
