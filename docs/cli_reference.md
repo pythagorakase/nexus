@@ -18,7 +18,7 @@ Every command that `nexus.cli.build_parser()` registers, with its arguments and 
 | --- | --- | --- |
 | `http` | The NEXUS API only | `inspect slot`, `inspect chunks`, `inspect chunk`, `inspect incubator`, `inspect characters`, `inspect places`, `inspect factions`, `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `model --set`, `model --clear` |
 | `database` | A slot database directly | `jobs`, `inspect-turn`, `prune-manifests`, `tags audit`, `model`, `trait-audit`, `retrograde-packet`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, `faction-manifest`, `faction-apply`, `character-manifest`, `character-apply`, `place-manifest`, `place-apply`, `retrograde-seed-candidates --slot` |
-| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `window-replay`, `models lock`, `models verify`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
+| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `receipts`, `window-replay`, `models lock`, `models verify`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
 
 Under the remote profile: `up` uses `http`; `status` uses `http`.
 
@@ -116,6 +116,14 @@ Transport: `local_operator`.
 | --- | --- | --- | --- |
 | `--day` | `DAY` | — | UTC quota day in YYYY-MM-DD format (default: current UTC day) |
 | `--run` | `RUN` | — | Filter events by correlation run id |
+
+### `nexus receipts`
+
+Show failure receipts grouped by fingerprint.
+
+Transport: `local_operator`.
+
+No arguments.
 
 ### `nexus window-replay`
 

@@ -321,7 +321,9 @@ class SlotStateResponse(BaseModel):
         default_factory=lambda: load_settings().api.narrative_generation
     )
     slot: int = Field(ge=1, le=5)
-    story_id: Optional[str] = None  # Stable identity across frontier changes
+    story_id: Optional[str] = None  # story_identity.story_uuid
+    # The pre-#822 id, only for the client's one-time draft-key migration.
+    legacy_story_id: Optional[str] = None
     is_empty: bool
     is_wizard_mode: bool
     pending_confirmation: Optional[Literal["setting", "character"]] = None

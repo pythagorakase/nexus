@@ -1,0 +1,15 @@
+--- /Users/pythagor/nexus/.claude/worktrees/812-one-embedder/nexus/config/settings_models.py
++++ /Users/pythagor/nexus/.claude/worktrees/812-one-embedder/nexus/config/settings_models.py
+@@ -4491,12 +4491,6 @@
+         """
+ 
+         names = sorted(self.memnon.models)
+-        if len(names) != 1:
+-            raise ValueError(
+-                "[memnon.models] declares exactly one runtime embedder; found "
+-                f"{len(names)} entries: {names}. Offline candidates belong in "
+-                "[ir_eval.embedding_candidates]."
+-            )
+         (name,) = names
+         if not self.memnon.models[name].is_active:
+             raise ValueError(

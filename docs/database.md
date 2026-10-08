@@ -133,9 +133,9 @@ without `memory_idf_corpora` is refused, naming the migration runner. A
 connection lost during COMMIT is `commit_unknown` (exit non-zero), never a
 rollback: the outcome is unknown, `--dry-run` shows the current keys and
 counts, and re-running the rebuild is safe because it recomputes the
-projection idempotently. It is the one mutation a replay after
-`AmbiguousCommit` is allowed for; narrative commits are never replayed
-(above). The report gives each corpus's key
+projection idempotently. This rebuild and the pinned Natural Earth load
+(below) are the two explicit exceptions to the never-replay rule; narrative
+commits are never replayed (above). The report gives each corpus's key
 and document count before and after, and the number of lexemes whose row
 differs from the pre-rebuild state (added, dropped, or given a new frequency;
 each counts once), which is a diagnostic, not a failure. `--dry-run` reads
@@ -239,3 +239,49 @@ share the world transaction's cursor so their records commit or roll back with
 that world. The Retrograde status route reads the latest run from these tables,
 so every gateway worker reports the same durable record. Rows are kept after
 completion.
+
+## Story Identity
+
+`story_identity` holds one row per slot database: the story's `story_uuid`, its title and its origin. `NEXUS_template` carries the table and no row. Slot initialization mints a row, every wizard transition replaces it, and `clone_slot_with_data` gives the copy a new `story_uuid` with a `story_lineage` fork row naming the source. Disposable and rehearsal clones get a fresh identity with no lineage. Slots that predate migration 146 are minted once with `python scripts/backfill_story_identity.py --all --write-locked-slot`, which also records that `save_02` forks `save_01`; `nexus doctor` checks both rules (`template.story_identity_absent`, `slots.story_identity_present`).
+
+## Natural Earth Reference
+
+`natural_earth_features` (migration 147) holds the server-owned real-Earth
+reference geometry of issue #840: the 10m `land`, `admin_0` (countries) and
+`admin_1` (states and provinces) layers of Natural Earth release 5.1.1, one
+row per source feature, keyed by `(layer, source_index)`, with every geometry
+a valid WGS 84 MultiPolygon. `nexus/agents/orrery/geo_reference.py` reads it
+inside the caller's transaction (region lookup by name, point on land,
+polygon validation, land clipping and land coverage), and every read first
+refuses a missing table, or one whose per-layer counts or release differ from
+the manifest, with `ReferenceDataError`.
+
+The three zips are vendored unmodified under `data/natural_earth/` (public
+domain; `data/natural_earth/LICENSE.md`). `data/natural_earth/manifest.json`
+pins the release, each layer's file, source URL, sha256 and feature count, and
+the expected repairs. `scripts/load_natural_earth.py` refuses before any
+connection when a zip's sha256 differs from the manifest, when a zip's
+`VERSION.txt` names another release, or when `ogr2ogr` reads another feature
+count. In one transaction per database it then replaces every row, requires
+the invalid features to be exactly the manifest's two repairs (`admin_0`
+1159320575, EGY, and `admin_1` 1159309897, BRA-1294 Goiás, both ring
+self-intersections), repairs them with
+`ST_Multi(ST_CollectionExtract(ST_MakeValid(geom, 'method=structure'), 3))`,
+proves every row valid, and commits; any error before COMMIT rolls back. A
+connection lost during COMMIT is reported as `commit_unknown` (outcome
+unknown) and exits 1, never as a rollback. Like the IDF rebuild above, this
+load is an exception to the never-replay rule: rerunning it after
+`AmbiguousCommit` is safe because one transaction deletes every row and
+inserts the same pinned, checksummed files, so a replay is idempotent whether
+or not the lost COMMIT landed.
+
+```bash
+python scripts/load_natural_earth.py --all                      # Template + unlocked slots
+python scripts/load_natural_earth.py --slot 1 --write-locked-slot   # The locked golden master
+python scripts/load_natural_earth.py --dbname qa640_clone       # One disposable database
+```
+
+`natural_earth_features` is a template seed table (`TEMPLATE_SEED_TABLES` in
+`scripts/new_story_setup.py`): fresh slots and default test clones copy its
+rows from `NEXUS_template`, so loading the template replaces a template
+refresh for this table.

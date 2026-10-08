@@ -142,6 +142,7 @@ if __name__ == "__main__":
 logger = logging.getLogger("nexus.embeddings")
 
 from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402
+from nexus.config import load_settings  # noqa: E402
 
 # Try to import SQLAlchemy
 try:
@@ -170,7 +171,7 @@ class ModelLoader:
     def resolve_registered_model(
         model_name: str, models_config: Mapping[str, Mapping[str, Any]]
     ) -> Tuple[str, Mapping[str, Any]]:
-        """Find the ``[memnon.models]`` entry that ``model_name`` names.
+        """Find the registered embedder entry that ``model_name`` names.
 
         ``model_name`` may be the entry name (``Octen-Embedding-4B``), its
         ``remote_path`` (``infly/inf-retriever-v1-1.5b``), or the legacy
@@ -178,7 +179,8 @@ class ModelLoader:
 
         Args:
             model_name: The model named on the command line
-            models_config: The ``[memnon.models]`` registry
+            models_config: The embedder registry (``[memnon.models]`` and
+                ``[ir_eval.embedding_candidates]``)
 
         Returns:
             The entry name and its configuration
@@ -196,7 +198,8 @@ class ModelLoader:
                 return key, config
         raise RuntimeError(
             f"Embedding model '{model_name}' is not registered in [memnon.models] "
-            f"(registered: {sorted(models_config)}); embeddings are generated "
+            f"or [ir_eval.embedding_candidates] (registered: "
+            f"{sorted(models_config)}); embeddings are generated "
             "only from a registered local_path."
         )
 
@@ -209,14 +212,15 @@ class ModelLoader:
         Load a registered model from its local artifact directory.
 
         There is no Hugging Face download and no Hub-cache snapshot probe
-        (issue #812): the ``[memnon.models]`` entry's ``local_path`` loads
-        with ``local_files_only`` through the shared embedder loader, or the
-        load raises with the restore command.
+        (issue #812): the registered entry's ``local_path`` loads with
+        ``local_files_only`` through the shared embedder loader, or the load
+        raises with the restore command.
 
         Args:
             model_name: Name of the model to load
-            models_config: The ``[memnon.models]`` registry; defaults to the
-                one in nexus.toml
+            models_config: The embedder registry (``[memnon.models]`` and
+                ``[ir_eval.embedding_candidates]``); defaults to the one in
+                nexus.toml
 
         Returns:
             Loaded model
@@ -227,7 +231,7 @@ class ModelLoader:
         """
         logger.info(f"Loading model: {model_name}")
         if models_config is None:
-            models_config = SETTINGS.get("models", {})
+            models_config = load_settings().embedder_registry()
         key, config = ModelLoader.resolve_registered_model(model_name, models_config)
 
         # INT8-quantized models use bitsandbytes, which has no working MPS

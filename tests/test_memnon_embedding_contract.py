@@ -161,19 +161,31 @@ def test_no_active_embedder_raises_instead_of_loading_defaults(
         )
 
 
-def _config_with_active(tmp_path: Path, active: List[str]) -> Path:
+def _production_embedder() -> str:
+    document = tomllib.loads((REPO_ROOT / "nexus.toml").read_text())
+    (name,) = document["memnon"]["models"]
+    return name
+
+
+def _config_with_runtime_entries(
+    tmp_path: Path, *, production_active: bool, extra: List[str]
+) -> Path:
+    """Write nexus.toml with the production entry and added active entries."""
+
     document = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
     memnon: Any = document["memnon"]
-    for name, model in memnon["models"].items():
-        model["is_active"] = name in active
+    production = memnon["models"][_production_embedder()]
+    production["is_active"] = production_active
+    for name in extra:
+        entry = tomlkit.table()
+        entry["is_active"] = True
+        entry["local_path"] = str(tmp_path / name)
+        entry["dimensions"] = int(production["dimensions"])
+        entry["weight"] = 1.0
+        memnon["models"][name] = entry
     path = tmp_path / "nexus.toml"
     path.write_text(tomlkit.dumps(document))
     return path
-
-
-def _registered_embedders() -> List[str]:
-    document = tomllib.loads((REPO_ROOT / "nexus.toml").read_text())
-    return list(document["memnon"]["models"])
 
 
 def test_repository_config_declares_one_active_embedder() -> None:
@@ -186,19 +198,25 @@ def test_repository_config_declares_one_active_embedder() -> None:
 def test_settings_reject_zero_active_embedders(tmp_path: Path) -> None:
     """A config with no production embedder fails at load, not at first query."""
 
-    with pytest.raises(ValidationError, match="exactly one embedder.*none is active"):
-        load_settings(_config_with_active(tmp_path, []))
+    with pytest.raises(ValidationError, match="must set is_active = true"):
+        load_settings(
+            _config_with_runtime_entries(tmp_path, production_active=False, extra=[])
+        )
 
 
 def test_settings_reject_two_active_embedders_and_name_them(tmp_path: Path) -> None:
     """An accidental ensemble names both offending entries."""
 
-    first, second = _registered_embedders()[:2]
+    first, second = _production_embedder(), "second-embedder"
     with pytest.raises(ValidationError) as raised:
-        load_settings(_config_with_active(tmp_path, [first, second]))
+        load_settings(
+            _config_with_runtime_entries(
+                tmp_path, production_active=True, extra=[second]
+            )
+        )
     message = str(raised.value)
-    assert "exactly one embedder" in message
-    assert "2 are active" in message
+    assert "exactly one runtime embedder" in message
+    assert "found 2 entries" in message
     assert first in message and second in message
 
 

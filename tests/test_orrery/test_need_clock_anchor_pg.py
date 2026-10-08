@@ -94,6 +94,8 @@ def disposable_need_clock_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
                     sql.Identifier(source_db),
                 )
             )
+        _, failed = migrate.migrate_database(dbname, skip_locked=False)
+        assert failed == 0
         with _transaction(dbname) as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "

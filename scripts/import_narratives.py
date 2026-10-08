@@ -63,9 +63,11 @@ if __name__ == "__main__":
 logger = logging.getLogger("nexus.import")
 
 from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402
+from nexus.config import load_settings  # noqa: E402
 
 
-# The registered [memnon.models] entries this import-era script embeds with.
+# The registered embedders ([memnon.models] or [ir_eval.embedding_candidates])
+# this import-era script embeds with.
 # Each loads only from its local_path (issue #812): no Hugging Face download,
 # no hardcoded default path, and a missing folder raises with the restore
 # command instead of being skipped.
@@ -75,10 +77,11 @@ SCRIPT_EMBEDDERS = ("bge-large", "e5-large", "bge-small-custom")
 def load_embedding_models(
     models_config: Mapping[str, Mapping[str, Any]],
 ) -> Dict[str, Any]:
-    """Load every script embedder from its ``[memnon.models]`` local_path.
+    """Load every script embedder from its registered local_path.
 
     Args:
-        models_config: The ``[memnon.models]`` registry, keyed by entry name
+        models_config: The embedder registry (``[memnon.models]`` and
+            ``[ir_eval.embedding_candidates]``), keyed by entry name
 
     Returns:
         The loaded SentenceTransformers, keyed by entry name
@@ -92,7 +95,8 @@ def load_embedding_models(
         if model_key not in models_config:
             raise RuntimeError(
                 f"Embedding model '{model_key}' is not registered in "
-                "[memnon.models]; register it with its local_path."
+                "[memnon.models] or [ir_eval.embedding_candidates]; register "
+                "it with its local_path."
             )
         models[model_key] = load_local_model(model_key, models_config[model_key])
     logger.info(f"Loaded {len(models)} embedding models: {', '.join(models)}")
@@ -295,7 +299,7 @@ class NarrativeImporter:
 
     def _initialize_embedding_models(self) -> Dict[str, Any]:
         """Load the script embedders from their local artifacts or raise."""
-        return load_embedding_models(SETTINGS.get("models", {}))
+        return load_embedding_models(load_settings().embedder_registry())
 
     def generate_embedding(self, text: str, model_key: str) -> List[float]:
         """
