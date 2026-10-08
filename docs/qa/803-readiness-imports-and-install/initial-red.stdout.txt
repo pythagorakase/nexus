@@ -1,0 +1,171 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+___________ test_runner_reports_an_import_failure_as_a_failed_check ____________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-initial-nf946z_0/pytest-temp/test_runner_reports_an_import_0')
+
+    def test_runner_reports_an_import_failure_as_a_failed_check(tmp_path: Path) -> None:
+        """A missing import fails its check and skips dependents without escaping."""
+    
+        def absent_import(_ctx: ReadinessContext) -> Outcome:
+            __import__("nexus_803_absent_module")
+            return Outcome(True, "unexpectedly imported the absent probe module")
+    
+        def dependent(_ctx: ReadinessContext) -> Outcome:
+            raise AssertionError("a dependent of an import failure must not run")
+    
+        registry = (
+            _spec("probe.import", targets=("ci-runner",), run=absent_import),
+            _spec(
+                "probe.dependent",
+                ("probe.import",),
+                targets=("ci-runner",),
+                run=dependent,
+            ),
+        )
+>       report = run_readiness(
+            "ci-runner", ReadinessContext(ui_dist_dir=tmp_path), registry=registry
+        )
+
+tests/test_runtime/test_readiness.py:262: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/runtime/readiness.py:1384: in run_readiness
+    outcome = spec.run(ctx)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_ctx = ReadinessContext(config_path=None, ui_dist_dir=PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nex...Path('/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus'), settings=None, home=None, runtime_status=None)
+
+    def absent_import(_ctx: ReadinessContext) -> Outcome:
+>       __import__("nexus_803_absent_module")
+E       ModuleNotFoundError: No module named 'nexus_803_absent_module'
+
+tests/test_runtime/test_readiness.py:247: ModuleNotFoundError
+__________________ test_doctor_json_reports_a_broken_install ___________________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-initial-nf946z_0/pytest-temp/test_doctor_json_reports_a_bro0')
+
+    def test_doctor_json_reports_a_broken_install(tmp_path: Path) -> None:
+        """The real CLI returns a report and retains its private failure receipt."""
+    
+        stub = tmp_path / "stub"
+        package = stub / "pydantic_ai"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text(
+            "raise ModuleNotFoundError(\"No module named 'opentelemetry._events'\", "
+            'name="opentelemetry._events")\n',
+            encoding="utf-8",
+        )
+        receipts = tmp_path / "receipts"
+        # Allow only OS process basics; inherited routing, libpq, provider tokens,
+        # live flags and pytest plugin/selection overrides cannot enter this child.
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key
+            in {
+                "HOME",
+                "PATH",
+                "TMPDIR",
+                "LANG",
+                "LC_ALL",
+                "LC_CTYPE",
+                "SYSTEMROOT",
+                "WINDIR",
+            }
+        }
+        environment.update(
+            PYTHONPATH=f"{stub}{os.pathsep}{REPO_ROOT}",
+            PYTHONDONTWRITEBYTECODE="1",
+            NEXUS_KEYRING_DISABLE="1",
+            NEXUS_TEST_PROVIDER_ONLY="1",
+        )
+        environment[TEST_RECEIPTS_ENV] = str(receipts)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "nexus.cli",
+                "--json",
+                "doctor",
+                "--target",
+                "ci-runner",
+                "--config",
+                str(REPO_CONFIG),
+            ],
+            cwd=tmp_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert completed.returncode == 1, completed.stderr
+>       assert "Traceback" not in completed.stderr, completed.stderr
+E       AssertionError: ❌ Error validating /Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus.toml:
+E            No module named 'opentelemetry._events'
+E         Traceback (most recent call last):
+E           File "<frozen runpy>", line 198, in _run_module_as_main
+E           File "<frozen runpy>", line 88, in _run_code
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6280, in <module>
+E             raise SystemExit(main())
+E                              ^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6214, in main
+E             outcome = _dispatch(args)
+E                       ^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6097, in _dispatch
+E             return run_doctor(args)
+E                    ^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 4447, in run_doctor
+E             report = run_readiness(args.target, ReadinessContext(config_path=config))
+E                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/runtime/readiness.py", line 1384, in run_readiness
+E             outcome = spec.run(ctx)
+E                       ^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/runtime/readiness.py", line 254, in _check_config
+E             settings = load_settings(path)
+E                        ^^^^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/loader.py", line 279, in load_settings
+E             return _load_from_toml(path)
+E                    ^^^^^^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/loader.py", line 320, in _load_from_toml
+E             settings = Settings(**data)
+E                        ^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pydantic/main.py", line 253, in __init__
+E             validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+E                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/settings_models.py", line 1447, in _validate_weather_contract
+E             from nexus.agents.orrery.weather import WEATHER_VALUES
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/agents/orrery/__init__.py", line 22, in <module>
+E             from nexus.agents.orrery.resolver import (
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/agents/orrery/resolver.py", line 74, in <module>
+E             from nexus.presence.roster import read_roster, read_rosters
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/presence/roster.py", line 16, in <module>
+E             from nexus.api.native_structured_output import WireContractViolation
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/api/native_structured_output.py", line 16, in <module>
+E             from pydantic_ai import JsonSchemaTransformer
+E           File "/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-initial-nf946z_0/pytest-temp/test_doctor_json_reports_a_bro0/stub/pydantic_ai/__init__.py", line 1, in <module>
+E             raise ModuleNotFoundError("No module named 'opentelemetry._events'", name="opentelemetry._events")
+E         ModuleNotFoundError: No module named 'opentelemetry._events'
+E         
+E       assert 'Traceback' not in "❌ Error val...y._events'\n"
+E         
+E         'Traceback' is contained here:
+E           ._events'
+E           Traceback (most recent call last):
+E         ? +++++++++
+E             File "<frozen runpy>", line 198, in _run_module_as_main
+E             File "<frozen runpy>", line 88, in _run_code...
+E         
+E         ...Full output truncated (40 lines hidden), use '-vv' to show
+
+tests/test_runtime/test_readiness.py:332: AssertionError
+- generated xml file: /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-initial-nf946z_0/initial-red.xml -
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_readiness.py::test_runner_reports_an_import_failure_as_a_failed_check
+FAILED tests/test_runtime/test_readiness.py::test_doctor_json_reports_a_broken_install
+2 failed in 0.70s

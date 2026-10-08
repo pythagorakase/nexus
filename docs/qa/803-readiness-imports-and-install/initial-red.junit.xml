@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="0.702" timestamp="2026-10-08T18:55:59.060333-05:00" hostname="ECHO.local"><testcase classname="tests.test_runtime.test_readiness" name="test_runner_reports_an_import_failure_as_a_failed_check" time="0.014"><failure message="ModuleNotFoundError: No module named 'nexus_803_absent_module'">tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-initial-nf946z_0/pytest-temp/test_runner_reports_an_import_0')
+
+    def test_runner_reports_an_import_failure_as_a_failed_check(tmp_path: Path) -&gt; None:
+        """A missing import fails its check and skips dependents without escaping."""
+    
+        def absent_import(_ctx: ReadinessContext) -&gt; Outcome:
+            __import__("nexus_803_absent_module")
+            return Outcome(True, "unexpectedly imported the absent probe module")
+    
+        def dependent(_ctx: ReadinessContext) -&gt; Outcome:
+            raise AssertionError("a dependent of an import failure must not run")
+    
+        registry = (
+            _spec("probe.import", targets=("ci-runner",), run=absent_import),
+            _spec(
+                "probe.dependent",
+                ("probe.import",),
+                targets=("ci-runner",),
+                run=dependent,
+            ),
+        )
+&gt;       report = run_readiness(
+            "ci-runner", ReadinessContext(ui_dist_dir=tmp_path), registry=registry
+        )
+
+tests/test_runtime/test_readiness.py:262: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/runtime/readiness.py:1384: in run_readiness
+    outcome = spec.run(ctx)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_ctx = ReadinessContext(config_path=None, ui_dist_dir=PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nex...Path('/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus'), settings=None, home=None, runtime_status=None)
+
+    def absent_import(_ctx: ReadinessContext) -&gt; Outcome:
+&gt;       __import__("nexus_803_absent_module")
+E       ModuleNotFoundError: No module named 'nexus_803_absent_module'
+
+tests/test_runtime/test_readiness.py:247: ModuleNotFoundError</failure></testcase><testcase classname="tests.test_runtime.test_readiness" name="test_doctor_json_reports_a_broken_install" time="0.406"><failure message="AssertionError: ❌ Error validating /Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus.toml:&#10;     No module named 'opentelemetry._events'&#10;  Traceback (most recent call last):&#10;    File &quot;&lt;frozen runpy&gt;&quot;, line 198, in _run_module_as_main&#10;    File &quot;&lt;frozen runpy&gt;&quot;, line 88, in _run_code&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py&quot;, line 6280, in &lt;module&gt;&#10;      raise SystemExit(main())&#10;                       ^^^^^^&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py&quot;, line 6214, in main&#10;      outcome = _dispatch(args)&#10;                ^^^^^^^^^^^^^^^&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py&quot;, line 6097, in _dispatch&#10;      return run_doctor(args)&#10;             ^^^^^^^^^^^^^^^^&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py&quot;, line 4447, in run_doctor&#10;      report = run_readiness(args.target, ReadinessContext(config_path=config))&#10;               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/runtime/readiness.py&quot;, line 1384, in run_readiness&#10;      outcome = spec.run(ctx)&#10;                ^^^^^^^^^^^^^&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/runtime/readiness.py&quot;, line 254, in _check_config&#10;      settings = load_settings(path)&#10;                 ^^^^^^^^^^^^^^^^^^^&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/loader.py&quot;, line 279, in load_settings&#10;      return _load_from_toml(path)&#10;             ^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/loader.py&quot;, line 320, in _load_from_toml&#10;      settings = Settings(**data)&#10;                 ^^^^^^^^^^^^^^^^&#10;    File &quot;/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pydantic/main.py&quot;, line 253, in __init__&#10;      validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)&#10;                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/settings_models.py&quot;, line 1447, in _validate_weather_contract&#10;      from nexus.agents.orrery.weather import WEATHER_VALUES&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/agents/orrery/__init__.py&quot;, line 22, in &lt;module&gt;&#10;      from nexus.agents.orrery.resolver import (&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/agents/orrery/resolver.py&quot;, line 74, in &lt;module&gt;&#10;      from nexus.presence.roster import read_roster, read_rosters&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/presence/roster.py&quot;, line 16, in &lt;module&gt;&#10;      from nexus.api.native_structured_output import WireContractViolation&#10;    File &quot;/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/api/native_structured_output.py&quot;, line 16, in &lt;module&gt;&#10;      from pydantic_ai import JsonSchemaTransformer&#10;    File &quot;/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-initial-nf946z_0/pytest-temp/test_doctor_json_reports_a_bro0/stub/pydantic_ai/__init__.py&quot;, line 1, in &lt;module&gt;&#10;      raise ModuleNotFoundError(&quot;No module named 'opentelemetry._events'&quot;, name=&quot;opentelemetry._events&quot;)&#10;  ModuleNotFoundError: No module named 'opentelemetry._events'&#10;  &#10;assert 'Traceback' not in &quot;❌ Error val...y._events'\n&quot;&#10;  &#10;  'Traceback' is contained here:&#10;    ._events'&#10;    Traceback (most recent call last):&#10;  ? +++++++++&#10;      File &quot;&lt;frozen runpy&gt;&quot;, line 198, in _run_module_as_main&#10;      File &quot;&lt;frozen runpy&gt;&quot;, line 88, in _run_code...&#10;  &#10;  ...Full output truncated (40 lines hidden), use '-vv' to show">tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-initial-nf946z_0/pytest-temp/test_doctor_json_reports_a_bro0')
+
+    def test_doctor_json_reports_a_broken_install(tmp_path: Path) -&gt; None:
+        """The real CLI returns a report and retains its private failure receipt."""
+    
+        stub = tmp_path / "stub"
+        package = stub / "pydantic_ai"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text(
+            "raise ModuleNotFoundError(\"No module named 'opentelemetry._events'\", "
+            'name="opentelemetry._events")\n',
+            encoding="utf-8",
+        )
+        receipts = tmp_path / "receipts"
+        # Allow only OS process basics; inherited routing, libpq, provider tokens,
+        # live flags and pytest plugin/selection overrides cannot enter this child.
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key
+            in {
+                "HOME",
+                "PATH",
+                "TMPDIR",
+                "LANG",
+                "LC_ALL",
+                "LC_CTYPE",
+                "SYSTEMROOT",
+                "WINDIR",
+            }
+        }
+        environment.update(
+            PYTHONPATH=f"{stub}{os.pathsep}{REPO_ROOT}",
+            PYTHONDONTWRITEBYTECODE="1",
+            NEXUS_KEYRING_DISABLE="1",
+            NEXUS_TEST_PROVIDER_ONLY="1",
+        )
+        environment[TEST_RECEIPTS_ENV] = str(receipts)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "nexus.cli",
+                "--json",
+                "doctor",
+                "--target",
+                "ci-runner",
+                "--config",
+                str(REPO_CONFIG),
+            ],
+            cwd=tmp_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert completed.returncode == 1, completed.stderr
+&gt;       assert "Traceback" not in completed.stderr, completed.stderr
+E       AssertionError: ❌ Error validating /Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus.toml:
+E            No module named 'opentelemetry._events'
+E         Traceback (most recent call last):
+E           File "&lt;frozen runpy&gt;", line 198, in _run_module_as_main
+E           File "&lt;frozen runpy&gt;", line 88, in _run_code
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6280, in &lt;module&gt;
+E             raise SystemExit(main())
+E                              ^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6214, in main
+E             outcome = _dispatch(args)
+E                       ^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6097, in _dispatch
+E             return run_doctor(args)
+E                    ^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 4447, in run_doctor
+E             report = run_readiness(args.target, ReadinessContext(config_path=config))
+E                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/runtime/readiness.py", line 1384, in run_readiness
+E             outcome = spec.run(ctx)
+E                       ^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/runtime/readiness.py", line 254, in _check_config
+E             settings = load_settings(path)
+E                        ^^^^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/loader.py", line 279, in load_settings
+E             return _load_from_toml(path)
+E                    ^^^^^^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/loader.py", line 320, in _load_from_toml
+E             settings = Settings(**data)
+E                        ^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pydantic/main.py", line 253, in __init__
+E             validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+E                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/settings_models.py", line 1447, in _validate_weather_contract
+E             from nexus.agents.orrery.weather import WEATHER_VALUES
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/agents/orrery/__init__.py", line 22, in &lt;module&gt;
+E             from nexus.agents.orrery.resolver import (
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/agents/orrery/resolver.py", line 74, in &lt;module&gt;
+E             from nexus.presence.roster import read_roster, read_rosters
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/presence/roster.py", line 16, in &lt;module&gt;
+E             from nexus.api.native_structured_output import WireContractViolation
+E           File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/api/native_structured_output.py", line 16, in &lt;module&gt;
+E             from pydantic_ai import JsonSchemaTransformer
+E           File "/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-initial-nf946z_0/pytest-temp/test_doctor_json_reports_a_bro0/stub/pydantic_ai/__init__.py", line 1, in &lt;module&gt;
+E             raise ModuleNotFoundError("No module named 'opentelemetry._events'", name="opentelemetry._events")
+E         ModuleNotFoundError: No module named 'opentelemetry._events'
+E         
+E       assert 'Traceback' not in "❌ Error val...y._events'\n"
+E         
+E         'Traceback' is contained here:
+E           ._events'
+E           Traceback (most recent call last):
+E         ? +++++++++
+E             File "&lt;frozen runpy&gt;", line 198, in _run_module_as_main
+E             File "&lt;frozen runpy&gt;", line 88, in _run_code...
+E         
+E         ...Full output truncated (40 lines hidden), use '-vv' to show
+
+tests/test_runtime/test_readiness.py:332: AssertionError</failure></testcase></testsuite></testsuites>
