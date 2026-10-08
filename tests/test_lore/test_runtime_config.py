@@ -200,7 +200,7 @@ def test_lore_instances_keep_independent_memnon_configuration(
     try:
         for index, debug in enumerate((True, False)):
             document = tomlkit.parse(REPO_CONFIG.read_text())
-            memnon = document["memnon"]
+            memnon: Any = document["memnon"]
             memnon["debug"] = debug
             memnon["query"]["default_limit"] = 11 + index
             # The production embedder is the one runtime model (issue #812);

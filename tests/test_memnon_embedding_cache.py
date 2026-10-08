@@ -89,7 +89,9 @@ def model_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     A candidate may not shadow the production entry, so bge-large leaves
     [ir_eval.embedding_candidates] and becomes the one [memnon.models] entry.
     """
-    document = tomlkit.parse((Path(__file__).parents[1] / "nexus.toml").read_text())
+    document: Any = tomlkit.parse(
+        (Path(__file__).parents[1] / "nexus.toml").read_text()
+    )
     candidate = document["ir_eval"]["embedding_candidates"].pop("bge-large")
     entry = tomlkit.table()
     entry["is_active"] = True
