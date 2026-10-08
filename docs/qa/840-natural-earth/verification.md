@@ -462,3 +462,27 @@ the one added line). None is on a changed line.
 ### Pre-Existing Diagnostics
 
 The seven `scripts/new_story_setup.py` E501 lines above. mypy: none.
+
+## Codex Takeover on 2026-10-08
+
+Merged `origin/main` at `afd034f3` into the branch in `ae4b4250`, kept the
+reviewed runtime and migration code intact, and re-verified `AGENTS.md`.
+Corrected the older IDF paragraph in `docs/database.md` to name both explicit
+idempotent replay exceptions, matching the Natural Earth section.
+
+Validation on `ae4b4250`:
+
+```text
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_doc_front_matter.py tests/test_orrery/test_natural_earth_manifest.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+50 passed, 5 warnings in 4.56s
+```
+
+The initial run before committing the merge correctly refused the new stamp
+as newer than the then-current merge base (`b0da93ea`): 1 failed, 49 passed.
+The committed merge advances that base to `afd034f3`; the rerun above passes.
+Existing independent review at `833ea270` found no actionable defect. The
+combined migration 146–148 PostgreSQL gate is still pending; these focused
+checks do not substitute for it. No owner database or service changed.
+
+Codex — GPT-6
