@@ -271,6 +271,26 @@ restored control subject.
 
 ## Scope and Pending Proof
 
+The coordinator's assembled core gate stopped with 3,685 passes, 52 skips and
+one prompt-lint failure: the new endpoint's developer docstring began “Return
+only,” which the existing embedded-prompt heuristic rejects. The docstring now
+says “Serve the player client's explicitly allowlisted display tunables.”
+No runtime statement, lint rule or exemption changed. The bounded follow-up:
+
+```text
+env -u NEXUS_RUN_LIVE_LLM -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL \
+  -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 \
+  /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit \
+  tests/test_prompt_lint.py tests/test_api/test_ui_config.py
+24 passed, 7 warnings in 12.63s
+```
+
+The [output](prompt-lint-endpoint-fix.txt) confirms active secret isolation,
+untouched receipt roots, zero database targets and no owner targets. The
+combined gate is still incomplete. At the user's packing-up request, no new
+capture, build or full suite was started; the prepared capture plan remains
+pending.
+
 The new configuration key is `[ui.announcer].hold_ms`, shipped as 5000 and
 required, strict, and bounded to 1000–60000. The player route returns only its
 explicitly allowlisted announcer object. The reachability baseline adds exactly
