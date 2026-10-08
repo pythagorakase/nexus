@@ -58,34 +58,67 @@ JSON through LFS). `LICENSE.md` paragraphs compared against
 text of both paragraphs matches (the page wraps the names in `<em>`).
 `ogr2ogr --version`: `GDAL 3.8.5, released 2024/04/02`.
 
+## Review Fixes (Commit `6a1be51d`)
+
+The review of PR #1116 confirmed four code and evidence findings; commit
+`6a1be51d` applies the code ones, and every PostgreSQL tail below from this
+heading on ran on `6a1be51d` (the earlier tails ran on `78a92f35` and are
+replaced).
+
+- `require_reference` first reads `to_regclass('public.natural_earth_features')`
+  and raises `ReferenceDataError` naming `land, admin_0, admin_1` ("table ...
+  missing; apply migration 147") when it is NULL, so a database without
+  migration 147 refuses instead of raising `UndefinedTable` and aborting the
+  caller's transaction. New test `test_missing_table_refuses` drops the table
+  in a rolled-back transaction on the empty clone, expects that error, proves
+  the cursor still runs `SELECT 1` (transaction not aborted), and proves the
+  table is back after the rollback.
+- `write_reference` commits through `nexus.database.transaction()`
+  (`with closing(conn), transaction(conn), conn.cursor() as cur:`, the
+  `rebuild_memory_idf.py` model). `_load_target` catches `AmbiguousCommit`
+  before `psycopg2.Error`, logs "outcome unknown ...; rerun to replace the
+  rows", returns status `commit_unknown`, and `main` counts that status as a
+  failure (exit 1). The `docs/database.md` section says so.
+- `AmbiguousRegionError.__init__` gains `-> None`.
+- Evidence: the source-fact read is rerun under `nice -n 15` after the bounded
+  load wait, the `-99` fact is now counted from the raw source rows, and every
+  pasted PostgreSQL tail runs from the guard line to the summary.
+
 ## Loader Listing, Counts and Facts
 
-The loader's invalid-feature listing (pytest `--log-cli-level=INFO` on
-`tests/test_orrery/test_geo_reference_pg.py`; three loads in that file, each
-lists the same two features):
+The loader's invalid-feature listing (on `6a1be51d`, from the
+`--log-cli-level=INFO` run of `tests/test_orrery/test_geo_reference_pg.py`
+below; three loads in that file, each lists the same two features):
 
 ```
-INFO     nexus.load_natural_earth:load_natural_earth.py:254 qa640_840_geo_d44ca170d8ab: invalid admin_0 feature ne_id=1159320575 source_index=161: Ring Self-intersection[35.6210871060001 23.1392929140001]
-INFO     nexus.load_natural_earth:load_natural_earth.py:254 qa640_840_geo_d44ca170d8ab: invalid admin_1 feature ne_id=1159309897 source_index=3813: Ring Self-intersection[-47.3024818588507 -16.040054212432]
+INFO     nexus.load_natural_earth:load_natural_earth.py:263 qa640_840_geo_0c7e457fd65e: invalid admin_0 feature ne_id=1159320575 source_index=161: Ring Self-intersection[35.6210871060001 23.1392929140001]
+INFO     nexus.load_natural_earth:load_natural_earth.py:263 qa640_840_geo_0c7e457fd65e: invalid admin_1 feature ne_id=1159309897 source_index=3813: Ring Self-intersection[-47.3024818588507 -16.040054212432]
 ```
 
-A read of a disposable clone loaded by `load_reference`
-(scratch script `840-S1-resume/evidence_facts.py`, which creates
-`qa640_840_evidence_*` through `disposable_slot_database` and drops it):
+A read of a disposable clone loaded by `load_reference` (scratch script
+`840-S1-resume/evidence_facts.py`, which creates `qa640_840_evidence_*`
+through `disposable_slot_database` and drops it). Run on `6a1be51d` as
+`PYTHONPATH=$PWD nice -n 15 $PY <scratch>/840-S1-resume/evidence_facts.py`
+after the bounded load wait (`uptime` read `16.93 24.66 28.60`; the wait loop
+returned at once, the one-minute load being below 24; `uptime` at start
+`18.38 24.72 28.58`). Its first line counts the `ISO_A3` literal in the raw
+`admin_0` rows that `ogr2ogr` reads (`_read_features`), before the loader
+turns `-99` into NULL:
 
 ```
-load_reference {'land': 11, 'admin_0': 258, 'admin_1': 4596} 7.97s
+source admin_0 ISO_A3: features 258 | literal '-99': 22 | NULL: 0
+load_reference {'land': 11, 'admin_0': 258, 'admin_1': 4596} 7.44s
 counts: [('admin_0', 258), ('admin_1', 4596), ('land', 11)]
 releases: [(['5.1.1'],)]
 invalid/srid/type: [(0, 0, 0)]
-pg_total_relation_size: [(31440896, '30 MB')]
+pg_total_relation_size: [(31432704, '30 MB')]
 vertices: [(2289967,)]
 dup ne_id: [('admin_0', 0), ('admin_1', 0)]
 dup adm0_a3 admin_0: [(0,)]
 dup adm1_code admin_1: [(0,)]
 repeated admin_1 names (non-NULL groups): [(95,)]
 NULL admin_1 names: [(7,)]
-admin_0 iso_code NULL (source -99): [(22,)]
+admin_0 loaded iso_code NULL: [(22,)]
 La Paz: [('BOL-1936',), ('HND-649',), ('SLV-1347',)]
 Denver land: [(True,)]
 Denver admin_1: [('Colorado', 'USA-3522')]
@@ -94,59 +127,95 @@ repair admin_0 1159320575: ('EGY', None, 'Ring Self-intersection[35.621087106000
 repair admin_1 1159309897: ('BRA', 'BRA-1294', 'Ring Self-intersection[-47.3024818588507 -16.040054212432]', 341247103614.5597, 341247103614.5597, True, 'MULTIPOLYGON')
 ```
 
-The repair rows read: source validity reason, geography area of the source
-geometry, geography area after the `method=structure` repair (equal), valid,
-type. Every fact in the order's table and paragraph holds; nothing differs.
-This read started at a one-minute load of 27.84 (I read `uptime` and ran
-without waiting; every later PostgreSQL run waited for a load below 24).
+22 source `ISO_A3` values are the literal `-99` and none is NULL, so the 22
+loaded NULL `iso_code` rows are exactly the converted `-99` values. The repair
+rows read: source validity reason, geography area of the source geometry,
+geography area after the `method=structure` repair (equal), valid, type.
+Every fact in the order's table and paragraph holds; nothing differs. (The
+first read, on `78a92f35`, started at a one-minute load of 27.84 without the
+wait; this rerun replaces it. Its numbers were the same except
+`pg_total_relation_size` 31,440,896 bytes, also 30 MB.)
 
 ## Timings
 
-From the full proof run (`test_fresh_slot_copies_reference` prints them):
+From the focused proof run on `6a1be51d` (`test_fresh_slot_copies_reference`
+prints them):
 
 ```
-840 timings: load_reference 7.56s; initialize_slot_database from loaded clone 1.96s, from empty clone 1.02s
+840 timings: load_reference 6.98s; initialize_slot_database from loaded clone 2.36s, from empty clone 1.18s
 ```
 
-From the `--log-cli-level=INFO` rerun of the same file:
+From the `--log-cli-level=INFO` run of the same file on `6a1be51d`:
 
 ```
-840 timings: load_reference 8.01s; initialize_slot_database from loaded clone 2.15s, from empty clone 1.35s
+840 timings: load_reference 7.15s; initialize_slot_database from loaded clone 2.15s, from empty clone 1.07s
 ```
 
-So once the template holds the rows, each default clone pays about 0.8 to 0.9
-seconds more (the copy of a 30 MB table, about 2.3 million vertices) under a
-machine load near 20.
+Earlier runs on `78a92f35`: 7.56 s, 1.96 s and 1.02 s; 8.01 s, 2.15 s and
+1.35 s. So once the template holds the rows, each default clone pays about
+0.8 to 1.2 seconds more (the copy of a 30 MB table, about 2.3 million
+vertices) under a one-minute machine load near 20.
 
 ## Red Runs
 
-Plant 1: `read_reference_files` loops over `manifest.layers[:0]` in the
-checksum step (step removed). Reverted with `git checkout`.
+Both on `6a1be51d`, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
+`NEXUS_SLOT` unset, each after the bounded load wait.
+
+Plant 1: in `read_reference_files` the checksum loop reads
+`for layer in manifest.layers[:0]:` (step removed). Reverted with
+`git checkout scripts/load_natural_earth.py`. The wait took 210 s (`uptime`
+read `26.53 26.19 29.00` before it).
+
+```
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery/test_geo_reference_pg.py::test_checksum_mismatch_refuses
+```
 
 ```
 E       Failed: DID NOT RAISE <class 'scripts.load_natural_earth.NaturalEarthChecksumError'>
+...
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_840_empty_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
+=========================== short test summary info ============================
 FAILED tests/test_orrery/test_geo_reference_pg.py::test_checksum_mismatch_refuses
-1 failed in 9.53s
+1 failed in 9.54s
 ```
 
 Plant 2: `"public.natural_earth_features"` removed from
-`TEMPLATE_SEED_TABLES`. Reverted with `git checkout`.
+`TEMPLATE_SEED_TABLES`. Reverted with `git checkout scripts/new_story_setup.py`.
+No wait (`uptime` `19.93 25.94 28.45`).
 
 ```
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery/test_geo_reference_pg.py::test_fresh_slot_copies_reference
+```
+
+```
+>           assert _counts(fresh) == EXPECTED_COUNTS
 E           AssertionError: assert {} == {'admin_0': 2...6, 'land': 11}
+E             
 E             Right contains 3 more items:
 E             {'admin_0': 258, 'admin_1': 4596, 'land': 11}
+E             Use -v to get more diff
+
+tests/test_orrery/test_geo_reference_pg.py:310: AssertionError
+...
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 4 targets: postgres, qa640_840_empty_*, qa640_840_fresh_*, qa640_840_geo_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
+=========================== short test summary info ============================
 FAILED tests/test_orrery/test_geo_reference_pg.py::test_fresh_slot_copies_reference
-1 failed in 14.22s
+1 failed in 12.03s
 ```
 
 ## PostgreSQL Proof
 
-Run with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset, after
-waiting about 11 minutes for the one-minute load to fall below 24 (it read
-24.28, then 25.21; started at 22.34):
+On `6a1be51d`, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT`
+unset, after the bounded load wait (no wait needed: `uptime`
+`18.27 25.18 28.12`):
 
 ```
 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery/test_geo_reference_pg.py tests/test_orrery/test_natural_earth_manifest.py tests/test_new_story_setup.py tests/test_postgres_tools.py tests/test_schema_documentation_pg.py tests/test_orrery/test_migrate.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
@@ -154,21 +223,25 @@ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname
 
 ```
 E       AssertionError: assert {'013', '119'... '145', '146'} == frozenset({'013', '119'})
+E         
 E         Extra items in the left set:
-E         '146'
-E         '144'
 E         '145'
+E         '144'
+E         '146'
+E         Use -v to get more diff
+
 tests/test_orrery/test_migrate.py:266: AssertionError
+...
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-dbname audit: 35 targets: mock, nexus_m10_fresh_test_75901, nexus_m10_template_test_75901, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_840_empty_*, qa640_840_fresh_* x2, qa640_840_geo_*, qa640_885_ren_replay_* x4, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa885_transaction_writer_*
+dbname audit: 35 targets: mock, nexus_m10_fresh_test_19464, nexus_m10_template_test_19464, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_840_empty_*, qa640_840_fresh_* x2, qa640_840_geo_*, qa640_885_ren_replay_* x4, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa885_transaction_writer_*
 dbname audit: owner server: local:5432
-dbname audit: registered disposable clusters: two_clusters[0] at local:49561 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:49565 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
-dbname audit: owner names admitted on registered clusters: save_04@local:49561 (psycopg2), save_04@local:49565 (psycopg2)
+dbname audit: registered disposable clusters: two_clusters[0] at local:64469 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:64475 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:64469 (psycopg2), save_04@local:64475 (psycopg2)
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 =========================== short test summary info ============================
 FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps
-1 failed, 293 passed, 2 skipped, 2 warnings in 112.42s (0:01:52)
+1 failed, 294 passed, 2 skipped, 2 warnings in 119.83s (0:01:59)
 ```
 
 The one failure is the expected migration gap: 144, 145 and 146 belong to
@@ -176,19 +249,33 @@ The one failure is the expected migration gap: 144, 145 and 146 belong to
 skips are the `requires_corpus` tests
 `tests/test_orrery/test_card_identity.py::test_card_exposure_rank_joint_and_backstage_parity[False|True]`
 (`NEXUS_RUN_CORPUS` unset). The `save_04` admissions are on the two throwaway
-clusters `test_connection_lifecycle.py` registers, not the owner server.
+clusters `test_connection_lifecycle.py` registers, not the owner server. One
+more test passes than on `78a92f35` (293): `test_missing_table_refuses`.
 
-The file on its own with logging (`-rs -o log_cli=true --log-cli-level=INFO`):
+The file on its own with logging, on `6a1be51d` (no wait needed: `uptime`
+`20.39 23.38 26.95`):
 
 ```
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rs -o log_cli=true --log-cli-level=INFO tests/test_orrery/test_geo_reference_pg.py
+```
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_840_empty_*, qa640_840_fresh_* x2, qa640_840_geo_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-============================== 9 passed in 31.77s ==============================
+============================= 10 passed in 29.16s ==============================
 ```
 
 Per the machine-load rule the whole-tree PostgreSQL gate (three pieces) is not
 run here; the coordinator runs it at landing.
 
 ## Offline Suites
+
+The two large offline runs below ran on `78a92f35`; commit `6a1be51d` changes
+only `geo_reference.py`, `load_natural_earth.py`, the PostgreSQL test file and
+`docs/database.md`, whose tests ran above.
 
 ```
 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
@@ -227,6 +314,14 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 (Before the re-stamp, right after the merge, the same file failed
 `test_declared_sources_carry_a_fresh_verified_commit`, as expected.)
 
+On `6a1be51d`:
+
+```
+PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_orrery/test_natural_earth_manifest.py tests/test_reachability.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+104 passed, 5 warnings in 17.40s
+```
+
 ## Static Checks
 
 ```
@@ -243,6 +338,29 @@ All done! ✨ 🍰 ✨
 PYTHONPATH=$PWD $PY -m mypy --explicit-package-bases nexus/agents/orrery/geo_reference.py scripts/load_natural_earth.py scripts/new_story_setup.py tests/test_orrery/test_geo_reference_pg.py tests/test_orrery/test_natural_earth_manifest.py
 Success: no issues found in 5 source files
 ```
+
+On `6a1be51d`, for the three Python files it changes:
+
+```
+$PY -m black --check nexus/agents/orrery/geo_reference.py scripts/load_natural_earth.py tests/test_orrery/test_geo_reference_pg.py
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+
+PYTHONPATH=$PWD $PY -m mypy --explicit-package-bases nexus/agents/orrery/geo_reference.py scripts/load_natural_earth.py tests/test_orrery/test_geo_reference_pg.py
+Success: no issues found in 3 source files
+
+$PY -m flake8 nexus/agents/orrery/geo_reference.py scripts/load_natural_earth.py tests/test_orrery/test_geo_reference_pg.py
+(no output, exit 0)
+
+$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+
+$PY scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
+```
+
+The new `AmbiguousCommit` handler in `_load_target` carries
+`# nexus-exception-disposition: fail; reason=logged; safety=exit 1`.
 
 flake8 on the five changed Python files reports only seven E501 lines in
 `scripts/new_story_setup.py` (7, 51, 64, 111, 239, 340, 561); the same command
