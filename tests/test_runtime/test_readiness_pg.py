@@ -44,6 +44,8 @@ DATABASE_CHECKS = {
     "slots.migrations_current",
     "template.idf_analyzer_current",
     "slots.idf_analyzer_current",
+    "template.story_identity_absent",
+    "slots.story_identity_present",
 }
 
 
@@ -76,6 +78,10 @@ def owner_host_stand_ins(monkeypatch: pytest.MonkeyPatch) -> Iterator[int]:
             )
             for slot in slots
         }
+        # Initialization mints an identity; the template carries none (822-Q13).
+        with closing(pg_fixtures.connect(template)) as conn, conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM public.story_identity")
+            assert cur.rowcount == 1, "the template stand-in had no identity row"
         monkeypatch.setattr(migrate, "TEMPLATE_DB", template)
         pg_fixtures.route_slots_to_disposable(monkeypatch.setattr, routes)
         locked_slot = slots[0]
@@ -151,6 +157,18 @@ def test_owner_host_database_checks_run_against_the_contract_server(
         assert REBUILD_COMMAND in (slots_idf.remediation or "") or (
             "python scripts/migrate.py --slot" in (slots_idf.remediation or "")
         )
+    template_identity = checks["template.story_identity_absent"]
+    assert (template_identity.status, template_identity.observed) == (
+        "pass",
+        f"{TEMPLATE_DB}: no story identity row",
+    )
+    slots_identity = checks["slots.story_identity_present"]
+    assert slots_identity.status == "pass"
+    assert slots_identity.observed == "; ".join(
+        f"{slot_dbname(slot)}: one story identity row"
+        for slot in settings.runtime.readiness.slots
+    )
+
     locked_slot = owner_host_stand_ins
     dbname = slot_dbname(locked_slot)
     assert _existing_databases([dbname]) == {dbname}

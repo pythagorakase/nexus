@@ -229,6 +229,10 @@ that world. The Retrograde status route reads the latest run from these tables,
 so every gateway worker reports the same durable record. Rows are kept after
 completion.
 
+## Story Identity
+
+`story_identity` holds one row per slot database: the story's `story_uuid`, its title and its origin. `NEXUS_template` carries the table and no row. Slot initialization mints a row, every wizard transition replaces it, and `clone_slot_with_data` gives the copy a new `story_uuid` with a `story_lineage` fork row naming the source. Disposable and rehearsal clones get a fresh identity with no lineage. Slots that predate migration 146 are minted once with `python scripts/backfill_story_identity.py --all --write-locked-slot`, which also records that `save_02` forks `save_01`; `nexus doctor` checks both rules (`template.story_identity_absent`, `slots.story_identity_present`).
+
 ## Natural Earth Reference
 
 `natural_earth_features` (migration 147) holds the server-owned real-Earth
