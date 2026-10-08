@@ -16,9 +16,11 @@ import pytest
 from nexus import cli
 from scripts.qa_shift import qa_shift
 from tests.pg_fixtures import (
+    DEFAULT_BASE_TIMESTAMP,
     connect,
     disposable_slot_database,
     route_slot_to_disposable,
+    set_story_base,
 )
 
 
@@ -49,6 +51,7 @@ def test_jobs_cli_reports_counts_and_non_terminal_rows(
         try:
             with conn:
                 with conn.cursor() as cur:
+                    set_story_base(cur, DEFAULT_BASE_TIMESTAMP)
                     cur.execute(
                         "INSERT INTO narrative_chunks (raw_text) VALUES (%s) "
                         "RETURNING id",
