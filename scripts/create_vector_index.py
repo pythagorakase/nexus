@@ -32,6 +32,7 @@ from nexus.agents.memnon.utils.embedding_tables import (
     supports_pgvector_ann_index,
     table_name_for_dimensions,
 )
+from nexus.config import load_settings
 
 # Try to load settings using centralized config loader
 try:
@@ -45,14 +46,17 @@ except Exception as e:
 
 
 def get_model_dimensions(model_name: str) -> int:
-    """Get the dimensions for a model name"""
-    # First check settings
-    if SETTINGS.get("models"):
-        model_key = model_name.replace("/", "_")
-        if model_key in SETTINGS["models"]:
-            dimensions = SETTINGS["models"][model_key].get("dimensions")
-            if dimensions:
-                return dimensions
+    """Get the dimensions for a model name.
+
+    The embedder registry ([memnon.models] or [ir_eval.embedding_candidates])
+    answers first.
+    """
+    registry = load_settings().embedder_registry()
+    model_key = model_name.replace("/", "_")
+    if model_key in registry:
+        dimensions = registry[model_key].get("dimensions")
+        if dimensions:
+            return dimensions
 
     # Hard-coded fallbacks
     model_dimensions = {

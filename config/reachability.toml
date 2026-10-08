@@ -167,7 +167,7 @@ reason = "The reranker artifact contract test imports a copy of the real cross-e
 source = "tests/test_regenerate_embeddings_truncate_pg.py:test_truncate_table_keeps_rows_when_the_model_artifact_is_missing"
 expression = "importlib.util.spec_from_file_location('regenerate_embeddings_probe', REPO_ROOT / 'scripts' / 'regenerate_embeddings.py')"
 target = "scripts/regenerate_embeddings.py"
-reason = "The truncate-safety PostgreSQL test imports the real script fresh after pointing NEXUS_RUNTIME_CONFIG at a registry whose local_path is missing, because the script reads its model registry at import time. This edge is test-only: the script (and scripts/utils/embedding_utils.py through it) still has no operator entry point and is import-era tooling for #811."
+reason = "The truncate-safety PostgreSQL test imports the real script fresh after pointing NEXUS_RUNTIME_CONFIG at a registry whose local_path is missing, because the script resolves its embedder registry when it loads a model. This edge is test-only: the script (and scripts/utils/embedding_utils.py through it) still has no operator entry point and is import-era tooling for #811."
 
 [[dynamic_edges]]
 source = "tests/test_config/test_ir_eval_golden_overrides.py:_merge_golden_overrides"

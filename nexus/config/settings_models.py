@@ -9,6 +9,7 @@ from copy import deepcopy
 from datetime import timedelta
 from decimal import Decimal
 import logging
+from pathlib import Path
 import re
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -3234,6 +3235,21 @@ class EmbeddingModelConfig(BaseModel):
     weight: float = Field(..., ge=0.0, le=1.0, description="Ensemble weight")
 
 
+class EmbeddingCandidate(BaseModel):
+    """One offline embedding candidate in ``[ir_eval.embedding_candidates]``.
+
+    The runtime never loads a candidate: only an ir_eval run selects one, by
+    its name (``ir_eval.runner create-run --model NAME:WEIGHT``). A candidate
+    carries no ``is_active`` or ``weight``; the run supplies both.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    local_path: str = Field(..., min_length=1)
+    remote_path: Optional[str] = None
+    dimensions: int = Field(..., ge=1)
+
+
 class ModelArtifactsConfig(BaseModel):
     """Where ``nexus models lock|verify`` keep the production artifact lock."""
 
@@ -3375,17 +3391,17 @@ class HybridSearchConfig(BaseModel):
 
 
 class RerankerCandidate(BaseModel):
-    """One reranker model entry in the bakeoff candidate registry.
+    """One offline reranker candidate in ``[ir_eval.reranker_candidates]``.
 
     `api_type` selects the inference path in ``cross_encoder.rerank_results``:
       - "cross_encoder": standard SequenceClassification (DeBERTa-v3,
         mxbai, BGE-v2, etc.)
       - "qwen3_lm": Qwen3-Reranker causal-LM with yes/no logit head
 
-    Note: the production reranker is selected by the top-level
-    ``CrossEncoderReranking.model_path`` + ``api_type`` fields, not by any
-    flag on this candidate entry. This registry is for ir_eval bakeoff
-    selection via ``ir_eval.runner create-run --reranker NAME``.
+    The runtime never loads a candidate: the production reranker is
+    ``[memnon.retrieval.cross_encoder_reranking]`` (``model_path``,
+    ``api_type``, ``name``, ``remote_path``). Only an ir_eval run selects a
+    candidate, via ``ir_eval.runner create-run --reranker NAME``.
     """
 
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
@@ -3403,6 +3419,16 @@ class CrossEncoderReranking(BaseModel):
 
     enabled: bool
     model_path: str
+    name: str = Field(
+        ...,
+        min_length=1,
+        description="Production reranker name that `nexus models lock` records",
+    )
+    remote_path: str = Field(
+        ...,
+        min_length=1,
+        description="Hugging Face repository of the production reranker",
+    )
     api_type: Literal["cross_encoder", "qwen3_lm"] = "cross_encoder"
     blend_weight: float = Field(..., ge=0.0, le=1.0)
     top_k: int = Field(..., ge=1)
@@ -3412,7 +3438,6 @@ class CrossEncoderReranking(BaseModel):
     window_overlap: int = Field(..., ge=0)
     weights_by_query_type: Dict[str, float]
     use_query_type_weights: bool
-    candidates: Dict[str, RerankerCandidate] = Field(default_factory=dict)
 
 
 class ANNConfig(BaseModel):
@@ -4044,6 +4069,14 @@ class IREvalSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     judgment: IREvalJudgmentConfig
+    embedding_candidates: Dict[str, EmbeddingCandidate] = Field(
+        default_factory=dict,
+        description="Offline embedders an ir_eval run selects by name",
+    )
+    reranker_candidates: Dict[str, RerankerCandidate] = Field(
+        default_factory=dict,
+        description="Offline rerankers an ir_eval run selects by name",
+    )
 
 
 class UIFontSlots(BaseModel):
@@ -4449,27 +4482,63 @@ class Settings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_single_active_embedder(self) -> "Settings":
-        """Require exactly one production embedder in [memnon.models].
+    def _validate_single_runtime_embedder(self) -> "Settings":
+        """Require exactly one entry in [memnon.models]: the production embedder.
 
-        Inactive entries are offline evaluation candidates; ir_eval may
-        activate several of them per run through validated MEMNON overrides,
-        but the committed runtime configuration names exactly one embedder.
+        The runtime loads that one entry and nothing else. Offline evaluation
+        candidates live in ``[ir_eval.embedding_candidates]``, and only an
+        ir_eval run selects them; no runtime entry is ever switched off.
         """
 
-        active = sorted(
-            name for name, model in self.memnon.models.items() if model.is_active
-        )
-        if len(active) != 1:
-            found = (
-                f"none is active among {sorted(self.memnon.models)}"
-                if not active
-                else f"{len(active)} are active: {active}"
-            )
+        names = sorted(self.memnon.models)
+        if len(names) != 1:
             raise ValueError(
-                "[memnon.models] must mark exactly one embedder is_active = true "
-                f"(the production embedder); {found}"
+                "[memnon.models] declares exactly one runtime embedder; found "
+                f"{len(names)} entries: {names}. Offline candidates belong in "
+                "[ir_eval.embedding_candidates]."
             )
+        (name,) = names
+        if not self.memnon.models[name].is_active:
+            raise ValueError(
+                f"[memnon.models].{name} must set is_active = true "
+                "(the production embedder)."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_offline_candidates(self) -> "Settings":
+        """Keep offline candidates from shadowing the production artifacts.
+
+        Runs after ``_validate_single_runtime_embedder`` (Pydantic executes
+        model validators in definition order), so ``[memnon.models]`` holds
+        exactly one entry here.
+        """
+
+        if self.ir_eval is None:
+            return self
+        ((production_name, production),) = self.memnon.models.items()
+        production_path = Path(production.local_path)
+        for name, candidate in self.ir_eval.embedding_candidates.items():
+            if name == production_name:
+                raise ValueError(
+                    f"[ir_eval.embedding_candidates].{name} repeats the name of "
+                    "the production [memnon.models] entry; a candidate needs "
+                    "its own name."
+                )
+            if Path(candidate.local_path) == production_path:
+                raise ValueError(
+                    f"[ir_eval.embedding_candidates].{name}.local_path "
+                    f"({candidate.local_path}) is the production "
+                    f"[memnon.models].{production_name}.local_path."
+                )
+        reranker_path = Path(self.memnon.retrieval.cross_encoder_reranking.model_path)
+        for name, reranker in self.ir_eval.reranker_candidates.items():
+            if Path(reranker.local_path) == reranker_path:
+                raise ValueError(
+                    f"[ir_eval.reranker_candidates].{name}.local_path "
+                    f"({reranker.local_path}) is the production "
+                    "[memnon.retrieval.cross_encoder_reranking].model_path."
+                )
         return self
 
     @model_validator(mode="after")
@@ -4602,6 +4671,23 @@ class Settings(BaseModel):
             for provider, models in self.global_.model.api_models.items()
             for entry in models.models
         }
+
+    def embedder_registry(self) -> Dict[str, Dict[str, Any]]:
+        """Return every embedder an offline script may load, keyed by name.
+
+        The production ``[memnon.models]`` entry and each
+        ``[ir_eval.embedding_candidates]`` entry, each as its ``model_dump()``.
+        ``_validate_offline_candidates`` keeps the names unique.
+        """
+        registry = {
+            name: model.model_dump() for name, model in self.memnon.models.items()
+        }
+        if self.ir_eval is not None:
+            registry.update(
+                (name, candidate.model_dump())
+                for name, candidate in self.ir_eval.embedding_candidates.items()
+            )
+        return registry
 
     def model_dump(self, **kwargs) -> dict:
         """

@@ -48,14 +48,11 @@ LONG = " ".join(["needle"] * 40)
 
 
 def _bge_large_path() -> Path:
-    """Resolve bge-large's local path from the nexus.toml model registry."""
-    models = (
-        load_settings_as_dict()
-        .get("Agent Settings", {})
-        .get("MEMNON", {})
-        .get("models", {})
+    """Resolve bge-large's local path from [ir_eval.embedding_candidates]."""
+    candidates = (load_settings_as_dict().get("ir_eval") or {}).get(
+        "embedding_candidates", {}
     )
-    return Path(models.get("bge-large", {}).get("local_path", "/nonexistent"))
+    return Path(candidates.get("bge-large", {}).get("local_path", "/nonexistent"))
 
 
 MODEL_DIR = _bge_large_path()
@@ -87,10 +84,21 @@ def model_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 
 @pytest.fixture()
 def model_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Use a real validated config with only the regression embedder active."""
+    """Use a real validated config whose one runtime embedder is bge-large.
+
+    A candidate may not shadow the production entry, so bge-large leaves
+    [ir_eval.embedding_candidates] and becomes the one [memnon.models] entry.
+    """
     document = tomlkit.parse((Path(__file__).parents[1] / "nexus.toml").read_text())
-    for name, model in document["memnon"]["models"].items():
-        model["is_active"] = name == "bge-large"
+    candidate = document["ir_eval"]["embedding_candidates"].pop("bge-large")
+    entry = tomlkit.table()
+    entry["is_active"] = True
+    for key, value in candidate.items():
+        entry[key] = value
+    entry["weight"] = 1.0
+    models = tomlkit.table()
+    models["bge-large"] = entry
+    document["memnon"]["models"] = models
     path = tmp_path / "model-cache.toml"
     path.write_text(tomlkit.dumps(document))
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(path))

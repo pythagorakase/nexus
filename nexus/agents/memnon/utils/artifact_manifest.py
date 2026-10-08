@@ -92,8 +92,9 @@ class VerifyReport:
 def production_artifact_specs(settings: Settings) -> List[ArtifactSpec]:
     """Return the active embedder and, while reranking is enabled, the reranker.
 
-    The reranker's repository comes from the candidate registry entry whose
-    ``local_path`` is the production ``model_path``.
+    The reranker's lock name and repository are the production
+    ``[memnon.retrieval.cross_encoder_reranking]`` ``name`` and
+    ``remote_path``.
     """
 
     active = [
@@ -119,25 +120,12 @@ def production_artifact_specs(settings: Settings) -> List[ArtifactSpec]:
 
     reranking = settings.memnon.retrieval.cross_encoder_reranking
     if reranking.enabled:
-        model_path = Path(reranking.model_path)
-        matches = sorted(
-            candidate_name
-            for candidate_name, candidate in reranking.candidates.items()
-            if Path(candidate.local_path) == model_path
-        )
-        if len(matches) != 1:
-            raise ArtifactLockError(
-                f"The production reranker model_path {model_path} must match "
-                "exactly one [memnon.retrieval.cross_encoder_reranking.candidates] "
-                f"entry naming its repository; found {matches}"
-            )
-        candidate = reranking.candidates[matches[0]]
         specs.append(
             ArtifactSpec(
                 role=RERANKER_ROLE,
-                name=matches[0],
-                repo_id=candidate.remote_path or None,
-                local_path=model_path,
+                name=reranking.name,
+                repo_id=reranking.remote_path,
+                local_path=Path(reranking.model_path),
                 dimensions=None,
             )
         )

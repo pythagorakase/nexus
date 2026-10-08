@@ -908,12 +908,11 @@ create_tables = true
 drop_existing = true
 
 # Embedding models configuration
-# Exactly one entry is active (validated at load): the production embedder,
+# Exactly one runtime embedder (validated at load): the production embedder,
 # loaded only from its local_path (no download, no default model; a missing
-# or unloadable artifact raises with the corrective command). Every
-# inactive entry is an offline evaluation candidate only, selectable per
-# ir_eval run; they stay registered until legacy vector dimensions are
-# inventoried (issue #812).
+# or unloadable artifact raises with the corrective command). Offline
+# evaluation candidates live in [ir_eval.embedding_candidates], and only an
+# ir_eval run selects them (issue #812).
 
 # Active retrieval embedder: Octen-Embedding-4B (issue #175 winner).
 # Beat the prior bge+e5+inf-retriever ensemble on all 5 IR metrics
@@ -923,68 +922,12 @@ drop_existing = true
 # Statistical significance approached but didn't reach p<0.05 at n=130;
 # direction was consistent on all 5 metrics.
 
-[memnon.models.bge-large]
-is_active = false  # Deprecated by Octen-4B (issue #175)
-local_path = "/Users/pythagor/nexus/models/bge-large-en"
-remote_path = "BAAI/bge-large-en"
-dimensions = 1024
-weight = 0.0
-
-[memnon.models.e5-large]
-is_active = false  # Deprecated by Octen-4B (issue #175)
-local_path = "/Users/pythagor/nexus/models/e5-large-v2"
-remote_path = "intfloat/e5-large-v2"
-dimensions = 1024
-weight = 0.0
-
-[memnon.models.bge-small-custom]
-is_active = false  # Fine-tuned model, currently disabled
-local_path = "/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654"
-remote_path = ""
-dimensions = 384
-weight = 0.0
-
-[memnon.models."inf-retriever-v1-1.5b"]
-is_active = false  # Deprecated by Octen-4B (issue #175)
-local_path = "/Users/pythagor/nexus/models/inf-retriever-v1-1.5b"
-remote_path = "infly/inf-retriever-v1-1.5b"
-dimensions = 1536
-weight = 0.0
-
-[memnon.models."Octen-Embedding-0.6B"]
-is_active = false  # Candidate model for issue #175 evaluation campaign
-local_path = "/Users/pythagor/nexus/models/Octen-Embedding-0.6B"
-remote_path = "Octen/Octen-Embedding-0.6B"
-dimensions = 1024
-weight = 0.0
-
 [memnon.models."Octen-Embedding-4B"]
 is_active = true  # Production embedder (winner of issue #175 bakeoff)
 local_path = "/Users/pythagor/nexus/models/Octen-Embedding-4B"
 remote_path = "Octen/Octen-Embedding-4B"
 dimensions = 2560
 weight = 1.0
-
-[memnon.models."Octen-Embedding-4B-INT8"]
-is_active = false  # Candidate model for issue #175 evaluation campaign (INT8 quantized, CPU-only on Apple Silicon)
-local_path = "/Users/pythagor/nexus/models/Octen-Embedding-4B-INT8"
-remote_path = "Octen/Octen-Embedding-4B-INT8"
-dimensions = 2560
-weight = 0.0
-
-[memnon.models."Octen-Embedding-8B"]
-is_active = false  # Candidate model for issue #175 evaluation campaign
-local_path = "/Users/pythagor/nexus/models/Octen-Embedding-8B"
-remote_path = "Octen/Octen-Embedding-8B"
-dimensions = 4096
-weight = 0.0
-
-[memnon.models."Octen-Embedding-8B-INT8"]
-is_active = false  # Candidate model for issue #175 evaluation campaign (INT8 quantized, CPU-only on Apple Silicon)
-local_path = "/Users/pythagor/nexus/models/Octen-Embedding-8B-INT8"
-remote_path = "Octen/Octen-Embedding-8B-INT8"
-dimensions = 4096
-weight = 0.0
 
 [memnon.artifacts]
 # `nexus models lock` records the active embedder and the production reranker
@@ -1158,11 +1101,14 @@ general = 0.15
 
 [memnon.retrieval.cross_encoder_reranking]
 # Cross-encoder reranking for improved relevance.
-# Production default is determined by `model_path` + `api_type` below; the
-# `candidates` registry below is for ir_eval bakeoff selection via
-# `ir_eval.runner create-run --reranker NAME`, not for swapping production.
+# The production reranker is `model_path` + `api_type` below; `name` and
+# `remote_path` are the identity `nexus models lock` records for it.
+# Offline reranker candidates live in [ir_eval.reranker_candidates], and
+# only `ir_eval.runner create-run --reranker NAME` selects them.
 enabled = true
 model_path = "/Users/pythagor/nexus/models/naver-trecdl22-crossencoder-debertav3"
+name = "deberta-v3-trecdl22"
+remote_path = "naver/trecdl22-crossencoder-debertav3"
 api_type = "cross_encoder"  # "cross_encoder" (SequenceClassification) or "qwen3_lm"
 blend_weight = 0.3  # How much to blend reranker score with original score
 top_k = 30          # Only rerank top 30 results (for speed)
@@ -1183,37 +1129,6 @@ event = 0.35
 location = 0.35
 theme = 0.2
 general = 0.3
-
-# Reranker candidate registry — entries here can be targeted at bakeoff time
-# via `ir_eval.runner create-run --reranker NAME`. The production default is
-# the top-level `model_path` + `api_type` above; swap by editing those, not
-# by adding/removing entries here.
-# `api_type` selects the inference path: "cross_encoder" for standard
-# SequenceClassification rerankers (DeBERTa-v3, mxbai), "qwen3_lm" for
-# Qwen3-Reranker yes/no causal-LM rerankers.
-[memnon.retrieval.cross_encoder_reranking.candidates."deberta-v3-trecdl22"]
-local_path = "/Users/pythagor/nexus/models/naver-trecdl22-crossencoder-debertav3"
-remote_path = "naver/trecdl22-crossencoder-debertav3"
-api_type = "cross_encoder"
-notes = "DeBERTa-v3-large fine-tuned on TREC-DL 2022; current production default."
-
-[memnon.retrieval.cross_encoder_reranking.candidates."qwen3-reranker-0.6b"]
-local_path = "/Users/pythagor/nexus/models/Qwen3-Reranker-0.6B"
-remote_path = "Qwen/Qwen3-Reranker-0.6B"
-api_type = "qwen3_lm"
-notes = "Qwen3-based yes/no causal-LM reranker, 0.6B params (issue #175 follow-up)."
-
-[memnon.retrieval.cross_encoder_reranking.candidates."qwen3-reranker-4b"]
-local_path = "/Users/pythagor/nexus/models/Qwen3-Reranker-4B"
-remote_path = "Qwen/Qwen3-Reranker-4B"
-api_type = "qwen3_lm"
-notes = "Qwen3-based yes/no causal-LM reranker, 4B params (issue #175 follow-up)."
-
-[memnon.retrieval.cross_encoder_reranking.candidates."mxbai-rerank-large"]
-local_path = "/Users/pythagor/nexus/models/mxbai-rerank-large-v2"
-remote_path = "mixedbread-ai/mxbai-rerank-large-v2"
-api_type = "cross_encoder"
-notes = "Mixedbread modern cross-encoder reranker (issue #175 follow-up)."
 
 [memnon.logging]
 file = "memnon.log"
@@ -1333,6 +1248,82 @@ reasoning_reserve_tokens = 0
 [ir_eval.judgment]
 model_policy = "fixed"
 reasoning_effort = "high"     # Reasoning effort level (low/medium/high)
+
+# Offline embedding candidates: never loaded by the runtime. An ir_eval run
+# selects one by name (`ir_eval.runner create-run --model NAME:WEIGHT`).
+
+# Deprecated by Octen-4B (issue #175)
+[ir_eval.embedding_candidates.bge-large]
+local_path = "/Users/pythagor/nexus/models/bge-large-en"
+remote_path = "BAAI/bge-large-en"
+dimensions = 1024
+
+# Deprecated by Octen-4B (issue #175)
+[ir_eval.embedding_candidates.e5-large]
+local_path = "/Users/pythagor/nexus/models/e5-large-v2"
+remote_path = "intfloat/e5-large-v2"
+dimensions = 1024
+
+# Fine-tuned model, currently disabled
+[ir_eval.embedding_candidates.bge-small-custom]
+local_path = "/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654"
+remote_path = ""
+dimensions = 384
+
+# Deprecated by Octen-4B (issue #175)
+[ir_eval.embedding_candidates."inf-retriever-v1-1.5b"]
+local_path = "/Users/pythagor/nexus/models/inf-retriever-v1-1.5b"
+remote_path = "infly/inf-retriever-v1-1.5b"
+dimensions = 1536
+
+# Candidate model for issue #175 evaluation campaign
+[ir_eval.embedding_candidates."Octen-Embedding-0.6B"]
+local_path = "/Users/pythagor/nexus/models/Octen-Embedding-0.6B"
+remote_path = "Octen/Octen-Embedding-0.6B"
+dimensions = 1024
+
+# Candidate model for issue #175 evaluation campaign (INT8 quantized, CPU-only on Apple Silicon)
+[ir_eval.embedding_candidates."Octen-Embedding-4B-INT8"]
+local_path = "/Users/pythagor/nexus/models/Octen-Embedding-4B-INT8"
+remote_path = "Octen/Octen-Embedding-4B-INT8"
+dimensions = 2560
+
+# Candidate model for issue #175 evaluation campaign
+[ir_eval.embedding_candidates."Octen-Embedding-8B"]
+local_path = "/Users/pythagor/nexus/models/Octen-Embedding-8B"
+remote_path = "Octen/Octen-Embedding-8B"
+dimensions = 4096
+
+# Candidate model for issue #175 evaluation campaign (INT8 quantized, CPU-only on Apple Silicon)
+[ir_eval.embedding_candidates."Octen-Embedding-8B-INT8"]
+local_path = "/Users/pythagor/nexus/models/Octen-Embedding-8B-INT8"
+remote_path = "Octen/Octen-Embedding-8B-INT8"
+dimensions = 4096
+
+# Offline reranker candidates: never loaded by the runtime. An ir_eval run
+# selects one with `ir_eval.runner create-run --reranker NAME`; without
+# it, the run uses the production [memnon.retrieval.cross_encoder_reranking].
+# `api_type` selects the inference path: "cross_encoder" for standard
+# SequenceClassification rerankers (DeBERTa-v3, mxbai), "qwen3_lm" for
+# Qwen3-Reranker yes/no causal-LM rerankers.
+
+[ir_eval.reranker_candidates."qwen3-reranker-0.6b"]
+local_path = "/Users/pythagor/nexus/models/Qwen3-Reranker-0.6B"
+remote_path = "Qwen/Qwen3-Reranker-0.6B"
+api_type = "qwen3_lm"
+notes = "Qwen3-based yes/no causal-LM reranker, 0.6B params (issue #175 follow-up)."
+
+[ir_eval.reranker_candidates."qwen3-reranker-4b"]
+local_path = "/Users/pythagor/nexus/models/Qwen3-Reranker-4B"
+remote_path = "Qwen/Qwen3-Reranker-4B"
+api_type = "qwen3_lm"
+notes = "Qwen3-based yes/no causal-LM reranker, 4B params (issue #175 follow-up)."
+
+[ir_eval.reranker_candidates."mxbai-rerank-large"]
+local_path = "/Users/pythagor/nexus/models/mxbai-rerank-large-v2"
+remote_path = "mixedbread-ai/mxbai-rerank-large-v2"
+api_type = "cross_encoder"
+notes = "Mixedbread modern cross-encoder reranker (issue #175 follow-up)."
 
 # =============================================================================
 # API Settings
