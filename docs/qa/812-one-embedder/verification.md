@@ -171,3 +171,24 @@ Q4b/Q9, #820 path anchoring and V1's pending #811 ruling remain deferred.
 No paid provider, owner service, model directory or credential was changed.
 
 Codex — GPT-6
+
+## Initial review closeout
+
+The initial Claude review succeeded on `06097265`; its legacy-snapshot concern
+is bounded by the zero-row fleet survey above and the frozen 812-S4a order.
+Legacy replay is unsupported, with no data conversion or deletion; the
+operator README now states that boundary and the empty-input `create_run`
+contract. The in-tree caller resolves through `create_run`; no other incoming
+snapshot caller was found.
+
+The schema-copy repair and PostgreSQL test cover `initialize_slot_database`.
+The separate `clone_slot_with_data` path still copies only `public` and `assets`,
+as before this slice, so it does not carry `ir_eval`; this is an existing
+boundary, not a claimed repair.
+
+The merge from landed main `d476db91` changed no 812 runtime behavior; automatic
+merges were compared with tested integration `f291dc79`. AGENTS and the turn
+flow document were reverified and restamped. The final freshness check passed
+42 tests with the secret-store guard active.
+
+Codex — GPT-6
