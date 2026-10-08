@@ -35,6 +35,7 @@ if "NEXUS_HOME" in os.environ:
 if "NEXUS_SLOT" in os.environ:
     del os.environ["NEXUS_SLOT"]
 
+from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
 from nexus.telemetry import usage as usage_telemetry
 from nexus.util.secret_manager import (
     InMemorySecretBackend,
@@ -42,6 +43,14 @@ from nexus.util.secret_manager import (
     use_secret_backend,
 )
 from tests import dbname_audit, secret_store_guard
+
+# No test or child process reaches the owner's ``mock`` (issue #816): every
+# process this session spawns inherits this TEST provider database, which is
+# never created, so an unrouted read fails because the database does not
+# exist. A test that needs the TEST provider requests
+# ``routed_test_provider_database``.
+TEST_PROVIDER_UNROUTED_DATABASE = "qa640_816_test_provider_unrouted"
+os.environ[TEST_PROVIDER_DATABASE_ENV] = TEST_PROVIDER_UNROUTED_DATABASE
 
 # Guard the real secret-store backends before collection, so test-module
 # imports and session- or module-scoped fixtures are covered as well as test
@@ -187,6 +196,22 @@ def unreadable_secret_store(
     backend = UnreadableSecretBackend()
     with use_secret_backend(backend):
         yield backend
+
+
+@pytest.fixture
+def routed_test_provider_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Route this process and its children to a seeded disposable TEST database.
+
+    The clone is seeded through migration 008's production path. List this
+    fixture before ``mock_openai_server`` (or any fixture that spawns a TEST
+    provider): fixtures run in parameter order, and a child inherits the
+    environment at spawn.
+    """
+    from tests import pg_fixtures
+
+    with pg_fixtures.disposable_test_provider_database() as dbname:
+        pg_fixtures.route_test_provider_database(monkeypatch.setenv, dbname)
+        yield dbname
 
 
 @pytest.fixture(autouse=True)

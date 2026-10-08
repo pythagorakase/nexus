@@ -229,6 +229,11 @@ connect_timeout_seconds = 5
 tool_search_paths = ["/Applications/Postgres.app/Contents/Versions/latest/bin"]
 
 [api.test_provider]
+# The database the TEST provider reads its wizard and bootstrap rows from; seed
+# one with `python migrations/008_populate_mock_database.py --dbname <name>`.
+# NEXUS_TEST_PROVIDER_DATABASE overrides it before validation (tests route
+# parent and child processes to a disposable clone through it).
+database = "mock"
 experience_response_delay_seconds = 0
 writer_response_delay_seconds = 0
 

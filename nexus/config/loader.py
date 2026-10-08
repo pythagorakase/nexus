@@ -37,6 +37,7 @@ from .settings_models import LocalModelsSettings, Settings
 logger = logging.getLogger("nexus.config.loader")
 
 RUNTIME_CONFIG_ENV = "NEXUS_RUNTIME_CONFIG"
+TEST_PROVIDER_DATABASE_ENV = "NEXUS_TEST_PROVIDER_DATABASE"
 _SETTINGS_PATH: ContextVar[Path | None] = ContextVar(
     "nexus_settings_path", default=None
 )
@@ -296,6 +297,16 @@ def _load_from_toml(path: Path) -> Settings:
     # historically, accidentally committed — nexus.toml.
     if os.environ.get("NEXUS_DEV_DASHBOARD") == "1":
         data.setdefault("orrery", {}).setdefault("dashboard", {})["enabled"] = True
+
+    # Test route (issue #816): the TEST provider's database comes from the
+    # environment so a parent and every child it spawns read one disposable
+    # clone. The value is validated with the file's, so an empty or story
+    # database name fails here.
+    test_provider_database = os.environ.get(TEST_PROVIDER_DATABASE_ENV)
+    if test_provider_database is not None:
+        data.setdefault("api", {}).setdefault("test_provider", {})[
+            "database"
+        ] = test_provider_database
 
     try:
         settings = Settings(**data)

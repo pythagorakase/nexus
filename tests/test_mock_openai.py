@@ -1,8 +1,15 @@
 """Tests for the local TEST-mode OpenAI impersonator."""
 
 import json
+import os
+from contextlib import closing
+from pathlib import Path
+import re
+import time
+import uuid
 
 import pytest
+import requests  # type: ignore[import-untyped]
 
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
@@ -21,9 +28,20 @@ from nexus.api.mock_openai import (
     _mock_writer_response,
     _requested_output_properties,
     chat_completions,
+    get_cached_bootstrap_narrative,
+    query_bootstrap_narrative,
+    query_traits,
+    query_wizard_cache,
     responses_create,
 )
 from nexus.api.native_structured_output import openai_response_text_format
+from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_test_provider_database,
+)
+from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 
 def _final_result_tool(schema_model) -> dict:
@@ -331,6 +349,7 @@ async def test_mock_responses_gaia_schema_without_proposals_is_empty() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.requires_postgres
+@pytest.mark.usefixtures("routed_test_provider_database")
 async def test_mock_responses_routes_bootstrap_schema_as_final_result_tool() -> None:
     """Bootstrap structured output must also call the required output tool."""
 
@@ -351,6 +370,7 @@ async def test_mock_responses_routes_bootstrap_schema_as_final_result_tool() -> 
 
 @pytest.mark.asyncio
 @pytest.mark.requires_postgres
+@pytest.mark.usefixtures("routed_test_provider_database")
 async def test_mock_responses_routes_bootstrap_schema_as_native_text_format() -> None:
     """Bootstrap native structured output should return message JSON."""
 
@@ -365,6 +385,106 @@ async def test_mock_responses_routes_bootstrap_schema_as_native_text_format() ->
     message = response["output"][0]
     assert message["type"] == "message"
     StorytellerResponseBootstrap.model_validate_json(response["output_text"])
+
+
+@pytest.mark.requires_postgres
+def test_seeded_test_provider_database_holds_the_rows_the_provider_reads(
+    routed_test_provider_database: str,
+) -> None:
+    """Migration 008 seeds every row the TEST provider reads, on a clone."""
+
+    cache = query_wizard_cache()
+    assert cache["base_timestamp"] is not None
+    assert cache["layer_name"]
+
+    traits = query_traits()
+    selected = [row for row in traits if row["is_selected"] and row["id"] <= 10]
+    assert len(selected) == 3, selected
+    assert "fame" in {row["name"] for row in selected}
+    assert {row["id"]: row["name"] for row in traits}[11] == "Ghostprint Key"
+
+    assert get_cached_bootstrap_narrative()["narrative"].startswith("The tram shudders")
+
+    with closing(connect(routed_test_provider_database)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT model, new_story, user_character "
+                "FROM global_variables WHERE id = TRUE"
+            )
+            assert cur.fetchone() == ("TEST", False, 1)
+
+
+@pytest.mark.requires_postgres
+def test_missing_test_provider_rows_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unseeded TEST provider database raises; it never returns a placeholder."""
+
+    with disposable_slot_database("qa640_816_empty") as dbname:
+        route_test_provider_database(monkeypatch.setenv, dbname)
+        names_database = re.escape(f"TEST provider database {dbname!r}")
+        with pytest.raises(RuntimeError, match=names_database):
+            query_wizard_cache()
+        with pytest.raises(RuntimeError, match=names_database):
+            query_bootstrap_narrative()
+        with pytest.raises(RuntimeError, match=names_database):
+            get_cached_bootstrap_narrative()
+
+
+def _post_bootstrap_request(base_url: str) -> requests.Response:
+    """POST a native ``text.format`` bootstrap request to a TEST provider child."""
+
+    return requests.post(
+        f"{base_url}/responses",
+        json={
+            "model": "TEST",
+            "input": [{"role": "user", "content": "Bootstrap the protagonist story."}],
+            "text": _native_text_format(StorytellerResponseBootstrap),
+        },
+        timeout=30,
+    )
+
+
+@pytest.mark.requires_postgres
+def test_child_mock_server_reads_the_routed_database(
+    routed_test_provider_database: str,
+    mock_openai_server: str,  # noqa: F811
+) -> None:
+    """A spawned TEST provider reads the clone its parent routed."""
+
+    sentinel = f"qa640-816-sentinel-{uuid.uuid4().hex}"
+    with closing(connect(routed_test_provider_database)) as conn:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE incubator SET storyteller_text = %s WHERE id = TRUE",
+                (sentinel,),
+            )
+            assert cur.rowcount == 1
+
+    response = _post_bootstrap_request(mock_openai_server)
+
+    assert response.status_code == 200, response.text
+    payload = json.loads(response.json()["output_text"])
+    assert payload["narrative"] == sentinel
+
+
+@pytest.mark.requires_postgres
+def test_unrouted_child_mock_server_refuses(
+    mock_openai_server: str,  # noqa: F811
+    tmp_path: Path,
+) -> None:
+    """Without a route the child reads the never-created default and fails."""
+
+    response = _post_bootstrap_request(mock_openai_server)
+
+    assert response.status_code == 500, response.text
+    unrouted = os.environ[TEST_PROVIDER_DATABASE_ENV]
+    # Uvicorn logs the traceback after it has sent the 500, so poll briefly.
+    log_path = tmp_path / "mock_openai.log"
+    deadline = time.monotonic() + 10
+    log = log_path.read_text(errors="replace")
+    while unrouted not in log and time.monotonic() < deadline:
+        time.sleep(0.1)
+        log = log_path.read_text(errors="replace")
+    assert unrouted in log, log
 
 
 def test_requested_output_properties_extracts_schema_fields() -> None:
