@@ -22,8 +22,8 @@ open at `5830781b`. `origin/main` was still `b0da93ea`, so no merge was owed.
 | `6df5115a` | This file's evidence for the `f7b73277` fix pass | Nothing |
 | `b8c656b6` | Third review fixes: the sources the coordinator's ruling adds to 0009, 0019 and 0023, and the sweep's additions to 0010, 0020, 0024, 0025-0029 and 0034; `table_check.py` appends them | The sweep script (next commit) and this file's evidence |
 | `d338db76` | `source_sweep.py` (the sweep, rerunnable); `table_check.py` types the joined sources list | This file's evidence (next commit) |
-| (next commit) | This file's evidence for `b8c656b6` and `d338db76`, except the offline-suite tails | The offline-suite tails (the commit after) |
-| (last commit) | The offline-suite tails, run on the commit before it | Nothing |
+| `5a5bab1e` | This file's evidence for `b8c656b6` and `d338db76`, except the offline-suite tails | The offline-suite tails (next commit) |
+| (last commit) | The offline-suite tails, run on `5a5bab1e` | Nothing |
 
 The resume first rechecked the records against the order's table with an
 unrecorded scratch script. The review fix pass below replaced that recheck with
@@ -708,8 +708,36 @@ in 20.29s`.
 The Astra review of `6df5115a` found that the earlier offline tails named no
 tested commit and predated the test changes of `4c9ebb83`. Those tails
 (`2986 passed, 562 skipped` and `1848 passed, 1369 skipped`, recorded before
-`5830781b`) are superseded by the runs in the next commit, which name the
-commit they ran on and the state of the tree.
+`5830781b`) are superseded by the runs below.
+
+Both runs below ran on `5a5bab1e4ce7142e57e1d574fca14715a3e6da6e` (the commit
+before the one that adds these tails, which changes only this file), one
+pytest session at a time, with a clean tree (`git status --short` printed
+nothing before and after each run) and with `NEXUS_GATEWAY_PORT`,
+`NEXUS_API_URL`, `NEXUS_SLOT` and `NEXUS_RUN_POSTGRES` unset. `origin/main`
+was still the merge base `b0da93ea`, so no merge was owed. The first suite
+gains two passes over the superseded run (the two Links cases of `4c9ebb83`).
+
+```text
+$ git rev-parse HEAD; git status --short | wc -l
+5a5bab1e4ce7142e57e1d574fca14715a3e6da6e
+       0
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+120 passed, 5 warnings in 16.11s
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+[...]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2988 passed, 562 skipped, 8 warnings in 535.42s (0:08:55)
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery
+[...]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1848 passed, 1369 skipped, 7 warnings in 44.20s
+```
+
+No test failed or errored in either run (`grep -E 'FAILED|ERROR'` on both logs
+prints nothing). The first suite ran in the background with its log polled; it
+started at 23:57:53 and ended at 00:06:50 CDT.
 
 ## Static Checks
 
