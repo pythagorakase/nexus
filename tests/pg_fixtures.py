@@ -59,6 +59,7 @@ from nexus.database import (
     database_url,
     subprocess_env,
 )
+from nexus.api.story_identity import detach_clone_identity
 from scripts import migrate, new_story_setup
 
 
@@ -334,6 +335,7 @@ def disposable_slot_database(
                 raise RuntimeError(
                     f"Corpus clone {dbname} has {failed} failed migrations"
                 )
+            detach_clone_identity(dbname)
             if story_pin is not None and crosses_seat_backfill:
                 _refuse_source_pin_backfill(dbname, story_pin)
             pin_clone()

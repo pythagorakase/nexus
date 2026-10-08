@@ -29,6 +29,7 @@ from nexus.api.slot_utils import slot_dbname
 from nexus.config import load_settings
 from nexus.config.settings_models import ANNConfig
 from nexus.database import connection_kwargs
+from nexus.api.story_identity import detach_clone_identity
 from scripts.new_story_setup import _postgres_tools
 
 TABLE = "chunk_embeddings_2560d"
@@ -81,6 +82,7 @@ def slot_clone(slot: int) -> Iterator[str]:
                 ],
                 check=True,
             )
+            detach_clone_identity(name)
             yield name
     finally:
         try:

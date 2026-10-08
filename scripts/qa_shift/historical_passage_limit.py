@@ -26,6 +26,7 @@ from nexus.config import load_settings
 from nexus.config.story_model import StorySettings
 from nexus.database import connection_kwargs
 from nexus.memory import ContextMemoryManager
+from nexus.api.story_identity import detach_clone_identity
 from scripts.new_story_setup import _postgres_tools
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -106,6 +107,7 @@ def main() -> None:
             ],
             check=True,
         )
+        detach_clone_identity(dbname)
         dispose_database(dbname)
         evidence["clone_frontier"] = read_rows(dbname, frontier_sql)
         assert evidence["clone_frontier"] == evidence["source_before"] == [(46, 49)]

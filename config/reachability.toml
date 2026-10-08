@@ -32,6 +32,9 @@ reason = "CLAUDE.md schema migration workflow."
 target = "scripts/new_story_setup.py:main"
 reason = "CLAUDE.md slot initialization workflow."
 [[operators]]
+target = "scripts/backfill_story_identity.py:main"
+reason = "One-time story-identity fleet backfill named by nexus doctor and docs/database.md (issue 822)."
+[[operators]]
 target = "scripts/rebuild_memory_idf.py:main"
 reason = "CLAUDE.md and docs/database.md IDF rebuild after a PostgreSQL update; named by the analyzer-mismatch error and nexus doctor (issue 1013)."
 [[operators]]
@@ -282,6 +285,7 @@ paths = [
     { path = "scripts/apply_slot2_semantic_tags.py", class = "pending-ruling:811-Q1", reason = "811-Q1: slot-2 manifest and apply tooling; the 2026-07-17 retention ruling stands until the owner rules otherwise (#811, 2026-09-30)." },
     { path = "scripts/assemble_context.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/backfill_routine_anchors.py", class = "pending-ruling:811-Q1", reason = "811-Q1: slot-2 manifest and apply tooling; the 2026-07-17 retention ruling stands until the owner rules otherwise (#811, 2026-09-30)." },
+    { path = "scripts/backfill_story_identity.py", class = "operator", reason = "operator root scripts/backfill_story_identity.py:main" },
     { path = "scripts/benchmark_experience_enqueue_fence.py", class = "test-only", reason = "test root tests/test_api/test_benchmark_seat_jobs_pg.py:<module>" },
     { path = "scripts/character_context_1.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/character_context_26.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
