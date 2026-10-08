@@ -1,0 +1,84 @@
+diff --git a/docs/database.md b/docs/database.md
+remerge CONFLICT (content): Merge conflict in docs/database.md
+index cbd3e373..c7b91a22 100644
+--- a/docs/database.md
++++ b/docs/database.md
+@@ -229,11 +229,10 @@ that world. The Retrograde status route reads the latest run from these tables,
+ so every gateway worker reports the same durable record. Rows are kept after
+ completion.
+ 
+-<<<<<<< bf0ab6fa (Integrate story identity for batch validation)
+ ## Story Identity
+ 
+ `story_identity` holds one row per slot database: the story's `story_uuid`, its title and its origin. `NEXUS_template` carries the table and no row. Slot initialization mints a row, every wizard transition replaces it, and `clone_slot_with_data` gives the copy a new `story_uuid` with a `story_lineage` fork row naming the source. Disposable and rehearsal clones get a fresh identity with no lineage. Slots that predate migration 146 are minted once with `python scripts/backfill_story_identity.py --all --write-locked-slot`, which also records that `save_02` forks `save_01`; `nexus doctor` checks both rules (`template.story_identity_absent`, `slots.story_identity_present`).
+-=======
++
+ ## Natural Earth Reference
+ 
+ `natural_earth_features` (migration 147) holds the server-owned real-Earth
+@@ -275,4 +274,3 @@ python scripts/load_natural_earth.py --dbname qa640_clone       # One disposable
+ `scripts/new_story_setup.py`): fresh slots and default test clones copy its
+ rows from `NEXUS_template`, so loading the template replaces a template
+ refresh for this table.
+->>>>>>> e79dfda0 (Record Natural Earth takeover verification)
+diff --git a/config/reachability_baseline.json b/config/reachability_baseline.json
+remerge CONFLICT (content): Merge conflict in config/reachability_baseline.json
+index 447e7f32..5f22e9b3 100644
+--- a/config/reachability_baseline.json
++++ b/config/reachability_baseline.json
+@@ -1,10 +1,6 @@
+ {
+   "schema_version": 1,
+-<<<<<<< cfae3c63 (Integrate 836-unified-references)
+-  "reason": "#822 S1: nexus/api/story_identity.py is imported by nexus/api/slot_state.py (slot state reports story_identity.story_uuid as story_id), so it joins production_reachable",
+-=======
+-  "reason": "#806 S1: nexus/runtime/receipts.py is imported by nexus/runtime/home.py (receipt hooks), so it joins production_reachable",
+->>>>>>> cf61a440 (Record receipt review regression and focused validation)
++  "reason": "#822 S1 and #806 S1: story_identity and receipts join production_reachable through slot_state and runtime.home respectively",
+   "unreachable": [
+     "ir_eval/db.py",
+     "ir_eval/evaluate_query_classifier.py",
+diff --git a/tests/conftest.py b/tests/conftest.py
+remerge CONFLICT (content): Merge conflict in tests/conftest.py
+index def942b7..180435bc 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -37,12 +37,9 @@ if "NEXUS_HOME" in os.environ:
+ if "NEXUS_SLOT" in os.environ:
+     del os.environ["NEXUS_SLOT"]
+ 
+-<<<<<<< 10839d8d (Integrate migration-owned schema enforcement)
++from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
+ from nexus.runtime.contract import FALLBACK_RECEIPTS_DIR, TEST_RECEIPTS_ENV
+ from nexus.runtime.home import RECEIPTS_DIR, repo_root
+-=======
+-from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
+->>>>>>> e002b4c8 (Complete TEST provider isolation proof and guard evidence)
+ from nexus.telemetry import usage as usage_telemetry
+ from nexus.util.secret_manager import (
+     InMemorySecretBackend,
+@@ -51,7 +48,6 @@ from nexus.util.secret_manager import (
+ )
+ from tests import dbname_audit, secret_store_guard
+ 
+-<<<<<<< 10839d8d (Integrate migration-owned schema enforcement)
+ ReceiptSnapshot = Optional[list[tuple[str, int]]]
+ 
+ 
+@@ -77,7 +73,7 @@ _RECEIPT_SNAPSHOTS = {root: _snapshot_receipts(root) for root in _RECEIPT_ROOTS}
+ _RECEIPT_SEAM = tempfile.mkdtemp(prefix="nexus-test-receipts-")
+ os.environ[TEST_RECEIPTS_ENV] = _RECEIPT_SEAM
+ _changed_receipt_roots: list[Path] = []
+-=======
++
+ # No test or child process reaches the owner's ``mock`` (issue #816): every
+ # process this session spawns inherits this TEST provider database, which is
+ # never created, so an unrouted read fails because the database does not
+@@ -85,7 +81,6 @@ _changed_receipt_roots: list[Path] = []
+ # ``routed_test_provider_database``.
+ TEST_PROVIDER_UNROUTED_DATABASE = "qa640_816_test_provider_unrouted"
+ os.environ[TEST_PROVIDER_DATABASE_ENV] = TEST_PROVIDER_UNROUTED_DATABASE
+->>>>>>> e002b4c8 (Complete TEST provider isolation proof and guard evidence)
+ 
+ # Guard the real secret-store backends before collection, so test-module
+ # imports and session- or module-scoped fixtures are covered as well as test
