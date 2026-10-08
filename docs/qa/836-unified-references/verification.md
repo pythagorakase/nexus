@@ -43,7 +43,7 @@ NEXUS_SLOT and NEXUS_RUN_LIVE_LLM unset. PostgreSQL commands enable
 - Migration comment and exception disposition checks passed.
 
 Every PostgreSQL run above reported `secret-store guard: active; nexus-api:
- denied` and `dbname audit: owner targets: none`. See r2.log and corpus.log.
+ denied` and `dbname audit: owner targets: none`. See r2.txt and corpus.txt.
 
 ## Mutation controls
 

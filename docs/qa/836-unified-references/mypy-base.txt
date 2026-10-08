@@ -1,0 +1,5 @@
+/tmp/nexus-codex-836-baseline/tests/test_orrery/test_need_clock_anchor_pg.py:307: error: Item "None" of "WizardCache | None" has no attribute "thread_id"  [union-attr]
+/tmp/nexus-codex-836-baseline/tests/test_orrery/test_need_clock_anchor_pg.py:307: error: Argument "thread_id" to "confirm_artifact" has incompatible type "str | Any | None"; expected "str"  [arg-type]
+/tmp/nexus-codex-836-baseline/tests/test_orrery/test_need_clock_anchor_pg.py:309: error: Item "None" of "WizardCache | None" has no attribute "artifact_token"  [union-attr]
+/tmp/nexus-codex-836-baseline/tests/test_orrery/test_need_clock_anchor_pg.py:309: error: Argument "artifact_token" to "confirm_artifact" has incompatible type "str | Any | None"; expected "str"  [arg-type]
+Found 4 errors in 1 file (checked 1 source file)

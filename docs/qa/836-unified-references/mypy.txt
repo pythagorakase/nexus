@@ -1,0 +1,5 @@
+tests/test_orrery/test_need_clock_anchor_pg.py:309: error: Item "None" of "WizardCache | None" has no attribute "thread_id"  [union-attr]
+tests/test_orrery/test_need_clock_anchor_pg.py:309: error: Argument "thread_id" to "confirm_artifact" has incompatible type "str | Any | None"; expected "str"  [arg-type]
+tests/test_orrery/test_need_clock_anchor_pg.py:311: error: Item "None" of "WizardCache | None" has no attribute "artifact_token"  [union-attr]
+tests/test_orrery/test_need_clock_anchor_pg.py:311: error: Argument "artifact_token" to "confirm_artifact" has incompatible type "str | Any | None"; expected "str"  [arg-type]
+Found 4 errors in 1 file (checked 4 source files)
