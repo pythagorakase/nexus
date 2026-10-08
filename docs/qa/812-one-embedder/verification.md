@@ -110,7 +110,9 @@ the coordinator's single serial integration run; no whole-suite pass is claimed.
 Each control changed only the named source file, ran one pytest session, then
 restored the original bytes in a `finally` block. Each returned pytest exit 1,
 with the secret-store guard active and `dbname audit: owner targets: none`.
-The exact patches and complete failure output are retained.
+The exact patches, failure tracebacks and final tails are retained. Repeated
+captured setup/call output is elided with each omitted line count; the raw
+local logs remain under `temp/codex-812-resume/`.
 
 - [Skip create-run resolution](resume-2026-10-08/red-resolution.patch), using
   `origin/main`'s original `create_run` method. Command: the same guarded pytest
