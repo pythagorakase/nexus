@@ -29,6 +29,23 @@ parity buckets (``entities.kind``, or ``unattributed``); a column that is not
 carried does not by itself fail the run, because the unified table is
 expected to carry ``kind`` and ``evidence`` and the view is not.
 
+Target column aliases (``TARGET_COLUMN_ALIASES``): the table
+``chunk_entity_references`` (migration 148) names ``kind`` ``entity_kind``
+and ``reference_type`` ``reference_kind``. Each expected column is read from
+the target column of the same name when the target has one, else from its
+alias when the target has that; a target with both raises ``ValueError``.
+The report stays keyed by the expected names (``compared_columns``,
+``columns``); ``target.columns`` lists the target's real names.
+
+Faction rule (``FACTION_UNIFIED_REFERENCE``): the faction junction has no
+role column, so the view emits NULL as the role of every faction row, while
+the unified table stores ``mentioned``, the role the presence reader gives
+faction rows. When the target's role column resolves to ``reference_kind``,
+an expected faction row whose role is NULL compares as ``mentioned``, and
+the report's ``normalizations`` states it (``{"faction_reference":
+"mentioned"}``, whether or not any faction row exists); otherwise
+``normalizations`` is empty and the role compares as read.
+
 Primary-key and unique constraints are reported with their definitions and
 their NULL semantics (``nulls_not_distinct``) and deferrability, so the
 invariant block shows whether a unified key over a nullable
@@ -72,7 +89,7 @@ from scripts.database_targets import metrics_dbname
 
 logger = logging.getLogger("nexus.entity_reference_parity")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 EXIT_PARITY = 0
 EXIT_MISMATCH = 3
 DEFAULT_TARGET = "chunk_entity_references_v"
@@ -82,6 +99,13 @@ UNATTRIBUTED = "unattributed"
 
 # The unified row shape; the order is the comparison order.
 EXPECTED_COLUMNS = ("chunk_id", "entity_id", "kind", "reference_type", "evidence")
+# Target column names the unified table (migration 148) uses in place of an
+# expected name; see _resolve_target_columns.
+TARGET_COLUMN_ALIASES = {"kind": "entity_kind", "reference_type": "reference_kind"}
+# The role a faction row compares as when the target's role column is
+# reference_kind: the faction junction has no role column, and the presence
+# reader maps every faction row to 'mentioned' (nexus/presence/roster.py:179).
+FACTION_UNIFIED_REFERENCE = "mentioned"
 # Columns without which no row can be matched at all.
 REQUIRED_TARGET_COLUMNS = ("chunk_id", "entity_id")
 # The session's name resolution, set and checked in open_read_only_connection.
@@ -457,17 +481,22 @@ def _place_row_filter(alias: str) -> sql.Composed:
 
 
 def _place_role_records(
-    cur: Any, source: sql.Composable, entity_column: str, places_only: bool
+    cur: Any,
+    source: sql.Composable,
+    entity_column: str,
+    places_only: bool,
+    role_column: str,
 ) -> dict[str, int]:
     """Count multi-role place pairs and multi-setting chunks (recorded only).
 
     ``places_only`` limits a unified relation to rows whose entity is a place;
-    the place junction holds nothing else. Both counts are of distinct roles
-    and distinct places, so a duplicated row in a keyless target is not a
-    second role or a second setting place.
+    the place junction holds nothing else. ``role_column`` names the source's
+    role column. Both counts are of distinct roles and distinct places, so a
+    duplicated row in a keyless target is not a second role or a second
+    setting place.
     """
     place = _place_row_filter("r")
-    setting = sql.SQL("r.reference_type::text = 'setting'")
+    setting = sql.SQL("r.{}::text = 'setting'").format(sql.Identifier(role_column))
     pair_filter = sql.SQL("WHERE {}").format(place) if places_only else sql.SQL("")
     setting_filter = sql.SQL("WHERE {}").format(
         sql.SQL(" AND ").join([place, setting]) if places_only else setting
@@ -477,9 +506,12 @@ def _place_role_records(
         sql.SQL(
             "SELECT count(*) FROM (SELECT 1 FROM {source} r {filter} "
             "GROUP BY r.chunk_id, r.{entity} "
-            "HAVING count(DISTINCT r.reference_type) > 1) pairs"
+            "HAVING count(DISTINCT r.{role}) > 1) pairs"
         ).format(
-            source=source, filter=pair_filter, entity=sql.Identifier(entity_column)
+            source=source,
+            filter=pair_filter,
+            entity=sql.Identifier(entity_column),
+            role=sql.Identifier(role_column),
         ),
     )
     multi_setting = _count(
@@ -500,9 +532,13 @@ def _place_role_records(
 
 
 def invariant_specification(
-    cur: Any, target: Mapping[str, Any], target_columns: Sequence[str]
+    cur: Any, target: Mapping[str, Any], column_map: Mapping[str, str]
 ) -> dict[str, Any]:
-    """Read the machine-readable invariant block for the junctions and target."""
+    """Read the machine-readable invariant block for the junctions and target.
+
+    ``column_map`` maps each expected column the target carries to the target
+    column it is read from (``_resolve_target_columns``).
+    """
     spec: dict[str, Any] = {}
     for junction in JUNCTIONS:
         relation = _resolve_relation(cur, f"public.{junction.table}")
@@ -515,25 +551,33 @@ def invariant_specification(
                 ),
             )
         if junction.kind == "place":
+            if junction.role_column is None:
+                raise RuntimeError(f"Junction {junction.table} has no role column")
             block["recorded_not_enforced"] = _place_role_records(
-                cur, relation["identifier"], junction.subtype_column, False
+                cur,
+                relation["identifier"],
+                junction.subtype_column,
+                False,
+                junction.role_column,
             )
         spec[junction.table] = block
-    block = relation_invariants(
-        cur, target, "reference_type" if "reference_type" in target_columns else None
-    )
-    if "evidence" in target_columns:
+    role_column = column_map.get("reference_type")
+    evidence_column = column_map.get("evidence")
+    block = relation_invariants(cur, target, role_column)
+    if evidence_column is not None:
         # Place rows only, as on the place junction: character and faction rows
         # have no evidence by construction.
         block["null_evidence_rows"] = _count(
             cur,
-            sql.SQL("SELECT count(*) FROM {} t WHERE t.evidence IS NULL AND {}").format(
-                target["identifier"], _place_row_filter("t")
+            sql.SQL("SELECT count(*) FROM {} t WHERE t.{} IS NULL AND {}").format(
+                target["identifier"],
+                sql.Identifier(evidence_column),
+                _place_row_filter("t"),
             ),
         )
-    if "reference_type" in target_columns:
+    if role_column is not None:
         block["recorded_not_enforced"] = _place_role_records(
-            cur, target["identifier"], "entity_id", True
+            cur, target["identifier"], "entity_id", True, role_column
         )
     spec["target"] = block
     return spec
@@ -565,6 +609,28 @@ def _row_block(
         "count": sum(counter.values()),
         "examples": _examples(counter, columns, limit),
     }
+
+
+def _resolve_target_columns(target_columns: Sequence[str]) -> dict[str, str]:
+    """Map each expected column the target carries to the column read for it.
+
+    The target column is the expected name when the target has it, else its
+    ``TARGET_COLUMN_ALIASES`` alias when the target has that. A target that
+    has both raises, because either could be meant.
+    """
+    resolved: dict[str, str] = {}
+    for name in EXPECTED_COLUMNS:
+        alias = TARGET_COLUMN_ALIASES.get(name)
+        if alias is not None and name in target_columns and alias in target_columns:
+            raise ValueError(
+                f"Target carries both {name!r} and its alias {alias!r}; "
+                f"it has {list(target_columns)}"
+            )
+        if name in target_columns:
+            resolved[name] = name
+        elif alias is not None and alias in target_columns:
+            resolved[name] = alias
+    return resolved
 
 
 def _project(row: Row, indexes: Iterable[int]) -> Row:
@@ -606,15 +672,21 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
                 f"Target {target['qualified']} lacks required columns "
                 f"{missing_required}; it has {target_columns}"
             )
-        compared = [name for name in EXPECTED_COLUMNS if name in target_columns]
+        column_map = _resolve_target_columns(target_columns)
+        compared = [name for name in EXPECTED_COLUMNS if name in column_map]
         compared_indexes = [EXPECTED_COLUMNS.index(name) for name in compared]
+        normalizations: dict[str, str] = (
+            {"faction_reference": FACTION_UNIFIED_REFERENCE}
+            if column_map.get("reference_type") == "reference_kind"
+            else {}
+        )
 
         cur.execute(_expected_rows_sql())
         expected_rows = cur.fetchall()
 
         target_select = sql.SQL(", ").join(
             sql.SQL("t.{}::{}").format(
-                sql.Identifier(name),
+                sql.Identifier(column_map[name]),
                 sql.SQL("bigint" if name in INTEGER_COLUMNS else "text"),
             )
             for name in compared
@@ -626,7 +698,7 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
             ).format(columns=target_select, target=target["identifier"])
         )
         target_rows = cur.fetchall()
-        invariants = invariant_specification(cur, target, target_columns)
+        invariants = invariant_specification(cur, target, column_map)
 
     kinds = [junction.kind for junction in JUNCTIONS]
     # Both sides are grouped by entities.kind of the row's entity_id; a row
@@ -638,10 +710,22 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
         for kind in kinds
     }
     non_null: dict[str, Counter[str]] = {name: Counter() for name in EXPECTED_COLUMNS}
+    role_index = EXPECTED_COLUMNS.index("reference_type")
     for row in expected_rows:
         unified = tuple(row[:5])
         junction_kind, subtype_id, entity_exists = row[5:]
-        compared_row = _project(unified, compared_indexes)
+        compared_source = unified
+        if (
+            "faction_reference" in normalizations
+            and junction_kind == "faction"
+            and unified[role_index] is None
+        ):
+            compared_source = (
+                *unified[:role_index],
+                normalizations["faction_reference"],
+                *unified[role_index + 1 :],
+            )
+        compared_row = _project(compared_source, compared_indexes)
         if entity_exists and unified[2] in expected_by_kind:
             attributed_to = unified[2]
             expected_by_kind[attributed_to][compared_row] += 1
@@ -699,7 +783,7 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
 
     column_blocks = {
         name: {
-            "carried": name in target_columns,
+            "carried": name in column_map,
             "expected_non_null": sum(non_null[name].values()),
             "expected_non_null_by_kind": {
                 kind: non_null[name][kind] for kind in (*kinds, UNATTRIBUTED)
@@ -723,6 +807,7 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
             "columns": target_columns,
         },
         "compared_columns": compared,
+        "normalizations": normalizations,
         "columns": column_blocks,
         "kinds": kind_blocks,
         "unattributed": {

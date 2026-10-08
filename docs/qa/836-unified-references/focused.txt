@@ -1,0 +1,82 @@
+Retained final80 lines of captured output; the complete local run log is in /tmp/nexus-codex-836-focused.log.
+
+        # ATOMIC OPERATION: All database operations in ONE transaction
+        with get_connection(self.dbname) as conn:
+            try:
+                with conn.cursor() as cur:
+                    # Ensure global_variables row exists (may have been deleted by previous CASCADE)
+                    cur.execute(
+                        """
+                        INSERT INTO global_variables (id, new_story)
+                        VALUES (true, true)
+                        ON CONFLICT (id) DO NOTHING
+                    """
+                    )
+    
+                    # Clean slate: DELETE all entity data and reset sequences
+                    # NOTE: Can't use TRUNCATE because global_variables has FK to characters,
+                    # and PostgreSQL blocks TRUNCATE on tables with inbound FK references.
+                    # DELETE respects ON DELETE SET NULL and works with FK constraints.
+                    cur.execute(
+                        "UPDATE global_variables SET user_character = NULL WHERE id = true"
+                    )
+    
+                    # Delete in reverse dependency order (children before parents)
+>                   cur.execute(
+                        """
+                        DELETE FROM chunk_entity_references;
+                        DELETE FROM chunk_character_references;
+                        DELETE FROM chunk_faction_references;
+                        DELETE FROM place_chunk_references;
+                        DELETE FROM character_aliases;
+                        DELETE FROM character_psychology;
+                        SET LOCAL nexus.write_producer = 'manual';
+                        DELETE FROM character_relationships;
+                        DELETE FROM faction_relationships;
+                        DELETE FROM faction_character_relationships;
+                        DELETE FROM factions;
+                        DELETE FROM characters;
+                        DELETE FROM places;
+                        DELETE FROM zones;
+                        DELETE FROM layers;
+                    """
+                    )
+E                   psycopg2.errors.UndefinedTable: relation "chunk_entity_references" does not exist
+E                   LINE 2:                         DELETE FROM chunk_entity_references;
+E                                                               ^
+
+nexus/api/new_story_db_mapper.py:570: UndefinedTable
+------------------------------ Captured log call -------------------------------
+ERROR    nexus.api.new_story_db_mapper:new_story_db_mapper.py:687 Atomic transition failed for Jules Mercer: relation "chunk_entity_references" does not exist
+LINE 2:                         DELETE FROM chunk_entity_references;
+                                            ^
+. All database changes rolled back (no partial data).
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_wizard_opening_presence_pg.py::test_declared_character_named_without_presence_commits_present_row
+  /Users/pythagor/nexus/.claude/worktrees/836-unified-references/nexus/agents/memnon/utils/cross_encoder.py:173: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+    elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
+
+tests/test_wizard_opening_presence_pg.py::test_declared_character_named_without_presence_commits_present_row
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/convert_slow_tokenizer.py:559: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 77 targets: mock, nexus_m10_fresh_test_28802, nexus_m10_template_test_28802, postgres, qa640_* x18, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_836_parity_* x2, qa640_836s3_* x3, qa640_885_ren_replay_* x4, qa640_docs_refresh_*, qa640_roster798_* x23, qa640_schema_docs_* x3, qa655_wizard_488459e7ef, qa655_wizard_62b9df1b5f, qa655_wizard_7eaacf63a7, qa655_wizard_8516f45361, qa655_wizard_a9a54968f9, qa655_wizard_e4702d56b5, qa885_transaction_writer_*, qa_wt724_recall_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:52869 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:52870 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:52869 (psycopg2), save_04@local:52870 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_chunk_entity_references_pg.py::test_wizard_reset_clears_unified_rows
+FAILED tests/test_orrery/test_need_clock_anchor_pg.py::test_atomic_transition_replaces_stale_clock_before_protagonist_trigger
+FAILED tests/test_orrery/test_need_clock_anchor_pg.py::test_atomic_transition_bounds_zone_with_configured_radius
+FAILED tests/test_orrery/test_need_clock_anchor_pg.py::test_atomic_transition_rolls_back_when_zone_boundary_write_fails
+4 failed, 278 passed, 6 skipped, 4 warnings in 161.16s (0:02:41)

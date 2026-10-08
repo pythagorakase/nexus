@@ -668,6 +668,16 @@ def test_kind_mismatch_and_unattributed_rows_fail_the_run() -> None:
             )
             (docks_rows,) = cur.fetchone()
             assert docks_rows == 1
+            # Work order 836-S3: migration 148's chunk_entity_references names
+            # the Docks entity through a composite foreign key to
+            # entities(id, kind), which refuses the kind change below while a
+            # row names it. Delete the Docks entity's mirrored rows first; the
+            # report under test reads the junctions and the view, not the table.
+            cur.execute(
+                "DELETE FROM chunk_entity_references WHERE entity_id = %s",
+                (seeded.docks_entity_id,),
+            )
+            assert cur.rowcount == docks_rows
             cur.execute(
                 "UPDATE entities SET kind = 'faction' WHERE id = %s",
                 (seeded.docks_entity_id,),
