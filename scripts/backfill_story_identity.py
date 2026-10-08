@@ -57,13 +57,14 @@ HISTORICAL_FORKS = (
 
 
 def _require_table(cur: Any, dbname: str) -> None:
-    """Raise unless ``dbname`` has migration 146's story_identity table."""
-    cur.execute("SELECT to_regclass('public.story_identity') IS NULL")
-    if cur.fetchone()[0]:
-        raise RuntimeError(
-            f"{dbname} has no public.story_identity table; apply migration 146 "
-            "first with python scripts/migrate.py"
-        )
+    """Raise unless ``dbname`` has both tables from migration 146."""
+    for table in ("story_identity", "story_lineage"):
+        cur.execute("SELECT to_regclass(%s) IS NULL", (f"public.{table}",))
+        if cur.fetchone()[0]:
+            raise RuntimeError(
+                f"{dbname} has no public.{table} table; apply migration 146 "
+                "first with python scripts/migrate.py"
+            )
 
 
 def _read_identity(cur: Any, dbname: str) -> tuple[str, str]:
@@ -77,6 +78,56 @@ def _read_identity(cur: Any, dbname: str) -> tuple[str, str]:
     return rows[0][0], rows[0][1]
 
 
+def _preflight_databases(targets: Sequence[str], forks: Sequence[ForkSpec]) -> None:
+    """Check every target and fork parent read-only before minting any UUID."""
+    identities: dict[str, Optional[tuple[str, str]]] = {}
+    lineage: dict[str, list[str]] = {}
+    databases = dict.fromkeys([*targets, *(fork.parent for fork in forks)])
+    for dbname in databases:
+        with closing(maintenance_connection(dbname, operation=OPERATION)) as conn:
+            conn.set_session(readonly=True)
+            with transaction(conn), conn.cursor() as cur:
+                _require_table(cur, dbname)
+                cur.execute(
+                    "SELECT story_uuid::text, origin FROM public.story_identity"
+                )
+                rows = cur.fetchall()
+                if len(rows) > 1 or (not rows and dbname not in targets):
+                    raise RuntimeError(
+                        f"{dbname} holds {len(rows)} story_identity rows; "
+                        "exactly one is required for an existing fork parent"
+                    )
+                identities[dbname] = rows[0] if rows else None
+                cur.execute("SELECT parent_uuid::text FROM public.story_lineage")
+                lineage[dbname] = [row[0] for row in cur.fetchall()]
+
+    requested_parents: dict[str, str] = {}
+    for fork in forks:
+        child = identities[fork.child]
+        parent = identities[fork.parent]
+        child_origin = child[1] if child else "backfill"
+        parent_origin = parent[1] if parent else "backfill"
+        if (child_origin, parent_origin) != ("backfill", "backfill"):
+            raise ValueError(
+                f"fork {fork.child} <- {fork.parent} needs two backfill "
+                f"identities; found {child_origin} and {parent_origin}"
+            )
+        if fork.child == fork.parent or (child and parent and child[0] == parent[0]):
+            raise ValueError(
+                f"fork {fork.child} <- {fork.parent} would be self-parentage"
+            )
+        previous = requested_parents.setdefault(fork.child, fork.parent)
+        if previous != fork.parent:
+            raise ValueError(
+                f"fork child {fork.child} has conflicting requested parents"
+            )
+        parents = lineage[fork.child]
+        if parents and (parent is None or parents != [parent[0]]):
+            raise RuntimeError(
+                f"{fork.child} already forks {', '.join(parents)}, not {fork.parent}"
+            )
+
+
 def backfill_story_identity(
     targets: Sequence[str],
     forks: Sequence[ForkSpec],
@@ -85,12 +136,13 @@ def backfill_story_identity(
 ) -> dict[str, str]:
     """Mint a ``backfill`` identity on each target lacking one; record forks.
 
-    Every check that can refuse runs before any write: no target or fork
-    database may be ``migrate.TEMPLATE_DB``, each fork's child must be a
-    target, and a locked target needs ``write_locked_slot``. Each target is
-    then written in its own transaction. A fork is recorded only between two
-    ``backfill`` identities (its evidence describes those stories), and only
-    once; a child already linked to another parent raises.
+    Before any write, validate every target and fork parent: template/lock
+    policy, both identity tables, row counts, fork origins and existing
+    lineage. Each target is then written in its own transaction, so a later
+    connection failure or concurrent change can still leave a partial run.
+    A rerun preserves already-committed identities. A fork is recorded only
+    between two ``backfill`` identities (its evidence describes those stories),
+    and only once; a child already linked to another parent raises.
 
     Returns:
         Each target database's ``story_uuid``.
@@ -110,6 +162,7 @@ def backfill_story_identity(
             f"{', '.join(sorted(locked))} locked; pass --write-locked-slot "
             "(write_locked_slot=True) to backfill a locked slot"
         )
+    _preflight_databases(targets, forks)
 
     identities: dict[str, str] = {}
     for dbname in targets:
@@ -180,6 +233,8 @@ def backfill_story_identity(
 
 def _owner_fork(value: str) -> ForkSpec:
     """Build the fork the owner named as ``child:parent``."""
+    if value not in ("3:4", "4:3"):
+        raise ValueError("An owner fork must be 3:4 or 4:3")
     child, parent = value.split(":")
     return ForkSpec(
         f"save_0{child}",

@@ -197,16 +197,39 @@ def test_clone_forks_with_lineage(monkeypatch: pytest.MonkeyPatch) -> None:
             assert origin == "clone"
             assert _lineage(target) == []
 
-        # A source that predates migration 146 is refused, and the refusal
-        # closes its connection so the target can still be dropped.
+        # An invalid source is refused before --force can erase an existing
+        # destination. Keep the traceback alive to also catch leaked connections.
+        _execute(
+            source,
+            "ALTER TABLE public.story_identity "
+            "DROP CONSTRAINT story_identity_id_check; "
+            "INSERT INTO public.story_identity (id, origin) "
+            "VALUES (TRUE, 'wizard'), (FALSE, 'wizard')",
+        )
+        with disposable_database("qa640_822_clone_invalid") as target:
+            _execute(target, "CREATE TABLE previous_story (content text)")
+            _execute(target, "INSERT INTO previous_story VALUES ('keep this story')")
+            with pytest.raises(RuntimeError, match="2 story_identity rows"):
+                new_story_setup.clone_slot_with_data(
+                    5, source_db=source, force=True, target_db=target
+                )
+            with closing(connect(target)) as conn, conn, conn.cursor() as cur:
+                cur.execute("SELECT content FROM previous_story")
+                assert cur.fetchall() == [("keep this story",)]
+
         _execute(source, "DROP TABLE public.story_lineage, public.story_identity")
         with disposable_database("qa640_822_clone_pre146") as target:
+            _execute(target, "CREATE TABLE previous_story (content text)")
+            _execute(target, "INSERT INTO previous_story VALUES ('keep this story')")
             with pytest.raises(RuntimeError, match="scripts/migrate.py") as refused:
                 new_story_setup.clone_slot_with_data(
                     5, source_db=source, force=True, target_db=target
                 )
             # ``refused`` still holds the traceback and so the failing frames.
             assert refused.value is not None
+            with closing(connect(target)) as conn, conn, conn.cursor() as cur:
+                cur.execute("SELECT content FROM previous_story")
+                assert cur.fetchall() == [("keep this story",)]
             with closing(connect(source)) as conn, conn, conn.cursor() as cur:
                 cur.execute(
                     "SELECT count(*) FROM pg_stat_activity WHERE datname = %s",
@@ -346,6 +369,78 @@ def test_backfill_mints_and_links(monkeypatch: pytest.MonkeyPatch) -> None:
             backfill.backfill_story_identity([a], [backfill.ForkSpec(a, stand_in, "e")])
         assert _identity(stand_in) == []
         assert _identity(a) == before
+
+
+@pytest.mark.parametrize(
+    "problem, message",
+    [
+        ("missing_identity", "scripts/migrate.py"),
+        ("missing_lineage", "scripts/migrate.py"),
+        ("empty_parent", "0 story_identity rows"),
+        ("wizard_parent", "two backfill identities"),
+        ("wizard_child", "two backfill identities"),
+        ("different_parent", "already forks"),
+        ("multiple_identities", "2 story_identity rows"),
+        ("self_parent", "self-parentage"),
+        ("conflicting_parents", "conflicting requested parents"),
+    ],
+)
+def test_backfill_preflights_all_databases(problem: str, message: str) -> None:
+    """A later target or fork refusal leaves every earlier target unminted."""
+    with (
+        disposable_slot_database("qa640_822_preflight_a") as a,
+        disposable_slot_database("qa640_822_preflight_b") as b,
+        disposable_slot_database("qa640_822_preflight_parent") as parent,
+    ):
+        for dbname in (a, b, parent):
+            _execute(dbname, "DELETE FROM public.story_identity")
+        _execute(
+            parent, "INSERT INTO public.story_identity (origin) VALUES ('backfill')"
+        )
+        forks = [backfill.ForkSpec(b, parent, "existing parent")]
+        if problem == "missing_identity":
+            _execute(b, "DROP TABLE public.story_lineage, public.story_identity")
+        elif problem == "missing_lineage":
+            _execute(b, "DROP TABLE public.story_lineage")
+        elif problem == "empty_parent":
+            _execute(parent, "DELETE FROM public.story_identity")
+        elif problem == "wizard_parent":
+            _execute(parent, "UPDATE public.story_identity SET origin = 'wizard'")
+        elif problem == "wizard_child":
+            _execute(b, "INSERT INTO public.story_identity (origin) VALUES ('wizard')")
+        elif problem == "different_parent":
+            _execute(
+                b, "INSERT INTO public.story_identity (origin) VALUES ('backfill')"
+            )
+            with closing(connect(b)) as conn, conn, conn.cursor() as cur:
+                record_fork(
+                    cur,
+                    child_uuid=read_story_uuid(cur),
+                    parent_uuid=str(uuid.uuid4()),
+                    source_dbname="qa640_822_previous_parent",
+                    evidence="an existing relationship must not be overwritten",
+                )
+        elif problem == "multiple_identities":
+            _execute(
+                b,
+                "ALTER TABLE public.story_identity "
+                "DROP CONSTRAINT story_identity_id_check; "
+                "INSERT INTO public.story_identity (id, origin) "
+                "VALUES (TRUE, 'backfill'), (FALSE, 'backfill')",
+            )
+        elif problem == "self_parent":
+            forks = [backfill.ForkSpec(b, b, "invalid self-parent")]
+        elif problem == "conflicting_parents":
+            forks.append(backfill.ForkSpec(b, a, "conflicting parent"))
+
+        before_b = _identity(b) if problem != "missing_identity" else None
+        before_parent = _identity(parent)
+        with pytest.raises((ValueError, RuntimeError), match=message):
+            backfill.backfill_story_identity([a, b], forks)
+        assert _identity(a) == []
+        if before_b is not None:
+            assert _identity(b) == before_b
+        assert _identity(parent) == before_parent
 
 
 def _doctor_context(slots: list[int]) -> ReadinessContext:

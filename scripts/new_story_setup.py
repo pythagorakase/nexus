@@ -19,6 +19,7 @@ from nexus.database import subprocess_env
 from nexus.database import connection_kwargs
 
 import argparse
+from contextlib import closing
 import logging
 import os
 from pathlib import Path
@@ -469,15 +470,22 @@ def clone_slot_with_data(
     Raises:
         ValueError: If ``slot`` is outside 1-5, or if ``target_db`` is locked
             (``default_transaction_read_only`` is on); nothing is dropped.
-        RuntimeError: If the copy has no ``story_identity`` table (the source
-            predates migration 146); run ``python scripts/migrate.py`` on it.
+        RuntimeError: If the source lacks either story-identity table or
+            holds multiple identities, before disposing or dropping the
+            target; run ``python scripts/migrate.py`` on a pre-146 source.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
     if target_db is None:
         target_db = slot_dbname(slot)
+    if source_db == target_db:
+        raise ValueError("Clone source and target must be different databases")
     tools = _postgres_tools("dropdb", "createdb", "pg_dump", "psql")
     _refuse_locked_target(target_db)
+    with closing(psycopg2.connect(**connection_kwargs(source_db))) as source_conn:
+        source_conn.set_session(readonly=True)
+        with source_conn, source_conn.cursor() as cur:
+            _clone_source_identity(cur, source_db)
     dispose_database(target_db)
 
     if force:
@@ -540,21 +548,13 @@ def clone_slot_with_data(
         connection = _connect(target_db)
         try:
             with connection as conn, conn.cursor() as cur:
-                cur.execute("SELECT to_regclass('public.story_identity') IS NULL")
-                if cur.fetchone()[0]:
-                    raise RuntimeError(
-                        f"{target_db} has no public.story_identity table: the "
-                        f"source {source_db} predates migration 146. Run python "
-                        f"scripts/migrate.py on {source_db}, then clone again."
-                    )
-                cur.execute("SELECT story_uuid::text FROM public.story_identity")
-                copied = [row[0] for row in cur.fetchall()]
+                copied = _clone_source_identity(cur, target_db)
                 child = replace_story_identity(cur, origin="clone")
                 if copied:
                     record_fork(
                         cur,
                         child_uuid=child,
-                        parent_uuid=copied[0],
+                        parent_uuid=copied,
                         source_dbname=source_db,
                         evidence=(
                             f"clone_slot_with_data copied {source_db} into {target_db}"
@@ -572,6 +572,28 @@ def clone_slot_with_data(
             os.remove(dump_path)
         except OSError:
             pass
+
+
+def _clone_source_identity(
+    cur: psycopg2.extensions.cursor, dbname: str
+) -> Optional[str]:
+    """Validate clone identity schema and return its optional singleton UUID."""
+    for table in ("story_identity", "story_lineage"):
+        cur.execute("SELECT to_regclass(%s) IS NULL", (f"public.{table}",))
+        row = cur.fetchone()
+        assert row is not None
+        if row[0]:
+            raise RuntimeError(
+                f"{dbname} has no public.{table} table. Run python "
+                f"scripts/migrate.py on {dbname}, then clone again."
+            )
+    cur.execute("SELECT story_uuid::text FROM public.story_identity")
+    rows = cur.fetchall()
+    if len(rows) > 1:
+        raise RuntimeError(
+            f"{dbname} holds {len(rows)} story_identity rows; at most one is allowed"
+        )
+    return rows[0][0] if rows else None
 
 
 def _post_clone_cleanup(target_db: str) -> None:

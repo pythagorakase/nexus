@@ -582,3 +582,100 @@ Migration 146 lands after 144 and 145. Then `python scripts/migrate.py --all`,
 `slots.story_identity_present`). Product code changes, so the gateway restart
 is owed after the backfill (a narrative read raises `StoryIdentityError` on a
 slot without a row), and `ui/` changes, so the UI bundle is rebuilt.
+
+
+## Codex Review Fixes (2026-10-08)
+
+This section supersedes the earlier outstanding preflight findings and expected
+initialization/migration-sequence failures. The branch already includes
+`origin/main` at `afd034f360e625f8bc4ffa8a717dda28422b19c7`, containing migrations
+144 and 145. Import provenance printed this worktree's `nexus/__init__.py`.
+
+- Clone setup validates both identity tables and the singleton row count in a
+  read-only source connection before disposing or dropping its target. It also
+  refuses a source equal to the target. The regression retains an occupied
+  target's sentinel row when either a malformed identity or pre-146 source is
+  rejected, and checks that the refusal leaves no open target connection.
+- Backfill validates every target and external fork parent before any UUID
+  insert: both tables, row counts, origins, existing lineage, self-parentage,
+  and conflicting parent requests. Nine real-PostgreSQL failure cases prove
+  that an earlier empty target stays empty. Existing successful minting,
+  idempotence, lineage and locked-session tests remain green. Transactions are
+  still per database; the script now states that connection failures or
+  concurrent edits can leave a partial run rather than promising fleet atomicity.
+- The deliberately stamped minimal template fixture now contains the full
+  identity and lineage DDL, including all constraints. Both fresh and desktop
+  reset initialization cases pass. The added identity imports in shared clone
+  helpers follow their existing import groups. `_owner_fork` rejects values
+  outside its two supported CLI choices even when called directly.
+
+The PostgreSQL sessions ran one at a time, at nice 15, with load below 24.
+Their exact commands and final summaries follow. The two skips are the existing
+`requires_corpus` tests; no fleet data-clone test was opted into.
+
+```text
+uptime load averages: 3.85 3.81 3.50
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_story_identity_pg.py tests/test_new_story_setup.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 60 targets: nexus_m10_fresh_test_32152, nexus_m10_template_test_32152, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_822_backfill_a_*, qa640_822_backfill_b_*, qa640_822_backfill_t_*, qa640_822_clone_*, qa640_822_clone_bare_*, qa640_822_clone_invalid_*, qa640_822_clone_pre146_*, qa640_822_clone_src_*, qa640_822_constraints_*, qa640_822_detach_*, qa640_822_detach_bare_*, qa640_822_detach_src_*, qa640_822_doctor_s_*, qa640_822_doctor_t_*, qa640_822_init_*, qa640_822_migration_*, qa640_822_preflight_a_* x9, qa640_822_preflight_b_* x9, qa640_822_preflight_parent_* x9, qa640_822_reset_*, qa640_822_reset_src_*, qa640_822_transition_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+32 passed in 78.43s (0:01:18)
+```
+
+```text
+uptime load averages: 9.30 6.18 4.48
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_api/test_reader_draft_identity_pg.py tests/test_api/test_slot_state.py tests/test_runtime/test_readiness_pg.py tests/test_runtime/test_readiness.py tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py tests/test_orrery/test_need_clock_anchor_pg.py tests/test_api/test_mock_wizard_responses.py tests/test_orrery/test_retrograde_constraints_pg.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 57 targets: mock, nexus_test_issue_613_*, postgres, qa640_* x18, qa640_1013_readiness_* x2, qa640_885_ren_replay_* x4, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_issue601_* x4, qa640_renamed_test_model_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6, qa951_identity_* x4, qa951_no_identity_*, qa951_overwrite_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:53225 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:53226 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:53225 (psycopg2), save_04@local:53226 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+224 passed, 2 skipped, 7 warnings in 95.09s (0:01:35)
+```
+
+```text
+uptime load averages: 5.07 5.58 4.48
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_story_identity_pg.py::test_clone_forks_with_lineage tests/test_doc_front_matter.py tests/test_reachability.py tests/test_owner_target_guard.py tests/test_pg_target_contract.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 7 targets: postgres, qa640_822_clone_*, qa640_822_clone_bare_*, qa640_822_clone_invalid_*, qa640_822_clone_pre146_*, qa640_822_clone_src_*, qa804_fixture_target
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+286 passed in 26.88s
+```
+
+Static checks used the same seven edited Python files (`FILES` below); main
+comparison used the five pre-existing files exported with
+`git show origin/main:<path>` into `/tmp/822-story-identity-static`, with
+`PYTHONPATH` and `MYPYPATH` pointing at this worktree. The two new branch files
+have no diagnostics. Flake8 used the worktree's explicit `.flake8` in both
+runs so its 88-column rule was identical. Removing only diagnostic line and
+column numbers before comparison showed no new diagnostics.
+
+```text
+FILES="scripts/backfill_story_identity.py scripts/new_story_setup.py scripts/qa_shift/ann_gate.py scripts/qa_shift/historical_passage_limit.py tests/pg_fixtures.py tests/test_new_story_setup.py tests/test_story_identity_pg.py"
+$ PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m black --check $FILES
+7 files would be left unchanged.
+$ PYTHONPATH=$PWD MYPYPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m flake8 --config=$PWD/.flake8 $FILES
+branch: 15 pre-existing diagnostics; main: 15 pre-existing diagnostics; new: 0
+$ PYTHONPATH=$PWD MYPYPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases $FILES
+branch: 8 errors in 4 files; main: 8 errors in 4 files; new: 0
+$ PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+$ PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
+$ git diff --check
+(no output)
+```
+
+No UI source or generated UI artifact changed in this review fix; the earlier
+UI proof remains recorded above. The coordinator still owes the combined
+whole-tree gate. No owner database was mutated, no fleet migration/backfill
+was run, and no service was restarted. This proof created no leftover
+fixture database; the three historical leftovers named above were not touched.
+
+Codex — GPT-6
