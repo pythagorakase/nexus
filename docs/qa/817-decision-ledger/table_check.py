@@ -1,8 +1,10 @@
 """Table and fixed-text check for the 817-S3 decision-ledger backfill.
 
-Usage: python table_check.py <worktree> <work order .md>
+Usage: python table_check.py <worktree> [<work order .md>]
 
-Parses the work order's record table and the fixed text of its Required
+The work order defaults to order_817_S3.md next to this script: the order's
+"Required Changes" section, committed so that the check runs from the branch
+alone. Parses the work order's record table and the fixed text of its Required
 Changes 3, and compares every record under docs/decisions/ with them: the file
 name, the front matter (status, sources in order, verified_commit, the 0030 to
 0005 supersession), the title, Kind and Links lines, the Ruling lead-in lines,
@@ -24,6 +26,8 @@ from pathlib import Path
 import yaml
 
 API = "repos/pythagorakase/nexus"
+DEFAULT_ORDER = Path(__file__).resolve().parent / "order_817_S3.md"
+USAGE = "usage: python table_check.py <worktree> [<work order .md>]"
 SECTIONS = ("## Ruling", "## Rejected Alternatives", "## Reopening Criteria")
 NONE_RECORDED = "- None recorded in the public relay."
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -285,7 +289,11 @@ def check(root: Path, order_path: Path) -> list[str]:
 
 def main() -> None:
     """Run the check and print the table, then the verdict."""
-    root, order_path = Path(sys.argv[1]), Path(sys.argv[2])
+    if len(sys.argv) not in (2, 3):
+        sys.exit(USAGE)
+    root = Path(sys.argv[1])
+    order_path = Path(sys.argv[2]) if len(sys.argv) == 3 else DEFAULT_ORDER
+    print(f"order: {order_path.name}")
     errors = check(root, order_path)
     print()
     if errors:

@@ -153,9 +153,14 @@ def killed(cluster: str) -> list[str]:
 
 
 def record_blocks(text: str) -> list[tuple[str, str, list[str], bool]]:
-    """Every (section, source, lines, fenced) block in a record body."""
+    """Every (section, source, lines, fenced) block in a record body.
+
+    Fails when a quoted (``>``) line or a fence line lies outside every block
+    that follows a ``Source:`` line, so no quotation escapes the comparison.
+    """
     lines = text.splitlines()
     blocks = []
+    covered: set[int] = set()
     section = ""
     i = 0
     while i < len(lines):
@@ -169,6 +174,7 @@ def record_blocks(text: str) -> list[tuple[str, str, list[str], bool]]:
             if lines[j].startswith("```"):
                 k = lines.index("```", j + 1)
                 blocks.append((section, source, lines[j : k + 1], True))
+                covered.update(range(j, k + 1))
                 i = k + 1
                 continue
             k = j
@@ -177,9 +183,16 @@ def record_blocks(text: str) -> list[tuple[str, str, list[str], bool]]:
             assert k > j, f"no quoted lines after {line!r}"
             assert k == len(lines) or lines[k] == "", "block not closed by a blank"
             blocks.append((section, source, lines[j:k], False))
+            covered.update(range(j, k))
             i = k
             continue
         i += 1
+    stray = [
+        n + 1
+        for n, line in enumerate(lines)
+        if (line.startswith(">") or line.startswith("```")) and n not in covered
+    ]
+    assert not stray, f"quoted or fenced lines without a Source line: {stray}"
     return blocks
 
 
@@ -307,7 +320,11 @@ def main() -> None:
         number = path.name[:4]
         text = path.read_text(encoding="utf-8")
         TOUCHED.clear()
-        found = record_blocks(text)
+        try:
+            found = record_blocks(text)
+        except AssertionError as error:
+            failures.append(f"{number}: {error}")
+            found = []
         expected = expected_blocks(number, merge_base, baseline)
         ok = len(found) == len(expected)
         if not ok:
@@ -325,11 +342,12 @@ def main() -> None:
             if ffenced:
                 same = flines == elines  # the #737 fence is kept as it is
             else:
+                # The same strip on both sides, for every kind: a source line
+                # that already starts with '>' is kept as it is by the quoting
+                # rule, so the expected side strips forward(elines) too.
                 stripped = "\n".join(STRIP.sub("", line, count=1) for line in flines)
-                target = (
-                    "\n".join(STRIP.sub("", line, count=1) for line in elines)
-                    if kind == "relay"
-                    else "\n".join(elines)
+                target = "\n".join(
+                    STRIP.sub("", line, count=1) for line in forward(elines)
                 )
                 # Equality on the whole text, then byte equality of the quoting.
                 same = stripped == target and flines == forward(elines)
