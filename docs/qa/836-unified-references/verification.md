@@ -103,3 +103,57 @@ commit. The coordinator paused the full gate to integrate that fix. No tests
 were run for this documentation correction.
 
 Codex — GPT-6
+
+## Landing With the Current TEST Seeder (2026-10-08)
+
+After PR 1123 landed, merged current main
+`9c8f10501389ffe14388b6d684ea060b2058781b` into this branch as
+`79f6e71c324afcb2e7dfe41f564b5a3b45b129d7`. This incorporates both the
+same-transaction unified-reference cleanup and the reviewed operator guards
+that survive `python -O`. It resolves the actual initial Claude review's seeder
+dependency; the SQL migration, reset logic, parity tool and two reference test
+files remain byte-identical to prior branch head `e9620fc9` and tested
+integration `f291dc79`. No 836 source correction was required. The 008 seeder,
+its new regression file, provider test file and conftest match landed 816 head
+`239fda27` exactly.
+
+Canonical document claims were rechecked against the merged sources and remain
+accurate; the two freshness stamps now name `9c8f1050`. Existing proof logs are
+retained at their original scope and revisions. This section records the new
+execution evidence separately.
+
+Import provenance printed this worktree's `nexus/__init__.py`. The coordinated
+test slot was acquired after the 810 run ended; the one-minute load was 3.69.
+With `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT` and
+`NEXUS_RUN_LIVE_LLM` unset:
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 \
+  /Users/pythagor/nexus/.venv/bin/python -m pytest -q -rs \
+  -p tests.dbname_audit tests/test_doc_front_matter.py \
+  tests/test_mock_openai.py::test_reseeding_test_provider_preserves_reference_parity \
+  tests/test_mock_openai.py::test_seeded_test_provider_database_holds_the_rows_the_provider_reads \
+  tests/test_mock_openai.py::test_seeder_trait_mismatch_rolls_back_every_write \
+  tests/test_chunk_entity_references_pg.py \
+  tests/test_entity_reference_parity_pg.py tests/test_test_provider_seeder.py
+```
+
+[Current combined proof](landing-2026-10-08/focused.txt):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: owner targets: none
+SKIPPED [4] tests/test_chunk_entity_references_pg.py:585: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+65 passed, 4 skipped, 2 warnings in 35.34s
+```
+
+The actual migration-148 regression ran, including both real CLI reseeds and
+retention of its narrative chunk and original character/place/faction entities.
+The four new operator cases also ran: malformed-config help, explicit-target
+configuration refusal and each suppressed singleton UPDATE under optimized
+Python with rollback verification. The only skips were the existing opt-in
+corpus probes. No owner operation, paid call, whole-suite rerun or service change
+was made; the test slot was released to the 810 reviewer after completion.
+
+Codex — GPT-6
