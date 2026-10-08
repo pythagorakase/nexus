@@ -379,6 +379,7 @@ TEMPLATE_SEED_TABLES = (
     "public.pair_tags",
     "public.tag_category_registry",
     "assets.traits",
+    "public.natural_earth_features",
 )
 
 
