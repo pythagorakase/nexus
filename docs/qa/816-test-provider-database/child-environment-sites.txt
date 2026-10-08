@@ -1,0 +1,60 @@
+tests/scheduler_helpers.py:249:            env={
+tests/test_api/test_acceptance_staging_pg.py:461:                    env={**os.environ, "PYTHONPATH": os.getcwd(), **child_env},
+tests/test_api/test_acceptance_staging_pg.py:479:                env={**os.environ, "PYTHONPATH": os.getcwd(), **child_env},
+tests/test_api/test_genesis_ledger_pg.py:192:            env={
+tests/test_api/test_scheduler_recovery_pg.py:648:                env={**os.environ, "PYTHONPATH": str(Path.cwd())},
+tests/test_cli_choice_http.py:122:            env={
+tests/test_cli_contract.py:238:        env={
+tests/test_cli_contract.py:330:            env={
+tests/test_cli_contract.py:339:            env={
+tests/test_cli_contract.py:366:            env={"NEXUS_API_URL": base_url},
+tests/test_cli_contract.py:380:        "inspect", "slot", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+tests/test_cli_contract.py:428:            env={"NEXUS_API_URL": base_url, "NEXUS_RUNTIME_CONFIG": str(config)},
+tests/test_cli_contract.py:451:            env={"NEXUS_API_URL": base_url},
+tests/test_cli_contract.py:481:    completed = _run(*argv, env={})
+tests/test_cli_contract.py:495:    rejected = _run("load", env={})
+tests/test_cli_contract.py:496:    helped = _run("--json", "load", "--help", env={})
+tests/test_cli_contract.py:520:    completed = _run(*argv, "--json", env={"NEXUS_RUNTIME_CONFIG": str(absent)})
+tests/test_cli_contract.py:551:    completed = _run(*argv, "--json", env={"NEXUS_API_URL": api_url})
+tests/test_cli_contract.py:573:    completed = _run(*argv, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+tests/test_cli_contract.py:589:        env={
+tests/test_cli_contract.py:651:        env={"NEXUS_RUNTIME_CONFIG": str(config)},
+tests/test_cli_contract.py:678:        env={},
+tests/test_cli_contract.py:742:        completed = _run(*argv, "--json", env={"NEXUS_API_URL": base_url})
+tests/test_cli_contract.py:801:        completed = _run(*argv, "--json", env={"NEXUS_API_URL": base_url})
+tests/test_cli_contract.py:841:            env={"NEXUS_API_URL": base_url, "NEXUS_AUTH": "815-token"},
+tests/test_cli_contract.py:894:            env={"NEXUS_API_URL": base_url, "NEXUS_AUTH": "815-token"},
+tests/test_cli_contract.py:920:            "load", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+tests/test_cli_contract.py:937:    completed = _run("up", "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+tests/test_cli_contract.py:971:            "retry", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+tests/test_cli_contract.py:994:        env={
+tests/test_cli_contract.py:1032:            env={
+tests/test_cli_contract.py:1063:            env={
+tests/test_cli_contract.py:1116:            env={"PGHOST": "127.0.0.1", "PGPORT": str(port)},
+tests/test_cli_contract.py:1142:    completed = _run(*argv, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+tests/test_cli_contract.py:1160:        env={"NEXUS_API_URL": "https://nexus.example.invalid"},
+tests/test_cli_contract.py:1176:    completed = _run("logs", "gateway", "--config", str(config), "--json", env={})
+tests/test_cli_contract.py:1193:            env={
+tests/test_cli_contract.py:1393:            env={"NEXUS_API_URL": base_url},
+tests/test_cli_contract.py:1460:                "inspect", *argv, "--slot", "5", env={"NEXUS_API_URL": base_url}
+tests/test_cli_contract.py:1692:            env={"NEXUS_API_URL": base_url},
+tests/test_cli_contract.py:1744:        "inspect", *argv, "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+tests/test_cli_contract.py:1794:            "--json", "continue", "--slot", "5", env={"NEXUS_API_URL": base_url}
+tests/test_cli_inspect_pg.py:54:        env={**os.environ, "PYTHONPATH": str(ROOT), **routed_child_environment()},
+tests/test_cli_session_wait.py:401:        env={
+tests/test_config/test_ir_eval_golden_overrides.py:87:        env={**os.environ, "TMPDIR": str(tmp_path), "PYTHONPATH": str(REPO_ROOT)},
+tests/test_embedding_artifacts.py:202:        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+tests/test_embedding_artifacts.py:478:        env={**env, "PYTHONPATH": str(REPO_ROOT), HOME_ENV: str(empty_home)},
+tests/test_entity_reference_parity_pg.py:194:        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+tests/test_lore/test_token_estimator.py:169:            env={
+tests/test_mock_openai.py:471:            env={**os.environ, "PYTHONPATH": str(root)},
+tests/test_openai_registry_capabilities.py:73:        env={
+tests/test_prompt_lint.py:561:        env={**os.environ, "PYTHONPATH": str(tmp_path)},
+tests/test_prompt_lint.py:666:            env={**os.environ, "PYTHONPATH": str(tmp_path)},
+tests/test_prompt_lint.py:687:        env={**os.environ, "PYTHONPATH": str(ROOT)},
+tests/test_prose_metrics_pg.py:108:            env={**os.environ, "PYTHONPATH": str(Path.cwd())},
+tests/test_qa_shift.py:348:        env={"PATH": os.environ["PATH"], HOME_ENV: str(owner_home)},
+tests/test_regenerate_embeddings_truncate_pg.py:155:        env={
+tests/test_secret_store_guard.py:626:        env={"PATH": os.environ.get("PATH", ""), **env},
+tests/test_slot_routed_entrypoints.py:428:                env={**env, "SPY_LOG": str(spy_log)},
+tests/test_travel_reachability_pg.py:69:        env={**os.environ, "PYTHONPATH": str(Path.cwd())},

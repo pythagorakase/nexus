@@ -1,11 +1,15 @@
 """Tests for the local TEST-mode OpenAI impersonator."""
 
+from collections.abc import Callable
+from contextlib import closing
 import json
 import os
-from contextlib import closing
 from pathlib import Path
 import re
+import subprocess
+import sys
 import time
+from typing import Any
 import uuid
 
 import pytest
@@ -415,18 +419,71 @@ def test_seeded_test_provider_database_holds_the_rows_the_provider_reads(
 
 
 @pytest.mark.requires_postgres
-def test_missing_test_provider_rows_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "reader, table",
+    [
+        (query_wizard_cache, "assets.new_story_creator"),
+        (query_bootstrap_narrative, "incubator"),
+        (get_cached_bootstrap_narrative, "incubator"),
+        (query_traits, "assets.traits"),
+    ],
+    ids=["wizard", "bootstrap", "cached-bootstrap", "traits"],
+)
+def test_missing_test_provider_rows_raise(
+    monkeypatch: pytest.MonkeyPatch,
+    reader: Callable[[], Any],
+    table: str,
+) -> None:
     """An unseeded TEST provider database raises; it never returns a placeholder."""
 
     with disposable_slot_database("qa640_816_empty") as dbname:
         route_test_provider_database(monkeypatch.setenv, dbname)
-        names_database = re.escape(f"TEST provider database {dbname!r}")
-        with pytest.raises(RuntimeError, match=names_database):
-            query_wizard_cache()
-        with pytest.raises(RuntimeError, match=names_database):
-            query_bootstrap_narrative()
-        with pytest.raises(RuntimeError, match=names_database):
-            get_cached_bootstrap_narrative()
+        if table == "assets.traits":
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM assets.traits")
+        message = re.escape(f"TEST provider database {dbname!r} has no {table} rows")
+        with pytest.raises(RuntimeError, match=message):
+            reader()
+
+
+@pytest.mark.requires_postgres
+def test_seeder_trait_mismatch_rolls_back_every_write() -> None:
+    """A legacy trait spelling refuses the CLI seed and rolls back earlier writes."""
+    root = Path(__file__).resolve().parents[1]
+    with disposable_slot_database("qa640_816_legacy_trait") as dbname:
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE assets.traits SET name = 'reputation', "
+                "is_selected = TRUE, rationale = 'preserve this rationale' "
+                "WHERE name = 'fame'"
+            )
+            assert cur.rowcount == 1
+            cur.execute("INSERT INTO assets.new_story_creator (id) VALUES (TRUE)")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(root / "migrations/008_populate_mock_database.py"),
+                "--dbname",
+                dbname,
+            ],
+            cwd=root,
+            env={**os.environ, "PYTHONPATH": str(root)},
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode != 0
+        assert "selected unknown trait 'reputation'" in result.stderr
+        assert "populated successfully" not in result.stdout
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT is_selected, rationale FROM assets.traits "
+                "WHERE name = 'reputation'"
+            )
+            assert cur.fetchone() == (True, "preserve this rationale")
+            cur.execute("SELECT count(*) FROM assets.new_story_creator")
+            assert cur.fetchone() == (1,)
 
 
 def _post_bootstrap_request(base_url: str) -> requests.Response:

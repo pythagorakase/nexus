@@ -19,7 +19,7 @@ at all.
 
 Seed helpers write only disposable databases: each calls
 ``require_disposable_target`` before it connects, which refuses the owner's
-save slots and ``NEXUS_template`` by name.
+save slots, ``NEXUS_template``, and the legacy TEST database ``mock`` by name.
 """
 
 from __future__ import annotations
