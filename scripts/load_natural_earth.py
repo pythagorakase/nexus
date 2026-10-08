@@ -10,7 +10,10 @@ count from each shapefile. A mismatch refuses the whole run.
 One transaction per database then replaces every ``natural_earth_features``
 row, checks that the invalid features are exactly the manifest's ``repairs``,
 repairs those with ``ST_MakeValid(..., 'method=structure')``, proves every row
-valid, and commits. Any error rolls the database back to its previous rows.
+valid, and commits. Any error before COMMIT rolls the database back to its
+previous rows; a connection lost during COMMIT is reported as
+``commit_unknown`` (outcome unknown; rerunning replaces the rows) and fails
+the run.
 
 Targets mirror ``scripts/rebuild_memory_idf.py``: under ``--all``, ``--slot``
 and ``--template`` a database that does not exist is skipped (``absent``) and
@@ -49,7 +52,12 @@ from nexus.agents.orrery.geo_reference import (  # noqa: E402
     NaturalEarthManifest,
     load_manifest,
 )
-from nexus.database import maintenance_connection, subprocess_env  # noqa: E402
+from nexus.database import (  # noqa: E402
+    AmbiguousCommit,
+    maintenance_connection,
+    subprocess_env,
+    transaction,
+)
 from scripts.database_targets import evaluation_dbname  # noqa: E402
 from scripts.migrate import (  # noqa: E402
     SLOT_DBS,
@@ -207,97 +215,96 @@ def write_reference(
 
     Raises ``NaturalEarthValidityError`` and rolls back when the invalid
     features differ from the manifest's repairs or a repair leaves an invalid
-    row. Returns the committed row count per layer.
+    row. A connection lost during COMMIT raises ``AmbiguousCommit``: the
+    outcome is unknown, never reported as a rollback. Returns the committed
+    row count per layer.
     """
     manifest = files.manifest
     expected = {(repair.layer, repair.ne_id) for repair in manifest.repairs}
-    with closing(
-        maintenance_connection(
-            dbname,
-            write_locked_slot=write_locked_slot,
-            operation="load_natural_earth",
+    conn = maintenance_connection(
+        dbname, write_locked_slot=write_locked_slot, operation="load_natural_earth"
+    )
+    # transaction() commits through commit_transaction(): a connection lost
+    # during COMMIT raises AmbiguousCommit, and a failure before COMMIT rolls
+    # back without a failed rollback masking the original error.
+    with closing(conn), transaction(conn), conn.cursor() as cur:
+        cur.execute("DELETE FROM natural_earth_features")
+        execute_values(
+            cur,
+            "INSERT INTO natural_earth_features (layer, source_index, release, "
+            "ne_id, adm0_a3, adm1_code, iso_code, name, geom) VALUES %s",
+            [
+                (
+                    row.layer,
+                    row.source_index,
+                    manifest.release,
+                    row.ne_id,
+                    row.adm0_a3,
+                    row.adm1_code,
+                    row.iso_code,
+                    row.name,
+                    row.geometry,
+                )
+                for row in files.rows
+            ],
+            template=(
+                "(%s, %s, %s, %s, %s, %s, %s, %s, "
+                "ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)))"
+            ),
+            page_size=200,
         )
-    ) as conn:
-        with conn, conn.cursor() as cur:
-            cur.execute("DELETE FROM natural_earth_features")
-            execute_values(
-                cur,
-                "INSERT INTO natural_earth_features (layer, source_index, release, "
-                "ne_id, adm0_a3, adm1_code, iso_code, name, geom) VALUES %s",
-                [
-                    (
-                        row.layer,
-                        row.source_index,
-                        manifest.release,
-                        row.ne_id,
-                        row.adm0_a3,
-                        row.adm1_code,
-                        row.iso_code,
-                        row.name,
-                        row.geometry,
-                    )
-                    for row in files.rows
-                ],
-                template=(
-                    "(%s, %s, %s, %s, %s, %s, %s, %s, "
-                    "ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)))"
-                ),
-                page_size=200,
+        cur.execute(
+            "SELECT layer, ne_id, source_index, ST_IsValidReason(geom) "
+            "FROM natural_earth_features WHERE NOT ST_IsValid(geom) "
+            "ORDER BY layer, source_index"
+        )
+        invalid = cur.fetchall()
+        for layer, ne_id, source_index, reason in invalid:
+            LOG.info(
+                "%s: invalid %s feature ne_id=%s source_index=%s: %s",
+                dbname,
+                layer,
+                ne_id,
+                source_index,
+                reason,
             )
+        found = {(layer, ne_id) for layer, ne_id, _, _ in invalid}
+        if found != expected:
+            unlisted = [
+                f"{layer} {ne_id} ({reason})"
+                for layer, ne_id, _, reason in invalid
+                if (layer, ne_id) not in expected
+            ]
+            valid_repairs = sorted(expected - found)
+            raise NaturalEarthValidityError(
+                f"{dbname}: invalid features differ from the manifest's "
+                f"repairs; invalid but not listed: {unlisted or 'none'}; "
+                f"listed but valid: {valid_repairs or 'none'}"
+            )
+        for layer, ne_id in sorted(expected):
             cur.execute(
-                "SELECT layer, ne_id, source_index, ST_IsValidReason(geom) "
-                "FROM natural_earth_features WHERE NOT ST_IsValid(geom) "
-                "ORDER BY layer, source_index"
+                f"UPDATE natural_earth_features SET geom = {_REPAIR_SQL} "
+                "WHERE layer = %s AND ne_id = %s",
+                (layer, ne_id),
             )
-            invalid = cur.fetchall()
-            for layer, ne_id, source_index, reason in invalid:
-                LOG.info(
-                    "%s: invalid %s feature ne_id=%s source_index=%s: %s",
-                    dbname,
-                    layer,
-                    ne_id,
-                    source_index,
-                    reason,
-                )
-            found = {(layer, ne_id) for layer, ne_id, _, _ in invalid}
-            if found != expected:
-                unlisted = [
-                    f"{layer} {ne_id} ({reason})"
-                    for layer, ne_id, _, reason in invalid
-                    if (layer, ne_id) not in expected
-                ]
-                valid_repairs = sorted(expected - found)
+            if cur.rowcount != 1:
                 raise NaturalEarthValidityError(
-                    f"{dbname}: invalid features differ from the manifest's "
-                    f"repairs; invalid but not listed: {unlisted or 'none'}; "
-                    f"listed but valid: {valid_repairs or 'none'}"
+                    f"{dbname}: repair of {layer} {ne_id} matched "
+                    f"{cur.rowcount} rows"
                 )
-            for layer, ne_id in sorted(expected):
-                cur.execute(
-                    f"UPDATE natural_earth_features SET geom = {_REPAIR_SQL} "
-                    "WHERE layer = %s AND ne_id = %s",
-                    (layer, ne_id),
-                )
-                if cur.rowcount != 1:
-                    raise NaturalEarthValidityError(
-                        f"{dbname}: repair of {layer} {ne_id} matched "
-                        f"{cur.rowcount} rows"
-                    )
-            cur.execute(
-                "SELECT layer, source_index, ST_IsValidReason(geom) "
-                "FROM natural_earth_features "
-                "WHERE NOT ST_IsValid(geom) OR ST_IsEmpty(geom) "
-                "ORDER BY layer, source_index"
+        cur.execute(
+            "SELECT layer, source_index, ST_IsValidReason(geom) "
+            "FROM natural_earth_features "
+            "WHERE NOT ST_IsValid(geom) OR ST_IsEmpty(geom) "
+            "ORDER BY layer, source_index"
+        )
+        still_invalid = cur.fetchall()
+        if still_invalid:
+            raise NaturalEarthValidityError(
+                f"{dbname}: rows still invalid after repair: {still_invalid}"
             )
-            still_invalid = cur.fetchall()
-            if still_invalid:
-                raise NaturalEarthValidityError(
-                    f"{dbname}: rows still invalid after repair: {still_invalid}"
-                )
-            cur.execute(
-                "SELECT layer, count(*) FROM natural_earth_features GROUP BY layer"
-            )
-            counts = {layer: int(count) for layer, count in cur.fetchall()}
+        cur.execute("SELECT layer, count(*) FROM natural_earth_features GROUP BY layer")
+        counts = {layer: int(count) for layer, count in cur.fetchall()}
     return {layer.layer: counts.get(layer.layer, 0) for layer in manifest.layers}
 
 
@@ -330,6 +337,16 @@ def _load_target(
         return "skipped_locked", None
     try:
         counts = write_reference(dbname, files, write_locked_slot=write_locked_slot)
+    except (
+        AmbiguousCommit
+    ) as exc:  # nexus-exception-disposition: fail; reason=logged; safety=exit 1
+        LOG.error(
+            "%s: Natural Earth load outcome unknown (connection lost during "
+            "COMMIT: %s); rerun to replace the rows",
+            dbname,
+            " ".join(str(exc).split()),
+        )
+        return "commit_unknown", None
     except (
         NaturalEarthValidityError,
         psycopg2.Error,
@@ -403,7 +420,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             else ""
         )
         print(f"{dbname}: {status}{detail}")
-        if status == "failed":
+        if status in ("failed", "commit_unknown"):
             failed.append(dbname)
     if failed:
         LOG.error("Natural Earth load failed for %s", ", ".join(failed))

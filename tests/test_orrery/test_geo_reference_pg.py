@@ -271,6 +271,29 @@ def test_stale_reference_refuses(empty_clone: str, loaded_clone: LoadedClone) ->
     assert _counts(loaded_clone.dbname) == EXPECTED_COUNTS
 
 
+def test_missing_table_refuses(empty_clone: str) -> None:
+    # A database without migration 147 must refuse with ReferenceDataError
+    # naming every layer, not with UndefinedTable aborting the caller's
+    # transaction.
+    with closing(connect(empty_clone)) as conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DROP TABLE natural_earth_features")
+                with pytest.raises(
+                    ReferenceDataError, match="land, admin_0, admin_1"
+                ) as raised:
+                    point_on_land(cur, longitude=DENVER[0], latitude=DENVER[1])
+                assert "migration 147" in str(raised.value)
+                cur.execute("SELECT 1")
+                assert cur.fetchone() == (1,)
+        finally:
+            conn.rollback()
+        with conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.natural_earth_features')")
+            assert cur.fetchone()[0] is not None
+        conn.rollback()
+
+
 def test_fresh_slot_copies_reference(
     empty_clone: str,
     loaded_clone: LoadedClone,

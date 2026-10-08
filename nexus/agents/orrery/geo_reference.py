@@ -44,7 +44,7 @@ class RegionNotFoundError(LookupError):
 class AmbiguousRegionError(LookupError):
     """Several reference regions share the requested name."""
 
-    def __init__(self, message: str, candidates: tuple["ReferenceRegion", ...]):
+    def __init__(self, message: str, candidates: tuple["ReferenceRegion", ...]) -> None:
         super().__init__(message)
         self.candidates = candidates
 
@@ -151,9 +151,20 @@ def require_reference(cur: Any) -> None:
     """Raise ``ReferenceDataError`` unless the table holds the pinned release.
 
     Each layer must hold exactly the manifest's ``feature_count`` rows, all
-    stamped with the manifest's ``release``.
+    stamped with the manifest's ``release``. A database without the table
+    (migration 147 not applied) raises ``ReferenceDataError`` too, before any
+    query could abort the caller's transaction.
     """
     manifest = _pinned_manifest()
+    cur.execute("SELECT to_regclass('public.natural_earth_features')")
+    if cur.fetchone()[0] is None:
+        raise ReferenceDataError(
+            "Natural Earth reference data is missing: "
+            + ", ".join(layer.layer for layer in manifest.layers)
+            + ": table public.natural_earth_features missing; apply migration 147"
+            " with scripts/migrate.py, then load it with"
+            " scripts/load_natural_earth.py."
+        )
     cur.execute(_REFERENCE_STATE_SQL, (manifest.release,))
     state = {row[0]: (int(row[1]), int(row[2])) for row in cur.fetchall()}
     problems = []

@@ -238,7 +238,8 @@ row per source feature, keyed by `(layer, source_index)`, with every geometry
 a valid WGS 84 MultiPolygon. `nexus/agents/orrery/geo_reference.py` reads it
 inside the caller's transaction (region lookup by name, point on land,
 polygon validation, land clipping and land coverage), and every read first
-refuses a table whose per-layer counts or release differ from the manifest.
+refuses a missing table, or one whose per-layer counts or release differ from
+the manifest, with `ReferenceDataError`.
 
 The three zips are vendored unmodified under `data/natural_earth/` (public
 domain; `data/natural_earth/LICENSE.md`). `data/natural_earth/manifest.json`
@@ -251,7 +252,9 @@ the invalid features to be exactly the manifest's two repairs (`admin_0`
 1159320575, EGY, and `admin_1` 1159309897, BRA-1294 Goiás, both ring
 self-intersections), repairs them with
 `ST_Multi(ST_CollectionExtract(ST_MakeValid(geom, 'method=structure'), 3))`,
-proves every row valid, and commits; any error rolls back.
+proves every row valid, and commits; any error before COMMIT rolls back. A
+connection lost during COMMIT is reported as `commit_unknown` (outcome
+unknown; rerunning replaces the rows) and exits 1.
 
 ```bash
 python scripts/load_natural_earth.py --all                      # Template + unlocked slots
