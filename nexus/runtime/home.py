@@ -33,6 +33,7 @@ from typing import Literal, Optional, Union
 from nexus.config.loader import load_settings
 from nexus.config.settings_models import Settings
 from nexus.runtime.contract import HOME_ENV, RUNTIME_CONFIG_ENV
+from nexus.runtime.receipts import record_failure
 
 CONFIG_FILENAME = "nexus.toml"
 
@@ -46,6 +47,11 @@ UPLOAD_SUBDIRS = ("character_portraits", "place_images")
 MODELS_DIR = PurePath("models")
 CACHE_DIR = PurePath(".nexus", "cache")
 BACKUPS_DIR = PurePath(".nexus", "backups")
+
+# Failure receipts (issue #806). A fixed path that never becomes a nexus.toml
+# key: a receipt of a configuration failure is written before any
+# configuration is known.
+RECEIPTS_DIR = PurePath(".nexus", "receipts")
 
 Locator = Literal["NEXUS_HOME", "explicit", "NEXUS_RUNTIME_CONFIG", "checkout"]
 
@@ -122,6 +128,15 @@ def locate_runtime_home(config_path: Union[str, Path, None] = None) -> HomeLocat
         RuntimeHomeError: ``NEXUS_HOME`` is relative, or a set config locator
             names a different file than ``$NEXUS_HOME/nexus.toml``.
     """
+    try:
+        return _locate_runtime_home(config_path)
+    except RuntimeHomeError as exc:
+        record_failure("runtime.home", exc)
+        raise
+
+
+def _locate_runtime_home(config_path: Union[str, Path, None]) -> HomeLocation:
+    """The locator rule; :func:`locate_runtime_home` records its failures."""
     home = _environment_path(HOME_ENV)
     runtime_config = _environment_path(RUNTIME_CONFIG_ENV)
     explicit = Path(config_path).expanduser() if config_path is not None else None
@@ -169,6 +184,7 @@ class RuntimeHome:
     ``models_dir`` and ``uploads_dir`` name the home layout that later #820
     slices move data into; in this slice the upload endpoints still serve the
     checkout's ``ui/client/public`` and model paths stay as configured.
+    ``receipts_dir`` holds failure receipts (issue #806).
     """
 
     root: Path
@@ -179,6 +195,7 @@ class RuntimeHome:
     usage_dir: Path
     cache_dir: Path
     backups_dir: Path
+    receipts_dir: Path
     models_dir: Path
     uploads_dir: Path
 
@@ -193,6 +210,7 @@ class RuntimeHome:
             "usage_dir": str(self.usage_dir),
             "cache_dir": str(self.cache_dir),
             "backups_dir": str(self.backups_dir),
+            "receipts_dir": str(self.receipts_dir),
             "models_dir": str(self.models_dir),
             "uploads_dir": str(self.uploads_dir),
         }
@@ -204,6 +222,15 @@ def build_runtime_home(location: HomeLocation, settings: Settings) -> RuntimeHom
     Raises:
         RuntimeHomeError: the settings have no ``[runtime]`` section.
     """
+    try:
+        return _build_runtime_home(location, settings)
+    except RuntimeHomeError as exc:
+        record_failure("runtime.home", exc)
+        raise
+
+
+def _build_runtime_home(location: HomeLocation, settings: Settings) -> RuntimeHome:
+    """Lay out the home; :func:`build_runtime_home` records its failures."""
     if settings.runtime is None:
         raise RuntimeHomeError(
             f"{location.config_path} has no [runtime] section; the runtime home "
@@ -220,6 +247,7 @@ def build_runtime_home(location: HomeLocation, settings: Settings) -> RuntimeHom
         usage_dir=anchor_path(root, settings.usage.usage_dir),
         cache_dir=anchor_path(root, CACHE_DIR),
         backups_dir=anchor_path(root, BACKUPS_DIR),
+        receipts_dir=anchor_path(root, RECEIPTS_DIR),
         models_dir=anchor_path(root, MODELS_DIR),
         uploads_dir=anchor_path(root, UPLOADS_DIR),
     )

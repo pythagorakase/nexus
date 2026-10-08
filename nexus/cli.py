@@ -4453,6 +4453,104 @@ def run_doctor(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+def _receipt_detail_text(details: Mapping[str, Any]) -> str:
+    """One line of ``key=value`` pairs; structured values as compact JSON."""
+    return " ".join(
+        (
+            f"{key}={value}"
+            if value is None or isinstance(value, (str, int))
+            else f"{key}={json.dumps(value, separators=(',', ':'))}"
+        )
+        for key, value in details.items()
+    )
+
+
+def _render_receipt_group(group: Any) -> List[str]:
+    """Text lines for one fingerprint group of failure receipts."""
+    first = group.first
+    lines = [
+        f"{group.count}x {group.fingerprint[:12]} {first.surface} "
+        f"{first.exception_module}.{first.exception_type} "
+        f"first {group.first_seen.isoformat()} last {group.last_seen.isoformat()} "
+        f"{','.join(group.roots)}"
+    ]
+    if first.config_path is not None:
+        lines.append(f"  config_path={first.config_path}")
+    if first.details is not None:
+        details = first.details.model_dump(mode="json")
+        lines.append(f"  {_receipt_detail_text(details)}")
+    lines.extend(
+        f"  {frame.file}:{frame.line} {frame.function}" for frame in first.frames
+    )
+    return lines
+
+
+def run_receipts(args: argparse.Namespace) -> int:
+    """Show this machine's failure receipts grouped by fingerprint (read-only).
+
+    The home receipt directory is located first; when the locator fails, its
+    own ``runtime.home`` receipt has just been appended to the fallback root,
+    and the read (fallback only) includes it before ``config_error`` is
+    reported.
+    """
+    from nexus.runtime.receipts import (
+        ReceiptConfigurationError,
+        ReceiptReadError,
+        fallback_receipts_dir,
+        home_receipts_dir,
+        read_failure_groups,
+    )
+
+    home_dir: Optional[Path]
+    home_error: Optional[str] = None
+    try:
+        try:
+            home_dir = home_receipts_dir()
+        # The fallback root is read, and the command exits with config_error.
+        except (
+            RuntimeHomeError
+        ):  # nexus-exception-disposition: degrade-read-only; reason=home; safety=exit1
+            home_dir = None
+            home_error = str(sys.exc_info()[1])
+        fallback_dir = fallback_receipts_dir()
+    except (
+        ReceiptConfigurationError
+    ) as exc:  # nexus-exception-disposition: fail; reason=bad seam; safety=exit 1
+        return _fail(args, "config_error", str(exc))
+    roots = {"fallback": fallback_dir}
+    # When NEXUS_HOME is the user's home, both labels name one directory;
+    # reading it once keeps each receipt counted once.
+    if home_dir is not None and home_dir.resolve() != fallback_dir.resolve():
+        roots = {"home": home_dir, "fallback": fallback_dir}
+    try:
+        groups = read_failure_groups(roots)
+    except (
+        ReceiptReadError
+    ) as exc:  # nexus-exception-disposition: fail; reason=bad line; safety=exit 1
+        return _fail(args, "domain_failure", str(exc))
+
+    document = {
+        "home_dir": None if home_dir is None else str(home_dir),
+        "fallback_dir": str(fallback_dir),
+        "groups": [group.model_dump(mode="json") for group in groups],
+    }
+    if args.json:
+        if home_error is None:
+            print(json.dumps(document, indent=2, sort_keys=True))
+    else:
+        for group in groups:
+            for line in _render_receipt_group(group):
+                print(line)
+    if home_error is not None:
+        return _fail(
+            args,
+            "config_error",
+            f"home receipts unavailable: {home_error}",
+            partial=document,
+        )
+    return 0
+
+
 def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
     """Return provider usage and rendered blocks for one UTC day or run."""
     from nexus.telemetry.usage import read_prompt_windows, summarize_usage
@@ -5149,6 +5247,10 @@ Examples:
         help="UTC quota day in YYYY-MM-DD format (default: current UTC day)",
     )
     usage_parser.add_argument("--run", help="Filter events by correlation run id")
+
+    subparsers.add_parser(
+        "receipts", help="Show failure receipts grouped by fingerprint"
+    )
 
     window_replay_parser = subparsers.add_parser(
         "window-replay",
@@ -5993,6 +6095,8 @@ def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
         result = run_home(args)
     elif args.command == "doctor":
         return run_doctor(args)
+    elif args.command == "receipts":
+        return run_receipts(args)
     elif args.command == "usage":
         result = run_usage(args)
     elif args.command == "window-replay":
@@ -6087,8 +6191,9 @@ def main() -> int:
     if usage_error is not None:
         return _fail(args, "usage_error", usage_error)
 
-    # A self-diagnostic command reports on the configuration and this
-    # machine's role itself, so neither check below may pre-empt its report.
+    # A self-diagnostic command (doctor, receipts) reports on the
+    # configuration and this machine itself, so neither check below may
+    # pre-empt its report.
     if command not in SELF_DIAGNOSTIC_COMMANDS:
         try:
             remote = _active_remote_runtime(args, command)

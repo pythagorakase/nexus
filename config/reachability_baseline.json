@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#822 S1: nexus/api/story_identity.py is imported by nexus/api/slot_state.py (slot state reports story_identity.story_uuid as story_id), so it joins production_reachable",
+  "reason": "#822 S1 and #806 S1: story_identity and receipts join production_reachable through slot_state and runtime.home respectively",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -261,6 +261,7 @@
     "nexus/runtime/log_capture.py",
     "nexus/runtime/logging_config.py",
     "nexus/runtime/readiness.py",
+    "nexus/runtime/receipts.py",
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",
