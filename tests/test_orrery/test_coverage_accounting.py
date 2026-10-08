@@ -15,6 +15,7 @@ TEMPLATE_ID = "coverage_probe"
 def test_weather_is_an_honest_current_projection() -> None:
     """Unversioned place zones prevent historical weather from being rewound."""
 
+    assert "horizon_events" in coverage.HYDRATION_HONESTY["rewound_to_anchor"]
     assert "weather" not in coverage.HYDRATION_HONESTY["rewound_to_anchor"]
     assert "weather" in coverage.HYDRATION_HONESTY["current_projection"]
 

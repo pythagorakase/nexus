@@ -44,6 +44,7 @@ from nexus.agents.orrery.substrate import Template
 HYDRATION_HONESTY: Mapping[str, Tuple[str, ...]] = {
     "rewound_to_anchor": (
         "recent_events",
+        "horizon_events",
         "world_time",
         "time_of_day",
         "actor_roster",
@@ -372,6 +373,7 @@ def analyze_coverage(
     *,
     anchor_chunk_ids: Sequence[int],
     window_chunks: int,
+    event_horizon_hours: Optional[float] = None,
     sunhelm_settings: Optional[Any] = None,
     epoch_min_world_times: int,
     selection_settings: Optional[Any] = None,
@@ -422,6 +424,7 @@ def analyze_coverage(
             templates_tuple,
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
+            event_horizon_hours=event_horizon_hours,
             sunhelm_settings=sunhelm_settings,
             selection_settings=selection_settings,
             habituation_settings=habituation_settings,

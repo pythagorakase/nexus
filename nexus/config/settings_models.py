@@ -1338,6 +1338,7 @@ class OrreryBindingSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     window_chunks: int = Field(default=30, ge=1)
+    recent_event_horizon_hours: float = Field(default=24.0, gt=0, allow_inf_nan=False)
 
 
 class OrreryCompositionSettings(BaseModel):
