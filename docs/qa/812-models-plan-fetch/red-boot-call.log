@@ -1,0 +1,48 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_gateway_lifespan_refuses_drifted_artifacts ________________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-442/test_gateway_lifespan_refuses_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1695c5290>
+
+    def test_gateway_lifespan_refuses_drifted_artifacts(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Production startup checks artifacts even without an active slot."""
+        from nexus.api import narrative
+    
+        workspace, _ = _checkout_workspace(tmp_path)
+        _lock(workspace)
+        monkeypatch.delenv(TEST_PROVIDER_ONLY_ENV)
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(workspace.config))
+        with TestClient(narrative.app) as client:
+            assert client.get("/health").status_code == 200
+        (workspace.embedder_dir / "model.safetensors").write_bytes(b"changed")
+>       with pytest.raises(ArtifactLockError, match="^The gateway will not start"):
+E       Failed: DID NOT RAISE <class 'nexus.agents.memnon.utils.artifact_manifest.ArtifactLockError'>
+
+tests/test_embedding_artifacts.py:921: Failed
+------------------------------ Captured log call -------------------------------
+WARNING  nexus.api.static_ui:static_ui.py:97 UI build not found at /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/ui/dist/public - the gateway will serve APIs only. Run `npm --prefix ui run build` (or use the Vite dev server).
+=============================== warnings summary ===============================
+tests/test_embedding_artifacts.py::test_gateway_lifespan_refuses_drifted_artifacts
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_embedding_artifacts.py::test_gateway_lifespan_refuses_drifted_artifacts
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_embedding_artifacts.py::test_gateway_lifespan_refuses_drifted_artifacts
+1 failed, 2 warnings in 2.74s
