@@ -340,7 +340,8 @@ def test_doctor_json_reports_a_broken_install(tmp_path: Path) -> None:
     assert _by_id(report)["reachability.gate"].status == "skip"
     recorded = [
         FailureReceipt.model_validate_json(line)
-        for path in receipts.glob("failures-*.jsonl")
+        for directory in (receipts / "home", receipts / "fallback")
+        for path in directory.glob("failures-*.jsonl")
         for line in path.read_text(encoding="utf-8").splitlines()
     ]
     assert any(
