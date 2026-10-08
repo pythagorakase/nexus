@@ -58,6 +58,7 @@ from nexus.agents.orrery.substrate import (
     active_mood,
     binding_hash,
     evaluate_stack,
+    route_known,
 )
 from nexus.agents.orrery.tag_activity import active_entity_tag_at_world_time_sql
 from nexus.agents.orrery.weather import (
@@ -639,6 +640,35 @@ def hydrate_world_state(
         if row["is_primary"]:
             location_class[place_id] = class_name
 
+    charted_place_ids = frozenset(
+        int(row["id"])
+        for row in session.execute(
+            text(
+                """
+                /* orrery:charted_places */
+                SELECT id FROM places WHERE coordinates IS NOT NULL
+                """
+            )
+        ).mappings()
+    )
+    timed_route_pairs: set[tuple[int, int]] = set()
+    for row in session.execute(
+        text(
+            """
+            /* orrery:timed_route_pairs */
+            SELECT from_place_id, to_place_id, bidirectional
+            FROM orrery_travel_edges
+            WHERE route_method = 'authored_edge'
+              AND duration_minutes IS NOT NULL
+            """
+        )
+    ).mappings():
+        from_place_id = int(row["from_place_id"])
+        to_place_id = int(row["to_place_id"])
+        timed_route_pairs.add((from_place_id, to_place_id))
+        if row["bidirectional"]:
+            timed_route_pairs.add((to_place_id, from_place_id))
+
     activities = {
         row["entity_id"]: row["current_activity"]
         for row in session.execute(
@@ -798,6 +828,8 @@ def hydrate_world_state(
         },
         location_entity_ids=location_entity_ids,
         location_zones=location_zones,
+        charted_place_ids=charted_place_ids,
+        timed_route_pairs=frozenset(timed_route_pairs),
         need_debt_scores=need_debt_scores,
         travel_states=travel_states,
         project_states=project_states,
@@ -3139,7 +3171,7 @@ def _project_destination(
     actor_entity_id: int,
     location_classes: Iterable[str],
 ) -> int:
-    """Choose the same-zone-first deterministic project destination."""
+    """Choose the same-zone-first deterministic routable project destination."""
 
     current_place_id = state.locations.get(actor_entity_id)
     if current_place_id is None:
@@ -3149,10 +3181,14 @@ def _project_destination(
     candidates: set[int] = set()
     requested = frozenset(str(value) for value in location_classes)
     for place_id, classes in state.location_classes.items():
-        if place_id != current_place_id and requested.intersection(classes):
+        if requested.intersection(classes) and route_known(
+            state, current_place_id, place_id
+        ):
             candidates.add(place_id)
     for place_id, location_class in state.location_class.items():
-        if place_id != current_place_id and location_class in requested:
+        if location_class in requested and route_known(
+            state, current_place_id, place_id
+        ):
             candidates.add(place_id)
     if not candidates:
         raise ValueError(
@@ -3252,6 +3288,85 @@ def _materialize_project_delta(
     return delta
 
 
+_TRAVEL_DESTINATION_CLASS_KEYS: Tuple[str, ...] = (
+    "destination_place_classes",
+    "destination_place_class",
+    "destination_class",
+)
+
+
+def _explicit_travel_destination(
+    actor: int,
+    payload: Mapping[str, Any],
+    state: WorldState,
+) -> Optional[int]:
+    """Return the destination a travel.start payload names outright, if any.
+
+    Mirrors the commit precedence of ``_apply_travel_start_*``: a set
+    ``destination_place_id`` wins; with no anchor and no destination classes
+    the planned travel state supplies it. Anchor and class selectors are left
+    to the routable choosers.
+    """
+
+    destination = payload.get("destination_place_id")
+    if destination is not None:
+        return int(destination)
+    if payload.get("destination_anchor") is not None:
+        return None
+    if any(payload.get(key) for key in _TRAVEL_DESTINATION_CLASS_KEYS):
+        return None
+    travel = state.travel_states.get(actor)
+    if travel is None or travel.status != "planned":
+        return None
+    return travel.destination_place_id
+
+
+def _refuse_unroutable_explicit_travel(
+    resolution: Resolution,
+    state: WorldState,
+    state_delta: Mapping[str, Any],
+) -> None:
+    """Refuse an explicitly requested journey without a routable duration.
+
+    Explicit journeys are a ``travel.start`` whose destination is named or
+    planned, and the travel handoff of a completed ``plan_relocation``
+    project. Each is refused here, before acceptance, when ``route_known``
+    finds no duration from the origin (785-Q6).
+    """
+
+    actor = resolution.bindings.get(Slot.ACTOR)
+    if not isinstance(actor, int):
+        return
+    journeys: list[tuple[Mapping[str, Any], Optional[int]]] = []
+    raw_travel = state_delta.get("travel.start")
+    if raw_travel is not None:
+        travel_payload: Mapping[str, Any] = (
+            raw_travel if isinstance(raw_travel, Mapping) else {}
+        )
+        journeys.append(
+            (travel_payload, _explicit_travel_destination(actor, travel_payload, state))
+        )
+    raw_complete = state_delta.get("project.complete")
+    if raw_complete is not None:
+        project = state.project_states.get(actor)
+        if project is not None and project.project_type == "plan_relocation":
+            complete_payload: Mapping[str, Any] = (
+                raw_complete if isinstance(raw_complete, Mapping) else {}
+            )
+            journeys.append((complete_payload, project.target_place_id))
+    for payload, destination in journeys:
+        raw_origin = payload.get("origin_place_id")
+        origin = int(raw_origin) if raw_origin else state.locations.get(actor)
+        if origin is None or destination is None:
+            continue
+        if not route_known(state, origin, destination):
+            raise ValueError(
+                f"Orrery travel for actor {actor} from place {origin} to place "
+                f"{destination} has no routable duration; an unroutable journey "
+                "is refused before acceptance"
+            )
+
+
 def _draft_from_resolution(
     resolution: Resolution, *, state: Optional[WorldState] = None
 ) -> OrreryResolutionDraft:
@@ -3260,6 +3375,13 @@ def _draft_from_resolution(
             f"Orrery resolution {resolution.template_id!r} passed gate but lacks "
             "branch data"
         )
+    state_delta = (
+        _materialize_project_delta(resolution, state)
+        if state is not None
+        else resolution.state_delta
+    )
+    if state is not None:
+        _refuse_unroutable_explicit_travel(resolution, state, state_delta)
     return OrreryResolutionDraft(
         template_id=resolution.template_id,
         priority=resolution.priority,
@@ -3270,11 +3392,7 @@ def _draft_from_resolution(
         },
         branch_label=resolution.branch_label,
         narrative_stub=resolution.narrative_stub,
-        state_delta=(
-            _materialize_project_delta(resolution, state)
-            if state is not None
-            else resolution.state_delta
-        ),
+        state_delta=state_delta,
         event_type=resolution.event_type,
         signal_event_type=resolution.signal_event_type,
         changed_fields=resolution.changed_fields,

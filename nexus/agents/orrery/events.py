@@ -5063,6 +5063,23 @@ def _travel_settings() -> OrreryTravelSettings:
     return settings.orrery.travel
 
 
+def _refuse_route_without_duration(
+    route: Mapping[str, Any],
+    *,
+    actor_entity_id: int,
+    origin_place_id: Any,
+    destination_place_id: Any,
+) -> None:
+    """Commit-time recheck (785-Q6): a journey without a duration has no ETA."""
+
+    if route["duration_minutes"] is None:
+        raise ValueError(
+            f"travel.start for actor {actor_entity_id} from place "
+            f"{origin_place_id} to place {destination_place_id} has no route "
+            f"duration ({route['route_method']}); no ETA exists"
+        )
+
+
 def _apply_travel_start_sync(
     cur: Any,
     *,
@@ -5089,6 +5106,9 @@ def _apply_travel_start_sync(
                 actor_entity_id=actor_entity_id,
                 anchor_type=str(destination_anchor),
                 current_world_time=world_time,
+                origin_place_id=(
+                    int(origin_place_id) if origin_place_id is not None else None
+                ),
             )
         else:
             destination_classes = _destination_place_classes(data)
@@ -5111,6 +5131,12 @@ def _apply_travel_start_sync(
         mode=mode,
         risk=risk,
         route_graph_key=route_graph_key,
+    )
+    _refuse_route_without_duration(
+        route,
+        actor_entity_id=actor_entity_id,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
     )
     eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
@@ -5196,6 +5222,9 @@ async def _apply_travel_start_async(
                 actor_entity_id=actor_entity_id,
                 anchor_type=str(destination_anchor),
                 current_world_time=world_time,
+                origin_place_id=(
+                    int(origin_place_id) if origin_place_id is not None else None
+                ),
             )
         else:
             destination_classes = _destination_place_classes(data)
@@ -5220,6 +5249,12 @@ async def _apply_travel_start_async(
         mode=mode,
         risk=risk,
         route_graph_key=route_graph_key,
+    )
+    _refuse_route_without_duration(
+        route,
+        actor_entity_id=actor_entity_id,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
     )
     eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
@@ -6951,12 +6986,84 @@ def _planned_destination_sync(cur: Any, actor_entity_id: int) -> Optional[int]:
     return _row_get(row, "destination_place_id", 0) if row else None
 
 
+# Routability rule (785-Q6) over the aliases ``origin`` and ``p``: both places
+# carry coordinates, or an authored edge with a duration runs from origin to
+# p (or from p to origin when bidirectional). Graph routes do not count.
+_ROUTE_KNOWN_SQL = """
+    (
+        (origin.coordinates IS NOT NULL AND p.coordinates IS NOT NULL)
+        OR EXISTS (
+            SELECT 1
+            FROM orrery_travel_edges route
+            WHERE route.route_method = 'authored_edge'
+              AND route.duration_minutes IS NOT NULL
+              AND (
+                  (route.from_place_id = origin.id AND route.to_place_id = p.id)
+                  OR (
+                      route.bidirectional
+                      AND route.from_place_id = p.id
+                      AND route.to_place_id = origin.id
+                  )
+              )
+        )
+    )
+"""
+
+
+def _route_known_sync(
+    cur: Any, *, origin_place_id: int, destination_place_id: int
+) -> bool:
+    """Return whether a journey between two places has a known duration."""
+
+    cur.execute(
+        f"""
+        /* orrery:route_known */
+        SELECT EXISTS (
+            SELECT 1
+            FROM places origin, places p
+            WHERE origin.id = %s
+              AND p.id = %s
+              AND origin.id <> p.id
+              AND {_ROUTE_KNOWN_SQL}
+        ) AS route_known
+        """,
+        (origin_place_id, destination_place_id),
+    )
+    row = cur.fetchone()
+    return bool(_row_get(row, "route_known", 0)) if row else False
+
+
+async def _route_known_async(
+    conn: Any, *, origin_place_id: int, destination_place_id: int
+) -> bool:
+    """Return whether a journey between two places has a known duration."""
+
+    return bool(
+        await conn.fetchval(
+            f"""
+            /* orrery:route_known */
+            SELECT EXISTS (
+                SELECT 1
+                FROM places origin, places p
+                WHERE origin.id = $1
+                  AND p.id = $2
+                  AND origin.id <> p.id
+                  AND {_ROUTE_KNOWN_SQL}
+            ) AS route_known
+            """,
+            origin_place_id,
+            destination_place_id,
+        )
+    )
+
+
 def _routine_anchor_destination_sync(
     cur: Any,
     *,
     actor_entity_id: int,
     anchor_type: str,
     current_world_time: Any,
+    origin_place_id: Optional[int],
 ) -> Optional[int]:
     cur.execute(
         """
@@ -6974,6 +7081,16 @@ def _routine_anchor_destination_sync(
     place_id = _row_get(row, "place_id", 0)
     zone_id = _row_get(row, "zone_id", 1)
     if policy == "fixed_place":
+        if (
+            place_id is None
+            or origin_place_id is None
+            or not _route_known_sync(
+                cur,
+                origin_place_id=origin_place_id,
+                destination_place_id=int(place_id),
+            )
+        ):
+            return None
         return place_id
     if policy == "works_from_home":
         if anchor_type == "home":
@@ -6983,6 +7100,7 @@ def _routine_anchor_destination_sync(
             actor_entity_id=actor_entity_id,
             anchor_type="home",
             current_world_time=current_world_time,
+            origin_place_id=origin_place_id,
         )
     if policy == "zone_resolved" and zone_id is not None:
         return _routine_zone_destination_sync(
@@ -6990,6 +7108,7 @@ def _routine_anchor_destination_sync(
             zone_id=int(zone_id),
             anchor_type=anchor_type,
             current_world_time=current_world_time,
+            origin_place_id=origin_place_id,
         )
     return None
 
@@ -7000,6 +7119,7 @@ def _routine_zone_destination_sync(
     zone_id: int,
     anchor_type: str,
     current_world_time: Any,
+    origin_place_id: Optional[int],
 ) -> Optional[int]:
     preferred_tags = (
         ("dwelling", "haven")
@@ -7014,9 +7134,10 @@ def _routine_zone_destination_sync(
         )
     )
     cur.execute(
-        """
+        f"""
         SELECT p.id
         FROM places p
+        JOIN places origin ON origin.id = %s
         LEFT JOIN entity_tags_current etc
           ON etc.entity_id = p.entity_id
          AND etc.category = 'place_function'
@@ -7031,11 +7152,14 @@ def _routine_zone_destination_sync(
                )
          )
         WHERE p.zone = %s
+          AND p.id <> origin.id
+          AND {_ROUTE_KNOWN_SQL}
         GROUP BY p.id
         ORDER BY CASE WHEN count(etc.tag) > 0 THEN 0 ELSE 1 END, p.id
         LIMIT 1
         """,
         (
+            origin_place_id,
             list(preferred_tags),
             current_world_time,
             current_world_time,
@@ -7054,7 +7178,7 @@ def _location_class_destination_sync(
     current_world_time: Any,
 ) -> Optional[int]:
     cur.execute(
-        """
+        f"""
         SELECT p.id
         FROM places p
         LEFT JOIN places origin ON origin.id = %s
@@ -7073,6 +7197,7 @@ def _location_class_destination_sync(
          )
         WHERE p.id <> %s
           AND (p.type::text = ANY(%s) OR etc.tag IS NOT NULL)
+          AND {_ROUTE_KNOWN_SQL}
         -- Collapse multiple matching tags per place before preferring same-zone
         -- destinations.
         GROUP BY p.id, p.zone, origin.zone
@@ -7115,6 +7240,7 @@ async def _routine_anchor_destination_async(
     actor_entity_id: int,
     anchor_type: str,
     current_world_time: Any,
+    origin_place_id: Optional[int],
 ) -> Optional[int]:
     row = await conn.fetchrow(
         """
@@ -7132,6 +7258,16 @@ async def _routine_anchor_destination_async(
     place_id = _row_get(row, "place_id", 0)
     zone_id = _row_get(row, "zone_id", 1)
     if policy == "fixed_place":
+        if (
+            place_id is None
+            or origin_place_id is None
+            or not await _route_known_async(
+                conn,
+                origin_place_id=origin_place_id,
+                destination_place_id=int(place_id),
+            )
+        ):
+            return None
         return place_id
     if policy == "works_from_home":
         if anchor_type == "home":
@@ -7141,6 +7277,7 @@ async def _routine_anchor_destination_async(
             actor_entity_id=actor_entity_id,
             anchor_type="home",
             current_world_time=current_world_time,
+            origin_place_id=origin_place_id,
         )
     if policy == "zone_resolved" and zone_id is not None:
         return await _routine_zone_destination_async(
@@ -7148,6 +7285,7 @@ async def _routine_anchor_destination_async(
             zone_id=int(zone_id),
             anchor_type=anchor_type,
             current_world_time=current_world_time,
+            origin_place_id=origin_place_id,
         )
     return None
 
@@ -7158,6 +7296,7 @@ async def _routine_zone_destination_async(
     zone_id: int,
     anchor_type: str,
     current_world_time: Any,
+    origin_place_id: Optional[int],
 ) -> Optional[int]:
     preferred_tags = (
         ("dwelling", "haven")
@@ -7172,9 +7311,10 @@ async def _routine_zone_destination_async(
         )
     )
     return await conn.fetchval(
-        """
+        f"""
         SELECT p.id
         FROM places p
+        JOIN places origin ON origin.id = $4
         LEFT JOIN entity_tags_current etc
           ON etc.entity_id = p.entity_id
          AND etc.category = 'place_function'
@@ -7189,6 +7329,8 @@ async def _routine_zone_destination_async(
                )
          )
         WHERE p.zone = $3
+          AND p.id <> origin.id
+          AND {_ROUTE_KNOWN_SQL}
         GROUP BY p.id
         ORDER BY CASE WHEN count(etc.tag) > 0 THEN 0 ELSE 1 END, p.id
         LIMIT 1
@@ -7196,6 +7338,7 @@ async def _routine_zone_destination_async(
         list(preferred_tags),
         current_world_time,
         zone_id,
+        origin_place_id,
     )
 
 
@@ -7207,7 +7350,7 @@ async def _location_class_destination_async(
     current_world_time: Any,
 ) -> Optional[int]:
     return await conn.fetchval(
-        """
+        f"""
         SELECT p.id
         FROM places p
         LEFT JOIN places origin ON origin.id = $1
@@ -7226,6 +7369,7 @@ async def _location_class_destination_async(
          )
         WHERE p.id <> $1
           AND (p.type::text = ANY($3::text[]) OR etc.tag IS NOT NULL)
+          AND {_ROUTE_KNOWN_SQL}
         -- Collapse multiple matching tags per place before preferring same-zone
         -- destinations.
         GROUP BY p.id, p.zone, origin.zone

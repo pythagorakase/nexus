@@ -78,6 +78,7 @@ from nexus.agents.orrery.substrate import (
     project_overdue_hours,
     project_target_is,
     project_target_is_active,
+    route_known,
     weather_for_actor,
 )
 
@@ -746,14 +747,20 @@ def _has_location_class_destination(
     entity_id = _entity(bindings, slot)
     in_transit = entity_id is not None and _is_in_transit(state, entity_id)
     current_place_id = state.locations.get(entity_id) if entity_id is not None else None
+    class_places: set[int] = set()
     matched_places: set[int] = set()
     if entity_id is not None and not in_transit and current_place_id is not None:
         for place_id, semantic_classes in state.location_classes.items():
             if place_id != current_place_id and classes & semantic_classes:
-                matched_places.add(place_id)
+                class_places.add(place_id)
         for place_id, legacy_class in state.location_class.items():
             if place_id != current_place_id and legacy_class in classes:
-                matched_places.add(place_id)
+                class_places.add(place_id)
+        matched_places = {
+            place_id
+            for place_id in class_places
+            if route_known(state, current_place_id, place_id)
+        }
     return _evidence(
         "has_location_class_destination",
         params={"location_classes": sorted(classes), "slot": slot},
@@ -762,6 +769,7 @@ def _has_location_class_destination(
             "in_transit": in_transit,
             "current_place_id": current_place_id,
             "destination_count": len(matched_places),
+            "unroutable_destination_count": len(class_places - matched_places),
         },
         matched=sorted(matched_places),
         result=bool(matched_places),
