@@ -12,7 +12,7 @@ from nexus.api import narrative_lease
 from nexus.agents.orrery.job_queues import load_job_queues_sync
 from nexus.config import load_settings_as_dict
 from nexus.jobs.scheduler import SlotScheduler
-from tests.pg_fixtures import connect, seed_protagonist
+from tests.pg_fixtures import connect, seed_protagonist, seed_story_base
 from tests.test_orrery.test_narration_job_fencing_pg import (
     _materialize_pending_resolution,
     _enqueue,
@@ -239,6 +239,7 @@ def seed_experiences(dbname):
     """One rendered valid, one unrendered and one invalidated recollection."""
     from tests.test_orrery.test_narration_job_fencing_pg import _insert_chunk
 
+    seed_story_base(dbname)
     with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
         anchor = _insert_chunk(cur, "Experience embedding anchor")
         cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")

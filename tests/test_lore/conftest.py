@@ -17,6 +17,7 @@ from tests.pg_fixtures import (
     disposable_slot_database,
     route_slots_to_disposable,
     seed_committed_chunk,
+    seed_story_base,
 )
 
 # Add nexus module to path
@@ -85,6 +86,7 @@ def test_scenes() -> Dict[str, int]:
 def lore_infra_database() -> Iterator[str]:
     """Yield a template clone holding one committed chunk, never an owner slot."""
     with disposable_slot_database("qa_lore_infra") as dbname:
+        seed_story_base(dbname)
         seed_committed_chunk(dbname, raw_text="Fixture narrative for LORE checks.")
         yield dbname
 
