@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#842 S2: nexus/runtime/log_capture.py is imported by nexus/runtime/supervisor.py (every captured service's log writer), so it joins production_reachable",
+  "reason": "#806 S1: nexus/runtime/receipts.py is imported by nexus/runtime/home.py (receipt hooks), so it joins production_reachable",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -260,6 +260,7 @@
     "nexus/runtime/log_capture.py",
     "nexus/runtime/logging_config.py",
     "nexus/runtime/readiness.py",
+    "nexus/runtime/receipts.py",
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",
