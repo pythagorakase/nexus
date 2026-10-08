@@ -4,6 +4,36 @@ Branch `claude/817-decision-ledger`, merge base with `origin/main`
 `b0da93eaedb4d1661af50742440e7988c7e48185`. Every record and the ledger
 README carry that merge base as `verified_commit`.
 
+## Resumed on 2026-10-07
+
+The resume addendum to the order was dispatched at 22:58 CDT. The branch
+already held three commits, `git status --short` was empty, and PR #1115 was
+open at `5830781b`. `origin/main` was still `b0da93ea`, so no merge was owed.
+
+| Commit | Items Covered | Left Unfinished |
+|---|---|---|
+| `39375159` | Required Changes 1-4: the 55 records, front matter (0030 superseded by 0005), bodies, the README Records list, the Scope and Validation sentence and the README stamp | Nothing |
+| `aa42ebc5` | Tests: `ledger_errors`, `DECISION_LEDGER`, the format, backfill, rejection and valid-ledger tests | Nothing |
+| `5830781b` | Proof: quote audit, red run, test tails, static checks | This "Resumed" table |
+| (uncommitted) | None | None |
+
+Rechecks on resume: a scratch script compared every record's sources, title,
+Kind and Links lines with the order's table (`mismatches: 0 files: 56`); the
+Rejected Alternatives of 0001-0012 equal the order's bullets; every Reopening
+Criteria section matches Required Changes 3. Fresh runs:
+
+```text
+$ PYTHONPATH=$PWD $PY docs/qa/817-decision-ledger/quote_audit.py $PWD
+all 55 records match (merge base b0da93eaedb4d1661af50742440e7988c7e48185)
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+118 passed, 5 warnings in 17.83s
+```
+
+The offline suites were not rerun on resume: no test or record changed since
+the tails below, and the one-minute load was 23. The quote audit is a
+point-in-time proof; an edit to a cited comment after this run makes it stale.
+
 ## 819-S3 Merge Check
 
 819-S3 (#1109, `e0966c6d`) landed before this branch was cut, so rows
