@@ -23,9 +23,11 @@ from nexus.api.story_identity import (
     record_fork,
     replace_story_identity,
 )
+from nexus.config import load_settings
 from nexus.runtime.readiness import (
-    slot_story_identity_outcome,
-    template_story_identity_outcome,
+    ReadinessContext,
+    _check_slot_story_identity,
+    _check_template_story_identity,
 )
 from scripts import backfill_story_identity as backfill
 from scripts import migrate, new_story_setup
@@ -34,6 +36,7 @@ from tests.pg_fixtures import (
     disposable_database,
     disposable_slot_database,
     route_slot_to_disposable,
+    route_slots_to_disposable,
 )
 from tests.test_orrery.test_need_clock_anchor_pg import _build_story_transition
 
@@ -275,6 +278,12 @@ def test_backfill_mints_and_links(monkeypatch: pytest.MonkeyPatch) -> None:
             _execute(dbname, "DELETE FROM public.story_identity")
         forks = [backfill.ForkSpec(b, a, "e")]
 
+        # A fork whose child is not a target is refused before any write.
+        with pytest.raises(ValueError, match="is not a backfill target"):
+            backfill.backfill_story_identity([a], forks)
+        assert _identity(a) == []
+        assert _identity(b) == []
+
         minted = backfill.backfill_story_identity([a, b], forks)
         assert _identity(a) == [(minted[a], "backfill")]
         assert _identity(b) == [(minted[b], "backfill")]
@@ -282,6 +291,15 @@ def test_backfill_mints_and_links(monkeypatch: pytest.MonkeyPatch) -> None:
         assert _lineage(a) == []
         assert backfill.backfill_story_identity([a, b], forks) == minted
         assert _lineage(b) == [(minted[b], minted[a], "fork", a, "e")]
+
+        # A child that already forks another parent is never relinked.
+        _execute(
+            stand_in, "INSERT INTO public.story_identity (origin) VALUES ('backfill')"
+        )
+        with pytest.raises(RuntimeError, match="already forks"):
+            backfill.backfill_story_identity([b], [backfill.ForkSpec(b, stand_in, "e")])
+        assert _lineage(b) == [(minted[b], minted[a], "fork", a, "e")]
+        _execute(stand_in, "DELETE FROM public.story_identity")
 
         for dbname in (a, b):
             _execute(dbname, "DELETE FROM public.story_identity")
@@ -313,23 +331,40 @@ def test_backfill_mints_and_links(monkeypatch: pytest.MonkeyPatch) -> None:
         assert _identity(a) == before
 
 
-def test_doctor_identity_outcomes() -> None:
-    """Each template and slot identity branch names its exact remediation."""
+def _doctor_context(slots: list[int]) -> ReadinessContext:
+    """A readiness context whose ``[runtime.readiness].slots`` is ``slots``."""
+    settings = load_settings()
+    assert settings.runtime is not None
+    readiness = settings.runtime.readiness.model_copy(update={"slots": slots})
+    runtime = settings.runtime.model_copy(update={"readiness": readiness})
+    return ReadinessContext(settings=settings.model_copy(update={"runtime": runtime}))
+
+
+def test_doctor_identity_outcomes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each registered template and slot identity check names its exact remediation.
+
+    The template check reads ``scripts.migrate.TEMPLATE_DB`` at call time and
+    the slot check resolves each ``[runtime.readiness].slots`` number through
+    ``slot_dbname``, so a patched template name and routed slots carry both
+    registered checks to disposable clones.
+    """
+    ctx = _doctor_context([3, 4])
     with disposable_slot_database("qa640_822_doctor_t") as template:
-        outcome = template_story_identity_outcome(template)
+        monkeypatch.setattr(migrate, "TEMPLATE_DB", template)
+        outcome = _check_template_story_identity(ctx)
         assert (outcome.passed, outcome.observed, outcome.remediation) == (
             False,
             f"{template}: 1 story_identity row(s)",
             TEMPLATE_REMEDIATION,
         )
         _execute(template, "DELETE FROM public.story_identity")
-        outcome = template_story_identity_outcome(template)
+        outcome = _check_template_story_identity(ctx)
         assert (outcome.passed, outcome.observed) == (
             True,
             f"{template}: no story identity row",
         )
         _execute(template, "DROP TABLE public.story_lineage, public.story_identity")
-        outcome = template_story_identity_outcome(template)
+        outcome = _check_template_story_identity(ctx)
         assert (outcome.passed, outcome.observed, outcome.remediation) == (
             False,
             f"{template}: no story_identity table (migration 146 pending)",
@@ -337,37 +372,41 @@ def test_doctor_identity_outcomes() -> None:
         )
 
     with disposable_slot_database("qa640_822_doctor_s") as dbname:
-        names = {9: dbname}
+        # Slot 4 routes to a name the server lacks: reported, never failed.
         absent = f"{dbname}_absent"
-        outcome = slot_story_identity_outcome({9: dbname, 8: absent})
+        route_slots_to_disposable(monkeypatch.setattr, {3: dbname, 4: absent})
+        outcome = _check_slot_story_identity(ctx)
         assert (outcome.passed, outcome.observed) == (
             True,
             f"{dbname}: one story identity row; {absent} absent",
         )
         _execute(dbname, "DELETE FROM public.story_identity")
-        outcome = slot_story_identity_outcome(names)
+        outcome = _check_slot_story_identity(ctx)
         assert (outcome.passed, outcome.observed, outcome.remediation) == (
             False,
-            f"{dbname}: no story identity row",
-            "python scripts/backfill_story_identity.py --slot 9",
+            f"{dbname}: no story identity row; {absent} absent",
+            "python scripts/backfill_story_identity.py --slot 3",
         )
         with _locked(dbname):
-            outcome = slot_story_identity_outcome(names)
-            assert outcome.remediation == (
-                "python scripts/backfill_story_identity.py --slot 9 "
-                "--write-locked-slot"
+            outcome = _check_slot_story_identity(ctx)
+            assert (outcome.passed, outcome.remediation) == (
+                False,
+                "python scripts/backfill_story_identity.py --slot 3 "
+                "--write-locked-slot",
             )
         _execute(dbname, "DROP TABLE public.story_lineage, public.story_identity")
-        outcome = slot_story_identity_outcome(names)
+        outcome = _check_slot_story_identity(ctx)
         assert (outcome.passed, outcome.observed, outcome.remediation) == (
             False,
-            f"{dbname}: no story_identity table (migration 146 pending)",
-            "python scripts/migrate.py --slot 9",
+            f"{dbname}: no story_identity table (migration 146 pending); "
+            f"{absent} absent",
+            "python scripts/migrate.py --slot 3",
         )
         with _locked(dbname):
-            outcome = slot_story_identity_outcome(names)
-            assert outcome.remediation == (
-                "python scripts/migrate.py --slot 9 --write-locked-slot"
+            outcome = _check_slot_story_identity(ctx)
+            assert (outcome.passed, outcome.remediation) == (
+                False,
+                "python scripts/migrate.py --slot 3 --write-locked-slot",
             )
 
 
