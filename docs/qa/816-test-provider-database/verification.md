@@ -633,3 +633,36 @@ was made. The coordinator will exercise the unchanged actual-148 parity test
 again after merging this repair into the combined integration.
 
 Codex — GPT-6
+
+### Final Main Refresh
+
+Merged landed 785 main `6f338c55c1d1f769633136f91c2cad1bc8ff99ae` as
+`9b6940e04e9141d96f74598f8a8fdc2f3025241d`. The travel/configuration changes
+match tested integration f291. The seeder and review-regression tests remain
+byte-identical to `e6d3d146`; 008 SHA256 is
+`6c1dcdadf733fd7570221d368f97b9507c1cfa1bdffc6c50a19935cad51bf925`.
+Within the 816 production scope, the only difference from f291 remains the
+operator patch shown above. Other branch-versus-f291 differences are the still
+unlanded 810/836 lanes, not new 816 changes.
+
+Rechecked the canonical document claims against the merged sources: no prose
+correction was required. Both source freshness stamps now name `6f338c55`.
+With the coordinated test slot free and one-minute load 3.95:
+
+```sh
+PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python \
+  -m pytest -q tests/test_doc_front_matter.py
+```
+
+[Final document check](review-2026-10-08/final-doc-freshness.txt):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+42 passed, 5 warnings in 4.02s
+```
+
+No behavioral tests were repeated for this unchanged-source merge. The test
+slot was released to the 810 reviewer immediately after this check.
+
+Codex — GPT-6
