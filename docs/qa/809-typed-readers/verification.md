@@ -165,10 +165,12 @@ the decisions README is a fenced example, not a source declaration.
 
 After the coordinator grants the test slot: run the ordered focused groups and
 all adapted non-live consumers, including `test_pg_experience_seeds.py`,
-`test_pg_disposable_target.py`, card identity and connection lifecycle. Collect
-the three edited live/paid files only (`test_live_cycle.py`,
-`test_stage2a_status_live.py`, `test_narrative_summary_paid_pg.py`); never enable
-live inference. Run document/reachability checks and compare Black, flake8,
+`test_pg_disposable_target.py`, card identity and connection lifecycle. Execute
+`test_stage2a_status_live.py` in the shared PostgreSQL proof: despite its name,
+it carries only `requires_postgres` and uses the routed disposable TEST clone.
+Keep live-provider flags unset. Collect the two edited live/paid files only
+(`test_live_cycle.py`, `test_narrative_summary_paid_pg.py`); never enable live
+inference. Run document/reachability checks and compare Black, flake8,
 mypy and exception-disposition diagnostics with the frozen base. The
 coordinator owns full integration validation and publication.
 
