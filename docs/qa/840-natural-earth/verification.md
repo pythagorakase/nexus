@@ -84,6 +84,98 @@ replaced).
   load wait, the `-99` fact is now counted from the raw source rows, and every
   pasted PostgreSQL tail runs from the guard line to the summary.
 
+## Review Fixes, Round 2 (Commit `389c79e5`)
+
+The second review of PR #1116 confirmed five findings (two describe one
+defect, the untested `commit_unknown` path). Commit `389c79e5` applies them;
+every tail in this section ran on its tree. The other sections keep their
+tails from `6a1be51d`, whose claims these fixes do not change.
+
+- `_read_features` no longer passes `check=True`: a non-zero `ogr2ogr` exit
+  raises the new `NaturalEarthReadError(RuntimeError)` with the zip, the exit
+  code, the shapefile and GDAL's own stderr (decoded with `errors="replace"`).
+  The dedicated error was taken over reusing `NaturalEarthFeatureCountError`
+  because nothing was counted. New test `test_ogr2ogr_failure_carries_gdal_message`
+  asks the real `ogr2ogr` for a member the land zip does not hold and expects
+  `ogr2ogr exited 1 reading qa840_missing.shp` and GDAL's
+  `Unable to open datasource` in the message.
+- New test `test_connection_lost_at_commit_is_commit_unknown` (modelled on
+  `tests/test_rebuild_memory_idf_pg.py:536-605`) uses its own clone
+  `qa640_840_commit_*`, because a deferred constraint trigger
+  `AFTER INSERT ON natural_earth_features` that ends its own backend poisons
+  every commit. It proves: `load_reference(clone)` raises `AmbiguousCommit`
+  naming the clone; `_load_target(clone, read_reference_files(),
+  write_locked_slot=False)` returns `("commit_unknown", None)`;
+  `main(["--dbname", clone])` returns 1 and prints `<clone>: commit_unknown`;
+  both ERROR records say "outcome unknown" and none says "rolled back"; the
+  table still holds 0 rows (the fault ends the backend before the commit
+  record); after the trigger is dropped, `main` exits 0 and the counts are
+  11, 258, 4,596.
+- `docs/database.md`, Natural Earth section only: the load is named as an
+  exception to the never-replay rule, with the reason (one transaction deletes
+  every row and inserts the same pinned, checksummed files, so a replay is
+  idempotent whether or not the lost COMMIT landed). The rerun advice in the
+  loader docstring and log message stays. The sentence at
+  `docs/database.md:125-126` ("the one mutation a replay after
+  `AmbiguousCommit` is allowed for") is outside this order's edit scope
+  (item 7); the PR body carries a landing note to name both mutations there.
+- `config/reachability.toml:27`: the operator reason now cites only
+  `docs/database.md` (`CLAUDE.md` never names the loader).
+
+Load: `uptime` read 23.10 (one-minute) before the green run; the red run
+started at 31.43 without the bounded wait (an omission on my part; the run
+is one 22-second test).
+
+Green, `NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery/test_geo_reference_pg.py`
+with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset:
+
+```
+840 timings: load_reference 6.85s; initialize_slot_database from loaded clone 1.98s, from empty clone 0.99s
+...                                                             [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 6 targets: postgres, qa640_840_commit_*, qa640_840_empty_*, qa640_840_fresh_* x2, qa640_840_geo_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+12 passed in 57.25s
+```
+
+Red: `main`'s failure tuple planted as `("failed",)` (line 432 without
+`"commit_unknown"`), same command with `-k commit_unknown`, plant reverted
+afterwards:
+
+```
+>               assert load_natural_earth.main(["--dbname", dbname]) == 1
+E               AssertionError: assert 0 == 1
+E                +  where 0 = <function main at 0x10cfac860>(['--dbname', 'qa640_840_commit_b062a329896f'])
+E                +    where <function main at 0x10cfac860> = load_natural_earth.main
+...
+ERROR    nexus.load_natural_earth:load_natural_earth.py:352 qa640_840_commit_b062a329896f: Natural Earth load outcome unknown (connection lost during COMMIT: Ambiguous commit for database qa640_840_commit_b062a329896f: server closed the connection unexpectedly This probably means the server terminated abnormally before or while processing the request.); rerun to replace the rows
+...
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_840_commit_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_geo_reference_pg.py::test_connection_lost_at_commit_is_commit_unknown
+1 failed, 11 deselected in 22.06s
+```
+
+Offline, `nice -n 15 $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tests/test_orrery/test_natural_earth_manifest.py`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+104 passed, 5 warnings in 15.64s
+```
+
+Black (`--check`), flake8 and `$PY -m mypy --explicit-package-bases` on
+`scripts/load_natural_earth.py` and `tests/test_orrery/test_geo_reference_pg.py`:
+`2 files would be left unchanged.`; flake8 exit 0; `Success: no issues found
+in 2 source files`. `$PY -S scripts/check_exception_dispositions.py
+--baseline-base-ref origin/main`: `OK: exception disposition coverage and
+shrink-only baseline verified.`
+
 ## Loader Listing, Counts and Facts
 
 The loader's invalid-feature listing (on `6a1be51d`, from the
