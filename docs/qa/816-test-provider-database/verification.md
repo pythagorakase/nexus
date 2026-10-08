@@ -476,8 +476,66 @@ SKIPPED [1] tests/test_mock_openai.py:501: cross-slice reseed proof requires the
 Black passes both edited Python files; mypy reports no issues in either.
 Flake8 retains exactly the same thirteen existing seeder line-length diagnostics
 as `origin/main`, with none in the test file and no new messages. Diff whitespace
-passes. The real migration-148 regression and its deliberate old-code failure
-are pending the coordinator's merge into the combined checkout; these results
-are not yet a claim that the cross-slice defect is proved repaired.
+passes. An independent source review found no requested correction.
+
+### Real Migration-148 Integration Proof
+
+The coordinator merged code/test commit `9765bf1a149d1688c1cc8ce4b220276c92b38650`
+and the companion 836 documentation correction into integration head
+`188d9aab3ab2328db0fed9714cd9379537af2010`. Import provenance pointed at that
+checkout. Its tree was clean before and after this proof; no integration
+commit or owner write occurred. Load was 2.71 before red and 3.67 before green.
+
+The [mutation harness](reseed-148-mutation.py.txt) removed only the three
+`to_regclass` / conditional DELETE statements. It ran the new regression and
+restored the seeder byte-for-byte in `finally` (SHA256
+`0aaf62f366f5a143b3a339dc870450fcb4f11b6f996990458d3da486a8ffba2c`).
+[Red transcript](reseed-148-red.txt): the real CLI seed succeeded, but its
+post-seed parity assertion failed because the junctions were empty while their
+mirrored references remained. The fixture's pre-seed parity check had proved
+one row of each of character, place and faction.
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH="$PWD" nice -n 15 "$PY" -m pytest -q -rs \
+  -p tests.dbname_audit \
+  tests/test_mock_openai.py::test_reseeding_test_provider_preserves_reference_parity
+```
+
+```text
+>           assert after["parity"], after["kinds"]
+E           assert False
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: owner targets: none
+1 failed in 2.46s
+```
+
+After restoration, the new regression, existing provider/rollback proof and
+both reference/parity consumer files ran in one session:
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH="$PWD" nice -n 15 "$PY" -m pytest -q -rs \
+  -p tests.dbname_audit \
+  tests/test_mock_openai.py::test_reseeding_test_provider_preserves_reference_parity \
+  tests/test_mock_openai.py::test_seeded_test_provider_database_holds_the_rows_the_provider_reads \
+  tests/test_mock_openai.py::test_seeder_trait_mismatch_rolls_back_every_write \
+  tests/test_chunk_entity_references_pg.py tests/test_entity_reference_parity_pg.py
+```
+
+[Green transcript](reseed-148-green.txt):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: owner targets: none
+SKIPPED [4] tests/test_chunk_entity_references_pg.py:585: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+19 passed, 4 skipped, 2 warnings in 26.81s
+```
+
+The cross-slice regression ran and passed, including both actual CLI reseeds;
+only the four existing corpus probes skipped. The pre-148 branch transcript is
+also retained in [reseed-pre148.txt](reseed-pre148.txt). A read-only catalog
+check found no remaining `qa640_816_%` or `qa640_836%` databases. This targeted
+proof completes the repair; the coordinator still owns the full combined gate.
 
 Codex — GPT-6
