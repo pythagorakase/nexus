@@ -1165,6 +1165,18 @@ SECOND = "docs/decisions/0002-second.md"
         (
             {
                 SECOND: _record(
+                    "0002", "Second", kind="**Kind:** decision\n\n**Links:** #1\n"
+                )
+            },
+            "a non-empty '**Links:**' line must follow the Kind",
+        ),
+        (
+            {SECOND: _record("0002", "Second", kind="**Kind:** decision\n")},
+            "a non-empty '**Links:**' line must follow the Kind",
+        ),
+        (
+            {
+                SECOND: _record(
                     "0002",
                     "Second",
                     sections=RECORD_SECTIONS_TEXT + "\n## Notes\n\nX\n",

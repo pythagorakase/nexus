@@ -84,11 +84,14 @@ SUMMARY_819 = (
     "invented documentation."
 )
 COMMANDS: list[str] = []
+TOUCHED: list[str] = []  # the paths the record being audited reads
 _cache: dict[str, dict] = {}
 
 
 def gh(path: str) -> dict:
     """Fetch one GitHub API object as JSON (its .body is the raw Markdown)."""
+    if path not in TOUCHED:
+        TOUCHED.append(path)
     if path not in _cache:
         COMMANDS.append(f"gh api {API}/{path}")
         out = subprocess.run(
@@ -99,6 +102,7 @@ def gh(path: str) -> dict:
 
 
 def comment(cid: int) -> dict:
+    """Fetch one issue comment by id."""
     return gh(f"issues/comments/{cid}")
 
 
@@ -127,6 +131,7 @@ def forward(lines: list[str]) -> list[str]:
 
 
 def paragraph(body: str, heading: str) -> list[str]:
+    """The paragraph directly under ``heading`` in an issue body."""
     lines = body.splitlines()
     i = lines.index(heading) + 1
     out = []
@@ -137,6 +142,7 @@ def paragraph(body: str, heading: str) -> list[str]:
 
 
 def killed(cluster: str) -> list[str]:
+    """The lines of one ``## Cxxx`` section of #849."""
     lines = gh("issues/849")["body"].splitlines()
     start = next(i for i, row in enumerate(lines) if row.startswith(f"## {cluster}: "))
     end = next(
@@ -282,6 +288,7 @@ def inline_quotes(text: str, section: str) -> list[str]:
 
 
 def main() -> None:
+    """Audit every record and print the table, fetch commands and verdict."""
     root = Path(sys.argv[1])
     merge_base = subprocess.run(
         ["git", "-C", str(root), "merge-base", "origin/main", "HEAD"],
@@ -299,6 +306,7 @@ def main() -> None:
     for path in records:
         number = path.name[:4]
         text = path.read_text(encoding="utf-8")
+        TOUCHED.clear()
         found = record_blocks(text)
         expected = expected_blocks(number, merge_base, baseline)
         ok = len(found) == len(expected)
@@ -359,16 +367,22 @@ def main() -> None:
                     f"{number}: {bullets} not-chosen bullets, {not_chosen} in relay"
                 )
                 ok = False
+        fetch = "<br>".join(f"`gh api {API}/{path}`" for path in TOUCHED)
         rows.append(
             f"| {number} | {', '.join(sorted({e[1] for e in expected}))} | "
-            f"{len(found)} | {len(inline)} | {'MATCH' if ok else 'DIFFER'} |"
+            f"{fetch} | {len(found)} | {len(inline)} | "
+            f"{'MATCH' if ok else 'DIFFER'} |"
         )
-    print("| Record | Sources | Blocks | Inline quotes | Result |")
-    print("|---|---|---|---|---|")
+    print("| Record | Sources | Fetch | Blocks | Inline quotes | Result |")
+    print("|---|---|---|---|---|---|")
     print("\n".join(rows))
     print()
-    print("Fetch commands:")
-    print("\n".join(sorted(set(COMMANDS))))
+    fetched = sorted(set(COMMANDS))
+    comments = [c for c in fetched if "/issues/comments/" in c]
+    print(
+        f"distinct objects fetched: {len(fetched)} "
+        f"({len(comments)} comments, {len(fetched) - len(comments)} issues)"
+    )
     print()
     if failures:
         print("FAILURES:")
