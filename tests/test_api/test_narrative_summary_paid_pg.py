@@ -16,7 +16,7 @@ import pytest
 import tomlkit
 
 from nexus.api.summary_triggers import SummaryTask, schedule_summary_generation
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.telemetry import usage
 from scripts.summarize_narrative import SummaryGenerator
@@ -152,9 +152,7 @@ def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
         seed_two_episode_story(dbname)
         session = str(uuid4())
         queue_episode_and_season_summaries(dbname, session)
-        scheduler = SlotScheduler(
-            SUMMARY_SLOT, dbname=dbname, settings=load_settings_as_dict()
-        )
+        scheduler = SlotScheduler(SUMMARY_SLOT, dbname=dbname, settings=load_settings())
         error = None
         try:
             result = scheduler.run_pass(

@@ -408,7 +408,7 @@ def test_child_job_enqueue_correlation_and_transaction_reset(monkeypatch):
         enqueue_declared_entity_maturations,
     )
     from nexus.agents.orrery.job_queues import load_job_queues_sync
-    from nexus.config import load_settings_as_dict
+    from nexus.config import load_settings
 
     with disposable_slot_database("qa640_764_jobs") as dbname:
         route_slot(monkeypatch, dbname)
@@ -434,7 +434,7 @@ def test_child_job_enqueue_correlation_and_transaction_reset(monkeypatch):
             slot=4,
         )
         session = str(uuid4())
-        settings = load_settings_as_dict()
+        settings = load_settings()
         with closing(connect(dbname)) as conn:
             with conn, conn.cursor() as cur:
                 cur.execute(

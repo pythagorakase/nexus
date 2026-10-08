@@ -6,7 +6,7 @@ from contextlib import closing
 
 import pytest
 
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.requires_postgres
 def test_seed_experience_render_job_enqueues_one_job() -> None:
     """One queued job holds the two seeds anchored at the scene chunk."""
 
-    settings = load_settings_as_dict()
+    settings = load_settings()
     with disposable_slot_database("qa640_816_experience_seed") as dbname:
         seed_protagonist(dbname)
         seed = seed_experience_render_job(
@@ -56,5 +56,5 @@ def test_seed_experience_candidates_needs_a_clock() -> None:
     with disposable_slot_database("qa640_816_experience_seed") as dbname:
         with pytest.raises(AssertionError, match="seed_experience_candidates"):
             seed_experience_candidates(
-                dbname, settings=load_settings_as_dict(), label="No Clock"
+                dbname, settings=load_settings(), label="No Clock"
             )

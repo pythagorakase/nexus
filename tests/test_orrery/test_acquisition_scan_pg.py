@@ -17,7 +17,7 @@ from nexus.agents.orrery.experiences import (
     seed_character_experiences_sync,
 )
 from nexus.api import db_pool
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from scripts import new_story_setup
 from tests.pg_fixtures import connect
 
@@ -244,7 +244,7 @@ def test_acquisition_semantics_and_awareness_lock_are_preserved(
 ) -> None:
     """Indexed formation preserves exact accounts, provenance, and row locks."""
 
-    settings = load_settings_as_dict()
+    settings = load_settings()
     told_time = datetime(2196, 7, 7, 1, 0, tzinfo=timezone.utc)
     granted_anchor_time = datetime(2196, 7, 7, 2, 0, tzinfo=timezone.utc)
     granted_acquired_time = datetime(2196, 7, 7, 2, 17, tzinfo=timezone.utc)

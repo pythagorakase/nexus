@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
 import logging
@@ -56,7 +55,8 @@ from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api import narrative as narrative_api
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
-from nexus.config import load_settings_as_dict
+from nexus.config.settings_models import Settings
+from tests.settings_helpers import settings_with
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.memory.manager import empty_pass2_baseline
 from scripts import new_story_setup
@@ -798,11 +798,14 @@ def test_backfill_defers_dossier_eligibility_to_live_config(
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )
-    live_settings = load_settings_as_dict()
-    live_settings["orrery"]["experiences"]["minimum_dossier_fields"] = 1
+    live_settings = settings_with(
+        {
+            "orrery.experiences.minimum_dossier_fields": 1,
+        }
+    )
     monkeypatch.setattr(
         "nexus.api.commit_handler_sync._load_orrery_settings",
-        lambda: live_settings["orrery"],
+        lambda: live_settings,
     )
     with _disposable_database(apply_formation_migration=False) as dbname:
         conn = _connect(dbname)
@@ -1703,7 +1706,7 @@ def test_late_same_owner_event_forms_once_at_its_past_anchor(
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )
-    settings = load_settings_as_dict()
+    settings = load_settings()
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
@@ -1979,13 +1982,12 @@ def test_player_experience_ownership_follows_config(
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )
-    settings = load_settings_as_dict()
-    settings["orrery"]["experiences"][
-        "include_player_character"
-    ] = include_player_character
+    settings = settings_with(
+        {"orrery.experiences.include_player_character": include_player_character}
+    )
     monkeypatch.setattr(
         "nexus.api.commit_handler_sync._load_orrery_settings",
-        lambda: settings["orrery"],
+        lambda: settings,
     )
     with _disposable_database() as dbname:
         conn = _connect(dbname)
@@ -2039,11 +2041,14 @@ def test_player_experience_consumption_follows_current_config(
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )
-    settings = load_settings_as_dict()
-    settings["orrery"]["experiences"]["include_player_character"] = True
+    settings = settings_with(
+        {
+            "orrery.experiences.include_player_character": True,
+        }
+    )
     monkeypatch.setattr(
         "nexus.api.commit_handler_sync._load_orrery_settings",
-        lambda: settings["orrery"],
+        lambda: settings,
     )
     with _disposable_database() as dbname:
         conn = _connect(dbname)
@@ -2078,10 +2083,16 @@ def test_player_experience_consumption_follows_current_config(
                         cur,
                         present_entity_ids=[actor_entity_id],
                         anchor_chunk_id=accepted_chunk_id,
-                        settings=settings["orrery"]["knowledge"],
+                        settings=settings.require_orrery(
+                            "experience proof"
+                        ).knowledge.model_dump(by_alias=True),
                         include_player_character=True,
-                        recall_settings=settings["orrery"]["recall"],
-                        disclosure_settings=settings["orrery"]["disclosure"],
+                        recall_settings=settings.require_orrery(
+                            "experience proof"
+                        ).recall.model_dump(by_alias=True),
+                        disclosure_settings=settings.require_orrery(
+                            "experience proof"
+                        ).disclosure.model_dump(by_alias=True),
                         turn_id="qa708-player-included",
                     )
             assert experience_id in {
@@ -2096,10 +2107,16 @@ def test_player_experience_consumption_follows_current_config(
                         cur,
                         present_entity_ids=[actor_entity_id],
                         anchor_chunk_id=accepted_chunk_id,
-                        settings=settings["orrery"]["knowledge"],
+                        settings=settings.require_orrery(
+                            "experience proof"
+                        ).knowledge.model_dump(by_alias=True),
                         include_player_character=False,
-                        recall_settings=settings["orrery"]["recall"],
-                        disclosure_settings=settings["orrery"]["disclosure"],
+                        recall_settings=settings.require_orrery(
+                            "experience proof"
+                        ).recall.model_dump(by_alias=True),
+                        disclosure_settings=settings.require_orrery(
+                            "experience proof"
+                        ).disclosure.model_dump(by_alias=True),
                         turn_id="qa708-player-excluded",
                     )
                     cur.execute(
@@ -2122,11 +2139,14 @@ def test_default_config_rejects_an_existing_player_render_job(
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )
-    opt_in_settings = load_settings_as_dict()
-    opt_in_settings["orrery"]["experiences"]["include_player_character"] = True
+    opt_in_settings = settings_with(
+        {
+            "orrery.experiences.include_player_character": True,
+        }
+    )
     monkeypatch.setattr(
         "nexus.api.commit_handler_sync._load_orrery_settings",
-        lambda: opt_in_settings["orrery"],
+        lambda: opt_in_settings,
     )
     with _disposable_database() as dbname:
         conn = _connect(dbname)
@@ -2161,7 +2181,7 @@ def test_default_config_rejects_an_existing_player_render_job(
             forbidden_provider = _ForbiddenSceneProvider()
             rendered, failed = drain_experience_render_jobs_sync(
                 slot=708,
-                settings=load_settings_as_dict(),
+                settings=load_settings(),
                 conn=conn,
                 provider=forbidden_provider,
             )
@@ -2213,12 +2233,12 @@ def _assert_no_experience_jobs(conn: Any) -> None:
     assert job_count == 0, f"wizard-phase clone already holds {job_count} jobs"
 
 
-def _wizard_drain_settings() -> dict[str, Any]:
+def _wizard_drain_settings() -> Settings:
     """Load settings and pin the experiences lane preconditions #1027 needs."""
-    settings = load_settings_as_dict()
-    experiences = settings["orrery"]["experiences"]
-    assert experiences["enabled"] is True
-    assert experiences["include_player_character"] is False
+    settings = load_settings()
+    experiences = settings.require_orrery("wizard drain proof").experiences
+    assert experiences.enabled is True
+    assert experiences.include_player_character is False
     return settings
 
 
@@ -2247,8 +2267,11 @@ def test_default_config_idle_drain_on_wizard_phase_slot_is_silent() -> None:
 def test_default_config_due_job_on_wizard_phase_slot_still_raises() -> None:
     """A due experience job with no bound player is corrupt state and stays loud."""
 
-    opt_in_settings = load_settings_as_dict()
-    opt_in_settings["orrery"]["experiences"]["include_player_character"] = True
+    opt_in_settings = settings_with(
+        {
+            "orrery.experiences.include_player_character": True,
+        }
+    )
     with disposable_slot_database("qa640_wizard_drain") as dbname:
         conn = _connect(dbname)
         try:
@@ -2276,7 +2299,7 @@ def test_default_config_due_job_on_wizard_phase_slot_still_raises() -> None:
             ):
                 drain_experience_render_jobs_sync(
                     slot=1027,
-                    settings=load_settings_as_dict(),
+                    settings=load_settings(),
                     conn=conn,
                     provider=forbidden_provider,
                 )
@@ -2341,11 +2364,14 @@ def test_mixed_player_job_renders_npc_and_reenqueues_unrendered_player(
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )
-    opt_in_settings = load_settings_as_dict()
-    opt_in_settings["orrery"]["experiences"]["include_player_character"] = True
+    opt_in_settings = settings_with(
+        {
+            "orrery.experiences.include_player_character": True,
+        }
+    )
     monkeypatch.setattr(
         "nexus.api.commit_handler_sync._load_orrery_settings",
-        lambda: opt_in_settings["orrery"],
+        lambda: opt_in_settings,
     )
     with _disposable_database() as dbname:
         conn = _connect(dbname)
@@ -2428,7 +2454,7 @@ def test_mixed_player_job_renders_npc_and_reenqueues_unrendered_player(
             provider = _RecordingSceneProvider()
             rendered, failed = drain_experience_render_jobs_sync(
                 slot=708,
-                settings=load_settings_as_dict(),
+                settings=load_settings(),
                 conn=conn,
                 provider=provider,
             )
@@ -2504,11 +2530,14 @@ def test_supersession_invalidates_pending_seed_and_retains_rendered_history(
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )
-    opt_in_settings = load_settings_as_dict()
-    opt_in_settings["orrery"]["experiences"]["include_player_character"] = True
+    opt_in_settings = settings_with(
+        {
+            "orrery.experiences.include_player_character": True,
+        }
+    )
     monkeypatch.setattr(
         "nexus.api.commit_handler_sync._load_orrery_settings",
-        lambda: opt_in_settings["orrery"],
+        lambda: opt_in_settings,
     )
     with _disposable_database() as dbname:
         conn = _connect(dbname)
@@ -2599,7 +2628,7 @@ def test_supersession_invalidates_pending_seed_and_retains_rendered_history(
                 )
             assert drain_experience_render_jobs_sync(
                 slot=708,
-                settings=load_settings_as_dict(),
+                settings=load_settings(),
                 conn=conn,
                 provider=_SceneProvider(),
             ) == (1, 0)
@@ -2706,13 +2735,13 @@ def test_supersession_invalidates_pending_seed_and_retains_rendered_history(
                         scene_end_chunk_id=replacement_chunk_id,
                         world_layer="primary",
                         slot=708,
-                        settings=load_settings_as_dict(),
+                        settings=load_settings(),
                     )
                     == 1
                 )
             assert drain_experience_render_jobs_sync(
                 slot=708,
-                settings=load_settings_as_dict(),
+                settings=load_settings(),
                 conn=conn,
                 provider=_SceneProvider(),
             ) == (1, 0)
@@ -3314,7 +3343,7 @@ def test_real_commit_forms_verified_seeds_and_boundary_batch(
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )
-    settings = load_settings_as_dict()
+    settings = load_settings()
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
@@ -3457,8 +3486,15 @@ def test_real_commit_forms_verified_seeds_and_boundary_batch(
             assert job["requested_model"] == job["resolved_model"]
             assert job["resolved_source"] == "story_follow"
 
-            render_settings = deepcopy(settings)
-            render_settings["orrery"]["experiences"]["model"] = "render-time-model"
+            render_settings = settings_with(
+                {"orrery.experiences.model": settings.apex.model}
+            )
+            assert (
+                render_settings.require_orrery(
+                    "render-time pin proof"
+                ).experiences.model
+                != job["resolved_model"]
+            )
             rendered, failed = drain_experience_render_jobs_sync(
                 slot=677,
                 settings=render_settings,
@@ -3503,8 +3539,11 @@ def test_real_commit_forms_verified_seeds_and_boundary_batch(
 
 def test_fresh_duplicate_render_job_is_stale_rejected() -> None:
     """A new job cannot claim success from another job's rendered seed."""
-    settings = load_settings_as_dict()
-    settings["orrery"]["experiences"]["max_jobs_per_drain"] = 1
+    settings = settings_with(
+        {
+            "orrery.experiences.max_jobs_per_drain": 1,
+        }
+    )
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
@@ -3575,10 +3614,13 @@ def test_fresh_duplicate_render_job_is_stale_rejected() -> None:
 
 def test_render_validation_persists_siblings_and_retries_only_rejections() -> None:
     """Content failures isolate persistence, retries, billing, and exhaustion."""
-    settings = load_settings_as_dict()
-    settings["orrery"]["experiences"]["max_attempts"] = 2
-    settings["orrery"]["experiences"]["retry_delay_seconds"] = 0
-    settings["orrery"]["experiences"]["max_jobs_per_drain"] = 1
+    settings = settings_with(
+        {
+            "orrery.experiences.max_attempts": 2,
+            "orrery.experiences.retry_delay_seconds": 0,
+            "orrery.experiences.max_jobs_per_drain": 1,
+        }
+    )
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
@@ -3742,7 +3784,7 @@ def test_render_validation_persists_siblings_and_retries_only_rejections() -> No
             assert exhausted["state"] == "failed"
             assert (
                 exhausted["attempts"]
-                == settings["orrery"]["experiences"]["max_attempts"]
+                == settings.require_orrery("retry proof").experiences.max_attempts
             )
             assert str(exhausted_ids[-1]) in exhausted["last_error"]
             assert exhausted_text[exhausted_ids[0]] is not None
@@ -3753,7 +3795,7 @@ def test_render_validation_persists_siblings_and_retries_only_rejections() -> No
 
 def test_private_hunt_seeds_only_verified_actor_receipt() -> None:
     """Present bystanders and a hidden target do not witness a private hunt."""
-    settings = load_settings_as_dict()
+    settings = load_settings()
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
@@ -3847,8 +3889,11 @@ def test_private_hunt_seeds_only_verified_actor_receipt() -> None:
 
 def test_boundary_batches_are_bounded_and_timeline_drift_is_rejected() -> None:
     """Boundary overflow splits, and locked completion rejects timeline drift."""
-    settings = load_settings_as_dict()
-    settings["orrery"]["experiences"]["max_seeds_per_render"] = 2
+    settings = settings_with(
+        {
+            "orrery.experiences.max_seeds_per_render": 2,
+        }
+    )
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
@@ -3951,7 +3996,7 @@ def test_boundary_batches_are_bounded_and_timeline_drift_is_rejected() -> None:
 
 def test_acquisition_requires_told_or_granted_delivered_account() -> None:
     """Only durable delivered-account awareness mints acquisition experiences."""
-    settings = load_settings_as_dict()
+    settings = load_settings()
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:

@@ -14,7 +14,7 @@ import tomlkit
 from nexus.api.native_structured_output import openai_response_text_format
 from nexus.api.summary_errors import SummaryInputTooLong
 from nexus.api.summary_triggers import SummaryTask, schedule_summary_generation
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings, load_settings_as_dict
 from nexus.config.seat_window import resolve_seat_window, resolve_summary_window
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.telemetry.attempt_manifest import (
@@ -183,7 +183,7 @@ def test_summary_budget_fails_job_before_test_provider_call(
                 cur=cur,
                 session_id=None,
             )
-        scheduler = SlotScheduler(4, dbname=dbname, settings=load_settings_as_dict())
+        scheduler = SlotScheduler(4, dbname=dbname, settings=load_settings())
         with pytest.raises(SummaryInputTooLong, match="model 'TEST'") as caught:
             scheduler.run_pass(
                 narration_limit=0,

@@ -59,7 +59,7 @@ from nexus.agents.orrery.tag_writer import (
     apply_status_pair_tag_bestowal,
     apply_tag_bestowal,
 )
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.story_model import (
     SeatResolution,
     persisted_job_model,
@@ -132,7 +132,7 @@ def enqueue_declared_entity_maturations(
     chunk_id: int,
     raw_text: str,
     slot: Optional[int] = None,
-    settings: Optional[Mapping[str, Any]] = None,
+    settings: Optional[Settings] = None,
     accepting_world_time: Optional[datetime] = None,
     scene_location: str | None = None,
 ) -> MaturationEnqueueResult:
@@ -162,8 +162,8 @@ def enqueue_declared_entity_maturations(
         )
     result.declared = len(parsed)
 
-    settings_dict = dict(settings or load_settings_as_dict())
-    cfg = _maturation_settings(settings_dict)
+    typed = settings or load_settings()
+    cfg = typed.require_orrery("Retrograde maturation").retrograde.maturation
     if not cfg.enabled:
         result.skipped_disabled = len(parsed)
         logger.info(
@@ -242,7 +242,7 @@ def enqueue_declared_entity_maturations(
                 resolution = resolve_enqueued_seat(
                     "orrery.retrograde.maturation.model_ref",
                     cur,
-                    settings=settings_dict,
+                    settings=typed,
                     slot=slot,
                 )
             inserted = _enqueue_job(
@@ -580,22 +580,15 @@ def drain_maturation_jobs_sync(
     slot: Optional[int] = None,
     *,
     limit: Optional[int] = None,
-    settings: Optional[Mapping[str, Any]] = None,
+    settings: Optional[Settings] = None,
     conn: Optional[Any] = None,
 ) -> tuple[int, int]:
     """Lease and run queued maturation jobs; returns (matured, failed)."""
 
-    settings_dict = dict(settings or load_settings_as_dict())
-    cfg = _maturation_settings(settings_dict)
+    typed = settings or load_settings()
+    cfg = typed.require_orrery("Retrograde maturation").retrograde.maturation
     if not cfg.enabled:
         return (0, 0)
-    typed_settings = Settings.model_validate(
-        {
-            key: value
-            for key, value in settings_dict.items()
-            if key not in {"Agent Settings", "API Settings"}
-        }
-    )
 
     owns_conn = conn is None
     conn = conn or _connect_for_slot(slot)
@@ -682,8 +675,7 @@ def drain_maturation_jobs_sync(
                         conn,
                         row=row,
                         cfg=cfg,
-                        settings_dict=settings_dict,
-                        settings=typed_settings,
+                        settings=typed,
                         slot=slot,
                     )
                 matured += 1
@@ -723,7 +715,6 @@ def _mature_one(
     *,
     row: Mapping[str, Any],
     cfg: OrreryRetrogradeMaturationSettings,
-    settings_dict: Mapping[str, Any],
     settings: Settings,
     slot: Optional[int],
 ) -> dict[str, Any]:
@@ -734,9 +725,9 @@ def _mature_one(
     model = persisted_job_model(row, table="orrery_maturation_jobs")
     started = time.monotonic()
     dbname = conn.info.dbname
-    retrieval = _retrieval_settings(settings_dict)
     if settings.orrery is None:
         raise ValueError("settings.orrery is required for Retrograde maturation")
+    retrieval = settings.orrery.retrograde.retrieval
 
     prior_manifest = row.get("result_manifest") or {}
     if prior_manifest.get("persisted"):
@@ -1097,8 +1088,6 @@ def build_runtime_maturation_packet(
     }
 
     if settings is None:
-        from nexus.config import load_settings
-
         settings = load_settings()
     if settings.orrery is None:
         raise ValueError("settings.orrery is required for maturation weirdness")
@@ -1761,28 +1750,6 @@ def _manifest_weird_block(weird: Mapping[str, Any]) -> dict[str, Any]:
             "band_fraction": weird["band_fraction"],
         },
     }
-
-
-def _maturation_settings(
-    settings: Mapping[str, Any],
-) -> OrreryRetrogradeMaturationSettings:
-    raw = ((settings.get("orrery") or {}).get("retrograde") or {}).get(
-        "maturation"
-    ) or {}
-    if isinstance(raw, OrreryRetrogradeMaturationSettings):
-        return raw
-    return OrreryRetrogradeMaturationSettings.model_validate(raw)
-
-
-def _retrieval_settings(
-    settings: Mapping[str, Any],
-) -> OrreryRetrogradeRetrievalSettings:
-    raw = ((settings.get("orrery") or {}).get("retrograde") or {}).get(
-        "retrieval"
-    ) or {}
-    if isinstance(raw, OrreryRetrogradeRetrievalSettings):
-        return raw
-    return OrreryRetrogradeRetrievalSettings.model_validate(raw)
 
 
 def _slot_int(slot: Optional[int], slot_label: Any) -> int:

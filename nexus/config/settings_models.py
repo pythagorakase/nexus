@@ -3911,7 +3911,7 @@ class APIConstraintsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_choice_text_length: int = Field(
-        default=1000, ge=1, description="Maximum length of choice text"
+        ..., ge=1, description="Maximum length of choice text"
     )
 
 
@@ -4039,8 +4039,8 @@ class APISettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    constraints: Optional[APIConstraintsConfig] = Field(
-        default=None, description="API constraints configuration"
+    constraints: APIConstraintsConfig = Field(
+        ..., description="API constraints configuration"
     )
     database: APIDatabaseSettings = Field(
         ..., description="Slot database connection behavior"
@@ -4390,6 +4390,22 @@ class Settings(BaseModel):
         default_factory=UsageSettings,
         description="Provider-reported API token telemetry settings",
     )
+
+    def require_orrery(self, purpose: str) -> OrrerySettings:
+        """Return Orrery settings or name the operation requiring the section."""
+        if self.orrery is None:
+            raise RuntimeError(
+                f"nexus.toml is missing the [orrery] section required for {purpose}"
+            )
+        return self.orrery
+
+    def require_runtime(self, purpose: str) -> RuntimeSettings:
+        """Return runtime settings or name the operation requiring the section."""
+        if self.runtime is None:
+            raise RuntimeError(
+                f"nexus.toml is missing the [runtime] section required for {purpose}"
+            )
+        return self.runtime
 
     @model_validator(mode="before")
     @classmethod

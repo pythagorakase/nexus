@@ -48,7 +48,7 @@ from nexus.agents.orrery.worker import (
     promote_pending_resolutions_sync,
 )
 from nexus.api.slot_utils import get_slot_db_url
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings, load_settings_as_dict
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
@@ -186,8 +186,8 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed(
 ) -> None:
     """The full Orrery pipeline runs on the seeded clone with config thresholds."""
 
-    settings = load_settings_as_dict()
-    orrery_settings = settings["orrery"]
+    settings = load_settings()
+    orrery_settings = settings.require_orrery("live cycle").model_dump(by_alias=True)
     assert orrery_settings["enabled"] is True, "Orrery must ship default-on"
     promote_settings = orrery_settings["promote"]
     priority_threshold = float(promote_settings["priority_threshold"])

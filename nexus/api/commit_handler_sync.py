@@ -9,7 +9,7 @@ transaction moves an incubator row into ``narrative_chunks`` and its tables.
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional, cast
+from typing import Any, Dict, List, Mapping, Optional
 
 from psycopg2.extras import RealDictCursor
 
@@ -59,6 +59,7 @@ from nexus.api.summary_triggers import (
     plan_summary_tasks,
     schedule_summary_generation,
 )
+from nexus.config.settings_models import OrrerySettings, Settings
 from nexus.memory.context_state import (
     bind_pass2_baseline,
 )
@@ -722,7 +723,11 @@ def commit_incubator_to_database_sync(
                 )
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
-            orrery_settings = _load_orrery_settings()
+            commit_settings = _load_orrery_settings()
+            orrery = commit_settings.require_orrery("the accepted-chunk Orrery commit")
+            # The Orrery engine's settings consumers take plain mappings; dump only
+            # the Orrery section, once for this commit.
+            orrery_sections = orrery.model_dump(by_alias=True)
             staged_orrery_proposal, bleed_offer_resolution_ids = (
                 split_staged_orrery_payload(incubator.get("orrery_proposal"))
             )
@@ -734,19 +739,19 @@ def commit_incubator_to_database_sync(
                 world_layer=world_layer,
                 adjudications=incubator.get("orrery_adjudications"),
                 storyteller_state_updates=incubator.get("entity_updates"),
-                prompt_settings=orrery_settings.get("prompt"),
-                ecology_settings=orrery_settings.get("ecology"),
-                project_settings=orrery_settings.get("projects"),
-                mood_settings=orrery_settings.get("mood"),
+                prompt_settings=orrery_sections["prompt"],
+                ecology_settings=orrery_sections["ecology"],
+                project_settings=orrery_sections["projects"],
+                mood_settings=orrery_sections["mood"],
                 epistemics_settings=(
-                    orrery_settings.get("epistemics")
+                    orrery_sections["epistemics"]
                     if staged_orrery_proposal is None
                     else None
                 ),
-                contagion_settings=orrery_settings.get("contagion"),
-                distortion_settings=orrery_settings.get("distortion"),
-                drift_settings=orrery_settings.get("drift"),
-                reveal_settings=orrery_settings.get("reveal"),
+                contagion_settings=orrery_sections["contagion"],
+                distortion_settings=orrery_sections["distortion"],
+                drift_settings=orrery_sections["drift"],
+                reveal_settings=orrery_sections["reveal"],
             )
             record_bleed_offers(
                 conn,
@@ -803,7 +808,7 @@ def commit_incubator_to_database_sync(
             experience_count = seed_character_experiences_sync(
                 conn,
                 anchor_chunk_id=chunk_id,
-                settings=orrery_settings,
+                settings=commit_settings,
                 warning_sink=experience_warnings,
             )
             if experience_count:
@@ -819,7 +824,7 @@ def commit_incubator_to_database_sync(
                     scene_end_chunk_id=int(incubator["parent_chunk_id"]),
                     world_layer=world_layer,
                     slot=slot,
-                    settings=orrery_settings,
+                    settings=commit_settings,
                 )
                 if enqueued_jobs:
                     logger.info(
@@ -831,7 +836,7 @@ def commit_incubator_to_database_sync(
             # Step 9.55: interval state checkpoint (reconstruction bar 7c).
             # Fresh cursor: the earlier `with conn.cursor()` blocks have
             # closed theirs by this point (review finding on #428).
-            checkpoint_interval = _orrery_checkpoint_interval(orrery_settings)
+            checkpoint_interval = _orrery_checkpoint_interval(orrery)
             if checkpoint_interval:
                 with conn.cursor() as checkpoint_cur:
                     playable_ordinal = playable_narrative_ordinal_sync(checkpoint_cur)
@@ -943,7 +948,7 @@ def compact_accepted_correspondence_sync(
             resolved_model = resolve_enqueued_seat(
                 "storyteller.correspondence.compaction_model",
                 cur,
-                settings=settings.model_dump(),
+                settings=settings,
             ).model
     model = resolved_model
     dbname = getattr(getattr(conn, "info", None), "dbname", None)
@@ -1199,16 +1204,15 @@ def _apply_state_tags(
         logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")
 
 
-def _load_orrery_settings() -> Mapping[str, Any]:
-    """Load the Orrery configuration once for one accepted-chunk operation."""
+def _load_orrery_settings() -> Settings:
+    """Load the typed configuration once for one accepted-chunk operation."""
 
-    from nexus.config import load_settings_as_dict
+    from nexus.config import load_settings
 
-    return cast(Mapping[str, Any], load_settings_as_dict().get("orrery") or {})
+    return load_settings()
 
 
-def _orrery_checkpoint_interval(orrery_settings: Mapping[str, Any]) -> int:
+def _orrery_checkpoint_interval(orrery: OrrerySettings) -> int:
     """[orrery.reconstruction] checkpoint cadence; 0 disables."""
 
-    reconstruction = orrery_settings.get("reconstruction") or {}
-    return int(reconstruction.get("checkpoint_interval_chunks", 0))
+    return orrery.reconstruction.checkpoint_interval_chunks

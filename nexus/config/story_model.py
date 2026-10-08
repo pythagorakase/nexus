@@ -257,33 +257,11 @@ def resolve_enqueued_seat(
     seat: str,
     cur: Any,
     *,
-    settings: Mapping[str, Any] | None = None,
+    settings: Settings | None = None,
     slot: int | None = None,
 ) -> SeatResolution:
     """Capture pins on the accepting transaction, serialized against repinning."""
-    if settings is None:
-        typed = load_settings()
-    elif "global" in settings:
-        typed = Settings.model_validate(
-            {
-                k: v
-                for k, v in settings.items()
-                if k not in {"Agent Settings", "API Settings"}
-            }
-        )
-    else:
-        # Accepting experience callers already hold the Orrery subsection.
-        complete = load_settings().model_dump()
-
-        def merge(target: dict[str, Any], updates: Mapping[str, Any]) -> None:
-            for key, value in updates.items():
-                if isinstance(value, Mapping) and isinstance(target.get(key), dict):
-                    merge(target[key], value)
-                else:
-                    target[key] = value
-
-        merge(complete["orrery"], settings.get("orrery", settings))
-        typed = Settings.model_validate(complete)
+    typed = settings or load_settings()
     cur.execute(
         "SELECT model, gaia_model, apex_context_window FROM global_variables WHERE id = TRUE FOR SHARE"
     )

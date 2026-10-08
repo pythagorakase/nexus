@@ -5,6 +5,14 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
+
+from nexus.config.settings_models import (
+    OrreryNarrationSettings,
+    OrreryPromoteSettings,
+    Settings,
+)
+from tests.settings_helpers import settings_with, table
 
 from nexus.agents.orrery.worker import (
     clear_semantic_tags_sync,
@@ -121,17 +129,20 @@ class WorkerConn:
         self.closed = True
 
 
-def _settings():
-    return {
-        "orrery": {
-            "narration": {},
-            "promote": {
-                "priority_threshold": 50.0,
-                "magnitude_threshold": 0.5,
-                "perceptual_summary_max_chars": 240,
-            },
+def _settings() -> Settings:
+    return settings_with(
+        {
+            "orrery.narration": table(OrreryNarrationSettings),
+            "orrery.promote": table(
+                OrreryPromoteSettings,
+                {
+                    "priority_threshold": 50.0,
+                    "magnitude_threshold": 0.5,
+                    "perceptual_summary_max_chars": 240,
+                },
+            ),
         }
-    }
+    )
 
 
 def _promotion_row():
@@ -267,8 +278,7 @@ def test_promote_default_thresholds_match_calibrated_seams() -> None:
         (dict(_promotion_row(), id=4, priority=84, magnitude=0.36), True),  # hide
         (dict(_promotion_row(), id=5, priority=25, magnitude=0.74), True),  # sleep!
     ]
-    settings = _settings()
-    del settings["orrery"]["promote"]  # exercise OrreryPromoteSettings defaults
+    settings = settings_with({"orrery.promote": table(OrreryPromoteSettings)})
     cursor = WorkerCursor(promotion_rows=[row for row, _expected in rows])
 
     promoted, skipped = promote_pending_resolutions_sync(
@@ -294,12 +304,18 @@ def test_promote_pending_resolutions_uses_configured_thresholds() -> None:
     """Promotion salience should be tuned through Orrery promote config."""
 
     row = dict(_promotion_row(), priority=80, magnitude=0.7)
-    settings = _settings()
-    settings["orrery"]["promote"] = {
-        "priority_threshold": 90.0,
-        "magnitude_threshold": 0.9,
-        "perceptual_summary_max_chars": 16,
-    }
+    settings = settings_with(
+        {
+            "orrery.promote": table(
+                OrreryPromoteSettings,
+                {
+                    "priority_threshold": 90.0,
+                    "magnitude_threshold": 0.9,
+                    "perceptual_summary_max_chars": 16,
+                },
+            ),
+        }
+    )
     cursor = WorkerCursor(promotion_rows=[row])
 
     promoted, skipped = promote_pending_resolutions_sync(
@@ -347,23 +363,8 @@ def test_drain_narration_outbox_rejects_retired_provider_config_before_leasing()
 ):
     """Retired provider settings fail before a worker takes custody."""
 
-    cursor = WorkerCursor(job_rows=[_job_row()])
-
-    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
-        drain_narration_outbox_sync(
-            slot=5,
-            settings={
-                "orrery": {"narration": {"provider": "missing", "model_ref": "TEST"}}
-            },
-            conn=WorkerConn(cursor),
-        )
-
-    lease_updates = [
-        sql
-        for sql, _params in cursor.executed
-        if "UPDATE orrery_narration_jobs" in sql and "SET state = 'leased'" in sql
-    ]
-    assert lease_updates == []
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        settings_with({"orrery.narration.provider": "missing"})
 
 
 def test_drain_narration_outbox_requeues_transient_failures() -> None:
@@ -415,7 +416,7 @@ def test_clear_semantic_tags_is_conservative_noop_without_local_inference() -> N
 
     cleared = clear_semantic_tags_sync(
         slot=5,
-        settings=_settings(),
+        settings=_settings().model_dump(),
         conn=WorkerConn(cursor),
     )
 
