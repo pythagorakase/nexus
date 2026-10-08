@@ -90,16 +90,6 @@ DYNAMIC_REGISTRIES: dict[FacadePath, tuple[str, str]] = {
         "memnon.retrieval.cross_encoder_reranking.weights_by_query_type",
         "reranker blend weights keyed by query type",
     ),
-    (
-        "Agent Settings",
-        "MEMNON",
-        "retrieval",
-        "cross_encoder_reranking",
-        "candidates",
-    ): (
-        "memnon.retrieval.cross_encoder_reranking.candidates",
-        "reranker candidate registry keyed by candidate name",
-    ),
 }
 
 # Every other façade leaf and its typed owner path on ``Settings``.
@@ -627,6 +617,20 @@ OWNERSHIP: dict[FacadePath, str] = {
         "cross_encoder_reranking",
         "model_path",
     ): "memnon.retrieval.cross_encoder_reranking.model_path",
+    (
+        "Agent Settings",
+        "MEMNON",
+        "retrieval",
+        "cross_encoder_reranking",
+        "name",
+    ): "memnon.retrieval.cross_encoder_reranking.name",
+    (
+        "Agent Settings",
+        "MEMNON",
+        "retrieval",
+        "cross_encoder_reranking",
+        "remote_path",
+    ): "memnon.retrieval.cross_encoder_reranking.remote_path",
     (
         "Agent Settings",
         "MEMNON",

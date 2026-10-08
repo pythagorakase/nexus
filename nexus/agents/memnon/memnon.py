@@ -224,15 +224,13 @@ class MEMNON:
         # not mid-turn; query_memory's rerank_results reuses this cache entry.
         reranker_config = self.settings["retrieval"]["cross_encoder_reranking"]
         if reranker_config["enabled"]:
-            from .utils.cross_encoder import get_or_create_reranker, reranker_repo_id
+            from .utils.cross_encoder import get_or_create_reranker
 
             self.reranker = get_or_create_reranker(
                 model_path=reranker_config["model_path"],
                 api_type=reranker_config["api_type"],
                 device=None,
-                repo_id=reranker_repo_id(
-                    reranker_config["model_path"], reranker_config["candidates"]
-                ),
+                repo_id=reranker_config["remote_path"],
             )
         else:
             self.reranker = None
@@ -1590,7 +1588,7 @@ class MEMNON:
             cross_encoder_config.get("enabled", False)
             and len(search_results_initial) > 0
         ):
-            from .utils.cross_encoder import rerank_results, reranker_repo_id
+            from .utils.cross_encoder import rerank_results
 
             logger.info("Applying cross-encoder reranking")
             search_metadata["strategies_used"].append("cross_encoder_reranking")
@@ -1628,9 +1626,7 @@ class MEMNON:
                 use_sliding_window=use_sliding_window,
                 model_path=model_path,
                 api_type=api_type,
-                repo_id=reranker_repo_id(
-                    model_path, cross_encoder_config["candidates"]
-                ),
+                repo_id=cross_encoder_config["remote_path"],
             )
 
             rerank_time = time.time() - rerank_start_time

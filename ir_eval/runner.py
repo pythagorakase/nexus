@@ -155,7 +155,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         action="append",
         required=True,
-        help="Model spec in model:weight format (repeatable)",
+        help=(
+            "Model spec in model:weight format (repeatable). The model is the "
+            "production [memnon.models] entry or an "
+            "[ir_eval.embedding_candidates] entry."
+        ),
     )
     create.add_argument("--hybrid", action=argparse.BooleanOptionalAction, default=True)
     create.add_argument("--vector-weight", type=float, default=0.6)
@@ -170,8 +174,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--reranker",
         default=None,
         help=(
-            "Name of a candidate in [memnon.retrieval.cross_encoder_reranking.candidates]. "
-            "If omitted, falls back to the legacy cross_encoder_reranking.model_path setting."
+            "Name of an [ir_eval.reranker_candidates] entry. If omitted, the run "
+            "uses the production [memnon.retrieval.cross_encoder_reranking] "
+            "reranker."
         ),
     )
     create.add_argument("--top-k", type=int, default=10)
