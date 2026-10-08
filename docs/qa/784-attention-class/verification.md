@@ -45,10 +45,14 @@ is historical evidence, not a fresh measurement by this branch.
   `.55` opacity rule. There is no new visible label, element, icon or hue.
 - Pure tests cover the authoring refusals, defaults, exact roster, claim
   refusal order, catalog markers, audit payload and chosen/unchosen trace.
-  Existing coverage fixtures receive the new required metadata. The PG tests
-  compare real card branches to every Backstage inventory row and preserve
-  null for an unknown fixture label. The new drawer test exercises rendered
-  row attributes without printing the class.
+  Existing coverage fixtures receive the new required metadata. The existing
+  card-identity class assertion requires corpus opt-in and will skip in the
+  ordinary PostgreSQL proof; that skip cannot establish class wiring. A new
+  template-clone endpoint test persists two known branch rows and requires
+  exactly two assembled rows and inventory entries with background and
+  meaningful values. It cleans its inserted rows in `finally`. The existing
+  unknown fixture label still requires null. The new drawer test exercises
+  rendered row attributes without printing the class.
 
 No change routes, exposes, commits, escalates or seeds on attention. The
 resolution type, resolver, events, worker, cards, model wire schemas, grammar
@@ -202,6 +206,11 @@ NEXUS_RUN_POSTGRES=1 nice -n 15 "$PY" -m pytest -q -p tests.dbname_audit \
 The two ordered controls remain pending: remove the background invariants
 and require the pure refusal cases to fail; remove only the background pin
 from Stroll's `Pace the near ground` and require the roster check to fail.
+An additional restoring control replaces the Backstage row's attention lookup
+with `None`; require
+`test_backstage_endpoints_pg.py::test_payload_reports_known_branch_attention`
+to fail on the expected class mapping, not setup or empty output. This proves
+the template-only endpoint test detects missing wiring without corpus opt-in.
 Preserve exact failure identities and raw tails, and record before/planted/
 restored hashes while restoring the source bytes even on interruption.
 
