@@ -1,0 +1,9 @@
+scripts/create_vector_index.py
+scripts/extract_scene_numbers.py
+scripts/extract_season_episode.py
+scripts/import_narratives.py
+scripts/migrate_provider_names.py
+scripts/new_story_setup.py
+scripts/regenerate_embeddings.py
+scripts/update_scene_numbers.py
+scripts/vector_migration.py
