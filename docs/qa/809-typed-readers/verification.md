@@ -1,8 +1,8 @@
 # 809-S1 Typed Settings Readers
 
-Status: source implementation complete; green, PostgreSQL, static and coordinated
-integration proof are pending. The only executed test session is the ordered
-initial red probe below. No publication or merge readiness is claimed.
+Status: source implementation and the ordered 12-case offline red/green proof
+are complete. PostgreSQL, static comparison and coordinated integration proof
+remain pending. No publication or merge readiness is claimed.
 
 The coordinator separately admitted a lightweight Black/source checkpoint.
 Black completed over all 32 changed or added Python files: 10 reformatted,
@@ -62,6 +62,30 @@ connection-refusal tripwire even when included later in a PostgreSQL-enabled
 session. The tripwire raises pytest's failure outcome, which cannot satisfy the
 required `RuntimeError`. The scheduler's explicit database is the unused
 disposable name `qa640_809_unused`; no connection was attempted.
+
+## Bounded Green and Source Checkpoint
+
+The same exact offline command passed on source commit
+`dec6f76cfdf559e89cda2085817aa1afdaf1d9ec`, under the same 120-second deadline,
+cleared environment, exact import path and connection-refusal tripwire. The
+one-minute load was 7.593. Original metadata and output are retained in
+[initial-green.json](initial-green.json) and [initial-green.txt](initial-green.txt).
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner targets: none
+12 passed in 0.90s
+```
+
+No source correction was needed after this green run. The source checkpoint's
+normal commit hooks passed the catalog regeneration, configuration/model-ID
+validation and exception-disposition checks. The migration-comment hook had no
+applicable files. Two independent source reviews found no blocker in the ten
+production conversions; the review of partial maturation tables and queued-model
+identity tests found their prior semantics preserved. These are source reviews,
+not additional runtime proof.
 
 ## Source Changes and Caller Adaptations
 
