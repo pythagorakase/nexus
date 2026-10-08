@@ -26,13 +26,14 @@ from nexus.agents.orrery.retrograde_maturation import (
     MaturationEnqueueResult,
     RetrogradeMaturationVocabularyError,
     _mature_one,
-    _load_story_setting,
+    _load_story_weird_inputs,
     _resolve_maturation_weird,
     _slot_label,
     enqueue_declared_entity_maturations,
     namespace_expansion_event_refs,
 )
 from nexus.api.lore_adapter import extract_new_entities
+from nexus.config import load_settings, load_settings_as_dict
 from nexus.config.settings_models import OrreryRetrogradeMaturationSettings, Settings
 
 from tests.pg_fixtures import (
@@ -397,28 +398,88 @@ def test_namespace_leaves_unknown_source_refs_for_validation() -> None:
 # ============================================================================
 
 
+def _genesis_record(
+    settings: Settings,
+    *,
+    genre: str,
+    level: str,
+    selected_level: str | None,
+) -> dict[str, Any]:
+    """Build a genesis record exactly as ``_record_genesis_weird`` stores it."""
+
+    from nexus.agents.orrery.retrograde_packet import resolve_weird_profile
+
+    profile = resolve_weird_profile(
+        settings=settings,
+        setting={"genre": genre},
+        weird_level=level,
+    )
+    return {**profile, "selected_level": selected_level}
+
+
+def _typed_settings_with_default_level(level: str) -> Settings:
+    """Typed settings from nexus.toml with one ``default_level`` override."""
+
+    raw = load_settings_as_dict()
+    raw["orrery"]["retrograde"]["weird"]["default_level"] = level
+    return Settings.model_validate(
+        {
+            key: value
+            for key, value in raw.items()
+            if key not in {"Agent Settings", "API Settings"}
+        }
+    )
+
+
+def _expected_manifest_weird(
+    settings: Settings,
+    cfg: OrreryRetrogradeMaturationSettings,
+    *,
+    genre: str,
+    level: str,
+    level_source: str,
+) -> dict[str, Any]:
+    """The manifest block computed from the configured band tables."""
+
+    assert settings.orrery is not None
+    band = getattr(settings.orrery.retrograde.weird.bands_by_genre[genre], level)
+    fraction = float(cfg.weird_band_fraction)
+    return {
+        "level": level,
+        "level_source": level_source,
+        "band": {
+            "genre": genre,
+            "raw_min": band.min,
+            "raw_max": pytest.approx(band.min + (band.max - band.min) * fraction),
+            "band_fraction": fraction,
+        },
+    }
+
+
 def test_resolve_maturation_weird_contracts_the_genre_band() -> None:
     """entropy(cold_start) > entropy(maturation): same floor, lower ceiling."""
 
     from nexus.agents.orrery.retrograde_packet import resolve_weird_profile
-    from nexus.config import load_settings
 
     settings = load_settings()
+    assert settings.orrery is not None
     cfg = settings.orrery.retrograde.maturation
     setting = {"genre": "fantasy", "secondary_genres": ["mystery"]}
 
     cold = resolve_weird_profile(
         settings=settings,
         setting=setting,
-        weird_level=cfg.weird_level,
+        weird_level=settings.orrery.retrograde.weird.default_level,
     )
     maturation = _resolve_maturation_weird(
         settings=settings,
         setting=setting,
+        genesis_weird=None,
         cfg=cfg,
     )
 
     assert maturation["source"] == "maturation_band"
+    assert maturation["level_source"] == "no_genesis_record"
     assert maturation["genre"] == cold["genre"]
     assert maturation["raw_min"] == cold["raw_min"]
     expected_max = cold["raw_min"] + (cold["raw_max"] - cold["raw_min"]) * float(
@@ -433,7 +494,149 @@ def test_resolve_maturation_weird_contracts_the_genre_band() -> None:
     assert "raw" not in maturation
 
 
-def test_load_story_setting_raises_on_missing_payload() -> None:
+def test_maturation_weird_follows_selected_genesis_level() -> None:
+    """A player's genesis choice sets the maturation level (#838)."""
+
+    settings = load_settings()
+    assert settings.orrery is not None
+    assert settings.orrery.retrograde.weird.default_level == "medium"
+    cfg = settings.orrery.retrograde.maturation
+    record = _genesis_record(
+        settings, genre="fantasy", level="high", selected_level="high"
+    )
+
+    weird = _resolve_maturation_weird(
+        settings=settings,
+        setting={"genre": "fantasy"},
+        genesis_weird=record,
+        cfg=cfg,
+    )
+
+    high = settings.orrery.retrograde.weird.bands_by_genre["fantasy"].high
+    assert weird["level"] == "high"
+    assert weird["level_source"] == "genesis_selected"
+    assert weird["source"] == "maturation_band"
+    assert weird["raw_min"] == high.min
+    assert weird["raw_max"] == pytest.approx(
+        high.min + (high.max - high.min) * float(cfg.weird_band_fraction)
+    )
+
+
+def test_maturation_weird_follows_genesis_default_level() -> None:
+    """A genesis record whose level was the default still sets the level."""
+
+    settings = load_settings()
+    assert settings.orrery is not None
+    cfg = settings.orrery.retrograde.maturation
+    record = _genesis_record(
+        settings, genre="fantasy", level="low", selected_level=None
+    )
+
+    weird = _resolve_maturation_weird(
+        settings=settings,
+        setting={"genre": "fantasy"},
+        genesis_weird=record,
+        cfg=cfg,
+    )
+
+    assert weird["level"] == "low"
+    assert weird["level_source"] == "genesis_default"
+
+
+def test_maturation_weird_without_genesis_record_uses_default_level() -> None:
+    """A story with no genesis record matures at the genesis default level."""
+
+    settings = _typed_settings_with_default_level("low")
+    assert settings.orrery is not None
+    cfg = settings.orrery.retrograde.maturation
+
+    weird = _resolve_maturation_weird(
+        settings=settings,
+        setting={"genre": "fantasy"},
+        genesis_weird=None,
+        cfg=cfg,
+    )
+
+    low = settings.orrery.retrograde.weird.bands_by_genre["fantasy"].low
+    assert weird["level"] == "low"
+    assert weird["level_source"] == "no_genesis_record"
+    assert weird["raw_min"] == low.min
+
+
+def test_maturation_weird_resolves_band_from_current_tables() -> None:
+    """The record's frozen bounds stay provenance; today's tables decide."""
+
+    settings = load_settings()
+    assert settings.orrery is not None
+    cfg = settings.orrery.retrograde.maturation
+    record = {
+        **_genesis_record(
+            settings, genre="fantasy", level="high", selected_level="high"
+        ),
+        "raw_min": 0.0,
+        "raw_max": 0.01,
+    }
+
+    weird = _resolve_maturation_weird(
+        settings=settings,
+        setting={"genre": "fantasy"},
+        genesis_weird=record,
+        cfg=cfg,
+    )
+
+    high = settings.orrery.retrograde.weird.bands_by_genre["fantasy"].high
+    assert high.min != 0.0
+    assert weird["raw_min"] == high.min
+    assert weird["raw_max"] == pytest.approx(
+        high.min + (high.max - high.min) * float(cfg.weird_band_fraction)
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        pytest.param({"level": "extreme"}, id="unknown-level"),
+        pytest.param({"level": [], "selected_level": None}, id="list-level"),
+        pytest.param({"level": {"x": 1}, "selected_level": None}, id="object-level"),
+        pytest.param({"selected_level": ...}, id="selected-level-absent"),
+        pytest.param(
+            {"level": "low", "selected_level": "high"}, id="selection-mismatch"
+        ),
+    ],
+)
+def test_maturation_weird_rejects_malformed_genesis_record(
+    mutation: dict[str, Any],
+) -> None:
+    """A malformed genesis record fails loudly instead of guessing a level."""
+
+    settings = load_settings()
+    assert settings.orrery is not None
+    record = _genesis_record(
+        settings, genre="fantasy", level="high", selected_level="high"
+    )
+    for key, value in mutation.items():
+        if value is ...:
+            del record[key]
+        else:
+            record[key] = value
+
+    with pytest.raises(ValueError, match="genesis_weird"):
+        _resolve_maturation_weird(
+            settings=settings,
+            setting={"genre": "fantasy"},
+            genesis_weird=record,
+            cfg=settings.orrery.retrograde.maturation,
+        )
+
+
+def test_maturation_settings_reject_retired_weird_level() -> None:
+    """The retired maturation level key fails config validation (#838)."""
+
+    with pytest.raises(ValidationError):
+        OrreryRetrogradeMaturationSettings.model_validate({"weird_level": "medium"})
+
+
+def test_load_story_weird_inputs_raises_on_missing_setting() -> None:
     """A slot without a persisted wizard setting fails loudly, not silently."""
 
     class _EmptySettingCursor:
@@ -441,10 +644,24 @@ def test_load_story_setting_raises_on_missing_payload() -> None:
             assert "global_variables" in sql
 
         def fetchone(self) -> Any:
-            return {"setting": None}
+            return {"setting": None, "genesis_weird": None}
 
     with pytest.raises(ValueError, match="global_variables.setting"):
-        _load_story_setting(_EmptySettingCursor())
+        _load_story_weird_inputs(_EmptySettingCursor())
+
+
+def test_load_story_weird_inputs_rejects_non_object_genesis_record() -> None:
+    """A genesis record that is not a JSON object fails loudly."""
+
+    class _ScalarGenesisCursor:
+        def execute(self, sql: str, params: Any = None) -> None:
+            assert "genesis_weird" in sql
+
+        def fetchone(self) -> Any:
+            return {"setting": {"genre": "noir"}, "genesis_weird": "high"}
+
+    with pytest.raises(ValueError, match="genesis_weird must be a JSON object"):
+        _load_story_weird_inputs(_ScalarGenesisCursor())
 
 
 def test_maturation_persistence_uses_injected_epistemics_settings(
@@ -513,17 +730,24 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
     )
     monkeypatch.setattr(
         retrograde_maturation,
-        "_load_story_setting",
-        lambda *_: {"genre": "noir"},
+        "_load_story_weird_inputs",
+        lambda *_: ({"genre": "noir"}, None),
     )
     monkeypatch.setattr(
         "nexus.agents.orrery.retrograde_vocabulary.enumerate_seed_eligible_vocabulary",
         lambda _dbname: object(),
     )
+    cfg = OrreryRetrogradeMaturationSettings()
+    stub_weird = _resolve_maturation_weird(
+        settings=typed_settings,
+        setting={"genre": "noir"},
+        genesis_weird=None,
+        cfg=cfg,
+    )
     monkeypatch.setattr(
         retrograde_maturation,
         "build_runtime_maturation_packet",
-        lambda **_kwargs: {"packet": True},
+        lambda **_kwargs: {"packet": True, "weird": stub_weird},
     )
     monkeypatch.setattr(
         "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage",
@@ -582,7 +806,7 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
             "result_manifest": {},
             "slot": "2",
         },
-        cfg=OrreryRetrogradeMaturationSettings(),
+        cfg=cfg,
         settings_dict=settings,
         settings=typed_settings,
         slot=2,
@@ -591,6 +815,13 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
     assert captured["epistemics_settings"] is typed_settings.orrery.epistemics
     assert captured["epistemics_settings"].model_dump() == injected_policy
     assert manifest["persisted"] is True
+    assert manifest["weird"] == _expected_manifest_weird(
+        typed_settings,
+        cfg,
+        genre="noir",
+        level="medium",
+        level_source="no_genesis_record",
+    )
 
 
 def test_required_geo_runs_expansion_when_seed_selection_is_empty(
@@ -649,17 +880,24 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
     )
     monkeypatch.setattr(
         retrograde_maturation,
-        "_load_story_setting",
-        lambda *_: {"genre": "noir"},
+        "_load_story_weird_inputs",
+        lambda *_: ({"genre": "noir"}, None),
     )
     monkeypatch.setattr(
         "nexus.agents.orrery.retrograde_vocabulary.enumerate_seed_eligible_vocabulary",
         lambda _dbname: object(),
     )
+    cfg = OrreryRetrogradeMaturationSettings()
+    stub_weird = _resolve_maturation_weird(
+        settings=typed_settings,
+        setting={"genre": "noir"},
+        genesis_weird=None,
+        cfg=cfg,
+    )
     monkeypatch.setattr(
         retrograde_maturation,
         "build_runtime_maturation_packet",
-        lambda **_kwargs: {"geo_authoring": {"required": True}},
+        lambda **_kwargs: {"geo_authoring": {"required": True}, "weird": stub_weird},
     )
     monkeypatch.setattr(
         "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage",
@@ -711,7 +949,7 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
             "result_manifest": {},
             "slot": "2",
         },
-        cfg=OrreryRetrogradeMaturationSettings(),
+        cfg=cfg,
         settings_dict=settings,
         settings=typed_settings,
         slot=2,
@@ -721,6 +959,148 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
     assert applied_coordinates[0]["coordinates"] == {"lat": 50.0, "lon": 50.0}
     assert manifest["coordinates_persisted"] is True
     assert manifest["skipped"] == "no_seeds_selected"
+    assert manifest["weird"] == _expected_manifest_weird(
+        typed_settings,
+        cfg,
+        genre="noir",
+        level="medium",
+        level_source="no_genesis_record",
+    )
+
+
+def test_seedless_skip_manifest_records_weird(monkeypatch: Any) -> None:
+    """The no-seeds skip manifest records the story's genesis level."""
+
+    class Cursor:
+        def __init__(self) -> None:
+            self.executed: list[tuple[str, Any]] = []
+
+        def __enter__(self) -> "Cursor":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def execute(self, sql: str, params: Any = None) -> None:
+            self.executed.append((sql, params))
+
+        def fetchone(self):
+            return {"id": 7}
+
+    class Connection:
+        def __init__(self) -> None:
+            self.cursor_obj = Cursor()
+
+        def __enter__(self) -> "Connection":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        info = type("Info", (), {"dbname": FAKE_SLOT_DBNAME})()
+
+        def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
+            return self.cursor_obj
+
+    from nexus.agents.orrery.retrograde_packet import resolve_weird_profile
+
+    settings = retrograde_maturation.load_settings_as_dict()
+    typed_settings = Settings.model_validate(
+        {
+            key: value
+            for key, value in settings.items()
+            if key not in {"Agent Settings", "API Settings"}
+        }
+    )
+    record = {
+        **resolve_weird_profile(
+            settings=typed_settings,
+            setting={"genre": "noir"},
+            weird_level="high",
+        ),
+        "selected_level": "high",
+    }
+    expansion_calls: list[dict[str, Any]] = []
+
+    route_slot_to_disposable(monkeypatch.setattr, slot=2, dbname=FAKE_SLOT_DBNAME)
+    monkeypatch.setattr(retrograde_maturation, "_entity_event_count", lambda *_: 0)
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "_load_job_context",
+        lambda *_args, **_kwargs: {"entity_summary": "A courier."},
+    )
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "_load_story_weird_inputs",
+        lambda *_: ({"genre": "noir"}, record),
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_vocabulary.enumerate_seed_eligible_vocabulary",
+        lambda _dbname: object(),
+    )
+
+    def build_packet(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "weird": _resolve_maturation_weird(
+                settings=kwargs["settings"],
+                setting=kwargs["setting"],
+                genesis_weird=kwargs["genesis_weird"],
+                cfg=kwargs["cfg"],
+            )
+        }
+
+    monkeypatch.setattr(
+        retrograde_maturation, "build_runtime_maturation_packet", build_packet
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage",
+        lambda **_kwargs: {
+            "model": "seed-model",
+            "seed_candidate_response": {"selected_seed_ids": []},
+        },
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_expansion.generate_expansion_with_skald",
+        lambda **kwargs: expansion_calls.append(kwargs),
+    )
+    cfg = OrreryRetrogradeMaturationSettings()
+    assert typed_settings.orrery is not None
+
+    manifest = _mature_one(
+        Connection(),
+        row={
+            "job_id": 9,
+            "resolved_model": typed_settings.orrery.retrograde.maturation.model_ref,
+            "resolved_source": "seat_default",
+            "locked_by": "fixture",
+            "lease_nonce": "00000000-0000-0000-0000-000000000001",
+            "entity_id": 79,
+            "entity_kind": "character",
+            "entity_subtype_id": 19,
+            "entity_name": "Ines",
+            "requesting_chunk_id": 103,
+            "declaration": {"summary": "A courier."},
+            "result_manifest": {},
+            "slot": "2",
+        },
+        cfg=cfg,
+        settings_dict=settings,
+        settings=typed_settings,
+        slot=2,
+    )
+
+    assert expansion_calls == []
+    assert manifest["skipped"] == "no_seeds_selected"
+    assert "coordinates_persisted" not in manifest
+    assert manifest["weird"]["level"] == "high"
+    assert manifest["weird"]["level_source"] == "genesis_selected"
+    assert manifest["weird"] == _expected_manifest_weird(
+        typed_settings,
+        cfg,
+        genre="noir",
+        level="high",
+        level_source="genesis_selected",
+    )
 
 
 # ============================================================================

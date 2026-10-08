@@ -2880,10 +2880,6 @@ class OrreryRetrogradeMaturationSettings(BaseModel):
         ge=0,
         description="Deferred-secret cap for a single-entity runtime packet.",
     )
-    weird_level: Literal["low", "medium", "high"] = Field(
-        default="medium",
-        description="Coarse weirdness level for runtime maturation seeds.",
-    )
     weird_band_fraction: float = Field(
         default=0.6,
         gt=0.0,
@@ -3868,9 +3864,6 @@ class WizardSettings(BaseModel):
     )
     max_tokens: int = Field(
         default=4096, ge=1, description="Max output tokens for wizard responses"
-    )
-    enable_streaming: bool = Field(
-        default=True, description="Enable wizard streaming endpoint"
     )
     trait_inputs: WizardTraitInputsSettings = Field(
         default_factory=WizardTraitInputsSettings,

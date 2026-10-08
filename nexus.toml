@@ -185,7 +185,6 @@ display = "Sixtyfour"
 message_history_limit = 20
 max_retries = 2
 max_tokens = 4096
-enable_streaming = true
 
 [wizard.trait_inputs]
 # Transition-time derivation of typed trait-compiler inputs (M9). The wizard
@@ -803,10 +802,11 @@ retry_delay_seconds = 300
 generate_candidates = 4
 select_target = 2
 deferred_secret_cap = 1
-weird_level = "medium"
 # entropy(cold_start) > entropy(maturation): runtime backstory rolls within
 # the lower fraction of the story's genre weird band, measured from its
-# floor. Cold-start wizard history keeps the full band; a mid-story entity's
+# floor. The band is the story's genesis level (global_variables.genesis_weird,
+# or [orrery.retrograde.weird].default_level when the story has none).
+# Cold-start wizard history keeps the full band; a mid-story entity's
 # backstory retrofits around its on-screen introduction. 1.0 = full band.
 weird_band_fraction = 0.6
 # Frontier model for the R4/R6 maturation calls.
@@ -818,6 +818,7 @@ chunk_excerpt_chars = 1200
 # Player-facing Retrograde strangeness is low/medium/high. Each genre remaps
 # those labels onto the raw calibration float below, so "medium" means
 # medium-for-that-genre rather than a universal numeric value.
+# It is also the runtime maturation level for a story with no genesis record.
 default_level = "medium"
 
 [orrery.retrograde.weird.dev]

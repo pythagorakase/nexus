@@ -1,6 +1,5 @@
 """Draft completion, revision and player confirmation are distinct transitions."""
 
-import json
 from copy import deepcopy
 from functools import partial
 from types import SimpleNamespace
@@ -529,18 +528,6 @@ def introduction_routes(
                 raise reply
             return SimpleNamespace(output=reply() if callable(reply) else reply)
 
-        async def run_stream(self, *args, **kwargs):
-            output = (await self.run()).output
-
-            class Turn:
-                async def stream_output(self):
-                    yield output
-
-                async def get_output(self):
-                    return output
-
-            yield Turn()
-
     def record_choices(choices, dbname, *, expected_thread_id):
         assert expected_thread_id == thread_id
         cache.choices = choices
@@ -589,7 +576,6 @@ def introduction_routes(
     monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
     monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: storage)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
-    monkeypatch.setattr(wizard_chat, "get_wizard_streaming_enabled", lambda: True)
     monkeypatch.setattr(
         wizard_chat, "build_pydantic_ai_model_with_provider", lambda m: (None, "test")
     )
@@ -685,10 +671,9 @@ def test_interrupted_introduction_is_retried_once_then_refused(
     }
 
     before = routes.storage.list_messages(routes.thread_id, limit=0)
-    for endpoint in ("/api/story/new/chat", "/api/story/new/chat/stream"):
-        repeated = client.post(endpoint, json=introduction)
-        assert repeated.status_code == 409
-        assert "already introduced" in repeated.json()["detail"]
+    repeated = client.post("/api/story/new/chat", json=introduction)
+    assert repeated.status_code == 409
+    assert "already introduced" in repeated.json()["detail"]
     assert routes.storage.list_messages(routes.thread_id, limit=0) == before
     assert len(replies) == 1
 
@@ -774,17 +759,15 @@ def test_crash_after_transcript_write_settles_the_delivered_claim(
 
     # A retry settles the claim from the transcript instead of introducing again.
     routes.faults["complete"] = None
-    for endpoint in ("/api/story/new/chat", "/api/story/new/chat/stream"):
-        retried = routes.client.post(endpoint, json=routes.introduction)
-        assert retried.status_code == 409
-        assert "already introduced" in retried.json()["detail"]
+    retried = routes.client.post("/api/story/new/chat", json=routes.introduction)
+    assert retried.status_code == 409
+    assert "already introduced" in retried.json()["detail"]
     assert routes.cache.introduction_claim is None
     assert routes.cache.choices == ["Here", "There"]
     assert routes.claims == [None]
     assert assistant_messages(routes) == ["Where does it begin?"]
 
 
-@pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("winner", ["completed", "claimed"])
 @pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
 def test_introduction_that_loses_the_claim_never_reaches_the_transcript(
@@ -792,7 +775,6 @@ def test_introduction_that_loses_the_claim_never_reaches_the_transcript(
     accepted: str,
     introduced: str,
     winner: str,
-    stream: bool,
 ) -> None:
     """Concurrent introductions: only the reply holding the claim is kept."""
     routes: SimpleNamespace
@@ -813,16 +795,9 @@ def test_introduction_that_loses_the_claim_never_reaches_the_transcript(
     routes = introduction_routes(
         monkeypatch, accepted, introduced, [concurrent_winner_goes_first]
     )
-    endpoint = "/api/story/new/chat" + ("/stream" if stream else "")
-    response = routes.client.post(endpoint, json=routes.introduction)
-    if stream:
-        assert response.status_code == 200
-        record = json.loads(response.text.strip().splitlines()[-1])
-        assert (record["type"], record["status_code"]) == ("error", 409)
-        assert "already introduced" in record["detail"]
-    else:
-        assert response.status_code == 409
-        assert "already introduced" in response.json()["detail"]
+    response = routes.client.post("/api/story/new/chat", json=routes.introduction)
+    assert response.status_code == 409
+    assert "already introduced" in response.json()["detail"]
     assert assistant_messages(routes) == []
     assert routes.claims == [None]
     if winner == "completed":
@@ -893,13 +868,10 @@ def test_cli_uses_the_delivered_introduction_after_a_crash(
     assert "message_origin" not in posts[0][1]
 
 
-@pytest.mark.parametrize(
-    "endpoint", ["/api/story/new/chat", "/api/story/new/chat/stream"]
-)
 def test_concurrent_settlement_of_a_delivered_claim_is_stale_state(
-    monkeypatch: pytest.MonkeyPatch, endpoint: str
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Losing the race to settle a delivered claim is a 409, before any stream."""
+    """Losing the race to settle a delivered claim is a 409."""
     from nexus.api.wizard_confirmation import WizardStateConflict
 
     routes = introduction_routes(
@@ -917,7 +889,7 @@ def test_concurrent_settlement_of_a_delivered_claim_is_stale_state(
     routes.faults["complete"] = WizardStateConflict(
         "The introduction changed while it was saved. Resume before continuing."
     )
-    response = routes.client.post(endpoint, json=routes.introduction)
+    response = routes.client.post("/api/story/new/chat", json=routes.introduction)
     assert response.status_code == 409
     assert response.json()["detail"] == (
         "The introduction changed while it was saved. Resume before continuing."
