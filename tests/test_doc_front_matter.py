@@ -49,6 +49,79 @@ CLASSIFIED = {
     "docs/vector_embeddings.md": "historical",
 }
 
+# The decision ledger: one record per file, listed in its README.
+DECISIONS_DIR = "docs/decisions/"
+LEDGER_README = "docs/decisions/README.md"
+RECORD_NAME = re.compile(r"\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*\.md")
+RECORD_TITLE = re.compile(r"# (\d{4}): (\S.*)")
+RECORD_KIND = re.compile(r"\*\*Kind:\*\* (decision|parked)")
+RECORD_LINKS = re.compile(r"\*\*Links:\*\* (\S.*)")
+RECORD_SECTIONS = ("## Ruling", "## Rejected Alternatives", "## Reopening Criteria")
+RECORDS_HEADING = "## Records"
+RECORD_LINK_TARGET = re.compile(r"\]\(([^)]*)\)$")
+FIRST_ISSUE = re.compile(r"#(\d+)")
+
+# The #817 backfill (817-S3): number -> (kind, first linked issue, status).
+# Losing, renumbering, re-kinding or re-statusing a record is a deliberate
+# edit here.
+DECISION_LEDGER: dict[str, tuple[str, int, str]] = {
+    "0001": ("decision", 850, "canonical"),
+    "0002": ("decision", 851, "canonical"),
+    "0003": ("decision", 852, "canonical"),
+    "0004": ("decision", 853, "canonical"),
+    "0005": ("decision", 854, "canonical"),
+    "0006": ("decision", 855, "canonical"),
+    "0007": ("decision", 856, "canonical"),
+    "0008": ("decision", 857, "canonical"),
+    "0009": ("decision", 858, "canonical"),
+    "0010": ("decision", 859, "canonical"),
+    "0011": ("decision", 860, "canonical"),
+    "0012": ("decision", 861, "canonical"),
+    "0013": ("parked", 786, "canonical"),
+    "0014": ("parked", 792, "canonical"),
+    "0015": ("parked", 832, "canonical"),
+    "0016": ("parked", 837, "canonical"),
+    "0017": ("parked", 839, "canonical"),
+    "0018": ("decision", 849, "canonical"),
+    "0019": ("decision", 849, "canonical"),
+    "0020": ("decision", 849, "canonical"),
+    "0021": ("decision", 849, "canonical"),
+    "0022": ("decision", 849, "canonical"),
+    "0023": ("decision", 849, "canonical"),
+    "0024": ("decision", 849, "canonical"),
+    "0025": ("parked", 819, "canonical"),
+    "0026": ("parked", 819, "canonical"),
+    "0027": ("parked", 819, "canonical"),
+    "0028": ("parked", 819, "canonical"),
+    "0029": ("parked", 819, "canonical"),
+    "0030": ("decision", 476, "superseded"),
+    "0031": ("decision", 479, "canonical"),
+    "0032": ("decision", 480, "canonical"),
+    "0033": ("decision", 566, "canonical"),
+    "0034": ("decision", 617, "canonical"),
+    "0035": ("decision", 737, "canonical"),
+    "0036": ("decision", 750, "canonical"),
+    "0037": ("decision", 756, "canonical"),
+    "0038": ("decision", 759, "canonical"),
+    "0039": ("decision", 780, "canonical"),
+    "0040": ("decision", 822, "canonical"),
+    "0041": ("decision", 781, "canonical"),
+    "0042": ("decision", 782, "canonical"),
+    "0043": ("decision", 783, "canonical"),
+    "0044": ("decision", 784, "canonical"),
+    "0045": ("decision", 787, "canonical"),
+    "0046": ("decision", 788, "canonical"),
+    "0047": ("decision", 789, "canonical"),
+    "0048": ("decision", 840, "canonical"),
+    "0049": ("decision", 841, "canonical"),
+    "0050": ("decision", 767, "canonical"),
+    "0051": ("decision", 768, "canonical"),
+    "0052": ("decision", 770, "canonical"),
+    "0053": ("decision", 776, "canonical"),
+    "0054": ("decision", 777, "canonical"),
+    "0055": ("decision", 838, "canonical"),
+}
+
 
 class FrontMatterError(ValueError):
     """A document's front matter block cannot be read as a YAML mapping."""
@@ -307,6 +380,168 @@ def readme_reference_errors(
     return errors
 
 
+@dataclass
+class LedgerRecord:
+    """One decision record as its file name and body declare it."""
+
+    path: str
+    number: str
+    title: str | None = None
+    kind: str | None = None
+    links: str | None = None
+
+
+def _record_body(text: str) -> list[str]:
+    """The lines after a record's closing front matter ``---``."""
+    lines = text.splitlines()
+    for index in range(1, len(lines)):
+        if lines[index].rstrip() == "---":
+            return lines[index + 1 :]
+    return []
+
+
+def _record_errors(record: LedgerRecord, body: list[str]) -> list[str]:
+    """Check a record body's title, Kind, Links and sections; fill ``record``."""
+    path = record.path
+    if not body or body[0] != "":
+        return [f"{path}: exactly one blank line must follow the closing ---"]
+    title = RECORD_TITLE.fullmatch(body[1].rstrip()) if len(body) > 1 else None
+    if title is None or title.group(1) != record.number:
+        return [
+            f"{path}: the line after the closing --- and one blank line must be "
+            f"'# {record.number}: <title>'"
+        ]
+    record.title = title.group(2)
+    errors: list[str] = []
+    kind = RECORD_KIND.fullmatch(body[3]) if len(body) > 3 and body[2] == "" else None
+    if kind is None:
+        errors.append(
+            f"{path}: '**Kind:** decision' or '**Kind:** parked' must follow the "
+            "title after one blank line"
+        )
+    else:
+        record.kind = kind.group(1)
+    links = RECORD_LINKS.fullmatch(body[4]) if len(body) > 4 else None
+    if links is None:
+        errors.append(f"{path}: a non-empty '**Links:**' line must follow the Kind")
+    else:
+        record.links = links.group(1)
+
+    headings: list[tuple[int, str]] = []
+    fenced = False
+    for index, line in enumerate(body):
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("## "):
+            headings.append((index, line.rstrip()))
+    found = [heading for _, heading in headings]
+    if found != list(RECORD_SECTIONS):
+        errors.append(
+            f"{path}: the ## headings must be exactly {list(RECORD_SECTIONS)} in "
+            f"that order, not {found}"
+        )
+        return errors
+    ends = [index for index, _ in headings[1:]] + [len(body)]
+    for (start, heading), end in zip(headings, ends):
+        if not any(line.strip() for line in body[start + 1 : end]):
+            errors.append(f"{path}: section {heading!r} is empty")
+    return errors
+
+
+def _records_list_errors(root: Path, records: list[LedgerRecord]) -> list[str]:
+    """The README's Records list names each record once, in number order."""
+    text = (root / LEDGER_README).read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if RECORDS_HEADING not in lines:
+        return [f"{LEDGER_README}: has no {RECORDS_HEADING!r} section"]
+    start = lines.index(RECORDS_HEADING) + 1
+    end = next(
+        (i for i in range(start, len(lines)) if lines[i].startswith("#")), len(lines)
+    )
+    listed = [line.rstrip() for line in lines[start:end] if line.strip()]
+    # A record whose title cannot be read is already reported; its line is not.
+    unreadable = {
+        PurePosixPath(record.path).name for record in records if record.title is None
+    }
+    listed = [
+        line
+        for line in listed
+        if not (
+            (target := RECORD_LINK_TARGET.search(line))
+            and target.group(1) in unreadable
+        )
+    ]
+    expected = [
+        f"- [{record.number}: {record.title}]({PurePosixPath(record.path).name})"
+        for record in sorted(records, key=lambda record: record.number)
+        if record.title is not None
+    ]
+    if not expected and listed == ["None yet."]:
+        return []
+    errors: list[str] = []
+    for line in expected:
+        if line not in listed:
+            errors.append(f"{LEDGER_README}: the Records list lacks {line!r}")
+    for line in dict.fromkeys(listed):
+        if line not in expected:
+            errors.append(
+                f"{LEDGER_README}: the Records list line {line!r} names no record "
+                "with that number, title and file"
+            )
+        elif listed.count(line) > 1:
+            errors.append(
+                f"{LEDGER_README}: the Records list names {line!r} more than once"
+            )
+    if not errors and listed != expected:
+        errors.append(f"{LEDGER_README}: the Records list is not in number order")
+    return errors
+
+
+def read_ledger(
+    root: Path, paths: frozenset[str], documents: dict[str, dict[str, Any]]
+) -> tuple[list[LedgerRecord], list[str]]:
+    """Read every decision record under ``root`` and report format violations."""
+    errors: list[str] = []
+    records: list[LedgerRecord] = []
+    numbers: dict[str, str] = {}
+    for path in sorted(paths):
+        if not path.startswith(DECISIONS_DIR) or path == LEDGER_README:
+            continue
+        name = path[len(DECISIONS_DIR) :]
+        if not RECORD_NAME.fullmatch(name):
+            errors.append(
+                f"{path}: record file names must match NNNN-short-slug.md "
+                "(four digits, then lowercase words joined by hyphens)"
+            )
+            continue
+        number = name[:4]
+        if number in numbers:
+            errors.append(
+                f"{path}: record number {number} is already used by {numbers[number]}"
+            )
+            continue
+        numbers[number] = path
+        record = LedgerRecord(path=path, number=number)
+        records.append(record)
+        if path not in documents:
+            errors.append(f"{path}: a record must open with document front matter")
+            continue
+        body = _record_body((root / path).read_text(encoding="utf-8"))
+        errors.extend(_record_errors(record, body))
+    if LEDGER_README not in paths:
+        errors.append(f"{LEDGER_README}: the ledger README is missing")
+    else:
+        errors.extend(_records_list_errors(root, records))
+    return records, errors
+
+
+def ledger_errors(
+    root: Path, paths: frozenset[str], documents: dict[str, dict[str, Any]]
+) -> list[str]:
+    """Every violation of the record format in ``docs/decisions/README.md``."""
+    return read_ledger(root, paths, documents)[1]
+
+
 class FreshnessHistoryError(RuntimeError):
     """The history the freshness check compares against is missing."""
 
@@ -556,6 +791,37 @@ def test_declared_sources_carry_a_fresh_verified_commit() -> None:
     assert freshness_errors(ROOT) == []
 
 
+def test_decision_ledger_follows_the_record_format(
+    repository: tuple[frozenset[str], Classification],
+) -> None:
+    """Every record and the README's Records list follow the record format."""
+    paths, classification = repository
+    assert ledger_errors(ROOT, paths, classification.documents) == []
+
+
+def _first_issue(links: str | None) -> int | None:
+    """The first ``#NNN`` issue a record's Links line names."""
+    match = FIRST_ISSUE.search(links or "")
+    return int(match.group(1)) if match else None
+
+
+def test_decision_ledger_backfill_holds(
+    repository: tuple[frozenset[str], Classification],
+) -> None:
+    """The #817 backfill keeps every record's number, kind, issue and status."""
+    paths, classification = repository
+    records, _ = read_ledger(ROOT, paths, classification.documents)
+    declared = {
+        record.number: (
+            record.kind,
+            _first_issue(record.links),
+            classification.documents.get(record.path, {}).get("status"),
+        )
+        for record in records
+    }
+    assert declared == DECISION_LEDGER
+
+
 def _write(root: Path, path: str, text: str) -> None:
     """Create one file of a synthetic repository tree."""
     target = root / path
@@ -801,6 +1067,191 @@ def test_readme_checks_dot_relative_links(tmp_path: Path) -> None:
         "historical on the line that references it",
         "README.md:5: ../elsewhere/notes.md points outside the repository",
     ]
+
+
+RECORD_SECTIONS_TEXT = (
+    "## Ruling\n\nRuled.\n\n## Rejected Alternatives\n\n- None.\n\n"
+    "## Reopening Criteria\n\n- A later ruling.\n"
+)
+
+
+def _record(
+    number: str,
+    title: str,
+    kind: str = "**Kind:** decision\n**Links:** #1\n",
+    sections: str = RECORD_SECTIONS_TEXT,
+) -> str:
+    """Render a decision record with valid front matter."""
+    return _document(VALID, f"# {number}: {title}\n\n{kind}\n{sections}")
+
+
+def _records_readme(*lines: str) -> str:
+    """Render a ledger README whose Records list holds ``lines``."""
+    listed = "".join(f"{line}\n" for line in lines)
+    return f"# Ledger\n\n## Records\n\n{listed}"
+
+
+FIRST_LINE = "- [0001: First](0001-first.md)"
+SECOND_LINE = "- [0002: Second](0002-second.md)"
+
+
+def _ledger(root: Path) -> None:
+    """Write a valid two-record ledger under ``root``."""
+    _write(root, "src/app.py", "")
+    _write(root, "docs/decisions/0001-first.md", _record("0001", "First"))
+    _write(root, "docs/decisions/0002-second.md", _record("0002", "Second"))
+    _write(root, LEDGER_README, _records_readme(FIRST_LINE, SECOND_LINE))
+
+
+def _ledger_errors_in(root: Path) -> list[str]:
+    """Run the ledger check on a synthetic tree."""
+    paths = repository_paths(root)
+    return ledger_errors(root, paths, classify(root, paths).documents)
+
+
+def test_valid_synthetic_ledger_passes(tmp_path: Path) -> None:
+    """Two well-formed records listed in number order pass."""
+    _ledger(tmp_path)
+    assert _ledger_errors_in(tmp_path) == []
+
+
+SECOND = "docs/decisions/0002-second.md"
+
+
+@pytest.mark.parametrize(
+    ("files", "message"),
+    [
+        (
+            {"docs/decisions/0003_Third.md": _record("0003", "Third")},
+            "record file names must match NNNN-short-slug.md",
+        ),
+        (
+            {"docs/decisions/0002-zeta.md": _record("0002", "Zeta")},
+            "record number 0002 is already used by docs/decisions/0002-second.md",
+        ),
+        (
+            {SECOND: "# 0002: Second\n\n**Kind:** decision\n**Links:** #1\n"},
+            "a record must open with document front matter",
+        ),
+        (
+            {SECOND: _record("0002", "Second").replace("---\n\n#", "---\n#")},
+            "exactly one blank line must follow the closing ---",
+        ),
+        (
+            {SECOND: _record("0002", "Second").replace("# 0002:", "# 0009:")},
+            "must be '# 0002: <title>'",
+        ),
+        ({SECOND: _record("0002", " ")}, "must be '# 0002: <title>'"),
+        (
+            {SECOND: _record("0002", "Second", kind="**Links:** #1\n")},
+            "'**Kind:** decision' or '**Kind:** parked' must follow the title",
+        ),
+        (
+            {SECOND: _record("0002", "Second", kind="**Kind:** idea\n**Links:** #1\n")},
+            "'**Kind:** decision' or '**Kind:** parked' must follow the title",
+        ),
+        (
+            {
+                SECOND: _record(
+                    "0002", "Second", kind="**Links:** #1\n**Kind:** decision\n"
+                )
+            },
+            "'**Kind:** decision' or '**Kind:** parked' must follow the title",
+        ),
+        (
+            {SECOND: _record("0002", "Second", kind="**Kind:** parked\n**Links:**\n")},
+            "a non-empty '**Links:**' line must follow the Kind",
+        ),
+        (
+            {
+                SECOND: _record(
+                    "0002", "Second", kind="**Kind:** decision\n\n**Links:** #1\n"
+                )
+            },
+            "a non-empty '**Links:**' line must follow the Kind",
+        ),
+        (
+            {SECOND: _record("0002", "Second", kind="**Kind:** decision\n")},
+            "a non-empty '**Links:**' line must follow the Kind",
+        ),
+        (
+            {
+                SECOND: _record(
+                    "0002",
+                    "Second",
+                    sections=RECORD_SECTIONS_TEXT + "\n## Notes\n\nX\n",
+                )
+            },
+            "the ## headings must be exactly",
+        ),
+        (
+            {
+                SECOND: _record(
+                    "0002",
+                    "Second",
+                    sections=RECORD_SECTIONS_TEXT.replace(
+                        "## Reopening Criteria\n\n- A later ruling.\n", ""
+                    ),
+                )
+            },
+            "the ## headings must be exactly",
+        ),
+        (
+            {
+                SECOND: _record(
+                    "0002",
+                    "Second",
+                    sections="## Rejected Alternatives\n\n- None.\n\n## Ruling\n\n"
+                    "Ruled.\n\n## Reopening Criteria\n\n- A later ruling.\n",
+                )
+            },
+            "the ## headings must be exactly",
+        ),
+        (
+            {
+                SECOND: _record(
+                    "0002",
+                    "Second",
+                    sections=RECORD_SECTIONS_TEXT.replace("- None.\n", ""),
+                )
+            },
+            "section '## Rejected Alternatives' is empty",
+        ),
+        (
+            {LEDGER_README: _records_readme(FIRST_LINE)},
+            f"the Records list lacks {SECOND_LINE!r}",
+        ),
+        (
+            {
+                LEDGER_README: _records_readme(
+                    FIRST_LINE, SECOND_LINE.replace("Second", "Other")
+                )
+            },
+            "names no record with that number, title and file",
+        ),
+        (
+            {LEDGER_README: _records_readme(SECOND_LINE, FIRST_LINE)},
+            "the Records list is not in number order",
+        ),
+        (
+            {LEDGER_README: _records_readme(FIRST_LINE, SECOND_LINE, SECOND_LINE)},
+            "more than once",
+        ),
+        (
+            {LEDGER_README: "# Ledger\n\n## Index\n\n" + FIRST_LINE + "\n"},
+            "has no '## Records' section",
+        ),
+    ],
+)
+def test_ledger_rejects_format_violations(
+    tmp_path: Path, files: dict[str, str], message: str
+) -> None:
+    """Each broken file name, body line, section or list line fails by name."""
+    _ledger(tmp_path)
+    for path, text in files.items():
+        _write(tmp_path, path, text)
+    errors = _ledger_errors_in(tmp_path)
+    assert any(message in error for error in errors), errors
 
 
 def _git(root: Path, *args: str) -> str:
