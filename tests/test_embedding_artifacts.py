@@ -1,4 +1,4 @@
-"""Issue #812: ``nexus models lock|verify`` over real artifact directories.
+"""Issue #812: model artifact checks and commands over real directories.
 
 Each test builds synthetic embedder and reranker directories on disk (real
 files, real hashes, real git checkouts), points a copy of the repository
@@ -21,13 +21,17 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 import pytest
 import tomlkit
+from fastapi.testclient import TestClient
 
 from nexus.agents.memnon.utils.artifact_manifest import (
     EMBEDDER_ROLE,
     ArtifactLockError,
     ArtifactSpec,
     artifact_revision,
+    check_artifacts_at_boot,
+    fetch_remedy,
     lock_artifact,
+    production_artifact_specs,
     run_models_command,
 )
 from nexus.agents.memnon.utils.cross_encoder import (
@@ -35,8 +39,10 @@ from nexus.agents.memnon.utils.cross_encoder import (
     CrossEncoderReranker,
 )
 from nexus.agents.memnon.utils.embedding_manager import load_local_model
-from nexus.config.loader import RUNTIME_CONFIG_ENV, settings_path_scope
+from nexus.config.loader import RUNTIME_CONFIG_ENV, load_settings, settings_path_scope
+from nexus.config.provider_guard import TEST_PROVIDER_ONLY_ENV
 from nexus.runtime.contract import HOME_ENV
+from nexus.runtime.readiness import REGISTRY, ReadinessContext, run_readiness
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
@@ -107,13 +113,15 @@ def _embedder_files(dimensions: int) -> Dict[str, bytes]:
     }
 
 
-def _hf_local_dir_metadata(root: Path, files: Dict[str, bytes]) -> None:
+def _hf_local_dir_metadata(
+    root: Path, files: Dict[str, bytes], commit: str = COMMIT
+) -> None:
     """Write what ``hf download --local-dir`` records beside each file."""
 
     for relative in files:
         metadata = root / ".cache/huggingface/download" / f"{relative}.metadata"
         metadata.parent.mkdir(parents=True, exist_ok=True)
-        metadata.write_text(f"{COMMIT}\netag-{relative}\n1758000000.0\n")
+        metadata.write_text(f"{commit}\netag-{relative}\n1758000000.0\n")
 
 
 @dataclass(frozen=True)
@@ -287,9 +295,9 @@ def test_verify_fails_after_one_byte_changes(tmp_path: Path) -> None:
         "from the lock"
     ]
     assert (
-        f"hf download {PRODUCTION.embedder_repo} --revision {COMMIT} "
-        f"--local-dir {workspace.embedder_dir}"
-    ) in result["error"]
+        fetch_remedy(production_artifact_specs(load_settings(workspace.config))[0])
+        in result["error"]
+    )
 
     cli = _cli_verify(workspace.config)
     assert cli.returncode == 1, cli.stdout + cli.stderr
@@ -677,10 +685,10 @@ def test_git_revision_never_comes_from_an_enclosing_repository(
     assert outer_head not in str(raised.value)
 
 
-def test_verify_reports_a_moved_checkout_with_the_pinned_restore(
+def test_verify_reports_a_moved_checkout_with_the_fetch_remedy(
     tmp_path: Path,
 ) -> None:
-    """verify compares the checkout's HEAD with the lock and pins the restore."""
+    """verify compares the checkout's HEAD with the lock and names fetch."""
 
     workspace, head = _checkout_workspace(tmp_path)
     manifest = _lock(workspace)
@@ -710,9 +718,9 @@ def test_verify_reports_a_moved_checkout_with_the_pinned_restore(
         f"the locked {head!r}"
     ]
     assert (
-        f"hf download {PRODUCTION.embedder_repo} --revision {head} "
-        f"--local-dir {workspace.embedder_dir}"
-    ) in result["error"]
+        fetch_remedy(production_artifact_specs(load_settings(workspace.config))[0])
+        in result["error"]
+    )
 
 
 def test_lock_of_a_missing_directory_names_the_locked_revision(
@@ -796,3 +804,373 @@ def test_loader_remedy_pins_the_folder_revision_when_the_lock_has_none(
         f"--local-dir {half_copied}`, then run `nexus models verify`."
     )
     assert raised.value.__cause__ is not None
+
+
+def _flip_byte(path: Path) -> None:
+    """Change content while preserving length, so only a hash detects it."""
+    original = path.read_bytes()
+    path.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+
+
+def _cli_offline_models(
+    command: str, workspace: Workspace, hf_home: Path
+) -> subprocess.CompletedProcess[str]:
+    """Exercise a real CLI process with an isolated, offline Hub cache."""
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nexus.cli",
+            "models",
+            command,
+            "--config",
+            str(workspace.config),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(REPO_ROOT),
+            "HF_HUB_OFFLINE": "1",
+            "HF_HOME": str(hf_home),
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "missing-file",
+        "unexpected-file",
+        "size",
+        "revision",
+        "missing-folder",
+        "dimensions",
+        "missing-lock",
+    ],
+)
+def test_boot_check_refuses_each_drift(tmp_path: Path, drift: str) -> None:
+    """The cheap startup contract covers files, sizes, revisions and config."""
+    workspace, _ = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    if drift == "missing-file":
+        (workspace.reranker_dir / "tokenizer.json").unlink()
+    elif drift == "unexpected-file":
+        (workspace.embedder_dir / "extra.json").write_text("{}")
+    elif drift == "size":
+        (workspace.embedder_dir / "model.safetensors").write_bytes(b"changed")
+    elif drift == "revision":
+        _hf_local_dir_metadata(
+            workspace.reranker_dir,
+            {"config.json": b"", "tokenizer.json": b"", "model.safetensors": b""},
+            commit="f" * 40,
+        )
+    elif drift == "missing-folder":
+        shutil.rmtree(workspace.reranker_dir)
+    elif drift == "dimensions":
+        _write_config(
+            tmp_path,
+            workspace.embedder_dir,
+            workspace.reranker_dir,
+            workspace.lock,
+            name="nexus",
+            dimensions=PRODUCTION.dimensions * 2,
+        )
+    else:
+        workspace.lock.unlink()
+
+    verified = run_models_command("verify", str(workspace.config))
+    assert verified["success"] is False
+    with pytest.raises(ArtifactLockError) as raised:
+        check_artifacts_at_boot(load_settings(workspace.config))
+    problems = verified.get("problems", [verified["error"]])
+    assert problems
+    for problem in problems:
+        assert problem in str(raised.value)
+
+
+def test_boot_check_does_not_hash(tmp_path: Path) -> None:
+    """Same-size drift passes boot; explicit verification compares sha256."""
+    workspace, _ = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    _flip_byte(workspace.embedder_dir / "model.safetensors")
+    summary = check_artifacts_at_boot(load_settings(workspace.config))
+    assert "by file list, size and revision" in summary
+    assert "nexus models verify also compares sha256" in summary
+    verified = run_models_command("verify", str(workspace.config))
+    assert verified["success"] is False
+    assert "sha256 differs from the lock" in verified["error"]
+
+
+def test_gateway_lifespan_refuses_drifted_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Production startup checks artifacts even without an active slot."""
+    from nexus.api import narrative
+
+    workspace, _ = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    monkeypatch.delenv(TEST_PROVIDER_ONLY_ENV)
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(workspace.config))
+    with TestClient(narrative.app) as client:
+        assert client.get("/health").status_code == 200
+    (workspace.embedder_dir / "model.safetensors").write_bytes(b"changed")
+    with pytest.raises(ArtifactLockError, match="^The gateway will not start"):
+        with TestClient(narrative.app):
+            pass
+
+
+def test_gateway_lifespan_skips_the_check_in_a_test_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The provider-only test lane can boot with synthetic artifact drift."""
+    from nexus.api import narrative
+
+    workspace, _ = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    (workspace.embedder_dir / "model.safetensors").write_bytes(b"changed")
+    monkeypatch.setenv(TEST_PROVIDER_ONLY_ENV, "1")
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(workspace.config))
+    with TestClient(narrative.app) as client:
+        assert client.get("/health").status_code == 200
+
+
+def test_doctor_models_artifacts_passes_and_fails(tmp_path: Path) -> None:
+    """The host-only doctor check performs the full hash and fails closed."""
+    workspace, _ = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    registry = [
+        spec for spec in REGISTRY if spec.id in {"config.valid", "models.artifacts"}
+    ]
+    check = next(spec for spec in registry if spec.id == "models.artifacts")
+    assert check.gateway_evaluable is False
+    report = run_readiness(
+        "owner-host", ReadinessContext(config_path=workspace.config), registry=registry
+    )
+    assert report.ok is True
+    assert report.checks[-1].observed.endswith(f"match {workspace.lock} (sha256)")
+    _flip_byte(workspace.embedder_dir / "model.safetensors")
+    report = run_readiness(
+        "owner-host", ReadinessContext(config_path=workspace.config), registry=registry
+    )
+    assert report.ok is False
+    assert report.checks[-1].status == "fail"
+    assert "sha256 differs from the lock" in report.checks[-1].observed
+    assert "never replaces an existing folder" in (report.checks[-1].remediation or "")
+    workspace.lock.unlink()
+    report = run_readiness(
+        "owner-host", ReadinessContext(config_path=workspace.config), registry=registry
+    )
+    assert report.ok is False
+    assert f"No model artifact lock at {workspace.lock}" in report.checks[-1].observed
+    assert (
+        report.checks[-1].remediation == "Run nexus models verify for the full report."
+    )
+
+
+def test_plan_reports_each_state(tmp_path: Path) -> None:
+    """Plan distinguishes download eligibility without hashing or writing."""
+    workspace = _workspace(tmp_path)
+    manifest = _lock(workspace)
+    plan = run_models_command("plan", str(workspace.config))
+    assert plan["success"] is True
+    assert [entry["state"] for entry in plan["plan"]] == ["present", "present"]
+    assert "nexus models verify also compares sha256" in plan["message"]
+    assert all(
+        entry["download_bytes"] is None and entry["free_bytes"] is None
+        for entry in plan["plan"]
+    )
+    _flip_byte(workspace.embedder_dir / "model.safetensors")
+    assert (
+        run_models_command("plan", str(workspace.config))["plan"][0]["state"]
+        == "present"
+    )
+    shutil.rmtree(workspace.embedder_dir)
+    plan = run_models_command("plan", str(workspace.config))
+    assert plan["success"] is True
+    absent = plan["plan"][0]
+    assert absent["state"] == "absent"
+    assert absent["download_bytes"] == manifest["artifacts"][0]["total_size"]
+    assert absent["free_bytes"] > 0
+    assert "fetch downloads" in plan["message"]
+    (workspace.reranker_dir / "model.safetensors").write_bytes(b"changed")
+    plan = run_models_command("plan", str(workspace.config))
+    assert plan["success"] is False
+    assert plan["plan"][1]["state"] == "drifted"
+    assert "hf download" in plan["error"]
+    assert "Move " not in plan["error"]
+    shutil.rmtree(workspace.reranker_dir)
+    plan = run_models_command("plan", str(workspace.config))
+    assert plan["success"] is False
+    assert plan["plan"][1]["state"] == "unpinned"
+    assert "lock records no revision" in plan["error"]
+    assert not workspace.embedder_dir.exists()
+    assert not workspace.reranker_dir.exists()
+
+    pinned, _ = _checkout_workspace(tmp_path / "pinned")
+    _lock(pinned)
+    (pinned.reranker_dir / "model.safetensors").write_bytes(b"changed")
+    plan = run_models_command("plan", str(pinned.config))
+    assert plan["success"] is False
+    assert plan["plan"][1]["state"] == "drifted"
+    assert "never replaces an existing folder" in plan["error"]
+
+
+def test_fetch_refuses_a_drifted_folder_and_downloads_nothing(tmp_path: Path) -> None:
+    """Fetch refuses existing drift before any Hub attempt, even when offline."""
+    workspace, _ = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    lock_bytes = workspace.lock.read_bytes()
+    _flip_byte(workspace.embedder_dir / "model.safetensors")
+    drifted_bytes = (workspace.embedder_dir / "model.safetensors").read_bytes()
+    shutil.rmtree(workspace.reranker_dir)
+    hf_home = tmp_path / "hf"
+    result = _cli_offline_models("fetch", workspace, hf_home)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "sha256 differs from the lock" in result.stderr
+    assert "never replaces an existing folder" in result.stderr
+    assert "download of" not in result.stderr
+    assert not workspace.reranker_dir.exists()
+    assert not list(hf_home.rglob("models--*"))
+    assert (workspace.embedder_dir / "model.safetensors").read_bytes() == drifted_bytes
+    assert workspace.lock.read_bytes() == lock_bytes
+
+
+def test_fetch_offline_fails_without_writing(tmp_path: Path) -> None:
+    """A pinned offline miss fails and leaves models and lock untouched."""
+    workspace = _workspace(tmp_path)
+    _hf_local_dir_metadata(
+        workspace.reranker_dir,
+        {path.name: b"" for path in workspace.reranker_dir.iterdir()},
+    )
+    _lock(workspace)
+    lock_bytes = workspace.lock.read_bytes()
+    shutil.rmtree(workspace.embedder_dir)
+    listing = sorted(path.name for path in (tmp_path / "models").iterdir())
+    result = _cli_offline_models("fetch", workspace, tmp_path / "hf")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"download of {PRODUCTION.embedder_repo} @ {COMMIT} failed" in result.stderr
+    assert not workspace.embedder_dir.exists()
+    assert sorted(path.name for path in (tmp_path / "models").iterdir()) == listing
+    assert workspace.lock.read_bytes() == lock_bytes
+
+
+@pytest.mark.parametrize("drift", ["unpinned", "config"])
+def test_fetch_refuses_unpinned_and_config_drift(tmp_path: Path, drift: str) -> None:
+    """No artifact is created when the lock cannot authorize the fetch."""
+    workspace = _workspace(tmp_path)
+    _lock(workspace)
+    lock_bytes = workspace.lock.read_bytes()
+    shutil.rmtree(workspace.reranker_dir)
+    if drift == "config":
+        _write_config(
+            tmp_path,
+            workspace.embedder_dir,
+            workspace.reranker_dir,
+            workspace.lock,
+            name="nexus",
+            dimensions=PRODUCTION.dimensions * 2,
+        )
+    result = _cli_offline_models("fetch", workspace, tmp_path / "hf")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (
+        "lock records no revision" if drift == "unpinned" else "nexus.toml dimensions"
+    ) in result.stderr
+    assert "download of" not in result.stderr
+    assert not workspace.reranker_dir.exists()
+    assert not (tmp_path / "hf").exists()
+    assert workspace.lock.read_bytes() == lock_bytes
+    if drift == "config":
+        plan = run_models_command("plan", str(workspace.config))
+        assert plan["success"] is False
+        assert "nexus.toml dimensions" in plan["error"]
+
+
+def test_fetch_with_everything_present_downloads_nothing(tmp_path: Path) -> None:
+    """Already verified production folders succeed without reaching the Hub."""
+    workspace, _ = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    lock_bytes = workspace.lock.read_bytes()
+    result = _cli_offline_models("fetch", workspace, tmp_path / "hf")
+    assert result.returncode == 0, result.stdout + result.stderr
+    for label in (
+        f"embedder '{PRODUCTION.embedder}'",
+        f"reranker '{PRODUCTION.reranker}'",
+    ):
+        assert f"{label}: already matching {workspace.lock}" in result.stdout
+    assert "downloaded" not in result.stdout
+    assert not list((tmp_path / "hf").rglob("models--*"))
+    assert workspace.lock.read_bytes() == lock_bytes
+
+
+def test_hf_download_of_a_git_locked_artifact_verifies(tmp_path: Path) -> None:
+    """Restoring the pinned commit may change revision provenance, not content."""
+    workspace, head = _checkout_workspace(tmp_path)
+    manifest = _lock(workspace)
+    shutil.rmtree(workspace.embedder_dir / ".git")
+    _hf_local_dir_metadata(
+        workspace.embedder_dir,
+        {entry["path"]: b"" for entry in manifest["artifacts"][0]["files"]},
+        commit=head,
+    )
+    assert artifact_revision(workspace.embedder_dir) == (head, "huggingface")
+    assert run_models_command("verify", str(workspace.config))["success"] is True
+    assert run_models_command("plan", str(workspace.config))["success"] is True
+    assert "match" in check_artifacts_at_boot(load_settings(workspace.config))
+
+
+def test_loader_remedies_name_fetch_for_production_paths(tmp_path: Path) -> None:
+    """Pinned production loaders give fetch, while preserving precise causes."""
+    workspace, _ = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    embedder_files = _embedder_files(PRODUCTION.dimensions)
+    shutil.rmtree(workspace.embedder_dir)
+    shutil.rmtree(workspace.reranker_dir)
+    with settings_path_scope(workspace.config):
+        with pytest.raises(RuntimeError) as embedder_error:
+            load_local_model(
+                PRODUCTION.embedder,
+                {
+                    "local_path": str(workspace.embedder_dir),
+                    "remote_path": PRODUCTION.embedder_repo,
+                },
+            )
+        with pytest.raises(RuntimeError) as reranker_error:
+            CrossEncoderReranker(
+                str(workspace.reranker_dir),
+                device="cpu",
+                repo_id=PRODUCTION.reranker_repo,
+            )
+        assert str(embedder_error.value) == (
+            f"Embedding model '{PRODUCTION.embedder}' is not installed: local_path "
+            f"{workspace.embedder_dir} does not exist. Run `nexus models fetch` to "
+            f"download embedder '{PRODUCTION.embedder}' into {workspace.embedder_dir}."
+        )
+        assert str(reranker_error.value) == (
+            f"Cross-encoder reranker is not installed: {MODEL_PATH_SETTING} "
+            f"{workspace.reranker_dir} does not exist. Run `nexus models fetch` to "
+            f"download reranker '{PRODUCTION.reranker}' into {workspace.reranker_dir}."
+        )
+        _write_files(workspace.embedder_dir, embedder_files)
+        with pytest.raises(RuntimeError) as broken_embedder:
+            load_local_model(
+                PRODUCTION.embedder,
+                {
+                    "local_path": str(workspace.embedder_dir),
+                    "remote_path": PRODUCTION.embedder_repo,
+                },
+            )
+        assert str(broken_embedder.value).startswith(
+            f"Embedding model '{PRODUCTION.embedder}' failed to load from "
+            f"local_path {workspace.embedder_dir}: "
+        )
+        assert str(broken_embedder.value).endswith(
+            f"Move {workspace.embedder_dir} aside (`nexus models fetch` never replaces "
+            "an existing folder), then run `nexus models fetch` to download "
+            f"embedder '{PRODUCTION.embedder}' again."
+        )
+        assert broken_embedder.value.__cause__ is not None

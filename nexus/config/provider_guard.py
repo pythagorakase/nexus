@@ -5,6 +5,8 @@ import os
 from nexus.config.loader import load_settings
 from nexus.config.settings_models import Settings
 
+TEST_PROVIDER_ONLY_ENV = "NEXUS_TEST_PROVIDER_ONLY"
+
 
 class ProviderForbiddenInTests(RuntimeError):
     """A test attempted to create a network client outside the TEST registry."""
@@ -12,7 +14,7 @@ class ProviderForbiddenInTests(RuntimeError):
 
 def require_test_provider(model: str, *, settings: Settings | None = None) -> None:
     """Check registry identity before creating any network client or reading keys."""
-    if os.environ.get("NEXUS_TEST_PROVIDER_ONLY") != "1":
+    if os.environ.get(TEST_PROVIDER_ONLY_ENV) != "1":
         return
     settings = settings or load_settings()
     provider = settings.provider_for_model(model)

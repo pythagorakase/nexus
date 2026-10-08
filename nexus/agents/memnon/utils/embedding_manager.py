@@ -15,7 +15,10 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from sentence_transformers import SentenceTransformer
 
-from nexus.agents.memnon.utils.artifact_manifest import restore_command
+from nexus.agents.memnon.utils.artifact_manifest import (
+    fetch_remedy_for,
+    restore_command,
+)
 
 logger = logging.getLogger("nexus.memnon.embedding_manager")
 
@@ -100,6 +103,9 @@ def artifact_remedy(local_path: str, remote_path: Optional[str]) -> str:
     artifact lock or the folder itself records one. Building it reads the
     lock and the folder, so callers build it only once a load has failed.
     """
+    remedy = fetch_remedy_for(remote_path, local_path)
+    if remedy is not None:
+        return remedy
     if remote_path:
         restore = f"Restore it with `{restore_command(remote_path, local_path)}`"
     else:

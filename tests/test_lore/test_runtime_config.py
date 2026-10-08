@@ -11,7 +11,6 @@ import tomlkit
 
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
-from nexus.agents.memnon.utils.artifact_manifest import lock_file_path, read_manifest
 from nexus.config import load_settings
 from nexus.config.loader import RUNTIME_CONFIG_ENV
 from tests.pg_fixtures import (
@@ -175,13 +174,7 @@ def test_lore_startup_names_the_missing_embedder_remedy(
     models[active]["local_path"] = str(missing)
     path = tmp_path / "missing-embedder.toml"
     path.write_text(tomlkit.dumps(document), encoding="utf-8")
-    repo = models[active]["remote_path"]
-    (revision,) = [
-        entry["revision"]
-        for entry in read_manifest(lock_file_path(load_settings(path)))["artifacts"]
-        if entry["repo_id"] == repo
-    ]
-    remedy = f"hf download {repo} --revision {revision} --local-dir {missing}"
+    remedy = f"Run `nexus models fetch` to download embedder '{active}' into {missing}."
 
     with pytest.raises(RuntimeError) as raised:
         LORE(settings_path=str(path), enable_logon=False, dbname=runtime_database)

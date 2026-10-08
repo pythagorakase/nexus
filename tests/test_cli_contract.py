@@ -1129,10 +1129,20 @@ def test_tags_audit_rejects_an_unusable_scope_before_any_connection(
         ("usage",),
         ("logs", "gateway"),
         ("models", "verify"),
+        ("models", "plan"),
+        ("models", "fetch"),
         ("model", "--list"),
         ("retrograde-expand-seeds", "--packet", "p.json", "--seed-candidates", "s"),
     ],
-    ids=["usage-ledger", "logs", "models-verify", "model-list", "provider-call"],
+    ids=[
+        "usage-ledger",
+        "logs",
+        "models-verify",
+        "models-plan",
+        "models-fetch",
+        "model-list",
+        "provider-call",
+    ],
 )
 def test_remote_profile_refuses_local_operator_commands(
     tmp_path: Path, argv: tuple[str, ...]

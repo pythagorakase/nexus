@@ -1,0 +1,68 @@
+"""812 ordered red controls; restore the precise source bytes after every plant."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE = ROOT / 'docs/qa/812-models-plan-fetch'
+PY = Path('/Users/pythagor/nexus/.venv/bin/python')
+CONTROLS = [
+    ('boot-call', 'nexus/api/narrative.py',
+     'summary = await asyncio.to_thread(check_artifacts_at_boot, load_settings())',
+     'summary = "red control: check omitted"',
+     'test_gateway_lifespan_refuses_drifted_artifacts'),
+    ('test-marker', 'nexus/api/narrative.py',
+     'if os.environ.get(TEST_PROVIDER_ONLY_ENV) == "1":', 'if False:',
+     'test_gateway_lifespan_skips_the_check_in_a_test_process'),
+    ('fetch-existing', 'nexus/agents/memnon/utils/artifact_manifest.py',
+     'if os.path.lexists(spec.local_path):\n            drift = _artifact_problems(spec, entry, hash_files=True)',
+     'if os.path.lexists(spec.local_path):\n            drift = []',
+     'test_fetch_refuses_a_drifted_folder_and_downloads_nothing'),
+]
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+def main():
+    env = dict(os.environ)
+    for key in ('NEXUS_HOME', 'NEXUS_RUNTIME_CONFIG', 'NEXUS_API_URL',
+                'NEXUS_GATEWAY_PORT', 'NEXUS_SLOT', 'NEXUS_RUN_LIVE_LLM',
+                'NEXUS_RUN_SECRET_STORE', 'NEXUS_RUN_CORPUS'):
+        env.pop(key, None)
+    env.update(PYTHONPATH=str(ROOT), NEXUS_RUN_POSTGRES='1', NEXUS_KEYRING_DISABLE='1')
+    records = []
+    for label, relative, original, plant, test in CONTROLS:
+        if os.getloadavg()[0] >= 24:
+            raise RuntimeError('Load cap reached before red control; rerun when admitted')
+        path = ROOT / relative
+        before = path.read_bytes()
+        text = before.decode()
+        if text.count(original) != 1:
+            raise RuntimeError(f'{label}: expected unique plant target')
+        record = {'control': label, 'source': relative, 'sha256_before': digest(before)}
+        command = [str(PY), '-m', 'pytest', '-q', '-p', 'tests.dbname_audit',
+                   f'tests/test_embedding_artifacts.py::{test}']
+        record['command'] = command
+        try:
+            path.write_text(text.replace(original, plant))
+            record['sha256_plant'] = digest(path.read_bytes())
+            with (EVIDENCE / f'red-{label}.log').open('w') as stream:
+                result = subprocess.run(command, cwd=ROOT, env=env, stdout=stream,
+                                        stderr=subprocess.STDOUT, timeout=570)
+            record['exit_code'] = result.returncode
+        finally:
+            path.write_bytes(before)
+            record['sha256_restored'] = digest(path.read_bytes())
+            record['restored'] = path.read_bytes() == before
+            records.append(record)
+            (EVIDENCE/'red-controls.json').write_text(json.dumps(records, indent=2)+'\n')
+        print(json.dumps(record), flush=True)
+        if result.returncode != 1 or not record['restored']:
+            raise RuntimeError(f'{label}: expected a test failure and exact restore')
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
