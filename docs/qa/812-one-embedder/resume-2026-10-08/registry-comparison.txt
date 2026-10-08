@@ -1,0 +1,42 @@
+bge-large.local_path: '/Users/pythagor/nexus/models/bge-large-en' -> '/Users/pythagor/nexus/models/bge-large-en'; equal
+bge-large.remote_path: 'BAAI/bge-large-en' -> 'BAAI/bge-large-en'; equal
+bge-large.dimensions: 1024 -> 1024; equal
+e5-large.local_path: '/Users/pythagor/nexus/models/e5-large-v2' -> '/Users/pythagor/nexus/models/e5-large-v2'; equal
+e5-large.remote_path: 'intfloat/e5-large-v2' -> 'intfloat/e5-large-v2'; equal
+e5-large.dimensions: 1024 -> 1024; equal
+bge-small-custom.local_path: '/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654' -> '/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654'; equal
+bge-small-custom.remote_path: '' -> ''; equal
+bge-small-custom.dimensions: 384 -> 384; equal
+inf-retriever-v1-1.5b.local_path: '/Users/pythagor/nexus/models/inf-retriever-v1-1.5b' -> '/Users/pythagor/nexus/models/inf-retriever-v1-1.5b'; equal
+inf-retriever-v1-1.5b.remote_path: 'infly/inf-retriever-v1-1.5b' -> 'infly/inf-retriever-v1-1.5b'; equal
+inf-retriever-v1-1.5b.dimensions: 1536 -> 1536; equal
+Octen-Embedding-0.6B.local_path: '/Users/pythagor/nexus/models/Octen-Embedding-0.6B' -> '/Users/pythagor/nexus/models/Octen-Embedding-0.6B'; equal
+Octen-Embedding-0.6B.remote_path: 'Octen/Octen-Embedding-0.6B' -> 'Octen/Octen-Embedding-0.6B'; equal
+Octen-Embedding-0.6B.dimensions: 1024 -> 1024; equal
+Octen-Embedding-4B.is_active: True -> True; equal
+Octen-Embedding-4B.local_path: '/Users/pythagor/nexus/models/Octen-Embedding-4B' -> '/Users/pythagor/nexus/models/Octen-Embedding-4B'; equal
+Octen-Embedding-4B.remote_path: 'Octen/Octen-Embedding-4B' -> 'Octen/Octen-Embedding-4B'; equal
+Octen-Embedding-4B.dimensions: 2560 -> 2560; equal
+Octen-Embedding-4B.weight: 1.0 -> 1.0; equal
+Octen-Embedding-4B-INT8.local_path: '/Users/pythagor/nexus/models/Octen-Embedding-4B-INT8' -> '/Users/pythagor/nexus/models/Octen-Embedding-4B-INT8'; equal
+Octen-Embedding-4B-INT8.remote_path: 'Octen/Octen-Embedding-4B-INT8' -> 'Octen/Octen-Embedding-4B-INT8'; equal
+Octen-Embedding-4B-INT8.dimensions: 2560 -> 2560; equal
+Octen-Embedding-8B.local_path: '/Users/pythagor/nexus/models/Octen-Embedding-8B' -> '/Users/pythagor/nexus/models/Octen-Embedding-8B'; equal
+Octen-Embedding-8B.remote_path: 'Octen/Octen-Embedding-8B' -> 'Octen/Octen-Embedding-8B'; equal
+Octen-Embedding-8B.dimensions: 4096 -> 4096; equal
+Octen-Embedding-8B-INT8.local_path: '/Users/pythagor/nexus/models/Octen-Embedding-8B-INT8' -> '/Users/pythagor/nexus/models/Octen-Embedding-8B-INT8'; equal
+Octen-Embedding-8B-INT8.remote_path: 'Octen/Octen-Embedding-8B-INT8' -> 'Octen/Octen-Embedding-8B-INT8'; equal
+Octen-Embedding-8B-INT8.dimensions: 4096 -> 4096; equal
+deberta-v3-trecdl22: production name, remote_path and model_path equal previous candidate
+qwen3-reranker-0.6b.local_path: '/Users/pythagor/nexus/models/Qwen3-Reranker-0.6B' -> '/Users/pythagor/nexus/models/Qwen3-Reranker-0.6B'; equal
+qwen3-reranker-0.6b.remote_path: 'Qwen/Qwen3-Reranker-0.6B' -> 'Qwen/Qwen3-Reranker-0.6B'; equal
+qwen3-reranker-0.6b.api_type: 'qwen3_lm' -> 'qwen3_lm'; equal
+qwen3-reranker-0.6b.notes: 'Qwen3-based yes/no causal-LM reranker, 0.6B params (issue #175 follow-up).' -> 'Qwen3-based yes/no causal-LM reranker, 0.6B params (issue #175 follow-up).'; equal
+qwen3-reranker-4b.local_path: '/Users/pythagor/nexus/models/Qwen3-Reranker-4B' -> '/Users/pythagor/nexus/models/Qwen3-Reranker-4B'; equal
+qwen3-reranker-4b.remote_path: 'Qwen/Qwen3-Reranker-4B' -> 'Qwen/Qwen3-Reranker-4B'; equal
+qwen3-reranker-4b.api_type: 'qwen3_lm' -> 'qwen3_lm'; equal
+qwen3-reranker-4b.notes: 'Qwen3-based yes/no causal-LM reranker, 4B params (issue #175 follow-up).' -> 'Qwen3-based yes/no causal-LM reranker, 4B params (issue #175 follow-up).'; equal
+mxbai-rerank-large.local_path: '/Users/pythagor/nexus/models/mxbai-rerank-large-v2' -> '/Users/pythagor/nexus/models/mxbai-rerank-large-v2'; equal
+mxbai-rerank-large.remote_path: 'mixedbread-ai/mxbai-rerank-large-v2' -> 'mixedbread-ai/mxbai-rerank-large-v2'; equal
+mxbai-rerank-large.api_type: 'cross_encoder' -> 'cross_encoder'; equal
+mxbai-rerank-large.notes: 'Mixedbread modern cross-encoder reranker (issue #175 follow-up).' -> 'Mixedbread modern cross-encoder reranker (issue #175 follow-up).'; equal

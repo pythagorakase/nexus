@@ -438,19 +438,22 @@ def _write(path: Path, content: bytes) -> Path:
     return path
 
 
+EMBEDDER_KEY = "memnon.models.Octen-Embedding-4B.local_path"
+RERANKER_KEY = "memnon.retrieval.cross_encoder_reranking.model_path"
+
+
 def _point_models(models_source: Path) -> Callable[[Any], None]:
-    """Point every model key in a config copy at a directory under a tmp root."""
+    """Point both runtime model keys in a config copy under a tmp root.
+
+    The configuration names two model roots: the production embedder and the
+    production reranker.
+    """
 
     def edit(document: Any) -> None:
-        for name, model in document["memnon"]["models"].items():
-            model["local_path"] = str(models_source / f"{name}-dir")
+        embedder = document["memnon"]["models"]["Octen-Embedding-4B"]
+        embedder["local_path"] = str(models_source / "Octen-Embedding-4B-dir")
         reranking = document["memnon"]["retrieval"]["cross_encoder_reranking"]
         reranking["model_path"] = str(models_source / "reranker")
-        for name, candidate in reranking["candidates"].items():
-            candidate["local_path"] = str(models_source / f"{name}-dir")
-        reranking["candidates"]["deberta-v3-trecdl22"]["local_path"] = str(
-            models_source / "reranker"
-        )
 
     return edit
 
@@ -482,9 +485,8 @@ def _fake_checkout(tmp_path: Path) -> Tuple[Path, Path, Path]:
     _write(public / "character_portraits" / "7" / "a.png", b"\x89PNG portrait")
     _write(public / "place_images" / "3" / "b.jpg", b"\xff\xd8 place")
     _write(public / "favicon.ico", b"checked-in asset, not an upload")
-    _write(models_source / "bge-large-dir" / "config.json", b"{}")
-    _write(models_source / "bge-large-dir" / "weights.bin", b"\x00" * 4096)
-    _write(models_source / "reranker" / "model.safetensors", b"\x01" * 2048)
+    _write(models_source / "Octen-Embedding-4B-dir" / "config.json", b"{}")
+    _write(models_source / "Octen-Embedding-4B-dir" / "weights.bin", b"\x00" * 4096)
     return checkout, config, models_source
 
 
@@ -552,25 +554,18 @@ def test_home_plan_inventories_checksums_and_maps_every_runtime_file(
             target / UPLOADS_DIR / "place_images/3/b.jpg",
         ),
         models_source
-        / "bge-large-dir"
+        / "Octen-Embedding-4B-dir"
         / "config.json": (
             "models",
             "move",
-            target / "models/bge-large-dir/config.json",
+            target / "models/Octen-Embedding-4B-dir/config.json",
         ),
         models_source
-        / "bge-large-dir"
+        / "Octen-Embedding-4B-dir"
         / "weights.bin": (
             "models",
             "move",
-            target / "models/bge-large-dir/weights.bin",
-        ),
-        models_source
-        / "reranker"
-        / "model.safetensors": (
-            "models",
-            "move",
-            target / "models/reranker/model.safetensors",
+            target / "models/Octen-Embedding-4B-dir/weights.bin",
         ),
     }
     for current, (category, status, proposed) in expected.items():
@@ -592,29 +587,23 @@ def test_home_plan_inventories_checksums_and_maps_every_runtime_file(
     assert public / "favicon.ico" not in entries
 
     missing = {entry.current for entry in plan.entries if entry.status == "missing"}
-    assert models_source / "e5-large-dir" in missing
-    assert models_source / "bge-large-dir" not in missing
+    assert models_source / "reranker" in missing
+    assert models_source / "Octen-Embedding-4B-dir" not in missing
     assert all(
         entry.kind == "missing" and entry.sha256 is None
         for entry in plan.entries
         if entry.status == "missing"
     )
     rewrites = {rewrite.key: rewrite for rewrite in plan.rewrites}
-    reranker_target = str(target / "models" / "reranker")
-    assert rewrites["memnon.retrieval.cross_encoder_reranking.model_path"].proposed == (
-        reranker_target
+    assert set(rewrites) == {EMBEDDER_KEY}
+    assert rewrites[EMBEDDER_KEY].current == str(
+        models_source / "Octen-Embedding-4B-dir"
     )
-    assert (
-        rewrites[
-            "memnon.retrieval.cross_encoder_reranking.candidates."
-            "deberta-v3-trecdl22.local_path"
-        ].proposed
-        == reranker_target
+    assert rewrites[EMBEDDER_KEY].proposed == str(
+        target / "models" / "Octen-Embedding-4B-dir"
     )
-    assert rewrites["memnon.models.bge-large.local_path"].current == str(
-        models_source / "bge-large-dir"
-    )
-    assert "memnon.models.e5-large.local_path" not in rewrites
+    assert RERANKER_KEY not in rewrites
+    assert not any(key.startswith("ir_eval.") for key in rewrites)
     assert plan.total_bytes() == sum(entry.size or 0 for entry in plan.entries)
     assert plan.source.root == checkout.resolve()
     assert plan.target.root == target.resolve()
@@ -636,6 +625,7 @@ def test_home_plan_orders_entries_by_category_then_path(
         "logs",
         "cache",
         "backups",
+        "receipts",
         "uploads",
         "models",
     )
@@ -654,7 +644,7 @@ def test_home_plan_cli_is_read_only_and_deterministic(
     _write(state / "preferences.toml", b'theme = "vector"\n')
     _write(tmp_path / "ledger" / "usage-2026-09-26.jsonl", b'{"tokens": 1}\n')
     models_source = tmp_path / "model-store"
-    _write(models_source / "bge-large-dir" / "weights.bin", b"\x02" * 1024)
+    _write(models_source / "Octen-Embedding-4B-dir" / "weights.bin", b"\x02" * 1024)
     config = _write_config(
         tmp_path / "config" / "nexus.toml",
         state_dir=str(state),
@@ -688,7 +678,7 @@ def test_home_plan_cli_is_read_only_and_deterministic(
     by_current = {entry["current"]: entry for entry in plan["entries"]}
     # Absolute configured directories outside the checkout stay put: the
     # model store as well as the state directory.
-    weights = models_source / "bge-large-dir" / "weights.bin"
+    weights = models_source / "Octen-Embedding-4B-dir" / "weights.bin"
     assert by_current[str(weights)]["sha256"] == _sha256(weights)
     assert (
         by_current[str(weights)]["status"],
@@ -765,8 +755,9 @@ def test_home_plan_refuses_two_models_landing_on_one_path(
 
     def edit(document: Any) -> None:
         _point_models(models_source)(document)
-        document["memnon"]["models"]["e5-large"]["local_path"] = str(
-            checkout / "second-store" / "bge-large-dir"
+        reranking = document["memnon"]["retrieval"]["cross_encoder_reranking"]
+        reranking["model_path"] = str(
+            checkout / "second-store" / "Octen-Embedding-4B-dir"
         )
 
     config = _write_config(tmp_path / "collide" / "nexus.toml", edit=edit)
@@ -785,12 +776,13 @@ def test_home_plan_leaves_models_outside_the_checkout_in_place(
     moves is no collision.
     """
     checkout, _, models_source = _fake_checkout(tmp_path)
-    external = tmp_path / "external-drive" / "bge-large-dir"
+    external = tmp_path / "external-drive" / "Octen-Embedding-4B-dir"
     weights = _write(external / "weights.bin", b"\x03" * 512)
 
     def edit(document: Any) -> None:
         _point_models(models_source)(document)
-        document["memnon"]["models"]["e5-large"]["local_path"] = str(external)
+        reranking = document["memnon"]["retrieval"]["cross_encoder_reranking"]
+        reranking["model_path"] = str(external)
 
     config = _write_config(tmp_path / "external" / "nexus.toml", edit=edit)
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
@@ -806,14 +798,14 @@ def test_home_plan_leaves_models_outside_the_checkout_in_place(
         weights,
     )
     assert outside.sha256 == _sha256(weights)
-    inside = entries[models_source / "bge-large-dir" / "weights.bin"]
+    inside = entries[models_source / "Octen-Embedding-4B-dir" / "weights.bin"]
     assert (inside.status, inside.proposed) == (
         "move",
-        target / "models" / "bge-large-dir" / "weights.bin",
+        target / "models" / "Octen-Embedding-4B-dir" / "weights.bin",
     )
     rewrites = {rewrite.key for rewrite in plan.rewrites}
-    assert "memnon.models.e5-large.local_path" not in rewrites
-    assert "memnon.models.bge-large.local_path" in rewrites
+    assert RERANKER_KEY not in rewrites
+    assert EMBEDDER_KEY in rewrites
 
 
 @pytest.mark.parametrize(
@@ -888,12 +880,20 @@ def test_home_plan_refuses_a_target_under_a_non_directory(
 
 
 def _set_models(models_source: Path, paths: Dict[str, Path]) -> Callable[[Any], None]:
-    """Point the model keys at the fake store, then override named models."""
+    """Point the model keys at the fake store, then override named models.
+
+    ``Octen-Embedding-4B`` names the embedder's ``local_path`` and
+    ``reranker`` the reranker's ``model_path``.
+    """
 
     def edit(document: Any) -> None:
         _point_models(models_source)(document)
         for name, path in paths.items():
-            document["memnon"]["models"][name]["local_path"] = str(path)
+            if name == "reranker":
+                reranking = document["memnon"]["retrieval"]["cross_encoder_reranking"]
+                reranking["model_path"] = str(path)
+            else:
+                document["memnon"]["models"][name]["local_path"] = str(path)
 
     return edit
 
@@ -929,7 +929,9 @@ def test_home_plan_refuses_overlapping_model_paths(
         second = tmp_path / "external" / "link" / "shared"
     config = _write_config(
         tmp_path / "overlap" / "nexus.toml",
-        edit=_set_models(models_source, {"bge-large": first, "e5-large": second}),
+        edit=_set_models(
+            models_source, {"Octen-Embedding-4B": first, "reranker": second}
+        ),
     )
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
 
@@ -937,8 +939,8 @@ def test_home_plan_refuses_overlapping_model_paths(
         plan_home_move(tmp_path / "target", checkout=checkout)
     message = str(raised.value)
     for named in (
-        "memnon.models.bge-large.local_path",
-        "memnon.models.e5-large.local_path",
+        EMBEDDER_KEY,
+        RERANKER_KEY,
         str(first),
         str(second),
     ):
@@ -954,13 +956,13 @@ def test_home_plan_refuses_a_model_path_that_is_or_contains_the_checkout(
     named = checkout if model_path == "checkout" else tmp_path
     config = _write_config(
         tmp_path / "wide" / "nexus.toml",
-        edit=_set_models(models_source, {"e5-large": named}),
+        edit=_set_models(models_source, {"reranker": named}),
     )
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
 
     with pytest.raises(HomePlanError, match="is or contains the checkout") as raised:
         plan_home_move(tmp_path / "target", checkout=checkout)
-    assert f"memnon.models.e5-large.local_path ({named})" in str(raised.value)
+    assert f"{RERANKER_KEY} ({named})" in str(raised.value)
 
 
 @pytest.mark.parametrize("layout", ("inside-state", "holds-state", "holds-config"))
@@ -989,14 +991,14 @@ def test_home_plan_refuses_a_model_path_overlapping_runtime_data(
         config_dir / "nexus.toml",
         state_dir=".nexus/runtime",
         usage_dir=".nexus/runtime/usage",
-        edit=_set_models(models_source, {"e5-large": named}),
+        edit=_set_models(models_source, {"reranker": named}),
     )
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
 
     with pytest.raises(HomePlanError, match="overlaps the") as raised:
         plan_home_move(tmp_path / "target", checkout=checkout)
     message = str(raised.value)
-    assert f"memnon.models.e5-large.local_path ({named}) overlaps {owner}" in message
+    assert f"{RERANKER_KEY} ({named}) overlaps {owner}" in message
 
 
 def test_home_plan_refuses_a_model_moving_onto_one_that_stays(
@@ -1005,21 +1007,21 @@ def test_home_plan_refuses_a_model_moving_onto_one_that_stays(
     """A moving model may not land in a model directory that stays in place."""
     checkout, _, models_source = _fake_checkout(tmp_path)
     target = tmp_path / "target"
-    staying = target / "models" / "bge-large-dir"
+    staying = target / "models" / "Octen-Embedding-4B-dir"
     _write(staying / "weights.bin", b"\x07" * 16)
     config = _write_config(
         tmp_path / "landing" / "nexus.toml",
-        edit=_set_models(models_source, {"e5-large": staying}),
+        edit=_set_models(models_source, {"reranker": staying}),
     )
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
 
     with pytest.raises(HomePlanError, match="stays in place") as raised:
         plan_home_move(target, checkout=checkout)
     message = str(raised.value)
-    moving = models_source / "bge-large-dir"
-    assert f"memnon.models.bge-large.local_path ({moving})" in message
+    moving = models_source / "Octen-Embedding-4B-dir"
+    assert f"{EMBEDDER_KEY} ({moving})" in message
     assert f"would move to {staying}" in message
-    assert f"memnon.models.e5-large.local_path ({staying})" in message
+    assert f"{RERANKER_KEY} ({staying})" in message
 
 
 @pytest.mark.parametrize("locator", ("NEXUS_RUNTIME_CONFIG", "NEXUS_HOME"))
