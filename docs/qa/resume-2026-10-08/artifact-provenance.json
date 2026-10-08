@@ -1,0 +1,193 @@
+{
+  "captured_at": "2026-10-08T17:01:08.000330+00:00",
+  "integration_head": "f291dc792e4b071a4cc4940101f6c40871ea8b7b",
+  "overall_status": "passed",
+  "no_full_gate_logs_copied": false,
+  "files": [
+    {
+      "file": "review-816-812.md",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/review-816-812.md",
+      "sha256": "28389af00a94de9103ae3263befa8fc5f72229aba083512dcd2e9edc123815fd"
+    },
+    {
+      "file": "review-810-812-836.md",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/review-810-812-836.md",
+      "sha256": "41db2f7800817fc880af0ccad5fb7659021c93042c4add2fa601d7d5aee736fa"
+    },
+    {
+      "file": "review-ledger-integration.md",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/review-ledger-integration.md",
+      "sha256": "9bc948aca6210a33099797c7d1e364658910761baccd8d8d8a7e6262ad67f010"
+    },
+    {
+      "file": "pr-review-closeout.md",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/pr-review-closeout.md",
+      "sha256": "9fa6c3238ca19056c0cbad9dc58664a0cdad9b40e53da454aeacd9f7b4b03e21"
+    },
+    {
+      "file": "models-verify.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/models-verify.json",
+      "sha256": "c7346b6048418b287e460e098e22581e90eccf6bfbe4ad78c4641699f4f1df67"
+    },
+    {
+      "file": "run_combined_gate.py.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/run_combined_gate.py",
+      "sha256": "8955dc71526d506371ecfcc3316030b8ca272d48321ec9ae83a3eb5ba43989c6"
+    },
+    {
+      "file": "state-at-draft.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/state.json",
+      "sha256": "39da2d4902b8d8ad87080f1ba659e6c2dc1da7e4fbe893d92c563e294df2ae15"
+    },
+    {
+      "file": "results-at-draft.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/full-gate/results.json",
+      "sha256": "ce53015293553179969952c2596c24df1a0b4171d4064f9da6c45f254de55447"
+    },
+    {
+      "file": "reseed-148-green.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/reseed-148-green.txt",
+      "sha256": "e5ceb6c2a71d5846a8677ea5633cf84ee02b410025cd52e36bc81d63dc6bf04a"
+    },
+    {
+      "file": "reseed-148-red.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/reseed-148-red.txt",
+      "sha256": "1846f972350f3542161929ce94cb440aeef14add3147b82ba0a7e92cd9e2c906"
+    },
+    {
+      "file": "reseed-148-mutation.py.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/reseed-148-mutation.py.txt",
+      "sha256": "4315f1d66267025b0af22b4a7c4c3bba395d7fc83b923f786711334bd091ac77"
+    },
+    {
+      "file": "reseed-pre148.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/reseed-pre148.txt",
+      "sha256": "00918aebbec2bf02ceb1d49859ab784d4bcbe900934036e2a0fcd29dee67cc6c"
+    },
+    {
+      "file": "816-verification.md",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/verification.md",
+      "sha256": "72e0cfedb29306917af42ff81bd8725981465a97b6f3a54879d7dccd3623f60d"
+    },
+    {
+      "file": "review-closeout-1115-1118/actions.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/review-closeout-1115-1118/actions.json",
+      "sha256": "6cef3ff6ae2b33826c45a0aa2442eed5137b5c5f6d1abdaf0f7ef4149d808155"
+    },
+    {
+      "file": "review-closeout-1115-1118/after-closeout.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/review-closeout-1115-1118/after-closeout.json",
+      "sha256": "1c96286268a6117dcecf760450f06fbfbdd106e13f1e6ce6150c285969bb31df"
+    },
+    {
+      "file": "review-closeout-1115-1118/initial-claude-runs.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/review-closeout-1115-1118/initial-claude-runs.json",
+      "sha256": "e6b0add59f54e86239a4b59e958e5e8b729b8c00cdd7606e0d03aa2d8132a709"
+    },
+    {
+      "file": "review-closeout-1115-1118/pr-review-snapshot.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/review-closeout-1115-1118/pr-review-snapshot.json",
+      "sha256": "e64c5f3841c5a0c5d9134bd0017907ce618c0c9e216878fd8248c7018164e76e"
+    },
+    {
+      "file": "review-closeout-1115-1118/pr-thread-snapshot.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/review-closeout-1115-1118/pr-thread-snapshot.json",
+      "sha256": "f2bd5f46d87131f8dbbd68c0f974c6d5c20b7df76351ee3191573cdbdfba9e7c"
+    },
+    {
+      "file": "merge-resolutions.diff",
+      "command": [
+        "git",
+        "show",
+        "--remerge-diff",
+        "--format=",
+        "a9a95f7f",
+        "853b57b8",
+        "fdba1aee"
+      ],
+      "cwd": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus",
+      "sha256": "7d2304070d89741d58b4df3127f0c621561f3fb5f1e6a9677becc94a1a28db31"
+    },
+    {
+      "file": "models-verify-head-diff.txt",
+      "command": [
+        "git",
+        "diff",
+        "--name-only",
+        "027ca3d7",
+        "f291dc79"
+      ],
+      "cwd": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus",
+      "sha256": "5468eaad1d16cf8ce2b18bd9a09c944186ed26e9fddcdfa9499055135893fedd"
+    },
+    {
+      "file": "child-environment-sites.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/child-environment-sites.txt",
+      "sha256": "e6afae6e269c7eb8e64c2b09c1cee585c6acb70c58a4c35440c3cd9ac5ee0439"
+    },
+    {
+      "file": "files.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/files.txt",
+      "sha256": "508c051041e5094340b8b53f7c1e1589f0d8e2e71d0ae643a3c3294ad4289080"
+    },
+    {
+      "file": "flake8-main.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/flake8-main.txt",
+      "sha256": "c3b605c527a9c6008d9cf80f14dfb6ad5decb050489002c83917f3751aef6067"
+    },
+    {
+      "file": "flake8-branch.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/flake8-branch.txt",
+      "sha256": "df7fc8a377b0ffecdd04a91c6795264e1960385895240d9cd70e11dae5060e1f"
+    },
+    {
+      "file": "mypy-main.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/mypy-main.txt",
+      "sha256": "b8cdf291b4a2c3e97690a18caf41b02d7ca71304462265f1e290e1b4353a4d11"
+    },
+    {
+      "file": "mypy-branch.txt",
+      "source": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/docs/qa/816-test-provider-database/mypy-branch.txt",
+      "sha256": "46115c7a18dd96a914131ab9161b30eca8deb8c8bc71a928c3472f78638533ac"
+    },
+    {
+      "file": "core.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/full-gate/core.log",
+      "sha256": "353a461486f342aff34d45ae7b19760d7b79c78e8f56390e603f489aafcbd97c"
+    },
+    {
+      "file": "api.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/full-gate/api.log",
+      "sha256": "21d4e346c680fb2a2daae661e018f2ac8c8b9dcf0e0c2b231d7b13665c8faec0"
+    },
+    {
+      "file": "orrery.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/full-gate/orrery.log",
+      "sha256": "680610dfdcd5659e0ae4e34bb12faadb3d6ae6ae0374d1efff588656d0db6255"
+    },
+    {
+      "file": "finalresults.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/full-gate/results.json",
+      "sha256": "d5961c93249aaa0c74f7ff169eac2f4c4323d7edd53fc371654479b1492997f4"
+    },
+    {
+      "file": "final-head-state.json",
+      "source": "Read-only Git capture and parsed completed full-gate summaries",
+      "sha256": "61fc6b6215d9d1f8a783bc9b530466b60255ea1f1a9acb9b70309a7ccad76a85"
+    },
+    {
+      "file": "verification.md",
+      "source": "Coordinator evidence synthesis from the listed captured artifacts",
+      "sha256": "fa1800659ed5efc5c5197adb86efa750b13b3b7ed3a8ecc0d21b722d2b8e8b11"
+    }
+  ],
+  "signature": "Codex \u2014 GPT-6",
+  "finalized_at": "2026-10-08T17:33:01.888157+00:00",
+  "full_gate_logs": [
+    "core.txt",
+    "api.txt",
+    "orrery.txt"
+  ],
+  "final_results": "finalresults.json",
+  "final_checkout_capture": "final-head-state.json"
+}

@@ -1,0 +1,74 @@
+{
+  "head": "f291dc792e4b071a4cc4940101f6c40871ea8b7b",
+  "started_at": "2026-10-08T16:23:27.112147+00:00",
+  "pieces": [
+    {
+      "name": "core",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests",
+        "--ignore=tests/test_api",
+        "--ignore=tests/test_orrery"
+      ],
+      "log": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/full-gate/core.log",
+      "state": "complete",
+      "exit_code": 0,
+      "secret_guard": true,
+      "owner_audit": true,
+      "receipt_isolation": true
+    },
+    {
+      "name": "api",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_api"
+      ],
+      "log": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/full-gate/api.log",
+      "state": "complete",
+      "exit_code": 0,
+      "secret_guard": true,
+      "owner_audit": true,
+      "receipt_isolation": true
+    },
+    {
+      "name": "orrery",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_orrery"
+      ],
+      "log": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/full-gate/orrery.log",
+      "state": "running"
+    }
+  ],
+  "state": "running"
+}

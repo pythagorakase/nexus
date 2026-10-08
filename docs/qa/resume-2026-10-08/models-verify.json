@@ -1,0 +1,5 @@
+{
+  "lock_file": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/config/model_artifacts.lock.json",
+  "message": "Model artifacts match /Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/config/model_artifacts.lock.json: embedder Octen-Embedding-4B, reranker deberta-v3-trecdl22",
+  "success": true
+}

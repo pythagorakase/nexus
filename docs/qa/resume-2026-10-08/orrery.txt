@@ -1,0 +1,56 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+........................................................................ [  2%]
+..............................................................ss........ [  5%]
+........................................................................ [  8%]
+........................................................................ [ 11%]
+........................................................................ [ 14%]
+........................................................................ [ 17%]
+........................................................................ [ 20%]
+........................................................................ [ 23%]
+........................................................................ [ 26%]
+..........................................................s............
+840 timings: load_reference 7.42s; initialize_slot_database from loaded clone 1.90s, from empty clone 1.04s
+. [ 28%]
+.........................s.............................................. [ 31%]
+...............................ssssss................................... [ 34%]
+........................................................................ [ 37%]
+........................................................................ [ 40%]
+........................................................................ [ 43%]
+........................................................................ [ 46%]
+........................................................................ [ 49%]
+........................................................................ [ 52%]
+........................................................................ [ 54%]
+........................................................................ [ 57%]
+........................................................................ [ 60%]
+.....s.................................................................. [ 63%]
+...........................s............................................ [ 66%]
+........................................................................ [ 69%]
+........................................................................ [ 72%]
+....................................................s................... [ 75%]
+..................s..................................................... [ 78%]
+...............s........................................................ [ 80%]
+...........................................s............................ [ 83%]
+........................................................................ [ 86%]
+........................................................................ [ 89%]
+........................................................................ [ 92%]
+........................................................................ [ 95%]
+........................................................................ [ 98%]
+.........................................                                [100%]
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 867 targets: postgres, qa638_*, qa640_* x18, qa640_778s2a_time_* x14, qa640_778s6a_played_*, qa640_778s6a_replay_* x7, qa640_780_boundaries_*, qa640_780_storm_*, qa640_781s1_*, qa640_783s1a_* x43, qa640_783s6_* x11, qa640_784s1_*, qa640_785s1b_fast_*, qa640_785s1b_slow_*, qa640_785s2_*, qa640_785s3d_* x12, qa640_788s7_acquaintance_* x2, qa640_800_operator_*, qa640_807_boundary_*, qa640_807_latest_playable_*, qa640_807_maturation_boundary_*, qa640_807_reapply_*, qa640_810s2_experience_ids_*, qa640_811_full_clear_only_*, qa640_811_gaia_scene_*, qa640_811_scene_clear_only_*, qa640_811_scene_kind_*, qa640_811_scene_pin_*, qa640_811_seed_policy_*, qa640_811_tag_library_*, qa640_813_case_* x542, qa640_840_commit_*, qa640_840_empty_*, qa640_840_fresh_* x2, qa640_840_geo_*, qa640_885_ren_replay_* x4, qa640_bleed_acceptance_*, qa640_bleed_proximity_* x4, qa640_claim_accounts_*, qa640_claim_consumption_*, qa640_communication_graph_*, qa640_drift_* x2, qa640_ecology_*, qa640_geo_resolver_*, qa640_grieving_migration_*, qa640_issue601_* x4, qa640_maturation799_*, qa640_membership_roles_*, qa640_mig077_*, qa640_mig084_*, qa640_mig085_*, qa640_mig086_*, qa640_mig087_*, qa640_mig088_*, qa640_mig090_*, qa640_mig091_*, qa640_mig092_*, qa640_mig095_*, qa640_mig096_*, qa640_need_absence_* x7, qa640_orbit_distance_*, qa640_pair_tag_predicates_*, qa640_pair_tag_substrate_*, qa640_projects799_*, qa640_provenance_* x3, qa640_reconstruction_*, qa640_replay_*, qa640_retrieval_* x2, qa640_retro078_* x13, qa640_roster798_* x23, qa640_status_bestow_*, qa640_vocab_migration_* x6, qa640_weather_migration_*, qa640_wizard_drain_* x3, qa640_worker_*, qa665_*, qa672_*, qa676_* x7, qa679_*, qa735_gis_stubs_* x5, qa735_mood_*, qa735_pair_tags_* x10, qa735_weather_*, qa885_adjudication_history_*, qa885_build_venture_*, qa885_build_venture_async_*, qa885_build_venture_replay_*, qa885_claim_awareness_replay_*, qa885_claim_propagation_*, qa885_composition_sources_*, qa885_court_patron_* x2, qa885_court_patron_async_*, qa885_distortion_*, qa885_epistemics_*, qa885_evidence_*, qa885_faction_contexts_*, qa885_knowledge_surfacing_*, qa885_patron_circle_*, qa885_project_promotion_*, qa885_pursue_romance_*, qa885_pursue_romance_async_*, qa885_pursue_romance_replay_*, qa885_recruit_ally_projects_*, qa885_recruit_ally_replay_*, qa885_retrograde_vocab_*, qa885_reveal_*, qa885_seek_redemption_* x2, qa885_seek_redemption_async_*, qa885_signal_events_*, qa885_stage2a_epistemics_*, qa885_stage2a_status_*, qa885_tag_library_* x2, qa885_tag_provenance_*, qa_wt720_*, qa_wt723_*, qa_wt724_experience_* x26, qa_wt724_recall_*, test_event_sources_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2473 passed, 16 skipped, 2 warnings in 2067.21s (0:34:27)

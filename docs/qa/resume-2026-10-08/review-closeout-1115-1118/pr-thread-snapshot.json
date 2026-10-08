@@ -1,0 +1,445 @@
+{
+  "data": {
+    "repository": {
+      "p1115": {
+        "headRefOid": "5cff344d54688d5e6b35e4dad83e369c9f45cfd3",
+        "reviewDecision": null,
+        "reviewThreads": {
+          "nodes": [
+            {
+              "id": "PRRT_kwDOOBe0Mc6qFk18",
+              "isResolved": false,
+              "isOutdated": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Track the configuration and CLI governed by this ruling**\n\nAdd `nexus.toml` and `nexus/cli.py` to this record's sources. The ruling explicitly forbids a price table in the runtime configuration and dollar output from `nexus usage`, but `freshness_errors()` currently reacts only to changes in `nexus/telemetry/usage.py`; either forbidden behavior can therefore be introduced while this canonical record remains stamped as current.\n\nAGENTS.md reference: [AGENTS.md:L44-L44](https://github.com/pythagorakase/nexus/blob/5830781bc1c46c4e6e33b1fef5105a291dee24e2/AGENTS.md#L44-L44)\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1115#discussion_r4211743669",
+                    "originalCommit": {
+                      "oid": "5830781bc1c46c4e6e33b1fef5105a291dee24e2"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOOBe0Mc6qFk1_",
+              "isResolved": false,
+              "isOutdated": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Include every path supporting the prose-custody decision**\n\nAdd `ui/client/src/components/nexus/NarrativePane.tsx` and `nexus/agents/lore/logon_utility.py` to this record's sources. The quoted refutations rely on the reader rendering only storyteller prose and on Skald authoring visible sentences, yet changes to either implementation currently bypass the freshness gate unless `worker.py` or `bleed.py` also changes, allowing the decision's factual basis to become stale unnoticed.\n\nAGENTS.md reference: [AGENTS.md:L44-L44](https://github.com/pythagorakase/nexus/blob/5830781bc1c46c4e6e33b1fef5105a291dee24e2/AGENTS.md#L44-L44)\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1115#discussion_r4211743673",
+                    "originalCommit": {
+                      "oid": "5830781bc1c46c4e6e33b1fef5105a291dee24e2"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOOBe0Mc6qFk2E",
+              "isResolved": false,
+              "isOutdated": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Track the storyteller contract behind boundary ownership**\n\nAdd `prompts/storyteller_core.md` to this record's sources. The rejection specifically depends on that prompt assigning episode boundaries to completed dramatic arcs, so a prompt change that makes boundaries arithmetic or world-time-driven would invalidate this canonical decision without requiring its `verified_commit` to move because the freshness gate currently watches only the two API modules.\n\nAGENTS.md reference: [AGENTS.md:L44-L44](https://github.com/pythagorakase/nexus/blob/5830781bc1c46c4e6e33b1fef5105a291dee24e2/AGENTS.md#L44-L44)\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1115#discussion_r4211743682",
+                    "originalCommit": {
+                      "oid": "5830781bc1c46c4e6e33b1fef5105a291dee24e2"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "statusCheckRollup": {
+                  "state": "SUCCESS",
+                  "contexts": {
+                    "nodes": [
+                      {
+                        "name": "orchestrate",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802432447/job/113397848161"
+                      },
+                      {
+                        "name": "exception-dispositions (3.11)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802440542/job/113397865685"
+                      },
+                      {
+                        "name": "migration-comments",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802440479/job/113397866771"
+                      },
+                      {
+                        "name": "drift",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802440664/job/113397871778"
+                      },
+                      {
+                        "name": "reachability",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802440586/job/113397877463"
+                      },
+                      {
+                        "name": "exception-dispositions (3.12)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802440542/job/113397866117"
+                      },
+                      {
+                        "name": "exception-dispositions (3.13)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802440542/job/113397865949"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "p1116": {
+        "headRefOid": "e79dfda0c37826b673042a93eedca252708b935e",
+        "reviewDecision": null,
+        "reviewThreads": {
+          "nodes": []
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "statusCheckRollup": {
+                  "state": "SUCCESS",
+                  "contexts": {
+                    "nodes": [
+                      {
+                        "name": "orchestrate",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802143261/job/113396823837"
+                      },
+                      {
+                        "name": "exception-dispositions (3.11)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802148823/job/113396839690"
+                      },
+                      {
+                        "name": "migration-comments",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802148848/job/113396840994"
+                      },
+                      {
+                        "name": "drift",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802148834/job/113396840025"
+                      },
+                      {
+                        "name": "reachability",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802148890/job/113396839368"
+                      },
+                      {
+                        "name": "exception-dispositions (3.12)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802148823/job/113396839834"
+                      },
+                      {
+                        "name": "exception-dispositions (3.13)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802148823/job/113396839376"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "p1117": {
+        "headRefOid": "f192fccd951c96689b5b76c2ff7d1680e3f97254",
+        "reviewDecision": null,
+        "reviewThreads": {
+          "nodes": [
+            {
+              "id": "PRRT_kwDOOBe0Mc6qM9Cj",
+              "isResolved": true,
+              "isOutdated": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P1 Badge](https://img.shields.io/badge/P1-orange?style=flat)</sub></sub>  Validate the clone source before dropping the target**\n\nWhen `--mode clone --force` uses a source predating migration 146, this check runs only after the destination has been dropped, recreated, restored, and modified by `_post_clone_cleanup`; the advertised `RuntimeError` therefore destroys the previous slot and leaves an unusable replacement without `story_identity`. Check the source for this table before disposing or dropping the target so this known incompatibility fails before any destructive operation.\n\nAGENTS.md reference: [AGENTS.md:L49-L50](https://github.com/pythagorakase/nexus/blob/7ac530a11d7b66d9b23bd5171e362ae13958d1b4/AGENTS.md#L49-L50)\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1117#discussion_r4214866845",
+                    "originalCommit": {
+                      "oid": "7ac530a11d7b66d9b23bd5171e362ae13958d1b4"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOOBe0Mc6qM9Cs",
+              "isResolved": true,
+              "isOutdated": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Preflight every database before starting the backfill**\n\nWhen `--all` encounters a later target without migration 146, or later discovers that a fork parent has a non-backfill identity, earlier targets have already committed new UUIDs in separate transactions before the command raises. This contradicts the function's stated pre-write refusal contract and leaves a partially backfilled fleet; inspect every target and fork parent, including tables, identities, origins, and existing lineage, before the first insert.\n\nAGENTS.md reference: [AGENTS.md:L49-L50](https://github.com/pythagorakase/nexus/blob/7ac530a11d7b66d9b23bd5171e362ae13958d1b4/AGENTS.md#L49-L50)\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1117#discussion_r4214866858",
+                    "originalCommit": {
+                      "oid": "7ac530a11d7b66d9b23bd5171e362ae13958d1b4"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOOBe0Mc6qM9C2",
+              "isResolved": true,
+              "isOutdated": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Update the stamped-template initialization fixture**\n\nThis unconditional write breaks the existing PostgreSQL cases `test_fresh_database_is_baseline_stamped[fresh]` and `[desktop-reset]`: their `template_db` fixture deliberately provides a minimal schema with every migration stamped, so migration 146 is not replayed and `replace_story_identity` raises `UndefinedTable`. The commit's verification records both failures; add the new identity schema to that fixture so the repository's established initialization suite remains green.\n\nAGENTS.md reference: [AGENTS.md:L55-L56](https://github.com/pythagorakase/nexus/blob/7ac530a11d7b66d9b23bd5171e362ae13958d1b4/AGENTS.md#L55-L56)\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1117#discussion_r4214866873",
+                    "originalCommit": {
+                      "oid": "7ac530a11d7b66d9b23bd5171e362ae13958d1b4"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "statusCheckRollup": {
+                  "state": "SUCCESS",
+                  "contexts": {
+                    "nodes": [
+                      {
+                        "name": "orchestrate",
+                        "conclusion": "SKIPPED",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803022338/job/113399892486"
+                      },
+                      {
+                        "name": "orchestrate",
+                        "conclusion": "SKIPPED",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803028570/job/113399914809"
+                      },
+                      {
+                        "name": "orchestrate",
+                        "conclusion": "SKIPPED",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803032318/job/113399930302"
+                      },
+                      {
+                        "name": "claude",
+                        "conclusion": "SKIPPED",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803022532/job/113399970342"
+                      },
+                      {
+                        "name": "claude",
+                        "conclusion": "SKIPPED",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803028688/job/113399917118"
+                      },
+                      {
+                        "name": "claude",
+                        "conclusion": "SKIPPED",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803032295/job/113399929158"
+                      },
+                      {
+                        "name": "orchestrate",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802954875/job/113399658656"
+                      },
+                      {
+                        "name": "exception-dispositions (3.11)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802961616/job/113399681199"
+                      },
+                      {
+                        "name": "migration-comments",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802960949/job/113399685256"
+                      },
+                      {
+                        "name": "drift",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802962919/job/113399687947"
+                      },
+                      {
+                        "name": "reachability",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802961237/job/113399678840"
+                      },
+                      {
+                        "name": "exception-dispositions (3.12)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802961616/job/113399681069"
+                      },
+                      {
+                        "name": "exception-dispositions (3.13)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37802961616/job/113399680784"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "p1118": {
+        "headRefOid": "cf61a440da7f3236226c717d031a493cbc25f5c5",
+        "reviewDecision": null,
+        "reviewThreads": {
+          "nodes": [
+            {
+              "id": "PRRT_kwDOOBe0Mc6qNCRX",
+              "isResolved": false,
+              "isOutdated": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Redact user-controlled mapping keys from validation locations**\n\nWhen malformed configuration places a secret-shaped string in a valid mapping key\u2014for example, a provider key under `[global.model.api_models]` with an invalid nested field\u2014Pydantic includes that key in the middle of `error[\"loc\"]`. This code redacts only the final component for `extra_forbidden`, while `_safe_token` preserves values such as `sk-...`, so the supposedly sanitized receipt can write the secret verbatim. Redact every user-controlled mapping-key component or retain only allowlisted schema field names.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1118#discussion_r4214902511",
+                    "originalCommit": {
+                      "oid": "e7f7a29d0e099173f44dcf8a0f87ac45a14c446c"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOOBe0Mc6qNCRf",
+              "isResolved": false,
+              "isOutdated": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Deduplicate coincident home and fallback receipt roots**\n\nWhen `NEXUS_HOME` is the user's home directory, both roots resolve to `$HOME/.nexus/receipts`. Adding the same directory under two labels makes `_read_receipts` scan every file twice, doubling each group's count and falsely reporting both `home` and `fallback`; avoid adding the fallback root when it resolves to the home root.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1118#discussion_r4214902524",
+                    "originalCommit": {
+                      "oid": "e7f7a29d0e099173f44dcf8a0f87ac45a14c446c"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOOBe0Mc6qNCRl",
+              "isResolved": false,
+              "isOutdated": true,
+              "comments": {
+                "nodes": [
+                  {
+                    "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Translate receipt decoding failures into read errors**\n\nIf a receipt file contains invalid UTF-8\u2014possible when `_append` leaves a short write ending midway through a Unicode path\u2014decoding fails during stream iteration before `model_validate_json` enters its exception handler. The resulting `UnicodeDecodeError` bypasses `ReceiptReadError`, so `nexus receipts` emits a traceback rather than its documented `domain_failure`; catch decoding and file-read errors and wrap them with the receipt path and line context.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e.",
+                    "url": "https://github.com/pythagorakase/nexus/pull/1118#discussion_r4214902533",
+                    "originalCommit": {
+                      "oid": "e7f7a29d0e099173f44dcf8a0f87ac45a14c446c"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "statusCheckRollup": {
+                  "state": "SUCCESS",
+                  "contexts": {
+                    "nodes": [
+                      {
+                        "name": "orchestrate",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803083158/job/113400112949"
+                      },
+                      {
+                        "name": "exception-dispositions (3.11)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803086580/job/113400123536"
+                      },
+                      {
+                        "name": "migration-comments",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803086513/job/113400123464"
+                      },
+                      {
+                        "name": "drift",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803086469/job/113400121969"
+                      },
+                      {
+                        "name": "reachability",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803086584/job/113400122904"
+                      },
+                      {
+                        "name": "exception-dispositions (3.12)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803086580/job/113400124094"
+                      },
+                      {
+                        "name": "exception-dispositions (3.13)",
+                        "conclusion": "SUCCESS",
+                        "status": "COMPLETED",
+                        "detailsUrl": "https://github.com/pythagorakase/nexus/actions/runs/37803086580/job/113400123913"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
