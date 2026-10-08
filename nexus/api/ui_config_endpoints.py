@@ -19,5 +19,5 @@ class UIConfigResponse(BaseModel):
 
 @router.get("/ui")
 def get_ui_config() -> UIConfigResponse:
-    """Return only the player client's explicitly named display tunables."""
+    """Serve the player client's explicitly allowlisted display tunables."""
     return UIConfigResponse(announcer=load_settings().ui.announcer)
