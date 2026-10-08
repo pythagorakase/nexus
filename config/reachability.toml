@@ -23,6 +23,10 @@ target = "scripts/character_identity_census.py:main"
 reason = "Read-only identity census documented in docs/qa/799-identity-before-minting/verification.md."
 
 [[operators]]
+target = "scripts/load_natural_earth.py:main"
+reason = "Natural Earth reference loader named by docs/database.md; loads the vendored, checksummed 10m files into natural_earth_features (issue 840)."
+
+[[operators]]
 target = "scripts/measure_place_coordinate_costs.py:main"
 reason = "Read-only place-coordinate cost report for 840-Q4; offline grammar weights plus read-only place counts (issue 840)."
 [[operators]]
@@ -31,6 +35,9 @@ reason = "CLAUDE.md schema migration workflow."
 [[operators]]
 target = "scripts/new_story_setup.py:main"
 reason = "CLAUDE.md slot initialization workflow."
+[[operators]]
+target = "scripts/backfill_story_identity.py:main"
+reason = "One-time story-identity fleet backfill named by nexus doctor and docs/database.md (issue 822)."
 [[operators]]
 target = "scripts/rebuild_memory_idf.py:main"
 reason = "CLAUDE.md and docs/database.md IDF rebuild after a PostgreSQL update; named by the analyzer-mismatch error and nexus doctor (issue 1013)."
@@ -294,6 +301,7 @@ paths = [
     { path = "scripts/apply_slot2_semantic_tags.py", class = "pending-ruling:811-Q1", reason = "811-Q1: slot-2 manifest and apply tooling; the 2026-07-17 retention ruling stands until the owner rules otherwise (#811, 2026-09-30)." },
     { path = "scripts/assemble_context.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/backfill_routine_anchors.py", class = "pending-ruling:811-Q1", reason = "811-Q1: slot-2 manifest and apply tooling; the 2026-07-17 retention ruling stands until the owner rules otherwise (#811, 2026-09-30)." },
+    { path = "scripts/backfill_story_identity.py", class = "operator", reason = "operator root scripts/backfill_story_identity.py:main" },
     { path = "scripts/benchmark_experience_enqueue_fence.py", class = "test-only", reason = "test root tests/test_api/test_benchmark_seat_jobs_pg.py:<module>" },
     { path = "scripts/character_context_1.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/character_context_26.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
@@ -357,6 +365,7 @@ paths = [
     { path = "scripts/import_orrery_route_graph.py", class = "test-only", reason = "test root tests/test_orrery/test_routing.py:<module>" },
     { path = "scripts/import_setting.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/install_pgvector.sh", class = "test-only", reason = "Read by tests/test_database_contract.py:228; no root runs it." },
+    { path = "scripts/load_natural_earth.py", class = "operator", reason = "operator root scripts/load_natural_earth.py:main" },
     { path = "scripts/map_builder.md", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/map_builder.py.new", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/map_builder_legacy.py", class = "dead", reason = "No root reaches it; no tracked document names it." },

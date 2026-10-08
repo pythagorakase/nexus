@@ -1,5 +1,9 @@
 import { useInputDraft } from "@/hooks/useInputDraft";
-import { readerDraftScope, readerDraftStore } from "@/lib/reader-draft";
+import {
+  migrateLegacyReaderKeys,
+  readerDraftScope,
+  readerDraftStore,
+} from "@/lib/reader-draft";
 import type { SlotState } from "@/types/narrative";
 
 /**
@@ -7,6 +11,7 @@ import type { SlotState } from "@/types/narrative";
  * choice identity is valid only against the choices slot state presents now.
  */
 export function useReaderDraft(slotState: SlotState | undefined) {
+  migrateLegacyReaderKeys(slotState);
   return useInputDraft(
     readerDraftStore,
     readerDraftScope(slotState),

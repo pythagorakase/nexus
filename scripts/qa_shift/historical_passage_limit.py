@@ -22,6 +22,7 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.api import slot_utils
+from nexus.api.story_identity import detach_clone_identity
 from nexus.config import load_settings
 from nexus.config.story_model import StorySettings
 from nexus.database import connection_kwargs
@@ -106,6 +107,7 @@ def main() -> None:
             ],
             check=True,
         )
+        detach_clone_identity(dbname)
         dispose_database(dbname)
         evidence["clone_frontier"] = read_rows(dbname, frontier_sql)
         assert evidence["clone_frontier"] == evidence["source_before"] == [(46, 49)]

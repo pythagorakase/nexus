@@ -18,7 +18,8 @@
 /context_packages/
 /models/
 /nexus/models/
-/data/
+/data/*
+!/data/natural_earth/
 /results/
 /sessions/
 /.git/objects/pack/
