@@ -796,6 +796,113 @@ def _check_slot_idf_analyzer(ctx: ReadinessContext) -> Outcome:
     return slot_idf_outcome({slot: slot_dbname(slot) for slot in slots})
 
 
+_TEMPLATE_IDENTITY_REMEDIATION = (
+    "Delete it: NEXUS_template carries no story identity "
+    "(psql -d NEXUS_template -c 'DELETE FROM public.story_identity')"
+)
+
+
+def _story_identity_rows(cur: Any) -> Optional[int]:
+    """Count story_identity rows, or None when the table is missing."""
+    cur.execute("SELECT to_regclass('public.story_identity') IS NULL")
+    if cur.fetchone()[0]:
+        return None
+    cur.execute("SELECT count(*) FROM public.story_identity")
+    return int(cur.fetchone()[0])
+
+
+def template_story_identity_outcome(dbname: str) -> Outcome:
+    """Pass when the template has the story_identity table and no row (822-Q13)."""
+    import psycopg2
+
+    try:
+        with closing(read_only_connection(dbname)) as conn:
+            with conn.cursor() as cur:
+                rows = _story_identity_rows(cur)
+    except (
+        psycopg2.Error
+    ) as exc:  # nexus-exception-disposition: fail; reason=postgres; safety=failed check
+        return _failed(one_line(exc), _POSTGRES_REMEDIATION)
+    if rows is None:
+        return _failed(
+            f"{dbname}: no story_identity table (migration 146 pending)",
+            "python scripts/migrate.py --template",
+        )
+    if rows:
+        return _failed(
+            f"{dbname}: {rows} story_identity row(s)", _TEMPLATE_IDENTITY_REMEDIATION
+        )
+    return _passed(f"{dbname}: no story identity row")
+
+
+def _check_template_story_identity(ctx: ReadinessContext) -> Outcome:
+    """NEXUS_template carries the story_identity table and no row."""
+    from scripts.migrate import TEMPLATE_DB
+
+    return template_story_identity_outcome(TEMPLATE_DB)
+
+
+def slot_story_identity_outcome(names: Mapping[int, str]) -> Outcome:
+    """Pass when each named slot database that exists holds exactly one identity.
+
+    ``names`` maps each slot number to its database. A database the server
+    lacks is reported as absent; a locked one's remediation carries
+    ``--write-locked-slot``.
+    """
+    import psycopg2
+
+    from nexus.api.save_slots import is_slot_locked
+
+    observations: list[str] = []
+    steps: list[str] = []
+    absent: list[str] = []
+    try:
+        with closing(read_only_connection(MAINTENANCE_DATABASE)) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT datname FROM pg_database WHERE datname = ANY(%s)",
+                    (list(names.values()),),
+                )
+                existing = {row[0] for row in cur.fetchall()}
+        for slot, dbname in names.items():
+            if dbname not in existing:
+                absent.append(dbname)
+                continue
+            override = " --write-locked-slot" if is_slot_locked(slot, dbname) else ""
+            with closing(read_only_connection(dbname)) as conn:
+                with conn.cursor() as cur:
+                    rows = _story_identity_rows(cur)
+            if rows is None:
+                observations.append(
+                    f"{dbname}: no story_identity table (migration 146 pending)"
+                )
+                steps.append(f"python scripts/migrate.py --slot {slot}{override}")
+            elif rows == 0:
+                observations.append(f"{dbname}: no story identity row")
+                steps.append(
+                    f"python scripts/backfill_story_identity.py --slot {slot}{override}"
+                )
+            else:
+                observations.append(f"{dbname}: one story identity row")
+    except (
+        psycopg2.Error
+    ) as exc:  # nexus-exception-disposition: fail; reason=postgres; safety=failed check
+        return _failed(one_line(exc), _POSTGRES_REMEDIATION)
+    observations.extend(f"{dbname} absent" for dbname in absent)
+    observed = "; ".join(observations)
+    if steps:
+        return _failed(observed, "; ".join(steps))
+    return _passed(observed)
+
+
+def _check_slot_story_identity(ctx: ReadinessContext) -> Outcome:
+    """Each probed slot that exists holds exactly one story identity row."""
+    from nexus.api.slot_utils import slot_dbname
+
+    slots = ctx.require_runtime().readiness.slots
+    return slot_story_identity_outcome({slot: slot_dbname(slot) for slot in slots})
+
+
 # ---------------------------------------------------------------------------
 # Host files and tools
 # ---------------------------------------------------------------------------
@@ -1145,6 +1252,18 @@ REGISTRY: tuple[CheckSpec, ...] = (
         _HOST,
         ("template.present",),
         _check_slot_idf_analyzer,
+    ),
+    CheckSpec(
+        "template.story_identity_absent",
+        _HOST,
+        ("template.present",),
+        _check_template_story_identity,
+    ),
+    CheckSpec(
+        "slots.story_identity_present",
+        _HOST,
+        ("template.present",),
+        _check_slot_story_identity,
     ),
     CheckSpec(
         "tools.pg_dump",

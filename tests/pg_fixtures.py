@@ -46,6 +46,7 @@ from sqlalchemy.engine import URL, make_url
 from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.api import db_pool
 from nexus.api.slot_utils import all_slots, slot_dbname
+from nexus.api.story_identity import detach_clone_identity
 from nexus.config import load_settings
 from nexus.config.story_model import (
     StorySettings,
@@ -334,6 +335,7 @@ def disposable_slot_database(
                 raise RuntimeError(
                     f"Corpus clone {dbname} has {failed} failed migrations"
                 )
+            detach_clone_identity(dbname)
             if story_pin is not None and crosses_seat_backfill:
                 _refuse_source_pin_backfill(dbname, story_pin)
             pin_clone()
