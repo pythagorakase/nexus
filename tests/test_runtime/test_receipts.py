@@ -383,8 +383,13 @@ def test_unwritable_root_does_not_mask_the_error(
 
 
 def test_child_receipts_land_in_the_session_root(tmp_path: Path) -> None:
-    """A child CLI inherits the session seam; real receipt roots stay untouched."""
-    session_root = Path(os.environ[TEST_RECEIPTS_ENV])
+    """A child CLI inherits the session seam; real receipt roots stay untouched.
+
+    The child runs before anything is asserted, so a session that stopped
+    exporting the seam also shows the written checkout receipt in its
+    ``receipt isolation`` line.
+    """
+    session_root = os.environ.get(TEST_RECEIPTS_ENV)
     checkout = repo_root() / RECEIPTS_DIR
     user = Path.home() / FALLBACK_RECEIPTS_DIR
     before = (_snapshot(checkout), _snapshot(user))
@@ -394,13 +399,14 @@ def test_child_receipts_land_in_the_session_root(tmp_path: Path) -> None:
 
     assert completed.returncode == 1
     assert _failure(completed)["code"] == "config_error"
+    assert (_snapshot(checkout), _snapshot(user)) == before
+    assert session_root, f"{TEST_RECEIPTS_ENV} is not exported for the session"
     mine = [
         record
-        for record in _records(session_root / "home")
+        for record in _records(Path(session_root) / "home")
         if record["config_path"] == str(broken)
     ]
     assert [record["surface"] for record in mine] == ["config.load_settings"]
-    assert (_snapshot(checkout), _snapshot(user)) == before
 
 
 def test_receipts_command_reports_a_broken_home(
