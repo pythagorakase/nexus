@@ -160,10 +160,28 @@ index 635cfdab..2dce357a 100644
                      child_uuid=child,
 ```
 
+The assertion lines and the full tail, from the saved log
+(`<scratch>/822-S1-resume-2/red-run.log`, lines 34-37, 2108-2111 and
+6511-6519):
+
 ```
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_story_identity_pg.py
 E               AssertionError: assert [('8795adfd-d...n must drop')] == []
+E                 
+E                 Left contains one more item: ('8795adfd-d372-4ba8-8428-e1375bb5d9f5', '2a85d5d1-0a43-4c25-8a5b-eaa8c0db2594', 'fork', 'qa640_822_parent', 'a lineage row the transition must drop')
+E                 Use -v to get more diff
+...
 E               AssertionError: assert 'wizard' == 'clone'
+E                 
+E                 - clone
+E                 + wizard
+...
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 17 targets: postgres, qa640_822_backfill_a_*, qa640_822_backfill_b_*, qa640_822_backfill_t_*, qa640_822_clone_*, qa640_822_clone_src_*, qa640_822_constraints_*, qa640_822_detach_*, qa640_822_detach_bare_*, qa640_822_detach_src_*, qa640_822_doctor_s_*, qa640_822_doctor_t_*, qa640_822_init_*, qa640_822_migration_*, qa640_822_reset_*, qa640_822_reset_src_*, qa640_822_transition_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
 FAILED tests/test_story_identity_pg.py::test_transition_renews_identity - Ass...
 FAILED tests/test_story_identity_pg.py::test_clone_forks_with_lineage - Asser...
 2 failed, 8 passed in 28.25s
@@ -173,10 +191,13 @@ FAILED tests/test_story_identity_pg.py::test_clone_forks_with_lineage - Asser...
 
 Machine-load rule: the whole PostgreSQL gate and its three-piece split were
 not run (the coordinator runs it at landing). The focused proof set ran in
-three sequential sessions, each after the bounded load wait
-(`load check` lines; the first waited about nine minutes while the one-minute
-load was above 24), with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
-`NEXUS_SLOT` unset and `nice -n 15`.
+three sequential sessions with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
+`NEXUS_SLOT` unset and `nice -n 15`. Each followed the bounded load wait
+(`<scratch>/822-S1-resume-2/waitload.sh`, which loops while the one-minute
+load is 24 or more, capped at 20 minutes, then prints a `load check` line),
+but the earlier resume did not save those `load check` lines, so no record
+of the waits exists for these three sessions. The review-fix runs below
+record theirs.
 
 ```
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_story_identity_pg.py tests/test_api/test_reader_draft_identity_pg.py tests/test_api/test_slot_state.py tests/test_new_story_setup.py tests/test_runtime/test_readiness_pg.py tests/test_orrery/test_migrate.py tests/test_schema_documentation_pg.py
@@ -258,10 +279,20 @@ E       psycopg2.errors.UndefinedTable: relation "public.story_identity" does no
 E       LINE 1: DELETE FROM public.story_identity
 E                           ^
 
-$ NEXUS_RUN_POSTGRES=1 ... -p tests.dbname_audit "tests/test_new_story_setup.py::test_fresh_database_is_baseline_stamped[desktop-reset]"
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit "tests/test_new_story_setup.py::test_fresh_database_is_baseline_stamped[desktop-reset]"
 E       psycopg2.errors.UndefinedTable: relation "public.story_identity" does not exist
 E       LINE 1: DELETE FROM public.story_identity
 E                           ^
+...
+----------------------------- Captured stderr call -----------------------------
+dropdb: error: database removal failed: ERROR:  database "nexus_m10_fresh_test_85266" is being accessed by other users
+DETAIL:  There is 1 other session using the database.
+------------------------------ Captured log call -------------------------------
+WARNING  nexus.new_story_setup:new_story_setup.py:250 Dropped database nexus_m10_fresh_test_85266 if it existed
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 3 targets: nexus_m10_fresh_test_85266, nexus_m10_template_test_85266, postgres
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 =========================== short test summary info ============================
 FAILED tests/test_new_story_setup.py::test_fresh_database_is_baseline_stamped[desktop-reset]
@@ -304,7 +335,11 @@ dbname audit: owner targets: none
 
    The failing test leaves its `nexus_m10_fresh_test_<pid>` database; three
    such databases remain on the server (`nexus_m10_fresh_test_23348`, `_70591`,
-   `_85266`). They are not `qa640_` names, so they were not dropped here.
+   `_85266`; re-read 2026-10-08 00:06 CDT, no session holds any of them).
+   They are not `qa640_` names, so they were not dropped here. Both the
+   stand-in edit (in `tests/test_new_story_setup.py`, which the order assigns
+   to 809-S3b) and the drop are the coordinator's decisions; until one of
+   them lands, both ids are known landing failures.
 
 No other gate failure came from a narrative read, so no seed needed
 `replace_story_identity` beyond the overwrite mirror the order names.
@@ -340,22 +375,53 @@ The one offline failure is expected failure 1 above.
 
 ## Static Checks
 
+Rerun at b44fde18 (review fixes). `<fix>` is
+`<scratch>/822-S1-resume-2/fix1`; `changed_py.txt` holds the 20 Python files
+`git diff --name-only origin/main...HEAD -- '*.py'` lists, and
+`preexisting.txt` the 17 of them that exist on `origin/main`. The `origin/main`
+versions were extracted whole (`git archive origin/main nexus scripts tests
+pyproject.toml .flake8 nexus.toml config | tar -x -C <fix>/main_full`) so the
+same commands resolve the same imports there.
+
 ```
-$ $PY -m black --check <20 changed Python files>
+$ $PY -m black --check $(cat <fix>/changed_py.txt)
 All done! ✨ 🍰 ✨
 20 files would be left unchanged.
-$ $PY -m flake8 <changed files>            # branch: 63 lines
-$ $PY -m flake8 <origin/main versions>     # main:   63 lines; diagnostics new in branch (line numbers stripped): none
-$ $PY -m mypy --explicit-package-bases <changed files>
+
+$ nice -n 15 $PY -m flake8 $(cat <fix>/changed_py.txt) > <fix>/flake8-branch.txt
+branch rc=1 lines=63
+$ cd <fix>/main_full && nice -n 15 $PY -m flake8 $(cat <fix>/preexisting.txt) > <fix>/flake8-main.txt
+main rc=1 lines=63
+$ sed -E 's/:[0-9]+:[0-9]+:/:/' flake8-branch.txt | sort > f8b.txt   # and the same for main into f8m.txt
+$ comm -23 f8b.txt f8m.txt          # diagnostics new in branch
+(empty)
+
+$ nice -n 15 $PY -m mypy --explicit-package-bases $(cat <fix>/changed_py.txt) > <fix>/mypy-branch.txt
+branch rc=1
 Found 37 errors in 8 files (checked 20 source files)
-$ $PY -m mypy --explicit-package-bases <origin/main versions of the 17 pre-existing files>
-Found 37 errors in 8 files (checked 17 source files)
-# diagnostics new in branch (line numbers stripped): none; the three new files have none
+$ cd <fix>/main_full && nice -n 15 $PY -m mypy --explicit-package-bases $(cat <fix>/preexisting.txt) > <fix>/mypy-main.txt
+main rc=1
+Found 316 errors in 59 files (checked 17 source files)
+$ grep -F -f <(sed 's/$/:/' preexisting.txt) mypy-main.txt | grep -v '^Found' > mypy-main-checked.txt
+$ grep -c ': error:' mypy-main-checked.txt mypy-branch.txt
+mypy-main-checked.txt:37
+mypy-branch.txt:37
+$ sed -E 's/:[0-9]+: /: /' mypy-branch.txt | grep -v '^Found' | sort > mb.txt   # and mypy-main-checked.txt into mm.txt
+$ comm -23 mb.txt mm.txt            # diagnostics new in branch
+(empty)
+
 $ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
 OK: exception disposition coverage and shrink-only baseline verified.
 $ $PY scripts/check_migration_comments.py
 OK: every object created after migration 129 has a comment.
 ```
+
+In the extracted `origin/main` tree mypy also reports errors in modules the
+17 files import (316 in 59 files); the comparison keeps only the 37 errors
+reported on the 17 checked files, which match the branch's 37 one for one.
+The three new files (`nexus/api/story_identity.py`,
+`scripts/backfill_story_identity.py`, `tests/test_story_identity_pg.py`) have
+no flake8 or mypy diagnostic.
 
 Pre-existing diagnostics: every flake8 and mypy diagnostic on the changed
 files is on an untouched line and is also reported on `origin/main`.
@@ -398,6 +464,15 @@ Emulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 27 medi
 Wrote /Users/pythagor/nexus/.claude/worktrees/822-story-identity/ui/client/src/state-surfaces.resolved.json; module graph=2095 inputs; SHA-256 f9b4869510b1ee91d54813760373e2e28822473f85024fb8976a847d30580c43
 ```
 
+The receipt shrank from 444,566,294 to 168,893,558 bytes (LFS pointer
+sizes on `origin/main` and on this branch) because it was written by the
+batched `resolve-state-surfaces -- --assemble` path, which writes compact
+single-line JSON (`ui/scripts/resolve-state-surfaces.mjs:43`,
+`JSON.stringify(merged)`), instead of the earlier unbatched write, which
+pretty-prints (`:464`, `JSON.stringify(results, null, 2)`; the old receipt
+had 13,680,322 lines, the new one has 1). Sample parity is unchanged, as
+the comparison below shows.
+
 Measurements are unchanged. Every painted core mean, histogram, core size and
 mask size in the new receipt equals the previous one (a comparison script
 walked every `meanLinear` sample under `conditions`); the media inventory is
@@ -417,12 +492,86 @@ $ nice -n 15 npm --prefix ui test
    Start at  23:45:45
    Duration  56.49s (transform 2.71s, setup 8.17s, collect 15.71s, tests 69.65s, environment 40.04s, prepare 17.70s)
 
-$ nice -n 15 npm --prefix ui run check
+$ (nice -n 15 npm --prefix ui run check; echo rc=$?)    # rerun at b44fde18
+> nexus-ui@1.0.0 check
+> tsc && npm run check:design-sync
+
+
 > nexus-ui@1.0.0 check:design-sync
 > tsc -p .design-sync/tsconfig.previews.json
+
+rc=0
 ```
 
 No UI element was added, so no shadcn component applies.
+
+## Review Fixes (2026-10-08, Commit b44fde18)
+
+`test_doctor_identity_outcomes` now runs every branch through the registered
+check functions: `migrate.TEMPLATE_DB` is patched to a template clone for
+`_check_template_story_identity`, and `_check_slot_story_identity` reads a
+readiness context whose `[runtime.readiness].slots` is `[3, 4]`, with slot 3
+routed to a clone and slot 4 to a name the server lacks
+(`route_slots_to_disposable`). The remediations are asserted exactly,
+including ` --write-locked-slot` on the locked routed slot.
+`test_backfill_mints_and_links` adds the two refusals the script makes:
+a fork whose child is not a target (`ValueError`, nothing written) and a
+child that already forks another parent (`RuntimeError`, lineage
+unchanged).
+
+Each guard plant (reverted before commit; `git status --short` showed only
+the test file afterwards) turns the extended test red:
+
+```
+$ git diff scripts/    # plant 1: <fix>/guard-plant-1.diff
+-        if fork.child not in targets:
+-            raise ValueError(f"fork child {fork.child} is not a backfill target")
++        pass  # plant: target guard removed
+load check 00:03:02: { 17.24 21.40 24.63 }
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_story_identity_pg.py::test_backfill_mints_and_links
+E           RuntimeError: qa640_822_backfill_b_1acf550d195b holds 0 story_identity rows; exactly one is required
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner server: local:5432
+dbname audit: owner targets: none
+1 failed in 4.02s
+
+$ git diff scripts/    # plant 2: <fix>/guard-plant-2.diff (the `elif parents:` raise removed)
+load check 00:03:14: { 20.25 21.91 24.77 }
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_story_identity_pg.py::test_backfill_mints_and_links
+E           Failed: DID NOT RAISE <class 'RuntimeError'>
+tests/test_story_identity_pg.py:299: Failed
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner server: local:5432
+dbname audit: owner targets: none
+1 failed in 4.28s
+```
+
+At b44fde18, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT`
+unset:
+
+```
+load check 00:05:55: { 14.39 20.43 23.81 }
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_story_identity_pg.py tests/test_runtime/test_readiness_pg.py
+...............                                                          [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 28 targets: postgres, qa640_1013_readiness_* x2, qa640_822_backfill_a_*, qa640_822_backfill_b_*, qa640_822_backfill_t_*, qa640_822_clone_*, qa640_822_clone_bare_*, qa640_822_clone_src_*, qa640_822_constraints_*, qa640_822_detach_*, qa640_822_detach_bare_*, qa640_822_detach_src_*, qa640_822_doctor_s_*, qa640_822_doctor_t_*, qa640_822_init_*, qa640_822_migration_*, qa640_822_reset_*, qa640_822_reset_src_*, qa640_822_transition_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+15 passed in 40.79s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+96 passed, 5 warnings in 16.38s
+```
+
+Not done here, because each needs the coordinator: the `story_identity`
+table in `tests/test_new_story_setup.py`'s `template_db` stand-in (the order
+assigns that file to 809-S3b), and dropping the three leftover
+`nexus_m10_fresh_test_*` databases (not `qa640_` names). Until one of the
+stand-in options lands, `test_fresh_database_is_baseline_stamped[fresh]`
+and `[desktop-reset]` are known landing failures, beside
+`test_migration_sequence_has_only_known_gaps`.
 
 ## Landing Notes for the Coordinator
 
