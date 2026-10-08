@@ -27,6 +27,7 @@ from nexus.agents.memnon.utils.embedding_tables import (
     ensure_embedding_table,
     table_name_for_dimensions,
 )
+from nexus.config import load_settings
 from nexus.database import database_url
 from tests.pg_fixtures import (
     connect,
@@ -75,14 +76,14 @@ def _stored_chunk_ids(dbname: str) -> List[int]:
 
 
 def _config_with_missing_artifact(tmp_path: Path) -> Tuple[Path, Path, str]:
-    """Write nexus.toml with bge-large's local_path at a missing folder.
+    """Write nexus.toml with bge-large's candidate local_path at a missing folder.
 
     Returns:
         The config path, the missing folder, and bge-large's repository.
     """
 
     document: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
-    entry = document["memnon"]["models"][MODEL]
+    entry = document["ir_eval"]["embedding_candidates"][MODEL]
     missing = tmp_path / "not-installed"
     entry["local_path"] = str(missing)
     config = tmp_path / "regen-missing-artifact.toml"
@@ -109,7 +110,7 @@ def test_truncate_table_keeps_rows_when_the_model_artifact_is_missing(
     assert spec is not None and spec.loader is not None
     script = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(script)
-    assert script.SETTINGS["models"][MODEL]["local_path"] == str(missing)
+    assert load_settings().embedder_registry()[MODEL]["local_path"] == str(missing)
     stored = _stored_chunk_ids(seeded_slot)
     assert len(stored) == 2
 

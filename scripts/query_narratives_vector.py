@@ -76,22 +76,25 @@ if __name__ == "__main__":
 logger = logging.getLogger("nexus.query")
 
 from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402
+from nexus.config import load_settings  # noqa: E402
 
 
-# The registered [memnon.models] entries this import-era script can query
-# with. A query loads only the one ``--model`` it names, from its local_path
-# (issue #812): no Hugging Face download, no hardcoded default path, and a
-# missing folder raises with the restore command instead of being skipped.
+# The registered embedders ([memnon.models] or [ir_eval.embedding_candidates])
+# this import-era script can query with. A query loads only the one
+# ``--model`` it names, from its local_path (issue #812): no Hugging Face
+# download, no hardcoded default path, and a missing folder raises with the
+# restore command instead of being skipped.
 SCRIPT_EMBEDDERS = ("bge-large", "e5-large", "bge-small-custom")
 
 
 def load_embedding_model(
     models_config: Mapping[str, Mapping[str, Any]], model_key: str
 ) -> Any:
-    """Load the one queried embedder from its ``[memnon.models]`` local_path.
+    """Load the one queried embedder from its registered local_path.
 
     Args:
-        models_config: The ``[memnon.models]`` registry, keyed by entry name
+        models_config: The embedder registry (``[memnon.models]`` and
+            ``[ir_eval.embedding_candidates]``), keyed by entry name
         model_key: The entry the query embeds with
 
     Returns:
@@ -104,7 +107,8 @@ def load_embedding_model(
     if model_key not in models_config:
         raise RuntimeError(
             f"Embedding model '{model_key}' is not registered in "
-            "[memnon.models]; register it with its local_path."
+            "[memnon.models] or [ir_eval.embedding_candidates]; register it "
+            "with its local_path."
         )
     model = load_local_model(model_key, models_config[model_key])
     logger.info(f"Loaded embedding model: {model_key}")
@@ -151,7 +155,8 @@ class NarrativeSearcher:
 
         Args:
             db_url: PostgreSQL database URL
-            model_key: The ``[memnon.models]`` entry semantic search embeds
+            model_key: The registered embedder (``[memnon.models]`` or
+                ``[ir_eval.embedding_candidates]``) semantic search embeds
                 with; the only embedder loaded. None loads no embedder (text
                 search only).
         """
@@ -167,7 +172,7 @@ class NarrativeSearcher:
         self.embedding_models: Dict[str, Any] = {}
         if model_key is not None:
             self.embedding_models[model_key] = load_embedding_model(
-                SETTINGS.get("models", {}), model_key
+                load_settings().embedder_registry(), model_key
             )
 
         # Check pgvector extension
