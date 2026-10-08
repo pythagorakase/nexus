@@ -73,4 +73,33 @@ and save 5 zero. Full combined gate, PR review, migration sequencing and any
 explicitly authorized fleet application remain coordinator work. No gateway
 or owner service was started.
 
+## Combined TEST Seeder Reset Review
+
+Read-only review of integration head `027ca3d7` found an indirect junction
+TRUNCATE path in migration 008's TEST seeder. The earlier “no code path” migration
+header statement was therefore inaccurate. The migration header now describes
+the row-trigger limitation and the required combined 816/836 seeder cleanup;
+this correction changes comments only, not migration SQL behavior.
+
+A read-only catalog traversal of `NEXUS_template` at migration 145, with
+`transaction_read_only=on`, found that `TRUNCATE layers CASCADE` reaches 32
+tables: layers → zones → places reaches the place junction, and places also
+reaches characters and factions through their location foreign keys, reaching
+the other two junctions. Neither `narrative_chunks` nor `entities` is reached.
+Migrations 146/147 add no connecting foreign key; migration 148's unified table
+references only those two unreached parents. Row DELETE triggers do not fire
+for TRUNCATE, so an existing target's unified rows can otherwise outlive every
+junction row after reseeding.
+
+The 816 companion fix conditionally clears `chunk_entity_references` before the
+existing truncates, in the same seeding transaction. The presence check preserves
+support for provider databases predating migration 148. Clearing all three kinds
+is correct because the cascade empties all three authoritative junctions,
+including factions. The combined-only regression must seed all three kinds,
+reseed through the production entrypoint, and verify empty junction/unified rows
+while its narrative chunk survives. Those implementation and red/green results
+belong to 816/integration evidence; they are not claimed by this comment-only
+commit. The coordinator paused the full gate to integrate that fix. No tests
+were run for this documentation correction.
+
 Codex — GPT-6

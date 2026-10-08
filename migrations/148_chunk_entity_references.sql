@@ -57,8 +57,12 @@
 -- table, deletes a subtype's rows here when the subtype row is deleted and
 -- keeps the entity. Decision 836-Q6: AFTER INSERT OR UPDATE OR DELETE row
 -- triggers on the three junctions mirror every junction write until 836-S5.
--- TRUNCATE of a junction and UPDATE OF entity_id on a subtype table are not
--- mirrored; no code path does either.
+-- Row triggers do not mirror TRUNCATE of a junction or UPDATE OF entity_id
+-- on a subtype table. The combined 816/836 landing clears this table explicitly
+-- in migration 008's TEST seeder before TRUNCATE layers/characters CASCADE,
+-- which empties all three junctions without reaching this table. The seeder
+-- checks for this table first so databases predating 148 remain supported.
+-- Production subtype writers do not change entity_id.
 --
 -- The backfill is followed by a DO block that recomputes the normalized rows
 -- from the junctions and compares them with the table as multisets, kind by
