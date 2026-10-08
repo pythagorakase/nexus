@@ -1,0 +1,17 @@
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m black --check tests/test_doc_front_matter.py docs/qa/817-decision-ledger/quote_audit.py docs/qa/817-decision-ledger/table_check.py docs/qa/817-decision-ledger/source_sweep.py
+All done! ✨ 🍰 ✨
+4 files would be left unchanged.
+exit 0
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m flake8 tests/test_doc_front_matter.py docs/qa/817-decision-ledger/quote_audit.py docs/qa/817-decision-ledger/table_check.py docs/qa/817-decision-ledger/source_sweep.py
+exit 0
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases tests/test_doc_front_matter.py
+Success: no issues found in 1 source file
+exit 0
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+exit 0
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m flake8 temp/codex-1115-resume/main/tests/test_doc_front_matter.py
+exit 0
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases temp/codex-1115-resume/main/tests/test_doc_front_matter.py
+Success: no issues found in 1 source file
+exit 0

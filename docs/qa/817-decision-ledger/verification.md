@@ -1,8 +1,71 @@
 # 817-S3 Verification: Decision-Ledger Backfill
 
 Branch `claude/817-decision-ledger`, merge base with `origin/main`
-`b0da93eaedb4d1661af50742440e7988c7e48185`. Every record and the ledger
+`afd034f360e625f8bc4ffa8a717dda28422b19c7`. Every record and the ledger
 README carry that merge base as `verified_commit`.
+
+## Current Verification on 2026-10-08
+
+The takeover resumed the pushed checkpoint `bfce72d4`, including the final
+source additions for 0027 and 0034. Commit
+`4e29ad9731fdfcc875032ec4eedb38a2dc0e89af` merges `origin/main` at `afd034f3`
+and refreshes all 55 record stamps, the ledger README stamp, and the five
+baseline quotation source revisions. No declared record source changed
+between the previous merge base `b0da93ea` and `afd034f3`; no ruling or
+rejection quotation changed. The original table, accepted source additions,
+exact ledger equality and prescribed 0001 Reason bullet remain intact.
+
+The commands below ran serially on the clean committed tree at `4e29ad97`,
+using `/Users/pythagor/nexus/.venv/bin/python` as `$PY` and the exact worktree
+as `PYTHONPATH`. Import verification printed
+`/Users/pythagor/nexus/.claude/worktrees/817-decision-ledger/nexus/__init__.py`.
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT`, `NEXUS_RUN_POSTGRES`
+and `NEXUS_RUN_LIVE_LLM` were unset. The follow-up evidence commit changes
+only this file and the captured text outputs.
+
+```text
+$ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/source_sweep.py $PWD
+tracked files cited but not in sources: 0
+
+$ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/table_check.py $PWD
+order: order_817_S3.md
+order table rows: 55; files under docs/decisions/: 56
+lead-ins: 14; fixed Rejected rows: 28; fixed Reopening rows: 13
+mismatches: 0
+
+$ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/quote_audit.py $PWD
+distinct objects fetched: 90 (45 comments, 45 issues)
+all 55 records match (merge base afd034f360e625f8bc4ffa8a717dda28422b19c7)
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+120 passed, 5 warnings in 17.47s
+```
+
+Full output, including every record's source URL and fetch command:
+[source sweep](resume-2026-10-08/source-sweep.txt),
+[order table](resume-2026-10-08/table-check.txt),
+[quote audit](resume-2026-10-08/quote-audit.txt),
+[focused tests](resume-2026-10-08/focused.txt), and
+[static checks](resume-2026-10-08/static-checks.txt).
+The quote and table audits are point-in-time comparisons with fresh GitHub
+responses. The source sweep's remaining candidates are the same five
+references to files outside Git: `~/.codex/config.toml`, `doctrine.md`
+and `coverage_critique.md`, explained under Third Review Fixes.
+
+Black and flake8 passed for all four changed Python files; mypy passed for
+`tests/test_doc_front_matter.py`. The `origin/main` version of that test file
+also passed flake8 and the same mypy invocation. The exception disposition
+and shrink-only baseline check passed. All commands used `nice -n 15`.
+
+The earlier whole offline suites below are historical evidence for
+`5a5bab1e`, before the final `bfce72d4` source widening. They are not a gate
+for this head. The coordinator explicitly reserved the full suite for one
+combined integration run; that current-head gate remains pending. No owner
+service, database or credential was changed, and no paid provider was used.
+
+The remaining sections preserve the original implementation and review
+history with their original tested revisions.
 
 ## Resumed on 2026-10-07
 
@@ -23,7 +86,8 @@ open at `5830781b`. `origin/main` was still `b0da93ea`, so no merge was owed.
 | `b8c656b6` | Third review fixes: the sources the coordinator's ruling adds to 0009, 0019 and 0023, and the sweep's additions to 0010, 0020, 0024, 0025-0029 and 0034; `table_check.py` appends them | The sweep script (next commit) and this file's evidence |
 | `d338db76` | `source_sweep.py` (the sweep, rerunnable); `table_check.py` types the joined sources list | This file's evidence (next commit) |
 | `5a5bab1e` | This file's evidence for `b8c656b6` and `d338db76`, except the offline-suite tails | The offline-suite tails (next commit) |
-| (last commit) | The offline-suite tails, run on `5a5bab1e` | Nothing |
+| `ba84aeec` | The offline-suite tails, run on `5a5bab1e` | Later source widening and fresh proof |
+| `bfce72d4` | Fourth review fixes: the role-cited sources for 0027 and 0034 and the stale-line explanation | Current-head gate |
 
 The resume first rechecked the records against the order's table with an
 unrecorded scratch script. The review fix pass below replaced that recheck with
@@ -338,8 +402,10 @@ distinct objects fetched: 90 (45 comments, 45 issues)
 all 55 records match (merge base b0da93eaedb4d1661af50742440e7988c7e48185)
 ```
 
-Black (`--check`) and flake8 are clean on `table_check.py`. The test tails at
-this pass's tested commit are under Test Tails.
+Black (`--check`) and flake8 were recorded clean on `table_check.py`. The
+offline tails below predate this pass; no final-commit suite was recorded
+before the weekly limit. Current focused proof and its pending integration
+gate are identified at the top of this file.
 
 ## 819-S3 Merge Check
 
@@ -770,7 +836,7 @@ The earlier run on `4c9ebb83` (two more rejection cases than the first
 `118 passed`) was recorded without its command; it gave `120 passed, 5 warnings
 in 20.29s`.
 
-### Offline Suites
+### Historical Offline Suites
 
 The Astra review of `6df5115a` found that the earlier offline tails named no
 tested commit and predated the test changes of `4c9ebb83`. Those tails
