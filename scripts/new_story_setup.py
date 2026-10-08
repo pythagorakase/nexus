@@ -3,7 +3,7 @@
 Utilities for new-story save slots.
 
 Actions:
-  - Create assets tables (`assets.new_story_creator`)
+  - Check that the assets tables exist (`assets.new_story_creator`)
   - Clone the public schema into a save slot schema (save_02 ... save_05) using pg_dump-based rewrite
 """
 
@@ -12,12 +12,14 @@ from __future__ import annotations
 from nexus.api.db_pool import dispose_database
 from nexus.api.save_slots import is_slot_locked
 from nexus.api.slot_utils import slot_dbname
+from nexus.api.story_identity import record_fork, replace_story_identity
 
 from nexus.database import subprocess_env
 
 from nexus.database import connection_kwargs
 
 import argparse
+from contextlib import closing
 import logging
 import os
 from pathlib import Path
@@ -66,26 +68,18 @@ def _connect(dbname: Optional[str] = None):
         return psycopg2.connect(**connection_kwargs(resolved_dbname))
 
 
-def create_assets_tables(dbname: Optional[str] = None) -> None:
-    """Create cache/metadata tables in assets schema for the given database."""
-    ddl_creator = """
-    CREATE SCHEMA IF NOT EXISTS assets;
-    CREATE TABLE IF NOT EXISTS assets.new_story_creator (
-        id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
-        thread_id TEXT,
-        setting_draft JSONB,
-        character_draft JSONB,
-        selected_seed JSONB,
-        initial_location JSONB,
-        base_timestamp TIMESTAMPTZ,
-        target_slot INTEGER,
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    """
+def require_assets_tables(dbname: Optional[str] = None) -> None:
+    """Raise unless assets.new_story_creator exists; migration 007 owns it."""
     with _connect(dbname) as conn, conn.cursor() as cur:
-        cur.execute(ddl_creator)
+        cur.execute("SELECT to_regclass('assets.new_story_creator')")
+        if cur.fetchone()[0] is None:
+            raise RuntimeError(
+                "Missing assets.new_story_creator; migration 007 "
+                "(migrations/007_normalize_new_story_creator.sql) owns it. "
+                "Apply migrations with scripts/migrate.py."
+            )
     LOG.info(
-        "Ensured assets tables exist in %s",
+        "assets.new_story_creator exists in %s",
         dbname or os.environ.get("PGDATABASE", "(unspecified)"),
     )
 
@@ -251,9 +245,19 @@ def initialize_slot_database(
     subprocess.run([tools["createdb"], target_db], check=True, env=subprocess_env())
     LOG.info("Created database %s", target_db)
 
-    # Dump both public and assets schemas from template
-    dump_cmd = [tools["pg_dump"], "-s", "-n", "public", "-n", "assets", source_db]
-    LOG.info("Dumping schema (public + assets) from %s", source_db)
+    # Copy every application schema covered by the template's migration stamps.
+    dump_cmd = [
+        tools["pg_dump"],
+        "-s",
+        "-n",
+        "public",
+        "-n",
+        "assets",
+        "-n",
+        "ir_eval",
+        source_db,
+    ]
+    LOG.info("Dumping schema (public + assets + ir_eval) from %s", source_db)
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
         subprocess.run(dump_cmd, check=True, stdout=tmp, env=subprocess_env())
         tmp_path = tmp.name
@@ -280,9 +284,14 @@ def initialize_slot_database(
                 and not line.strip().startswith("ALTER SCHEMA public")
                 and not line.strip().startswith("CREATE SCHEMA assets")
                 and not line.strip().startswith("ALTER SCHEMA assets")
+                and not line.strip().startswith("CREATE SCHEMA ir_eval")
+                and not line.strip().startswith("ALTER SCHEMA ir_eval")
             ]
-        # Add CREATE SCHEMA assets (since we filter it out but need it)
-        sql_lines.insert(0, "CREATE SCHEMA IF NOT EXISTS assets;\n")
+        # Recreate the filtered application schemas before restoring their objects.
+        sql_lines[:0] = [
+            "CREATE SCHEMA IF NOT EXISTS assets;\n",
+            "CREATE SCHEMA IF NOT EXISTS ir_eval;\n",
+        ]
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.writelines(sql_lines)
 
@@ -321,6 +330,17 @@ def initialize_slot_database(
     LOG.info("Applied %d migrations to %s", applied, target_db)
 
     _initialize_empty_idf_corpora(target_db)
+    # Initialization mints the story identity (822-Q13); a reset recreates
+    # the database and so mints a new one.
+    connection = _connect(target_db)
+    try:
+        with connection as conn, conn.cursor() as cur:
+            replace_story_identity(cur, origin="wizard")
+    finally:
+        if not USE_POOL:
+            # A direct connection's context manager commits or rolls back but
+            # never closes; a failed write must not hold target_db open.
+            connection.close()
     dispose_database(target_db)
     LOG.info("Database %s ready", target_db)
 
@@ -367,6 +387,7 @@ TEMPLATE_SEED_TABLES = (
     "public.pair_tags",
     "public.tag_category_registry",
     "assets.traits",
+    "public.natural_earth_features",
 )
 
 
@@ -448,16 +469,31 @@ def clone_slot_with_data(
     failing step (including one statement of the dump) raises.
     ``target_db`` defaults to the slot's database; tests pass a disposable name.
 
+    A clone is a fork (822-Q4): the copy gets a new ``story_uuid`` with origin
+    ``clone``, and when the source held an identity row, one ``story_lineage``
+    fork row names the source's ``story_uuid`` and ``source_db``. A source
+    without a row (the template, an unbackfilled database) gives a ``clone``
+    row and no lineage.
+
     Raises:
         ValueError: If ``slot`` is outside 1-5, or if ``target_db`` is locked
             (``default_transaction_read_only`` is on); nothing is dropped.
+        RuntimeError: If the source lacks either story-identity table or
+            holds multiple identities, before disposing or dropping the
+            target; run ``python scripts/migrate.py`` on a pre-146 source.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
     if target_db is None:
         target_db = slot_dbname(slot)
+    if source_db == target_db:
+        raise ValueError("Clone source and target must be different databases")
     tools = _postgres_tools("dropdb", "createdb", "pg_dump", "psql")
     _refuse_locked_target(target_db)
+    with closing(psycopg2.connect(**connection_kwargs(source_db))) as source_conn:
+        source_conn.set_session(readonly=True)
+        with source_conn, source_conn.cursor() as cur:
+            _clone_source_identity(cur, source_db)
     dispose_database(target_db)
 
     if force:
@@ -516,6 +552,27 @@ def clone_slot_with_data(
 
         _restore_plain_dump(target_db, dump_path, tools)
         _post_clone_cleanup(target_db)
+        # A clone is a fork (822-Q4): a new story_uuid with a parent link.
+        connection = _connect(target_db)
+        try:
+            with connection as conn, conn.cursor() as cur:
+                copied = _clone_source_identity(cur, target_db)
+                child = replace_story_identity(cur, origin="clone")
+                if copied:
+                    record_fork(
+                        cur,
+                        child_uuid=child,
+                        parent_uuid=copied,
+                        source_dbname=source_db,
+                        evidence=(
+                            f"clone_slot_with_data copied {source_db} into {target_db}"
+                        ),
+                    )
+        finally:
+            if not USE_POOL:
+                # As in initialize_slot_database: close the direct connection
+                # on every path so a refusal cannot hold target_db open.
+                connection.close()
         dispose_database(target_db)
         LOG.info("Cloned %s into %s (with data)", source_db, target_db)
     finally:
@@ -523,6 +580,28 @@ def clone_slot_with_data(
             os.remove(dump_path)
         except OSError:
             pass
+
+
+def _clone_source_identity(
+    cur: psycopg2.extensions.cursor, dbname: str
+) -> Optional[str]:
+    """Validate clone identity schema and return its optional singleton UUID."""
+    for table in ("story_identity", "story_lineage"):
+        cur.execute("SELECT to_regclass(%s) IS NULL", (f"public.{table}",))
+        row = cur.fetchone()
+        assert row is not None
+        if row[0]:
+            raise RuntimeError(
+                f"{dbname} has no public.{table} table. Run python "
+                f"scripts/migrate.py on {dbname}, then clone again."
+            )
+    cur.execute("SELECT story_uuid::text FROM public.story_identity")
+    rows = cur.fetchall()
+    if len(rows) > 1:
+        raise RuntimeError(
+            f"{dbname} holds {len(rows)} story_identity rows; at most one is allowed"
+        )
+    return rows[0][0] if rows else None
 
 
 def _post_clone_cleanup(target_db: str) -> None:
@@ -546,7 +625,10 @@ def main():
     parser.add_argument(
         "--create-assets",
         action="store_true",
-        help="Create assets tables in the primary DB",
+        help=(
+            "Check that the assets tables exist in the primary DB; "
+            "migrations own them"
+        ),
     )
     parser.add_argument("--slot", type=int, help="Target slot number (2-5)")
     parser.add_argument(
@@ -573,7 +655,7 @@ def main():
         parser.error("Specify --create-assets and/or --slot")
 
     if args.create_assets:
-        create_assets_tables()
+        require_assets_tables()
 
     if args.slot:
         if args.mode == "clone":

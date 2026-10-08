@@ -1,0 +1,63 @@
+order: order_817_S3.md
+order table rows: 55; files under docs/decisions/: 56
+lead-ins: 14; fixed Rejected rows: 28; fixed Reopening rows: 13
+
+| Record | Front matter | Title, Kind, Links | Ruling | Rejected | Reopening |
+|---|---|---|---|---|---|
+| 0001 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0002 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0003 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0004 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0005 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0006 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0007 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0008 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0009 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0010 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0011 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0012 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0013 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0014 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0015 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0016 | ok | ok | ok (lead-in, Source lines) | ok (1 bullet) | ok |
+| 0017 | ok | ok | ok (lead-in, Source lines) | ok (1 bullet) | ok |
+| 0018 | ok | ok | ok (lead-in, Source lines) | ok (0 bullets) | ok |
+| 0019 | ok | ok | ok (lead-in, Source lines) | ok (0 bullets) | ok |
+| 0020 | ok | ok | ok (lead-in, Source lines) | ok (0 bullets) | ok |
+| 0021 | ok | ok | ok (lead-in, Source lines) | ok (0 bullets) | ok |
+| 0022 | ok | ok | ok (lead-in, Source lines) | ok (0 bullets) | ok |
+| 0023 | ok | ok | ok (lead-in, Source lines) | ok (0 bullets) | ok |
+| 0024 | ok | ok | ok (lead-in, Source lines) | ok (0 bullets) | ok |
+| 0025 | ok | ok | ok (lead-in, Source lines) | ok (1 bullet) | ok |
+| 0026 | ok | ok | ok (lead-in, Source lines) | ok (1 bullet) | ok |
+| 0027 | ok | ok | ok (lead-in, Source lines) | ok (1 bullet) | ok |
+| 0028 | ok | ok | ok (lead-in, Source lines) | ok (1 bullet) | ok |
+| 0029 | ok | ok | ok (lead-in, Source lines) | ok (1 bullet) | ok |
+| 0030 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0031 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0032 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0033 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0034 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0035 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0036 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0037 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0038 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0039 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0040 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0041 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0042 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0043 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0044 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0045 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0046 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0047 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0048 | ok | ok | ok (Source lines) | ok (2 bullets) | ok |
+| 0049 | ok | ok | ok (Source lines) | ok (2 bullets) | ok |
+| 0050 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0051 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0052 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0053 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0054 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+| 0055 | ok | ok | ok (Source lines) | ok (1 bullet) | ok |
+
+mismatches: 0

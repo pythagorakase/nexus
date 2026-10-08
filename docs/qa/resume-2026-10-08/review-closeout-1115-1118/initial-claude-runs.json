@@ -1,0 +1,50 @@
+[
+  {
+    "pr": 1115,
+    "id": 37683818180,
+    "name": "Claude Code Review",
+    "status": "completed",
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "head_sha": "b0da93eaedb4d1661af50742440e7988c7e48185",
+    "created_at": "2026-10-07T20:40:32Z",
+    "updated_at": "2026-10-07T20:41:42Z",
+    "html_url": "https://github.com/pythagorakase/nexus/actions/runs/37683818180"
+  },
+  {
+    "pr": 1116,
+    "id": 37728133349,
+    "name": "Claude Code Review",
+    "status": "completed",
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "head_sha": "b0da93eaedb4d1661af50742440e7988c7e48185",
+    "created_at": "2026-10-08T04:34:28Z",
+    "updated_at": "2026-10-08T04:35:40Z",
+    "html_url": "https://github.com/pythagorakase/nexus/actions/runs/37728133349"
+  },
+  {
+    "pr": 1117,
+    "id": 37729705811,
+    "name": "Claude Code Review",
+    "status": "completed",
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "head_sha": "b0da93eaedb4d1661af50742440e7988c7e48185",
+    "created_at": "2026-10-08T04:54:09Z",
+    "updated_at": "2026-10-08T04:55:17Z",
+    "html_url": "https://github.com/pythagorakase/nexus/actions/runs/37729705811"
+  },
+  {
+    "pr": 1118,
+    "id": 37730020784,
+    "name": "Claude Code Review",
+    "status": "completed",
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "head_sha": "b0da93eaedb4d1661af50742440e7988c7e48185",
+    "created_at": "2026-10-08T04:58:04Z",
+    "updated_at": "2026-10-08T04:59:34Z",
+    "html_url": "https://github.com/pythagorakase/nexus/actions/runs/37730020784"
+  }
+]

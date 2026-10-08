@@ -83,10 +83,21 @@ catalog contract before modifying existing objects, write full table, column,
 primary-key index and model-index comments, and fail loudly on incompatibility
 or database errors. Transactions belong to their callers. ANN creation remains
 behind the explicit 2560d candidate gate; #812 owns legacy 1024d/1536d tables
-and L2 HNSW indexes on `save_01`/`save_02`. The legacy scripts
-`scripts/extract_scene_numbers.py`, `scripts/update_scene_numbers.py`, and
-`scripts/import_narratives.py` still carry their own DDL; moving those into
-migrations is later work on #810.
+and L2 HNSW indexes on `save_01`/`save_02`. Legacy scripts create no object that
+a migration owns. `scripts/update_scene_numbers.py` and
+`scripts/extract_scene_numbers.py` require `chunk_metadata.scene` (migration
+138), `scripts/new_story_setup.py --create-assets` requires
+`assets.new_story_creator` (migration 007), `scripts/import_narratives.py` and
+`scripts/regenerate_embeddings.py` require the `vector` extension (migration
+022), `scripts/extract_season_episode.py` requires the baseline `chunk_metadata`
+table, and `scripts/create_vector_index.py` and
+`scripts/regenerate_embeddings.py --only-indexes` build no ANN index; each
+raises, naming the owner, when an object it needs is missing.
+`scripts/update_raw_text.py` still copies `narrative_chunks` into
+`narrative_chunks_backup` before it rewrites rows.
+`tests/test_schema_ownership.py` scans the Python under `nexus/` and `scripts/`
+for CREATE, ALTER and DROP of a table, index, type, function or extension and
+fails on any site outside its reasoned allowlist.
 
 ## IDF Rebuild After a PostgreSQL Update
 
@@ -122,9 +133,9 @@ without `memory_idf_corpora` is refused, naming the migration runner. A
 connection lost during COMMIT is `commit_unknown` (exit non-zero), never a
 rollback: the outcome is unknown, `--dry-run` shows the current keys and
 counts, and re-running the rebuild is safe because it recomputes the
-projection idempotently. It is the one mutation a replay after
-`AmbiguousCommit` is allowed for; narrative commits are never replayed
-(above). The report gives each corpus's key
+projection idempotently. This rebuild and the pinned Natural Earth load
+(below) are the two explicit exceptions to the never-replay rule; narrative
+commits are never replayed (above). The report gives each corpus's key
 and document count before and after, and the number of lexemes whose row
 differs from the pre-rebuild state (added, dropped, or given a new frequency;
 each counts once), which is a diagnostic, not a failure. `--dry-run` reads
@@ -143,7 +154,7 @@ python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 
 ## Two Clocks
 
-PostgreSQL comments define both clocks; read them with `\d+ chunk_metadata`, `\df+ refresh_world_time_from_chunk*` and `\dd trg_chunk_metadata_refresh_world_time`. The story clock is `chunk_metadata.world_time`, recomputed by `refresh_world_time_from_chunk()` from `global_variables.base_timestamp` and primary-layer `time_delta` after every insert and every `time_delta` or `world_layer` update; event occurrence time is `world_events.world_time`. Diegetic state belongs on the story clock. The tick clock is the accepted chunk in each `tick_chunk_id` column; it serves ordering, replay, exposure fairness, habituation, and narration cadence.
+PostgreSQL comments define both clocks; read them with `\d+ chunk_metadata`, `\df+ refresh_world_time_from_chunk*` and `\dd trg_chunk_metadata_refresh_world_time`. The story clock is `chunk_metadata.world_time`, recomputed by `refresh_world_time_from_chunk()` from `global_variables.base_timestamp` and primary-layer `time_delta` after every insert and every `time_delta` or `world_layer` update; event occurrence time is `world_events.world_time`. A `chunk_metadata` write raises while `base_timestamp` is NULL, and `base_timestamp` cannot change once `chunk_metadata` holds a row. Diegetic state belongs on the story clock. The tick clock is the accepted chunk in each `tick_chunk_id` column; it serves ordering, replay, exposure fairness, habituation, and narration cadence.
 
 ## Schema Documentation
 
@@ -228,3 +239,49 @@ share the world transaction's cursor so their records commit or roll back with
 that world. The Retrograde status route reads the latest run from these tables,
 so every gateway worker reports the same durable record. Rows are kept after
 completion.
+
+## Story Identity
+
+`story_identity` holds one row per slot database: the story's `story_uuid`, its title and its origin. `NEXUS_template` carries the table and no row. Slot initialization mints a row, every wizard transition replaces it, and `clone_slot_with_data` gives the copy a new `story_uuid` with a `story_lineage` fork row naming the source. Disposable and rehearsal clones get a fresh identity with no lineage. Slots that predate migration 146 are minted once with `python scripts/backfill_story_identity.py --all --write-locked-slot`, which also records that `save_02` forks `save_01`; `nexus doctor` checks both rules (`template.story_identity_absent`, `slots.story_identity_present`).
+
+## Natural Earth Reference
+
+`natural_earth_features` (migration 147) holds the server-owned real-Earth
+reference geometry of issue #840: the 10m `land`, `admin_0` (countries) and
+`admin_1` (states and provinces) layers of Natural Earth release 5.1.1, one
+row per source feature, keyed by `(layer, source_index)`, with every geometry
+a valid WGS 84 MultiPolygon. `nexus/agents/orrery/geo_reference.py` reads it
+inside the caller's transaction (region lookup by name, point on land,
+polygon validation, land clipping and land coverage), and every read first
+refuses a missing table, or one whose per-layer counts or release differ from
+the manifest, with `ReferenceDataError`.
+
+The three zips are vendored unmodified under `data/natural_earth/` (public
+domain; `data/natural_earth/LICENSE.md`). `data/natural_earth/manifest.json`
+pins the release, each layer's file, source URL, sha256 and feature count, and
+the expected repairs. `scripts/load_natural_earth.py` refuses before any
+connection when a zip's sha256 differs from the manifest, when a zip's
+`VERSION.txt` names another release, or when `ogr2ogr` reads another feature
+count. In one transaction per database it then replaces every row, requires
+the invalid features to be exactly the manifest's two repairs (`admin_0`
+1159320575, EGY, and `admin_1` 1159309897, BRA-1294 Goiás, both ring
+self-intersections), repairs them with
+`ST_Multi(ST_CollectionExtract(ST_MakeValid(geom, 'method=structure'), 3))`,
+proves every row valid, and commits; any error before COMMIT rolls back. A
+connection lost during COMMIT is reported as `commit_unknown` (outcome
+unknown) and exits 1, never as a rollback. Like the IDF rebuild above, this
+load is an exception to the never-replay rule: rerunning it after
+`AmbiguousCommit` is safe because one transaction deletes every row and
+inserts the same pinned, checksummed files, so a replay is idempotent whether
+or not the lost COMMIT landed.
+
+```bash
+python scripts/load_natural_earth.py --all                      # Template + unlocked slots
+python scripts/load_natural_earth.py --slot 1 --write-locked-slot   # The locked golden master
+python scripts/load_natural_earth.py --dbname qa640_clone       # One disposable database
+```
+
+`natural_earth_features` is a template seed table (`TEMPLATE_SEED_TABLES` in
+`scripts/new_story_setup.py`): fresh slots and default test clones copy its
+rows from `NEXUS_template`, so loading the template replaces a template
+refresh for this table.

@@ -88,3 +88,7 @@ safehouse tunnels, ritual paths, private transit, faction-controlled shortcuts,
 blocked passages, or deliberate narrative exceptions. Prefer graph routes for
 ordinary roads where ballpark distance and duration matter more than bespoke
 story meaning.
+
+Destination choosers offer only places routable from the origin: both places
+carry coordinates, or an authored edge with a duration joins them.
+`travel.start` raises when the selected route has no duration.

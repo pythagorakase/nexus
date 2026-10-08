@@ -1,0 +1,48 @@
+from pathlib import Path
+import os
+import re
+import subprocess
+
+root = Path('/Users/pythagor/nexus/.claude/worktrees/836-unified-references')
+path = root / 'migrations/148_chunk_entity_references.sql'
+original = path.read_text()
+place_branch = """UNION ALL
+SELECT r.chunk_id, p.entity_id, 'place',
+       r.reference_type::text::public.chunk_reference_kind, r.evidence
+  FROM public.place_chunk_references AS r
+  JOIN public.places AS p ON p.id = r.place_id"""
+assert original.count(place_branch) == 1
+no_backfill = original.replace(place_branch, '')
+no_forget, n = re.subn(r'CREATE TRIGGER trg_factions_forget_chunk_references\n.*?;', '', original, count=1, flags=re.S)
+assert n == 1
+no_forget, n = re.subn(r"COMMENT ON TRIGGER trg_factions_forget_chunk_references ON public\.factions IS\n    '.*';\n", '', no_forget, count=1)
+assert n == 1
+lookup = '        END IF;\n        -- Not found: the characters row'
+assert original.count(lookup) == 1
+bad_lookup = original.replace(lookup, "        ELSE\n            RAISE EXCEPTION 'planted character lookup miss';\n        END IF;\n        -- Not found: the characters row")
+plants = [
+ ('missing-place-backfill', no_backfill, 'test_backfill_rebuilds_from_populated_junctions', 'Migration 148: place rows'),
+ ('missing-faction-forget', no_forget, 'test_subtype_delete_forgets_rows_and_keeps_entity[faction]', 'FAILED tests/test_chunk_entity_references_pg.py::test_subtype_delete_forgets_rows_and_keeps_entity[faction]'),
+ ('raise-on-renumber', bad_lookup, 'test_subtype_renumber_keeps_rows', 'planted character lookup miss'),
+]
+env = dict(os.environ)
+for key in ('NEXUS_GATEWAY_PORT','NEXUS_API_URL','NEXUS_SLOT','NEXUS_RUN_LIVE_LLM','NEXUS_RUN_CORPUS'):
+ env.pop(key, None)
+env.update(PYTHONPATH=str(root), NEXUS_RUN_POSTGRES='1')
+try:
+ for label, source, test, expected in plants[1:]:
+  path.write_text(source)
+  log = Path(f'/tmp/nexus-codex-836-plant-{label}-r2.log')
+  command = ['nice','-n','15','/Users/pythagor/nexus/.venv/bin/python','-m','pytest','-q','-p','tests.dbname_audit',f'tests/test_chunk_entity_references_pg.py::{test}']
+  with log.open('w') as f:
+   outcome = subprocess.run(command,cwd=root,env=env,stdout=f,stderr=subprocess.STDOUT)
+  output = log.read_text()
+  assert outcome.returncode == 1, (label, outcome.returncode, output[-3000:])
+  assert expected in output, (label, output[-3000:])
+  assert 'secret-store guard: active; nexus-api: denied' in output
+  assert 'dbname audit: owner targets: none' in output
+  print(f'{label}: expected failure reproduced, exit {outcome.returncode}; {log}', flush=True)
+finally:
+ path.write_text(original)
+assert path.read_text() == original
+print('All mutation plants reverted.',flush=True)

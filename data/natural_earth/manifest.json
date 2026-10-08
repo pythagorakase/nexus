@@ -1,0 +1,44 @@
+{
+  "dataset": "Natural Earth",
+  "release": "5.1.1",
+  "scale": "10m",
+  "license": "Public domain; see LICENSE.md",
+  "layers": [
+    {
+      "layer": "land",
+      "file": "ne_10m_land.zip",
+      "shapefile": "ne_10m_land.shp",
+      "url": "https://naciscdn.org/naturalearth/10m/physical/ne_10m_land.zip",
+      "sha256": "e547d749445eaa0964aba76738090ec88f5e63c4585122170f98c67a7ea922dc",
+      "feature_count": 11
+    },
+    {
+      "layer": "admin_0",
+      "file": "ne_10m_admin_0_countries.zip",
+      "shapefile": "ne_10m_admin_0_countries.shp",
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_0_countries.zip",
+      "sha256": "ce1ac7036499a0edd641fbc093cd209a98f96a49d2eca8480aaacad35138a7f6",
+      "feature_count": 258
+    },
+    {
+      "layer": "admin_1",
+      "file": "ne_10m_admin_1_states_provinces.zip",
+      "shapefile": "ne_10m_admin_1_states_provinces.shp",
+      "url": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_1_states_provinces.zip",
+      "sha256": "efc59726337323058f9446210adc96673179cd344e053666ee3d28cb58ba2b05",
+      "feature_count": 4596
+    }
+  ],
+  "repairs": [
+    {
+      "layer": "admin_0",
+      "ne_id": 1159320575,
+      "reason": "EGY: Ring Self-intersection[35.6210871060001 23.1392929140001]"
+    },
+    {
+      "layer": "admin_1",
+      "ne_id": 1159309897,
+      "reason": "BRA-1294 (Goiás): Ring Self-intersection[-47.3024818588507 -16.040054212432]"
+    }
+  ]
+}

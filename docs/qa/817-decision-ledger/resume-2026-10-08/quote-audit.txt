@@ -1,0 +1,61 @@
+| Record | Sources | Fetch | Blocks | Inline quotes | Result |
+|---|---|---|---|---|---|
+| 0001 | https://github.com/pythagorakase/nexus/issues/850#issuecomment-5556777011 | `gh api repos/pythagorakase/nexus/issues/comments/5556777011`<br>`gh api repos/pythagorakase/nexus/issues/850` | 1 | 2 | MATCH |
+| 0002 | https://github.com/pythagorakase/nexus/issues/851#issuecomment-5556777557 | `gh api repos/pythagorakase/nexus/issues/comments/5556777557`<br>`gh api repos/pythagorakase/nexus/issues/851` | 1 | 1 | MATCH |
+| 0003 | https://github.com/pythagorakase/nexus/issues/852#issuecomment-5556778630 | `gh api repos/pythagorakase/nexus/issues/comments/5556778630`<br>`gh api repos/pythagorakase/nexus/issues/852` | 1 | 2 | MATCH |
+| 0004 | https://github.com/pythagorakase/nexus/issues/853#issuecomment-5565300043 | `gh api repos/pythagorakase/nexus/issues/comments/5565300043`<br>`gh api repos/pythagorakase/nexus/issues/853` | 1 | 1 | MATCH |
+| 0005 | https://github.com/pythagorakase/nexus/issues/854#issuecomment-5565301694 | `gh api repos/pythagorakase/nexus/issues/comments/5565301694`<br>`gh api repos/pythagorakase/nexus/issues/854` | 1 | 2 | MATCH |
+| 0006 | https://github.com/pythagorakase/nexus/issues/855#issuecomment-5565439618 | `gh api repos/pythagorakase/nexus/issues/comments/5565439618`<br>`gh api repos/pythagorakase/nexus/issues/855` | 1 | 1 | MATCH |
+| 0007 | https://github.com/pythagorakase/nexus/issues/856#issuecomment-5800949507 | `gh api repos/pythagorakase/nexus/issues/comments/5800949507`<br>`gh api repos/pythagorakase/nexus/issues/856` | 1 | 1 | MATCH |
+| 0008 | https://github.com/pythagorakase/nexus/issues/857#issuecomment-5800951144 | `gh api repos/pythagorakase/nexus/issues/comments/5800951144`<br>`gh api repos/pythagorakase/nexus/issues/857` | 1 | 1 | MATCH |
+| 0009 | https://github.com/pythagorakase/nexus/issues/858#issuecomment-5800952750 | `gh api repos/pythagorakase/nexus/issues/comments/5800952750`<br>`gh api repos/pythagorakase/nexus/issues/858` | 1 | 1 | MATCH |
+| 0010 | https://github.com/pythagorakase/nexus/issues/859#issuecomment-5800955522 | `gh api repos/pythagorakase/nexus/issues/comments/5800955522`<br>`gh api repos/pythagorakase/nexus/issues/859` | 1 | 0 | MATCH |
+| 0011 | https://github.com/pythagorakase/nexus/issues/860#issuecomment-5565414838 | `gh api repos/pythagorakase/nexus/issues/comments/5565414838`<br>`gh api repos/pythagorakase/nexus/issues/860` | 1 | 0 | MATCH |
+| 0012 | https://github.com/pythagorakase/nexus/issues/861#issuecomment-5565410350 | `gh api repos/pythagorakase/nexus/issues/comments/5565410350`<br>`gh api repos/pythagorakase/nexus/issues/861` | 1 | 1 | MATCH |
+| 0013 | https://github.com/pythagorakase/nexus/issues/786#issuecomment-5915495413 | `gh api repos/pythagorakase/nexus/issues/comments/5915495413`<br>`gh api repos/pythagorakase/nexus/issues/786` | 1 | 1 | MATCH |
+| 0014 | https://github.com/pythagorakase/nexus/issues/792#issuecomment-5915496685 | `gh api repos/pythagorakase/nexus/issues/comments/5915496685`<br>`gh api repos/pythagorakase/nexus/issues/792` | 1 | 1 | MATCH |
+| 0015 | https://github.com/pythagorakase/nexus/issues/832#issuecomment-5915670598 | `gh api repos/pythagorakase/nexus/issues/comments/5915670598`<br>`gh api repos/pythagorakase/nexus/issues/832` | 1 | 1 | MATCH |
+| 0016 | https://github.com/pythagorakase/nexus/issues/837 | `gh api repos/pythagorakase/nexus/issues/837` | 1 | 1 | MATCH |
+| 0017 | https://github.com/pythagorakase/nexus/issues/839 | `gh api repos/pythagorakase/nexus/issues/839` | 1 | 1 | MATCH |
+| 0018 | https://github.com/pythagorakase/nexus/issues/849 | `gh api repos/pythagorakase/nexus/issues/849` | 4 | 0 | MATCH |
+| 0019 | https://github.com/pythagorakase/nexus/issues/849 | `gh api repos/pythagorakase/nexus/issues/849` | 4 | 0 | MATCH |
+| 0020 | https://github.com/pythagorakase/nexus/issues/849 | `gh api repos/pythagorakase/nexus/issues/849` | 4 | 0 | MATCH |
+| 0021 | https://github.com/pythagorakase/nexus/issues/849 | `gh api repos/pythagorakase/nexus/issues/849` | 4 | 0 | MATCH |
+| 0022 | https://github.com/pythagorakase/nexus/issues/849 | `gh api repos/pythagorakase/nexus/issues/849` | 4 | 0 | MATCH |
+| 0023 | https://github.com/pythagorakase/nexus/issues/849 | `gh api repos/pythagorakase/nexus/issues/849` | 4 | 0 | MATCH |
+| 0024 | https://github.com/pythagorakase/nexus/issues/849 | `gh api repos/pythagorakase/nexus/issues/849` | 4 | 0 | MATCH |
+| 0025 | config/schema_docs_baseline.json at afd034f360e625f8bc4ffa8a717dda28422b19c7, https://github.com/pythagorakase/nexus/issues/819, https://github.com/pythagorakase/nexus/issues/819#issuecomment-5915950416 | `gh api repos/pythagorakase/nexus/issues/comments/5915950416`<br>`gh api repos/pythagorakase/nexus/issues/819` | 3 | 0 | MATCH |
+| 0026 | config/schema_docs_baseline.json at afd034f360e625f8bc4ffa8a717dda28422b19c7, https://github.com/pythagorakase/nexus/issues/819, https://github.com/pythagorakase/nexus/issues/819#issuecomment-5915950416 | `gh api repos/pythagorakase/nexus/issues/comments/5915950416`<br>`gh api repos/pythagorakase/nexus/issues/819` | 3 | 0 | MATCH |
+| 0027 | config/schema_docs_baseline.json at afd034f360e625f8bc4ffa8a717dda28422b19c7, https://github.com/pythagorakase/nexus/issues/819, https://github.com/pythagorakase/nexus/issues/819#issuecomment-5915950416 | `gh api repos/pythagorakase/nexus/issues/comments/5915950416`<br>`gh api repos/pythagorakase/nexus/issues/819` | 3 | 0 | MATCH |
+| 0028 | config/schema_docs_baseline.json at afd034f360e625f8bc4ffa8a717dda28422b19c7, https://github.com/pythagorakase/nexus/issues/819, https://github.com/pythagorakase/nexus/issues/819#issuecomment-5915950416 | `gh api repos/pythagorakase/nexus/issues/comments/5915950416`<br>`gh api repos/pythagorakase/nexus/issues/819` | 3 | 0 | MATCH |
+| 0029 | config/schema_docs_baseline.json at afd034f360e625f8bc4ffa8a717dda28422b19c7, https://github.com/pythagorakase/nexus/issues/819, https://github.com/pythagorakase/nexus/issues/819#issuecomment-5915950416 | `gh api repos/pythagorakase/nexus/issues/comments/5915950416`<br>`gh api repos/pythagorakase/nexus/issues/819` | 3 | 0 | MATCH |
+| 0030 | https://github.com/pythagorakase/nexus/issues/476#issuecomment-5035538982 | `gh api repos/pythagorakase/nexus/issues/comments/5035538982`<br>`gh api repos/pythagorakase/nexus/issues/476` | 1 | 0 | MATCH |
+| 0031 | https://github.com/pythagorakase/nexus/issues/479#issuecomment-5035539149 | `gh api repos/pythagorakase/nexus/issues/comments/5035539149`<br>`gh api repos/pythagorakase/nexus/issues/479` | 1 | 0 | MATCH |
+| 0032 | https://github.com/pythagorakase/nexus/issues/480#issuecomment-5035539341, https://github.com/pythagorakase/nexus/issues/480#issuecomment-5035716638 | `gh api repos/pythagorakase/nexus/issues/comments/5035539341`<br>`gh api repos/pythagorakase/nexus/issues/comments/5035716638`<br>`gh api repos/pythagorakase/nexus/issues/480` | 2 | 0 | MATCH |
+| 0033 | https://github.com/pythagorakase/nexus/issues/566#issuecomment-5070275155 | `gh api repos/pythagorakase/nexus/issues/comments/5070275155`<br>`gh api repos/pythagorakase/nexus/issues/566` | 1 | 1 | MATCH |
+| 0034 | https://github.com/pythagorakase/nexus/issues/617#issuecomment-5113803006, https://github.com/pythagorakase/nexus/issues/617#issuecomment-5113867184, https://github.com/pythagorakase/nexus/issues/617#issuecomment-5113874777 | `gh api repos/pythagorakase/nexus/issues/comments/5113803006`<br>`gh api repos/pythagorakase/nexus/issues/comments/5113867184`<br>`gh api repos/pythagorakase/nexus/issues/comments/5113874777`<br>`gh api repos/pythagorakase/nexus/issues/617` | 3 | 0 | MATCH |
+| 0035 | https://github.com/pythagorakase/nexus/issues/737#issuecomment-5817898265 | `gh api repos/pythagorakase/nexus/issues/comments/5817898265`<br>`gh api repos/pythagorakase/nexus/issues/737` | 1 | 0 | MATCH |
+| 0036 | https://github.com/pythagorakase/nexus/issues/750#issuecomment-5915474062 | `gh api repos/pythagorakase/nexus/issues/comments/5915474062`<br>`gh api repos/pythagorakase/nexus/issues/750` | 1 | 0 | MATCH |
+| 0037 | https://github.com/pythagorakase/nexus/issues/756#issuecomment-5915474827 | `gh api repos/pythagorakase/nexus/issues/comments/5915474827`<br>`gh api repos/pythagorakase/nexus/issues/756` | 1 | 1 | MATCH |
+| 0038 | https://github.com/pythagorakase/nexus/issues/759#issuecomment-5915475165 | `gh api repos/pythagorakase/nexus/issues/comments/5915475165`<br>`gh api repos/pythagorakase/nexus/issues/759` | 1 | 1 | MATCH |
+| 0039 | https://github.com/pythagorakase/nexus/issues/780#issuecomment-5915474444 | `gh api repos/pythagorakase/nexus/issues/comments/5915474444`<br>`gh api repos/pythagorakase/nexus/issues/780` | 1 | 1 | MATCH |
+| 0040 | https://github.com/pythagorakase/nexus/issues/822#issuecomment-5915475477 | `gh api repos/pythagorakase/nexus/issues/comments/5915475477`<br>`gh api repos/pythagorakase/nexus/issues/822` | 1 | 1 | MATCH |
+| 0041 | https://github.com/pythagorakase/nexus/issues/781#issuecomment-5915494108 | `gh api repos/pythagorakase/nexus/issues/comments/5915494108`<br>`gh api repos/pythagorakase/nexus/issues/781` | 1 | 1 | MATCH |
+| 0042 | https://github.com/pythagorakase/nexus/issues/782#issuecomment-5915494408 | `gh api repos/pythagorakase/nexus/issues/comments/5915494408`<br>`gh api repos/pythagorakase/nexus/issues/782` | 1 | 1 | MATCH |
+| 0043 | https://github.com/pythagorakase/nexus/issues/783#issuecomment-5915494698 | `gh api repos/pythagorakase/nexus/issues/comments/5915494698`<br>`gh api repos/pythagorakase/nexus/issues/783` | 1 | 0 | MATCH |
+| 0044 | https://github.com/pythagorakase/nexus/issues/784#issuecomment-5915495072 | `gh api repos/pythagorakase/nexus/issues/comments/5915495072`<br>`gh api repos/pythagorakase/nexus/issues/784` | 1 | 1 | MATCH |
+| 0045 | https://github.com/pythagorakase/nexus/issues/787#issuecomment-5915495765 | `gh api repos/pythagorakase/nexus/issues/comments/5915495765`<br>`gh api repos/pythagorakase/nexus/issues/787` | 1 | 0 | MATCH |
+| 0046 | https://github.com/pythagorakase/nexus/issues/788#issuecomment-5915496016 | `gh api repos/pythagorakase/nexus/issues/comments/5915496016`<br>`gh api repos/pythagorakase/nexus/issues/788` | 1 | 1 | MATCH |
+| 0047 | https://github.com/pythagorakase/nexus/issues/789#issuecomment-5915496362 | `gh api repos/pythagorakase/nexus/issues/comments/5915496362`<br>`gh api repos/pythagorakase/nexus/issues/789` | 1 | 0 | MATCH |
+| 0048 | https://github.com/pythagorakase/nexus/issues/840#issuecomment-5915497021 | `gh api repos/pythagorakase/nexus/issues/comments/5915497021`<br>`gh api repos/pythagorakase/nexus/issues/840` | 1 | 2 | MATCH |
+| 0049 | https://github.com/pythagorakase/nexus/issues/841#issuecomment-5915497315 | `gh api repos/pythagorakase/nexus/issues/comments/5915497315`<br>`gh api repos/pythagorakase/nexus/issues/841` | 1 | 2 | MATCH |
+| 0050 | https://github.com/pythagorakase/nexus/issues/767#issuecomment-5915668877 | `gh api repos/pythagorakase/nexus/issues/comments/5915668877`<br>`gh api repos/pythagorakase/nexus/issues/767` | 1 | 0 | MATCH |
+| 0051 | https://github.com/pythagorakase/nexus/issues/768#issuecomment-5915669173 | `gh api repos/pythagorakase/nexus/issues/comments/5915669173`<br>`gh api repos/pythagorakase/nexus/issues/768` | 1 | 1 | MATCH |
+| 0052 | https://github.com/pythagorakase/nexus/issues/770#issuecomment-5915669468 | `gh api repos/pythagorakase/nexus/issues/comments/5915669468`<br>`gh api repos/pythagorakase/nexus/issues/770` | 1 | 1 | MATCH |
+| 0053 | https://github.com/pythagorakase/nexus/issues/776#issuecomment-5915669789 | `gh api repos/pythagorakase/nexus/issues/comments/5915669789`<br>`gh api repos/pythagorakase/nexus/issues/776` | 1 | 1 | MATCH |
+| 0054 | https://github.com/pythagorakase/nexus/issues/777#issuecomment-5915670142 | `gh api repos/pythagorakase/nexus/issues/comments/5915670142`<br>`gh api repos/pythagorakase/nexus/issues/777` | 1 | 1 | MATCH |
+| 0055 | https://github.com/pythagorakase/nexus/issues/838#issuecomment-5915671010 | `gh api repos/pythagorakase/nexus/issues/comments/5915671010`<br>`gh api repos/pythagorakase/nexus/issues/838` | 1 | 1 | MATCH |
+
+distinct objects fetched: 90 (45 comments, 45 issues)
+
+all 55 records match (merge base afd034f360e625f8bc4ffa8a717dda28422b19c7)

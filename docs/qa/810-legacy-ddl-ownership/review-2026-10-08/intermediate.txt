@@ -1,0 +1,172 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+.........................FF..............                                [100%]
+=================================== FAILURES ===================================
+_ test_requested_ann_refuses_before_model_load_or_existing_vector_deletion[regenerator_precheck_resume-False] _
+
+call = 'regenerator_precheck_resume', shared = False
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-422/test_requested_ann_refuses_bef6')
+
+    @pytest.mark.requires_postgres
+    @pytest.mark.parametrize("shared", [False, True])
+    @pytest.mark.parametrize(
+        "call",
+        [
+            "regenerator_precheck",
+            "regenerator_precheck_dry",
+            "regenerator_precheck_chunk",
+            "regenerator_precheck_resume",
+            "regenerator_precheck_all",
+        ],
+    )
+    def test_requested_ann_refuses_before_model_load_or_existing_vector_deletion(
+        call: str, shared: bool, tmp_path: Path
+    ) -> None:
+        """Real missing-ANN refusal precedes TRUNCATE, shared DELETE and chunk DELETE.
+    
+        Only model loading is replaced by a recording sentinel: no artifact is read
+        and no inference occurs. Catalog reads and stored-row operations are real.
+        """
+        with disposable_database("qa640_810s3_ann_precheck") as dbname:
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION vector")
+                cur.execute(
+                    "CREATE TABLE public.narrative_chunks "
+                    "(id bigint PRIMARY KEY, raw_text text NOT NULL)"
+                )
+                cur.execute("INSERT INTO public.narrative_chunks VALUES (1, 'the bell')")
+                table = ensure_embedding_table(cur, _DIMENSIONS)
+                vector = "[" + ",".join(["0.5"] * _DIMENSIONS) + "]"
+                models = [_MODEL, "e5-large"] if shared else [_MODEL]
+                for model in models:
+                    cur.execute(
+                        f"INSERT INTO public.{table} (chunk_id, model, embedding) "
+                        "VALUES (1, %s, %s::vector)",
+                        (model, vector),
+                    )
+            snapshot_sql = (
+                f"SELECT jsonb_agg(to_jsonb(t) ORDER BY model) FROM public.{table} t"
+            )
+            before = _scalar(dbname, snapshot_sql)
+            assert _ann_count(dbname, table) == 0
+    
+            outcome = _probe("scripts/regenerate_embeddings.py", call, dbname, tmp_path)
+            after = _scalar(dbname, snapshot_sql)
+            expected = {
+                "type": "builtins.RuntimeError",
+                "message": _ann_message(table, _DIMENSIONS),
+                "result": None,
+                "model_load_calls": [],
+            }
+            if call == "regenerator_precheck_all":
+                expected = {
+                    "type": None,
+                    "message": "",
+                    "result": {"total": 0, "success": 0, "failed": 2},
+                    "model_load_calls": [],
+                }
+>           assert outcome == expected and after == before, {
+                "outcome": outcome,
+                "existing_rows_unchanged": after == before,
+            }
+E           AssertionError: {'existing_rows_unchanged': True, 'outcome': {'message': '', 'model_load_calls': [], 'result': {'failed': 0, 'success': 0, 'total': 0}, 'type': None}}
+E           assert ({'message': '... 'type': None} == {'message': '...RuntimeError'}
+E             
+E             Omitting 1 identical items, use -vv to show
+E             Differing items:
+E             {'message': ''} != {'message': 'No ANN index exists on chunk_embeddings_1024d, and this script no longer creates one: the only ANN path i...d_candidate_ann_index, run by scripts/qa_shift/ann_gate.py), and #812 owns the legacy 1024d tables and their indexes.'}
+E             {'result': {'failed': 0, 'success': 0, 'total': 0}} != {'result': None}
+E             {'type': None} != {'type': 'builtins.RuntimeError'}
+E             Use -v to get more diff)
+
+tests/test_schema_ownership.py:724: AssertionError
+_ test_requested_ann_refuses_before_model_load_or_existing_vector_deletion[regenerator_precheck_resume-True] _
+
+call = 'regenerator_precheck_resume', shared = True
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-422/test_requested_ann_refuses_bef7')
+
+    @pytest.mark.requires_postgres
+    @pytest.mark.parametrize("shared", [False, True])
+    @pytest.mark.parametrize(
+        "call",
+        [
+            "regenerator_precheck",
+            "regenerator_precheck_dry",
+            "regenerator_precheck_chunk",
+            "regenerator_precheck_resume",
+            "regenerator_precheck_all",
+        ],
+    )
+    def test_requested_ann_refuses_before_model_load_or_existing_vector_deletion(
+        call: str, shared: bool, tmp_path: Path
+    ) -> None:
+        """Real missing-ANN refusal precedes TRUNCATE, shared DELETE and chunk DELETE.
+    
+        Only model loading is replaced by a recording sentinel: no artifact is read
+        and no inference occurs. Catalog reads and stored-row operations are real.
+        """
+        with disposable_database("qa640_810s3_ann_precheck") as dbname:
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION vector")
+                cur.execute(
+                    "CREATE TABLE public.narrative_chunks "
+                    "(id bigint PRIMARY KEY, raw_text text NOT NULL)"
+                )
+                cur.execute("INSERT INTO public.narrative_chunks VALUES (1, 'the bell')")
+                table = ensure_embedding_table(cur, _DIMENSIONS)
+                vector = "[" + ",".join(["0.5"] * _DIMENSIONS) + "]"
+                models = [_MODEL, "e5-large"] if shared else [_MODEL]
+                for model in models:
+                    cur.execute(
+                        f"INSERT INTO public.{table} (chunk_id, model, embedding) "
+                        "VALUES (1, %s, %s::vector)",
+                        (model, vector),
+                    )
+            snapshot_sql = (
+                f"SELECT jsonb_agg(to_jsonb(t) ORDER BY model) FROM public.{table} t"
+            )
+            before = _scalar(dbname, snapshot_sql)
+            assert _ann_count(dbname, table) == 0
+    
+            outcome = _probe("scripts/regenerate_embeddings.py", call, dbname, tmp_path)
+            after = _scalar(dbname, snapshot_sql)
+            expected = {
+                "type": "builtins.RuntimeError",
+                "message": _ann_message(table, _DIMENSIONS),
+                "result": None,
+                "model_load_calls": [],
+            }
+            if call == "regenerator_precheck_all":
+                expected = {
+                    "type": None,
+                    "message": "",
+                    "result": {"total": 0, "success": 0, "failed": 2},
+                    "model_load_calls": [],
+                }
+>           assert outcome == expected and after == before, {
+                "outcome": outcome,
+                "existing_rows_unchanged": after == before,
+            }
+E           AssertionError: {'existing_rows_unchanged': True, 'outcome': {'message': '', 'model_load_calls': [], 'result': {'failed': 0, 'success': 0, 'total': 0}, 'type': None}}
+E           assert ({'message': '... 'type': None} == {'message': '...RuntimeError'}
+E             
+E             Omitting 1 identical items, use -vv to show
+E             Differing items:
+E             {'message': ''} != {'message': 'No ANN index exists on chunk_embeddings_1024d, and this script no longer creates one: the only ANN path i...d_candidate_ann_index, run by scripts/qa_shift/ann_gate.py), and #812 owns the legacy 1024d tables and their indexes.'}
+E             {'result': {'failed': 0, 'success': 0, 'total': 0}} != {'result': None}
+E             {'type': None} != {'type': 'builtins.RuntimeError'}
+E             Use -v to get more diff)
+
+tests/test_schema_ownership.py:724: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 24 targets: postgres, qa640_810s3_ann_* x2, qa640_810s3_ann_high_* x2, qa640_810s3_ann_precheck_* x10, qa640_810s3_assets_*, qa640_810s3_importer_*, qa640_810s3_provider_*, qa640_810s3_regen_*, qa640_810s3_scene_* x2, qa640_810s3_season_*, qa640_regen_truncate_* x2
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_schema_ownership.py::test_requested_ann_refuses_before_model_load_or_existing_vector_deletion[regenerator_precheck_resume-False]
+FAILED tests/test_schema_ownership.py::test_requested_ann_refuses_before_model_load_or_existing_vector_deletion[regenerator_precheck_resume-True]
+2 failed, 39 passed in 79.01s (0:01:19)

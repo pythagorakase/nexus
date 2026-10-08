@@ -1,0 +1,23 @@
+branch: 19 sites, 0 unowned; 14 allowlist keys
+nexus/agents/memnon/utils/embedding_tables.py:293 _ensure_corpus_table CREATE TABLE
+nexus/agents/memnon/utils/embedding_tables.py:305 _ensure_corpus_table CREATE INDEX
+nexus/agents/memnon/utils/embedding_tables.py:404 build_candidate_ann_index CREATE INDEX
+nexus/agents/memnon/utils/embedding_tables.py:413 drop_candidate_ann_index DROP INDEX
+scripts/benchmark_experience_enqueue_fence.py:170 main DROP INDEX
+scripts/check_migration_comments.py:1410 _SqlScanner._alter_table ALTER TABLE
+scripts/check_migration_comments.py:1412 _SqlScanner._alter_table ALTER TABLE
+scripts/check_migration_comments.py:1454 _SqlScanner._create_named CREATE TYPE
+scripts/migrate.py:185 ensure_tracking_table DROP TABLE
+scripts/migrate.py:194 ensure_tracking_table CREATE TABLE
+scripts/new_story_setup.py:256 initialize_slot_database CREATE EXTENSION
+scripts/new_story_setup.py:261 initialize_slot_database CREATE EXTENSION
+scripts/new_story_setup.py:488 clone_slot_with_data CREATE EXTENSION
+scripts/new_story_setup.py:493 clone_slot_with_data CREATE EXTENSION
+scripts/simple_update.py:479 resequence_all_chunks CREATE TABLE
+scripts/simple_update.py:585 resequence_all_chunks DROP TABLE
+scripts/simple_update.py:679 resequence_all_chunks CREATE TABLE
+scripts/simple_update.py:735 resequence_all_chunks DROP TABLE
+scripts/update_raw_text.py:128 ChunkUpdater.create_backup_table CREATE TABLE
+
+Unowned:
+

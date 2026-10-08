@@ -42,7 +42,12 @@ from scripts.qa_shift.ann_gate import (
     promotion_verdict,
     slot_clone,
 )
-from tests.pg_fixtures import connect, disposable_slot_database, seed_committed_chunk
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_committed_chunk,
+    seed_story_base,
+)
 
 ANN_FIXTURE_MODEL = "qa640-ann-fixture"
 ANN_FIXTURE_TEXT = "Fixture narrative for the alias search."
@@ -158,6 +163,7 @@ def ann_schema_clone() -> Any:
     one embedded chunk with a word of three or more letters.
     """
     with disposable_slot_database("qa640_766_schema") as dbname:
+        seed_story_base(dbname)
         chunk_id = seed_committed_chunk(dbname, raw_text=ANN_FIXTURE_TEXT)
         vector = "[" + ",".join(str((i % 7 + 1) / 10) for i in range(2560)) + "]"
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cursor:

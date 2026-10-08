@@ -53,14 +53,9 @@ def test_committed_lock_names_the_production_models() -> None:
     assert embedder["dimensions"] == active[1]["dimensions"]
 
     reranking = memnon["retrieval"]["cross_encoder_reranking"]
-    (candidate,) = [
-        (name, candidate)
-        for name, candidate in reranking["candidates"].items()
-        if Path(candidate["local_path"]) == Path(reranking["model_path"])
-    ]
     reranker = by_role[RERANKER_ROLE]
-    assert reranker["name"] == candidate[0]
-    assert reranker["repo_id"] == candidate[1]["remote_path"]
+    assert reranker["name"] == reranking["name"]
+    assert reranker["repo_id"] == reranking["remote_path"]
     assert all(entry["files"] for entry in by_role.values())
 
     # Restore commands pin --revision from the lock, so every artifact that

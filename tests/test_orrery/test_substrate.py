@@ -53,6 +53,7 @@ from nexus.agents.orrery.substrate import (
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
+    route_known,
     routine_anchor_due,
     routine_anchor_has_destination,
     since_last_event_at_least,
@@ -497,6 +498,7 @@ def test_work_from_home_anchor_resolves_against_home_anchor() -> None:
 
     state = WorldState(
         locations={1: 10},
+        charted_place_ids=frozenset({10, 20}),
         routine_anchors={
             (1, "home"): RoutineAnchor(anchor_type="home", place_id=10),
             (1, "work"): RoutineAnchor(
@@ -505,9 +507,13 @@ def test_work_from_home_anchor_resolves_against_home_anchor() -> None:
             ),
         },
     )
+    # Away from home, the work anchor resolves to the routable home place.
+    away = replace(state, locations={1: 20})
 
     assert at_routine_anchor("work")(state, {Slot.ACTOR: 1})
-    assert routine_anchor_has_destination("work")(state, {Slot.ACTOR: 1})
+    assert routine_anchor_has_destination("work")(away, {Slot.ACTOR: 1})
+    # At home, the home place is the origin itself and so no destination.
+    assert not routine_anchor_has_destination("work")(state, {Slot.ACTOR: 1})
 
 
 def test_malformed_home_work_from_home_anchor_does_not_recurse() -> None:
@@ -802,6 +808,7 @@ def test_location_class_destination_condition_finds_other_places() -> None:
 
     state = WorldState(
         locations={1: 10},
+        charted_place_ids=frozenset({10, 20}),
         location_classes={
             10: frozenset({"dwelling"}),
             20: frozenset({"meeting", "commerce"}),
@@ -809,6 +816,7 @@ def test_location_class_destination_condition_finds_other_places() -> None:
     )
     current_only = WorldState(
         locations={1: 10},
+        charted_place_ids=frozenset({10}),
         location_classes={10: frozenset({"meeting"})},
     )
 
@@ -822,6 +830,7 @@ def test_location_class_destination_condition_supports_legacy_single_class() -> 
 
     state = WorldState(
         locations={1: 10},
+        charted_place_ids=frozenset({10, 20}),
         location_class={
             10: "dwelling",
             20: "meeting",
@@ -829,6 +838,32 @@ def test_location_class_destination_condition_supports_legacy_single_class() -> 
     )
 
     assert has_location_class_destination("meeting")(state, {Slot.ACTOR: 1})
+
+
+def test_route_known_rule() -> None:
+    """A journey is routable by coordinates or by a timed authored edge."""
+
+    charted = WorldState(charted_place_ids=frozenset({10, 20}))
+    assert route_known(charted, 10, 20)
+    assert route_known(charted, 20, 10)
+    assert not route_known(charted, 10, 10)
+    # One uncharted end and no edge: no duration exists.
+    assert not route_known(charted, 10, 30)
+    assert not route_known(charted, 30, 10)
+
+    # A timed authored edge 30 -> 40 routes its direction only; a
+    # bidirectional one (stored as both pairs by hydration) routes both.
+    edged = WorldState(timed_route_pairs=frozenset({(30, 40)}))
+    assert route_known(edged, 30, 40)
+    assert not route_known(edged, 40, 30)
+    reversed_bidirectional = WorldState(
+        timed_route_pairs=frozenset({(30, 40), (40, 30)})
+    )
+    assert route_known(reversed_bidirectional, 40, 30)
+
+    # An edge whose duration is NULL never enters timed_route_pairs.
+    untimed = WorldState(charted_place_ids=frozenset({30}))
+    assert not route_known(untimed, 30, 40)
 
 
 def test_travel_purpose_condition_reads_route_metadata() -> None:

@@ -150,6 +150,7 @@ RICH_STATE = WorldState(
     },
     location_entity_ids={101: PLACE_ENTITY},
     location_zones={101: 7, 102: 8},
+    charted_place_ids=frozenset({101, 102}),
     orbit_distance={(ACTOR, TARGET): 1},
     need_debt_scores={(ACTOR, "sleep"): 12.5},
     travel_states={

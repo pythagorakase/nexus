@@ -1,0 +1,23 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+............................................................s......ss... [ 45%]
+........................................................................ [ 91%]
+..............                                                           [100%]
+=============================== warnings summary ===============================
+tests/test_orrery/test_card_identity.py::test_ren_rank_commit_replay[False-False]
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_orrery/test_card_identity.py::test_ren_rank_commit_replay[False-False]
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 35 targets: mock, nexus_m10_fresh_test_75592, nexus_m10_template_test_75592, postgres, qa640_766_schema_*, qa640_810_adopt_drift_*, qa640_810_adopt_noop_*, qa640_810_adopt_recreate_*, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_no_create_all_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_810s3_ann_* x2, qa640_810s3_assets_*, qa640_810s3_importer_*, qa640_810s3_provider_*, qa640_810s3_regen_*, qa640_810s3_scene_* x2, qa640_810s3_season_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_885_ren_replay_* x4, qa640_regen_truncate_* x2
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:56440 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:56442 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:56440 (psycopg2), save_04@local:56442 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+155 passed, 3 skipped, 2 warnings in 110.77s (0:01:50)

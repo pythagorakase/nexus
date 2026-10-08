@@ -1,0 +1,104 @@
+cwd: /Users/pythagor/nexus/.claude/worktrees/810-legacy-ddl-ownership
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m flake8 scripts/create_vector_index.py scripts/extract_scene_numbers.py scripts/extract_season_episode.py scripts/import_narratives.py scripts/migrate_provider_names.py scripts/new_story_setup.py scripts/regenerate_embeddings.py scripts/update_scene_numbers.py scripts/vector_migration.py tests/test_schema_ownership.py
+scripts/create_vector_index.py:11:1: F401 'json' imported but unused
+scripts/create_vector_index.py:27:1: E402 module level import not at top of file
+scripts/create_vector_index.py:124:50: W291 trailing whitespace
+scripts/create_vector_index.py:136:42: W291 trailing whitespace
+scripts/extract_scene_numbers.py:9:1: F401 'os' imported but unused
+scripts/extract_scene_numbers.py:16:1: F401 'json' imported but unused
+scripts/extract_season_episode.py:20:1: F401 'os' imported but unused
+scripts/extract_season_episode.py:25:1: F401 'json' imported but unused
+scripts/extract_season_episode.py:27:1: F401 'typing.Optional' imported but unused
+scripts/extract_season_episode.py:126:89: E501 line too long (97 > 88 characters)
+scripts/extract_season_episode.py:236:42: E711 comparison to None should be 'if cond is None:'
+scripts/extract_season_episode.py:271:89: E501 line too long (97 > 88 characters)
+scripts/import_narratives.py:26:1: F401 'typing.Optional' imported but unused
+scripts/import_narratives.py:105:5: F401 'sqlalchemy.ForeignKey' imported but unused
+scripts/import_narratives.py:115:5: F401 'pgvector' imported but unused
+scripts/import_narratives.py:448:89: E501 line too long (103 > 88 characters)
+scripts/import_narratives.py:466:89: E501 line too long (98 > 88 characters)
+scripts/import_narratives.py:479:89: E501 line too long (95 > 88 characters)
+scripts/import_narratives.py:513:89: E501 line too long (95 > 88 characters)
+scripts/import_narratives.py:541:89: E501 line too long (139 > 88 characters)
+scripts/import_narratives.py:593:89: E501 line too long (102 > 88 characters)
+scripts/new_story_setup.py:7:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:51:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:64:89: E501 line too long (91 > 88 characters)
+scripts/new_story_setup.py:103:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:231:89: E501 line too long (96 > 88 characters)
+scripts/new_story_setup.py:332:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:555:89: E501 line too long (116 > 88 characters)
+scripts/regenerate_embeddings.py:12:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:18:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:21:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:24:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:53:1: F401 'json' imported but unused
+scripts/regenerate_embeddings.py:57:1: F401 'typing.Union' imported but unused
+scripts/regenerate_embeddings.py:102:1: E402 module level import not at top of file
+scripts/regenerate_embeddings.py:148:5: F401 'sqlalchemy as sa' imported but unused
+scripts/regenerate_embeddings.py:157:5: F401 'pgvector' imported but unused
+scripts/regenerate_embeddings.py:158:5: F401 'pgvector.sqlalchemy.Vector' imported but unused
+scripts/regenerate_embeddings.py:301:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:324:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:328:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:375:43: W291 trailing whitespace
+scripts/regenerate_embeddings.py:376:38: W291 trailing whitespace
+scripts/regenerate_embeddings.py:389:21: E722 do not use bare 'except'
+scripts/regenerate_embeddings.py:394:89: E501 line too long (95 > 88 characters)
+scripts/regenerate_embeddings.py:401:29: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:412:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:427:89: E501 line too long (96 > 88 characters)
+scripts/regenerate_embeddings.py:485:36: W291 trailing whitespace
+scripts/regenerate_embeddings.py:486:38: W291 trailing whitespace
+scripts/regenerate_embeddings.py:527:62: W291 trailing whitespace
+scripts/regenerate_embeddings.py:536:89: E501 line too long (91 > 88 characters)
+scripts/regenerate_embeddings.py:543:41: W291 trailing whitespace
+scripts/regenerate_embeddings.py:554:89: E501 line too long (102 > 88 characters)
+scripts/regenerate_embeddings.py:557:89: E501 line too long (93 > 88 characters)
+scripts/regenerate_embeddings.py:593:89: E501 line too long (98 > 88 characters)
+scripts/regenerate_embeddings.py:608:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:644:89: E501 line too long (109 > 88 characters)
+scripts/regenerate_embeddings.py:647:89: E501 line too long (104 > 88 characters)
+scripts/regenerate_embeddings.py:661:41: W291 trailing whitespace
+scripts/regenerate_embeddings.py:662:57: W291 trailing whitespace
+scripts/regenerate_embeddings.py:689:49: W291 trailing whitespace
+scripts/regenerate_embeddings.py:690:65: W291 trailing whitespace
+scripts/regenerate_embeddings.py:691:89: E501 line too long (108 > 88 characters)
+scripts/regenerate_embeddings.py:803:89: E501 line too long (101 > 88 characters)
+scripts/regenerate_embeddings.py:833:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:879:89: E501 line too long (128 > 88 characters)
+scripts/regenerate_embeddings.py:886:46: W291 trailing whitespace
+scripts/regenerate_embeddings.py:916:89: E501 line too long (104 > 88 characters)
+scripts/regenerate_embeddings.py:920:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:923:25: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:923:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:959:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:1053:89: E501 line too long (92 > 88 characters)
+scripts/regenerate_embeddings.py:1080:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:1095:40: W291 trailing whitespace
+scripts/regenerate_embeddings.py:1096:42: W291 trailing whitespace
+scripts/regenerate_embeddings.py:1168:89: E501 line too long (135 > 88 characters)
+scripts/regenerate_embeddings.py:1198:89: E501 line too long (90 > 88 characters)
+scripts/regenerate_embeddings.py:1444:89: E501 line too long (89 > 88 characters)
+scripts/regenerate_embeddings.py:1502:23: F541 f-string is missing placeholders
+scripts/regenerate_embeddings.py:1550:89: E501 line too long (102 > 88 characters)
+scripts/update_scene_numbers.py:3:89: E501 line too long (90 > 88 characters)
+scripts/update_scene_numbers.py:13:1: F401 'typing.Dict' imported but unused
+scripts/update_scene_numbers.py:13:1: F401 'typing.Any' imported but unused
+scripts/update_scene_numbers.py:86:89: E501 line too long (100 > 88 characters)
+scripts/vector_migration.py:14:1: F401 'os' imported but unused
+scripts/vector_migration.py:15:1: F401 'sys' imported but unused
+scripts/vector_migration.py:17:1: F401 'json' imported but unused
+scripts/vector_migration.py:20:1: F401 'psycopg2.extras.execute_values' imported but unused
+scripts/vector_migration.py:22:1: F401 'uuid' imported but unused
+scripts/vector_migration.py:23:1: F401 'time' imported but unused
+scripts/vector_migration.py:72:50: W291 trailing whitespace
+scripts/vector_migration.py:115:53: W291 trailing whitespace
+scripts/vector_migration.py:116:77: W291 trailing whitespace
+scripts/vector_migration.py:130:89: E501 line too long (91 > 88 characters)
+scripts/vector_migration.py:142:89: E501 line too long (94 > 88 characters)
+scripts/vector_migration.py:153:50: W291 trailing whitespace
+scripts/vector_migration.py:170:89: E501 line too long (95 > 88 characters)
+scripts/vector_migration.py:191:89: E501 line too long (107 > 88 characters)
+
+exit=1

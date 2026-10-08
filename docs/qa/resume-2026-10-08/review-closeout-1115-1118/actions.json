@@ -1,0 +1,122 @@
+[
+  {
+    "pr": 1115,
+    "head": "5cff344d54688d5e6b35e4dad83e369c9f45cfd3",
+    "thread_id": "PRRT_kwDOOBe0Mc6qFk18",
+    "original_comment_id": 4211743669,
+    "reply_id": 4221378863,
+    "reply_url": "https://github.com/pythagorakase/nexus/pull/1115#discussion_r4221378863",
+    "body": "Addressed at current head `5cff344d`: record 0009 declares both `nexus.toml` and `nexus/cli.py` in `sources`; the order-table checker pins both additions. Its freshness stamp is `afd034f3`. Verification at implementation/merge commit `4e29ad97`: source sweep found zero missing tracked sources, order-table audit found zero mismatches, quote audit matched all 55 records, and document/reachability tests passed (120 passed). See [current verification](https://github.com/pythagorakase/nexus/blob/5cff344d54688d5e6b35e4dad83e369c9f45cfd3/docs/qa/817-decision-ledger/verification.md#current-verification-on-2026-10-08).\n\nCodex \u2014 GPT-6",
+    "replied_at": "2026-10-08T16:10:49.375441+00:00",
+    "resolution": {
+      "data": {
+        "resolveReviewThread": {
+          "thread": {
+            "id": "PRRT_kwDOOBe0Mc6qFk18",
+            "isResolved": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "pr": 1115,
+    "head": "5cff344d54688d5e6b35e4dad83e369c9f45cfd3",
+    "thread_id": "PRRT_kwDOOBe0Mc6qFk1_",
+    "original_comment_id": 4211743673,
+    "reply_id": 4221379372,
+    "reply_url": "https://github.com/pythagorakase/nexus/pull/1115#discussion_r4221379372",
+    "body": "Addressed at current head `5cff344d`: record 0019 declares `ui/client/src/components/nexus/NarrativePane.tsx` and `nexus/agents/lore/logon_utility.py` in `sources`; the order-table checker pins both additions. Its freshness stamp is `afd034f3`. Verification at implementation/merge commit `4e29ad97`: source sweep found zero missing tracked sources, order-table audit found zero mismatches, quote audit matched all 55 records, and document/reachability tests passed (120 passed). See [current verification](https://github.com/pythagorakase/nexus/blob/5cff344d54688d5e6b35e4dad83e369c9f45cfd3/docs/qa/817-decision-ledger/verification.md#current-verification-on-2026-10-08).\n\nCodex \u2014 GPT-6",
+    "replied_at": "2026-10-08T16:10:52.267653+00:00",
+    "resolution": {
+      "data": {
+        "resolveReviewThread": {
+          "thread": {
+            "id": "PRRT_kwDOOBe0Mc6qFk1_",
+            "isResolved": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "pr": 1115,
+    "head": "5cff344d54688d5e6b35e4dad83e369c9f45cfd3",
+    "thread_id": "PRRT_kwDOOBe0Mc6qFk2E",
+    "original_comment_id": 4211743682,
+    "reply_id": 4221379962,
+    "reply_url": "https://github.com/pythagorakase/nexus/pull/1115#discussion_r4221379962",
+    "body": "Addressed at current head `5cff344d`: record 0023 declares `prompts/storyteller_core.md` in `sources`; the order-table checker pins that addition. Its freshness stamp is `afd034f3`. Verification at implementation/merge commit `4e29ad97`: source sweep found zero missing tracked sources, order-table audit found zero mismatches, quote audit matched all 55 records, and document/reachability tests passed (120 passed). See [current verification](https://github.com/pythagorakase/nexus/blob/5cff344d54688d5e6b35e4dad83e369c9f45cfd3/docs/qa/817-decision-ledger/verification.md#current-verification-on-2026-10-08).\n\nCodex \u2014 GPT-6",
+    "replied_at": "2026-10-08T16:10:55.242008+00:00",
+    "resolution": {
+      "data": {
+        "resolveReviewThread": {
+          "thread": {
+            "id": "PRRT_kwDOOBe0Mc6qFk2E",
+            "isResolved": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "pr": 1118,
+    "head": "cf61a440da7f3236226c717d031a493cbc25f5c5",
+    "thread_id": "PRRT_kwDOOBe0Mc6qNCRX",
+    "original_comment_id": 4214902511,
+    "reply_id": 4221380512,
+    "reply_url": "https://github.com/pythagorakase/nexus/pull/1118#discussion_r4221380512",
+    "body": "Addressed in `9f728a2a`, retained at current head `cf61a440`: validation locations now follow the declared model schema and redact every user-controlled mapping key, including keys that resemble valid schema fields. `test_validation_receipt_redacts_identifier_mapping_keys` covers both a planted secret and `default_slot` through real invalid TOML; both cases failed before the fix and pass afterward. The focused runtime/config/CLI/document suite passed (588 passed, 18 PostgreSQL skips); receipt regressions and document freshness were rerun at exact implementation commit `9f728a2a` (58 passed). See [verification](https://github.com/pythagorakase/nexus/blob/cf61a440da7f3236226c717d031a493cbc25f5c5/docs/qa/806-receipt-store/verification.md).\n\nCodex \u2014 GPT-6",
+    "replied_at": "2026-10-08T16:10:58.035284+00:00",
+    "resolution": {
+      "data": {
+        "resolveReviewThread": {
+          "thread": {
+            "id": "PRRT_kwDOOBe0Mc6qNCRX",
+            "isResolved": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "pr": 1118,
+    "head": "cf61a440da7f3236226c717d031a493cbc25f5c5",
+    "thread_id": "PRRT_kwDOOBe0Mc6qNCRf",
+    "original_comment_id": 4214902524,
+    "reply_id": 4221380993,
+    "reply_url": "https://github.com/pythagorakase/nexus/pull/1118#discussion_r4221380993",
+    "body": "Addressed by the resolved-root comparison in `run_receipts`, retained at current head `cf61a440`: coincident home/fallback directories are scanned once. `test_home_equal_to_user_home_reads_each_receipt_once` exercises the subprocess CLI with `NEXUS_HOME=$HOME`, asserts one receipt/count and the single `fallback` label, and verifies the file is unchanged. The focused runtime/config/CLI/document suite passed (588 passed, 18 PostgreSQL skips); receipt regressions and document freshness were rerun at exact implementation commit `9f728a2a` (58 passed). See [verification](https://github.com/pythagorakase/nexus/blob/cf61a440da7f3236226c717d031a493cbc25f5c5/docs/qa/806-receipt-store/verification.md).\n\nCodex \u2014 GPT-6",
+    "replied_at": "2026-10-08T16:11:00.723178+00:00",
+    "resolution": {
+      "data": {
+        "resolveReviewThread": {
+          "thread": {
+            "id": "PRRT_kwDOOBe0Mc6qNCRf",
+            "isResolved": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "pr": 1118,
+    "head": "cf61a440da7f3236226c717d031a493cbc25f5c5",
+    "thread_id": "PRRT_kwDOOBe0Mc6qNCRl",
+    "original_comment_id": 4214902533,
+    "reply_id": 4221381439,
+    "reply_url": "https://github.com/pythagorakase/nexus/pull/1118#discussion_r4221381439",
+    "body": "Addressed at current head `cf61a440`: receipt files are read as bytes, invalid UTF-8 becomes a path-and-line `ReceiptReadError`, and filesystem read failures are wrapped too. `test_undecodable_receipt_line_is_a_read_error` verifies the subprocess `domain_failure` envelope and unchanged bytes; `test_unreadable_receipt_file_is_a_read_error` covers the filesystem failure. The focused runtime/config/CLI/document suite passed (588 passed, 18 PostgreSQL skips); receipt regressions and document freshness were rerun at exact implementation commit `9f728a2a` (58 passed). See [verification](https://github.com/pythagorakase/nexus/blob/cf61a440da7f3236226c717d031a493cbc25f5c5/docs/qa/806-receipt-store/verification.md).\n\nCodex \u2014 GPT-6",
+    "replied_at": "2026-10-08T16:11:03.511614+00:00",
+    "resolution": {
+      "data": {
+        "resolveReviewThread": {
+          "thread": {
+            "id": "PRRT_kwDOOBe0Mc6qNCRl",
+            "isResolved": true
+          }
+        }
+      }
+    }
+  }
+]

@@ -19,12 +19,13 @@ at all.
 
 Seed helpers write only disposable databases: each calls
 ``require_disposable_target`` before it connects, which refuses the owner's
-save slots and ``NEXUS_template`` by name.
+save slots, ``NEXUS_template``, and the legacy TEST database ``mock`` by name.
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import os
 import subprocess
@@ -46,7 +47,9 @@ from sqlalchemy.engine import URL, make_url
 from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.api import db_pool
 from nexus.api.slot_utils import all_slots, slot_dbname
+from nexus.api.story_identity import detach_clone_identity
 from nexus.config import load_settings
+from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
 from nexus.config.story_model import (
     StorySettings,
     resolve_seat,
@@ -334,6 +337,7 @@ def disposable_slot_database(
                 raise RuntimeError(
                     f"Corpus clone {dbname} has {failed} failed migrations"
                 )
+            detach_clone_identity(dbname)
             if story_pin is not None and crosses_seat_backfill:
                 _refuse_source_pin_backfill(dbname, story_pin)
             pin_clone()
@@ -417,15 +421,16 @@ def disposable_database(prefix: str) -> Iterator[str]:
 # clone while a test runs; resolving the owner names through that attribute at
 # call time would refuse the clone and admit the owner's database.
 _OWNER_DATABASES = frozenset(
-    {"NEXUS_template", *(slot_dbname(slot) for slot in all_slots())}
+    {"NEXUS_template", "mock", *(slot_dbname(slot) for slot in all_slots())}
 )
 
 
 def require_disposable_target(dbname: str) -> str:
     """Return ``dbname`` unless it names an owner database, which raises.
 
-    The owner databases are ``NEXUS_template`` and every save slot that
-    ``nexus.api.slot_utils`` defines (``save_01`` through ``save_05``). A seed
+    The owner databases are ``NEXUS_template``, the owner's TEST provider
+    database ``mock``, and every save slot that ``nexus.api.slot_utils``
+    defines (``save_01`` through ``save_05``). A seed
     aimed at one is always a test bug, so there is no override or allowlist:
     every seed helper calls this before it opens a connection, and tests seed
     only clones from ``disposable_slot_database`` or ``disposable_database``.
@@ -437,6 +442,49 @@ def require_disposable_target(dbname: str) -> str:
             "only disposable clones from disposable_slot_database"
         )
     return dbname
+
+
+_SEED_TEST_PROVIDER_SCRIPT = (
+    Path(__file__).resolve().parents[1] / "migrations" / "008_populate_mock_database.py"
+)
+
+
+@contextmanager
+def disposable_test_provider_database(
+    prefix: str = "qa640_816_test_provider",
+) -> Iterator[str]:
+    """Yield a template clone seeded as a TEST provider database, then drop it.
+
+    The clone comes from ``disposable_slot_database`` (TEST-pinned) and is
+    seeded by migration 008's ``seed_test_provider_database``, the production
+    seeding path, in one transaction. Route it to this process and its children
+    with ``route_test_provider_database``.
+    """
+
+    spec = importlib.util.spec_from_file_location(
+        "migrations_008_populate_mock_database", _SEED_TEST_PROVIDER_SCRIPT
+    )
+    assert spec is not None and spec.loader is not None, _SEED_TEST_PROVIDER_SCRIPT
+    seeder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seeder)
+    with disposable_slot_database(prefix) as dbname:
+        seeder.seed_test_provider_database(dbname)
+        yield dbname
+
+
+def route_test_provider_database(
+    setenv: Callable[[str, str], None], dbname: str
+) -> None:
+    """Name ``dbname`` as the TEST provider database through the environment.
+
+    ``setenv`` is the caller's setter (``monkeypatch.setenv``), so the route is
+    undone with the caller's scope. ``load_settings`` overlays the variable
+    before validation, and child processes inherit it at spawn. Owner databases
+    are refused.
+    """
+
+    require_disposable_target(dbname)
+    setenv(TEST_PROVIDER_DATABASE_ENV, dbname)
 
 
 # The unrouted slot resolver, captured at import under a name the routing
@@ -695,12 +743,52 @@ def route_slot_from_environment(
     return slot, dbname
 
 
+DEFAULT_BASE_TIMESTAMP = "2100-01-01T00:00:00+00:00"
+
+
+def set_story_base(cur: Any, base_timestamp: str | datetime) -> None:
+    """Set ``global_variables.base_timestamp`` on ``cur``'s open transaction.
+
+    This is the one base path for fixtures. Call it before any
+    ``chunk_metadata`` row exists, as the wizard transition does: the refresh
+    trigger raises on a chunk write while the base is NULL or its row is
+    missing (migration 144 removed the wall-clock fallback), and
+    ``trg_global_variables_base_timestamp_fixed`` refuses to change the base
+    once ``chunk_metadata`` holds a row, because stored event times would keep
+    the old clock. The helper upserts the singleton row and checks nothing
+    else; the guard is the database's.
+    """
+
+    cur.execute(
+        "INSERT INTO global_variables (id, base_timestamp) VALUES (true, %s) "
+        "ON CONFLICT (id) DO UPDATE SET base_timestamp = EXCLUDED.base_timestamp",
+        (base_timestamp,),
+    )
+    assert cur.rowcount == 1
+
+
+def seed_story_base(
+    dbname: str, *, base_timestamp: str | datetime = DEFAULT_BASE_TIMESTAMP
+) -> None:
+    """Seed the story clock's base on a disposable save before any chunk.
+
+    A chunk written before the base raises (migration 144: no wall-clock
+    fallback), and the base cannot change once a chunk exists, so tests that
+    insert chunks without a protagonist call this first. Writes through
+    ``set_story_base`` on one connection.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        set_story_base(cur, base_timestamp)
+
+
 def seed_protagonist(
     dbname: str,
     *,
     name: str = "Fixture Player",
     summary: str = "Canonical player for PostgreSQL coverage.",
-    base_timestamp: str = "2100-01-01T00:00:00+00:00",
+    base_timestamp: str = DEFAULT_BASE_TIMESTAMP,
     current_location: int | None = None,
 ) -> tuple[int, int]:
     """Bind a fixture-owned player to the save and return character/entity IDs.
@@ -708,18 +796,10 @@ def seed_protagonist(
     Sets ``global_variables.base_timestamp`` before the character insert, which
     satisfies the need-clock anchor (migration 100); ``seed_story_clock`` can
     then add a head chunk after it. Refuses to move a clock that is already
-    set (for example by ``seed_story_clock``): resetting ``base_timestamp``
-    under stored chunks would desynchronize their ``world_time`` from the
-    summed primary-layer deltas until the next ``chunk_metadata`` write
-    re-stamps them.
-
-    When the clock is first set under chunks that already exist, those chunks
-    carry wall-clock ``world_time`` stamps (the refresh trigger falls back to
-    ``now()`` while ``base_timestamp`` is NULL). The helper re-stamps them
-    through the ``UPDATE OF time_delta`` statement trigger and asserts the
-    head clock is ``base_timestamp`` plus the summed primary-layer deltas
-    before the character insert, so need clocks never anchor to wall time
-    (#640/#645).
+    set (for example by ``seed_story_clock``): once ``chunk_metadata`` holds a
+    row, ``trg_global_variables_base_timestamp_fixed`` (migration 144) refuses
+    any change to ``base_timestamp``, and before the first chunk a second,
+    different base would contradict the clock a caller already seeded.
     """
 
     require_disposable_target(dbname)
@@ -735,13 +815,7 @@ def seed_protagonist(
                 f"{requested}; run it before seed_story_clock, or pass the "
                 "clock already set"
             )
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                (base_timestamp,),
-            )
-            assert cur.rowcount == 1
-            if row[0] is None:
-                cur.execute("UPDATE chunk_metadata SET time_delta = time_delta")
+            set_story_base(cur, base_timestamp)
             _require_need_clock_anchor(cur, "seed_protagonist")
             cur.execute(
                 "INSERT INTO entities (kind, is_active) "
@@ -783,8 +857,9 @@ def seed_committed_chunk(
     otherwise; an explicit value passes through unchanged. The
     statement-level ``trg_chunk_metadata_refresh_world_time`` trigger stamps
     ``chunk_metadata.world_time`` as ``base_timestamp`` plus the cumulative
-    primary-layer deltas, so the chunk's clock is exact only once
-    ``base_timestamp`` is set.
+    primary-layer deltas; the insert raises while ``base_timestamp`` is NULL,
+    so seed it first (``seed_story_base``, ``seed_protagonist``, or
+    ``seed_story_clock``).
 
     The chunk carries no ``authorial_directives``, so it satisfies
     ``playable_narrative_predicate`` (reconstruction.py) and counts toward the
@@ -832,8 +907,7 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     ``MAX(chunk_metadata.world_time)``, then at ``base_timestamp``. The anchor
     is exact only when ``base_timestamp`` is set and, if chunks exist, the head
     ``world_time`` equals ``base_timestamp`` plus the summed primary-layer
-    deltas. Chunks stamped while ``base_timestamp`` was NULL carry wall-clock
-    ``world_time`` and fail here rather than seeding wall-clock need clocks.
+    deltas.
     """
 
     cur.execute(
@@ -863,8 +937,8 @@ def _require_need_clock_anchor(cur: Any, helper: str) -> None:
     assert chunk_count == 0 or head_world_time == expected_head, (
         f"{helper} found a wall-clock need-clock anchor: head world_time "
         f"{head_world_time} is not base_timestamp {base_timestamp} plus the "
-        f"summed primary-layer deltas ({expected_head}); re-stamp "
-        "chunk_metadata after setting base_timestamp"
+        f"summed primary-layer deltas ({expected_head}); seed "
+        "base_timestamp through set_story_base before any chunk"
     )
 
 
@@ -905,11 +979,7 @@ def seed_story_clock(
         row = cur.fetchone()
         assert row is not None, f"{dbname} has no global_variables row"
         if row[0] is None:
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                (world_time,),
-            )
-            assert cur.rowcount == 1
+            set_story_base(cur, world_time)
         else:
             cur.execute("SELECT EXISTS (SELECT 1 FROM chunk_metadata)")
             if not cur.fetchone()[0]:
@@ -2604,7 +2674,7 @@ def seed_played_story(
     *,
     turns: int,
     protagonist_name: str = "Fixture Player",
-    base_timestamp: str = "2100-01-01T00:00:00+00:00",
+    base_timestamp: str = DEFAULT_BASE_TIMESTAMP,
     time_delta: timedelta = timedelta(minutes=5),
     cast: tuple[str, ...] = (),
     correspondence: bool = False,
@@ -2786,3 +2856,192 @@ def seed_starved_story(dbname: str, *, slot: int) -> list[int]:
         for _, state, model in jobs
     ), f"seed_starved_story enqueued jobs that are not queued on TEST: {jobs!r}"
     return [int(job_id) for job_id, _, _ in jobs]
+
+
+class ExperienceCandidatesSeed(NamedTuple):
+    """The scene chunk and actors ``seed_experience_candidates`` seeded."""
+
+    scene_end_chunk_id: int
+    actor_entity_ids: list[int]
+
+
+class ExperienceRenderJobSeed(NamedTuple):
+    """The queued render job ``seed_experience_render_job`` enqueued."""
+
+    job_id: int
+    experience_ids: list[int]
+    scene_end_chunk_id: int
+    boundary_chunk_id: int
+
+
+def _insert_experience_chunk(cur: Any, label: str) -> int:
+    """Insert one primary-layer chunk stamped at the save's ``base_timestamp``."""
+
+    cur.execute(
+        "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+        "VALUES (%s, %s) RETURNING id",
+        (label, label),
+    )
+    assert cur.rowcount == 1
+    chunk_id = int(cur.fetchone()[0])
+    cur.execute(
+        "INSERT INTO chunk_metadata "
+        "(chunk_id, season, episode, scene, world_layer, slug) "
+        "VALUES (%s, 1, 1, %s, 'primary', %s)",
+        (chunk_id, chunk_id, f"qa677_{chunk_id}"),
+    )
+    assert cur.rowcount == 1
+    cur.execute(
+        "UPDATE chunk_metadata SET world_time = gv.base_timestamp "
+        "FROM global_variables gv "
+        "WHERE gv.id = true AND chunk_metadata.chunk_id = %s",
+        (chunk_id,),
+    )
+    assert cur.rowcount == 1
+    return chunk_id
+
+
+def _insert_experience_actor(
+    cur: Any,
+    name: str,
+    *,
+    summary: str | None,
+    background: str | None,
+) -> tuple[int, int]:
+    """Insert one character with its entity; return character and entity IDs."""
+
+    cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
+    assert cur.rowcount == 1
+    entity_id = int(cur.fetchone()[0])
+    cur.execute(
+        """
+        INSERT INTO characters (name, entity_id, summary, background)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id
+        """,
+        (name, entity_id, summary, background),
+    )
+    assert cur.rowcount == 1
+    return int(cur.fetchone()[0]), entity_id
+
+
+def seed_experience_candidates(
+    dbname: str,
+    *,
+    settings: Mapping[str, Any],
+    label: str,
+    seed_count: int = 2,
+) -> ExperienceCandidatesSeed:
+    """Seed ``seed_count`` actors' experience candidates at one scene chunk.
+
+    In one transaction it inserts a scene chunk at ``base_timestamp``,
+    ``seed_count`` actors, a ``slept`` event for each and its actor row in
+    ``world_event_entities``. Then it runs the production experience sweep
+    (``seed_character_experiences_sync``) anchored at that chunk and asserts
+    one seed per actor. The save needs a story clock and a player
+    (``seed_protagonist``); without a clock it fails by name.
+    """
+
+    from nexus.agents.orrery.experiences import seed_character_experiences_sync
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn:
+        with conn, conn.cursor() as cur:
+            _require_need_clock_anchor(cur, "seed_experience_candidates")
+            scene_end_chunk_id = _insert_experience_chunk(cur, f"{label} scene")
+            actor_entity_ids: list[int] = []
+            for ordinal in range(seed_count):
+                _character_id, entity_id = _insert_experience_actor(
+                    cur,
+                    f"{label} Actor {ordinal}",
+                    summary=f"{label} actor {ordinal} has a complete dossier.",
+                    background="Present for a verified event role.",
+                )
+                actor_entity_ids.append(entity_id)
+                cur.execute(
+                    """
+                    INSERT INTO world_events (
+                        event_type, tick_chunk_id, actor_entity_id,
+                        world_layer, source, changed_fields, payload
+                    ) VALUES (
+                        'slept', %s, %s, 'primary', 'resolver',
+                        '{}', '{}'::jsonb
+                    ) RETURNING id
+                    """,
+                    (scene_end_chunk_id, entity_id),
+                )
+                assert cur.rowcount == 1
+                event_id = int(cur.fetchone()[0])
+                cur.execute(
+                    """
+                    INSERT INTO world_event_entities (event_id, entity_id, role)
+                    VALUES (%s, %s, 'actor')
+                    """,
+                    (event_id, entity_id),
+                )
+                assert cur.rowcount == 1
+        with conn:
+            seeded = seed_character_experiences_sync(
+                conn,
+                anchor_chunk_id=scene_end_chunk_id,
+                settings=settings,
+            )
+        assert seeded == seed_count, (
+            f"seed_experience_candidates expected {seed_count} experience "
+            f"seeds at chunk {scene_end_chunk_id}, got {seeded}"
+        )
+    return ExperienceCandidatesSeed(scene_end_chunk_id, actor_entity_ids)
+
+
+def seed_experience_render_job(
+    dbname: str,
+    *,
+    settings: Mapping[str, Any],
+    label: str,
+    slot: int,
+    seed_count: int = 2,
+) -> ExperienceRenderJobSeed:
+    """Seed experience candidates, then enqueue their scene's render job.
+
+    Calls ``seed_experience_candidates``, inserts a boundary chunk, and runs
+    the production scene-reset enqueue (``enqueue_scene_experience_job_sync``)
+    for ``slot``, asserting exactly one job. Returns that job's ID and its
+    ``experience_ids``, read by the boundary chunk.
+    """
+
+    from nexus.agents.orrery.experiences import enqueue_scene_experience_job_sync
+
+    require_disposable_target(dbname)
+    candidates = seed_experience_candidates(
+        dbname, settings=settings, label=label, seed_count=seed_count
+    )
+    with closing(_connect(dbname)) as conn:
+        with conn, conn.cursor() as cur:
+            boundary_chunk_id = _insert_experience_chunk(cur, f"{label} boundary")
+            enqueued = enqueue_scene_experience_job_sync(
+                conn,
+                boundary_chunk_id=boundary_chunk_id,
+                scene_end_chunk_id=candidates.scene_end_chunk_id,
+                world_layer="primary",
+                slot=slot,
+                settings=settings,
+            )
+            assert enqueued == 1, (
+                f"seed_experience_render_job expected one render job at "
+                f"boundary {boundary_chunk_id}, got {enqueued}"
+            )
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, experience_ids FROM character_experience_jobs "
+                "WHERE boundary_chunk_id = %s",
+                (boundary_chunk_id,),
+            )
+            rows = cur.fetchall()
+    assert len(rows) == 1, rows
+    job_id, experience_ids = rows[0]
+    return ExperienceRenderJobSeed(
+        job_id=int(job_id),
+        experience_ids=[int(value) for value in experience_ids],
+        scene_end_chunk_id=candidates.scene_end_chunk_id,
+        boundary_chunk_id=boundary_chunk_id,
+    )

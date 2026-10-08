@@ -1,0 +1,28 @@
+scripts/regenerate_embeddings.py:58: error: Library stubs not installed for "tqdm"  [import-untyped]
+scripts/regenerate_embeddings.py:58: note: Hint: "python3 -m pip install types-tqdm"
+scripts/regenerate_embeddings.py:58: note: (or run "mypy --install-types" to install all missing stub packages)
+scripts/regenerate_embeddings.py:158: error: Skipping analyzing "pgvector": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/regenerate_embeddings.py:159: error: Skipping analyzing "pgvector.sqlalchemy": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/regenerate_embeddings.py:159: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+scripts/regenerate_embeddings.py:288: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:288: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:288: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:385: error: Need type annotation for "other_models" (hint: "other_models: list[<type>] = ...")  [var-annotated]
+scripts/regenerate_embeddings.py:388: error: Incompatible types in assignment (expression has type "Sequence[Row[Any]]", variable has type "list[Any]")  [assignment]
+scripts/regenerate_embeddings.py:553: error: "Result[Any]" has no attribute "rowcount"  [attr-defined]
+scripts/regenerate_embeddings.py:655: error: Incompatible types in assignment (expression has type "str", target has type "int")  [assignment]
+scripts/regenerate_embeddings.py:949: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:949: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:949: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1042: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1042: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1042: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1081: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1185: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1185: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1185: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1212: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1258: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1258: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1258: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+Found 14 errors in 1 file (checked 2 source files)

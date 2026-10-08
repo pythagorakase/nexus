@@ -60,9 +60,9 @@ import pytest
 
 TESTS_ROOT = Path(__file__).resolve().parent
 
-OWNER_NAME = re.compile(r"save_\d+|NEXUS_template")
+OWNER_NAME = re.compile(r"save_\d+|NEXUS_template|mock")
 # An owner name inside a DSN or URL: after a path slash, ``=``, or whitespace.
-OWNER_IN_DSN = re.compile(r"(?:^|[/=\s])(?:save_\d+|NEXUS_template)(?:$|[?&\s])")
+OWNER_IN_DSN = re.compile(r"(?:^|[/=\s])(?:save_\d+|NEXUS_template|mock)(?:$|[?&\s])")
 # An f-string's leading text that a formatted slot number completes.
 SLOT_PREFIX_IN_DSN = re.compile(r"(?:^|[/=\s])save_$")
 # Shell control operators, which end a word without whitespace
@@ -161,6 +161,14 @@ EXEMPTIONS: tuple[Exemption, ...] = (
         "include_data=True )",
         "the data clone's source_db is the module's own disposable idf_slot "
         "clone (qa762_*), not an owner slot",
+    ),
+    Exemption(
+        "test_story_identity_pg.py",
+        RULE_DATA_CLONE,
+        'disposable_slot_database( "qa640_822_detach", source_db=source, '
+        "include_data=True )",
+        "the data clone's source_db is the test's own disposable slot clone "
+        "(qa640_822_detach_src_*), not an owner slot (issue 822)",
     ),
 )
 
@@ -535,6 +543,7 @@ def test_an_exemption_admits_only_its_own_use() -> None:
         ("connect('save_02')", RULE_CONNECTION),
         ("psycopg2.connect(dbname='save_05', host='')", RULE_CONNECTION),
         ("psycopg2.connect('dbname=save_03 connect_timeout=1')", RULE_CONNECTION),
+        ("psycopg2.connect(dbname='mock')", RULE_CONNECTION),
         ("connect(**{'dbname': 'save_02'})", RULE_CONNECTION),
         ("psycopg2.connect(host='', **{'dbname': 'NEXUS_template'})", RULE_CONNECTION),
         ("get_connection(f'save_{slot:02d}')", RULE_CONNECTION),

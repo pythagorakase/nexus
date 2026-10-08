@@ -1,0 +1,80 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+.FF........                                                              [100%]
+=================================== FAILURES ===================================
+____________ test_settings_reject_a_second_runtime_embedder[False] _____________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-374/test_settings_reject_a_second_0')
+is_active = False
+
+    @pytest.mark.parametrize("is_active", (False, True))
+    def test_settings_reject_a_second_runtime_embedder(
+        tmp_path: Path, is_active: bool
+    ) -> None:
+        """A second runtime entry fails at load, active or not."""
+    
+        def edit(document: Any) -> None:
+            candidate = document["ir_eval"]["embedding_candidates"].pop(
+                "Octen-Embedding-8B"
+            )
+            entry = tomlkit.table()
+            entry["is_active"] = is_active
+            for key, value in candidate.items():
+                entry[key] = value
+            entry["weight"] = 0.0
+            document["memnon"]["models"]["Octen-Embedding-8B"] = entry
+    
+        with pytest.raises(ValidationError) as raised:
+            load_settings(_config(tmp_path, edit))
+        message = str(raised.value)
+>       assert "exactly one runtime embedder" in message
+E       assert 'exactly one runtime embedder' in "1 validation error for Settings\n  Value error, too many values to unpack (expected 1) [type=value_error, input_value..._threshold': 0.9}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error"
+
+tests/test_ir_eval_v2/test_candidate_registry.py:91: AssertionError
+----------------------------- Captured stderr call -----------------------------
+❌ Error validating /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-374/test_settings_reject_a_second_0/nexus.toml:
+   1 validation error for Settings
+  Value error, too many values to unpack (expected 1) [type=value_error, input_value={'global': {'model': {'to...'fuzzy_threshold': 0.9}}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.11/v/value_error
+_____________ test_settings_reject_a_second_runtime_embedder[True] _____________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-374/test_settings_reject_a_second_1')
+is_active = True
+
+    @pytest.mark.parametrize("is_active", (False, True))
+    def test_settings_reject_a_second_runtime_embedder(
+        tmp_path: Path, is_active: bool
+    ) -> None:
+        """A second runtime entry fails at load, active or not."""
+    
+        def edit(document: Any) -> None:
+            candidate = document["ir_eval"]["embedding_candidates"].pop(
+                "Octen-Embedding-8B"
+            )
+            entry = tomlkit.table()
+            entry["is_active"] = is_active
+            for key, value in candidate.items():
+                entry[key] = value
+            entry["weight"] = 0.0
+            document["memnon"]["models"]["Octen-Embedding-8B"] = entry
+    
+        with pytest.raises(ValidationError) as raised:
+            load_settings(_config(tmp_path, edit))
+        message = str(raised.value)
+>       assert "exactly one runtime embedder" in message
+E       assert 'exactly one runtime embedder' in "1 validation error for Settings\n  Value error, too many values to unpack (expected 1) [type=value_error, input_value..._threshold': 0.9}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error"
+
+tests/test_ir_eval_v2/test_candidate_registry.py:91: AssertionError
+----------------------------- Captured stderr call -----------------------------
+❌ Error validating /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-374/test_settings_reject_a_second_1/nexus.toml:
+   1 validation error for Settings
+  Value error, too many values to unpack (expected 1) [type=value_error, input_value={'global': {'model': {'to...'fuzzy_threshold': 0.9}}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.11/v/value_error
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2 failed, 9 passed in 4.19s
