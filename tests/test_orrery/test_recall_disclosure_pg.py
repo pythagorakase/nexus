@@ -50,7 +50,12 @@ from nexus.config.settings_models import (
 from scripts import new_story_setup
 from tests.model_registry_helpers import registry_model
 from tests.settings_helpers import settings_with, table
-from tests.pg_fixtures import connect, sqlalchemy_url
+from tests.pg_fixtures import (
+    DEFAULT_BASE_TIMESTAMP,
+    connect,
+    set_story_base,
+    sqlalchemy_url,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -90,6 +95,7 @@ def recall_database() -> Iterator[str]:
                 recall_index_sql = RECALL_ELIGIBILITY_MIGRATION.read_text()
                 cur.execute(recall_index_sql)
                 cur.execute(recall_index_sql)
+                set_story_base(cur, DEFAULT_BASE_TIMESTAMP)
         yield dbname
     finally:
         new_story_setup.USE_POOL = original_use_pool
