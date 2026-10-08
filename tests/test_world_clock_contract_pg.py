@@ -1,9 +1,10 @@
 """Clock identity through real metadata writes on a disposable template clone.
 
 Requires narrative_chunks, chunk_metadata (including its clock trigger and the
-time_delta CHECK of migration 140), narrative_view, global_variables,
-characters, and places. The shared fixture migrates and drops only its
-disposable database; no live save is written.
+time_delta CHECK of migration 140), narrative_view, global_variables (with the
+base_timestamp guard of migration 144), characters, and places. The shared
+fixture migrates and drops only its disposable database; no live save is
+written.
 """
 
 from collections.abc import Iterator
@@ -29,6 +30,8 @@ from tests.pg_fixtures import (
     disposable_slot_database,
     seed_committed_chunk,
     seed_protagonist,
+    seed_story_base,
+    set_story_base,
     sqlalchemy_url,
 )
 from tests.settings_helpers import settings_with
@@ -349,3 +352,173 @@ def test_migration_140_refuses_bad_clocks() -> None:
             1,
             "O",
         )
+
+
+NO_BASE = "Story clock has no base"
+BASE_FIXED = "is fixed once chunk_metadata holds a row"
+GUARD = "trg_global_variables_base_timestamp_fixed"
+
+
+def _set_guard(dbname: str, enabled: bool) -> None:
+    """Enable or disable the base_timestamp guard (planted defects only)."""
+    action = "ENABLE" if enabled else "DISABLE"
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(f"ALTER TABLE global_variables {action} TRIGGER {GUARD}")
+
+
+def _null_the_base(dbname: str) -> None:
+    """Plant a NULL base under stored chunks by bypassing the guard."""
+    _set_guard(dbname, False)
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("UPDATE global_variables SET base_timestamp = NULL WHERE id")
+        assert cur.rowcount == 1
+    _set_guard(dbname, True)
+
+
+def _metadata_count(dbname: str) -> int:
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM chunk_metadata")
+        return int(cur.fetchone()[0])
+
+
+def test_null_base_rejects_first_chunk() -> None:
+    """A NULL base or a missing global_variables row fails the first chunk."""
+    with disposable_slot_database("qa640_clock") as dbname:
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT base_timestamp FROM global_variables WHERE id")
+            assert cur.fetchall() == [(None,)]
+        for setup in (None, "DELETE FROM global_variables"):
+            if setup is not None:
+                with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                    cur.execute(setup)
+                    assert cur.rowcount == 1
+            with closing(connect(dbname)) as conn:
+                with pytest.raises(psycopg2.errors.RaiseException) as raised:
+                    with conn, conn.cursor() as cur:
+                        _insert_chunk(cur, scene=1, layer="primary", delta=None)
+            assert NO_BASE in str(raised.value)
+            assert _metadata_count(dbname) == 0
+
+
+def _layers(dbname: str) -> list[str]:
+    """Return each chunk's world_layer, in chunk order."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT world_layer::text FROM chunk_metadata ORDER BY chunk_id")
+        return [row[0] for row in cur.fetchall()]
+
+
+def test_null_base_rejects_later_writes(clock_db: tuple[str, int]) -> None:
+    """With chunks stored, a NULL base fails every metadata write.
+
+    The writes are an INSERT, an UPDATE of time_delta, and an UPDATE of
+    world_layer alone (the flashback made primary, which would move the
+    clocks to (0, 7, 10, 10) under a base).
+    """
+    dbname, _ = clock_db
+    _null_the_base(dbname)
+    layers = _layers(dbname)
+    assert layers == ["primary", "primary", "flashback", "retrograde"]
+    with closing(connect(dbname)) as conn:
+        with pytest.raises(psycopg2.errors.RaiseException) as inserted:
+            with conn, conn.cursor() as cur:
+                _insert_chunk(cur, scene=5, layer="primary", delta=timedelta(0))
+        assert NO_BASE in str(inserted.value)
+        with pytest.raises(psycopg2.errors.RaiseException) as updated:
+            with conn, conn.cursor() as cur:
+                cur.execute("UPDATE chunk_metadata SET time_delta = time_delta")
+        assert NO_BASE in str(updated.value)
+        with pytest.raises(psycopg2.errors.RaiseException) as relayered:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE chunk_metadata SET world_layer = 'primary' "
+                    "WHERE world_layer = 'flashback'"
+                )
+        assert NO_BASE in str(relayered.value)
+    assert _clock_minutes(dbname) == [0, 7, 7, 7]
+    assert _layers(dbname) == layers
+    assert _metadata_count(dbname) == 4
+
+
+def test_base_timestamp_fixed_once_chunks_exist(clock_db: tuple[str, int]) -> None:
+    """Once a chunk exists the base cannot change; the same value passes."""
+    dbname, _ = clock_db
+    with closing(connect(dbname)) as conn:
+        with pytest.raises(psycopg2.errors.RaiseException) as moved:
+            with conn, conn.cursor() as cur:
+                set_story_base(cur, BASE + timedelta(hours=1))
+        assert BASE_FIXED in str(moved.value)
+        with pytest.raises(psycopg2.errors.RaiseException) as nulled:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE global_variables SET base_timestamp = NULL WHERE id"
+                )
+        assert BASE_FIXED in str(nulled.value)
+        with conn, conn.cursor() as cur:
+            set_story_base(cur, BASE)
+            cur.execute("SELECT base_timestamp FROM global_variables WHERE id")
+            assert cur.fetchall() == [(BASE,)]
+    assert _clock_minutes(dbname) == [0, 7, 7, 7]
+
+
+def test_base_timestamp_free_before_chunks() -> None:
+    """Before any chunk the base may be set and reset; the first chunk uses it."""
+    later = BASE + timedelta(hours=1)
+    with disposable_slot_database("qa640_clock") as dbname:
+        seed_story_base(dbname, base_timestamp=BASE)
+        seed_story_base(dbname, base_timestamp=later)
+        chunk_id = seed_committed_chunk(dbname, raw_text="Bootstrap.", scene=1)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+                (chunk_id,),
+            )
+            assert cur.fetchall() == [(later,)]
+
+
+def _migration_144_state(dbname: str) -> dict[str, Any]:
+    """Read the clocks, the 144 stamp, the guard's state, and the refresh body."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT world_time FROM chunk_metadata ORDER BY chunk_id")
+        clocks = [row[0] for row in cur.fetchall()]
+        cur.execute("SELECT count(*) FROM schema_migrations WHERE version = '144'")
+        stamps = cur.fetchone()[0]
+        cur.execute(
+            "SELECT tgenabled FROM pg_trigger "
+            "WHERE tgrelid = 'public.global_variables'::regclass AND tgname = %s",
+            (GUARD,),
+        )
+        (enabled,) = cur.fetchone()
+        cur.execute(
+            "SELECT pg_get_functiondef("
+            "'public.refresh_world_time_from_chunk()'::regprocedure)"
+        )
+        body = cur.fetchone()[0]
+    return {"clocks": clocks, "stamps": stamps, "enabled": enabled, "body": body}
+
+
+def test_migration_144_refuses_null_base_and_reruns() -> None:
+    """Migration 144 fails whole under a NULL base with chunks, then reruns."""
+    with disposable_slot_database("qa640_clock") as dbname:
+        seed_protagonist(dbname, base_timestamp=BASE.isoformat())
+        for scene in (1, 2, 3):
+            seed_committed_chunk(dbname, raw_text=f"Chunk {scene}.", scene=scene)
+        _set_guard(dbname, False)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("UPDATE global_variables SET base_timestamp = NULL WHERE id")
+            assert cur.rowcount == 1
+            cur.execute("DELETE FROM schema_migrations WHERE version = '144'")
+            assert cur.rowcount == 1
+        stored = _migration_144_state(dbname)
+        assert stored["clocks"] == [BASE + timedelta(minutes=m) for m in (0, 1, 2)]
+        assert (stored["stamps"], stored["enabled"]) == (0, "D")
+
+        assert migrate.migrate_database(dbname, skip_locked=False) == (0, 1)
+        assert _migration_144_state(dbname) == stored
+
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            set_story_base(cur, BASE)
+        assert migrate.migrate_database(dbname, skip_locked=False) == (1, 0)
+        applied = _migration_144_state(dbname)
+        assert applied["clocks"] == stored["clocks"]
+        assert (applied["stamps"], applied["enabled"]) == (1, "O")
+        assert "now()" not in applied["body"]
