@@ -37,6 +37,7 @@ from nexus.api.db_pool import get_connection
 from nexus.api.narrative_lease import RetryableFailure, read_retryable_failure
 from nexus.api.narrative_schemas import FrontierClock, WeirdLevel
 from nexus.api.slot_utils import slot_dbname
+from nexus.api.story_identity import read_story_uuid
 from nexus.util.clock_face import clock_face
 
 logger = logging.getLogger("nexus.api.slot_state")
@@ -97,7 +98,9 @@ class SlotState:
     wizard_state: Optional[WizardState]
     narrative_state: Optional[NarrativeState]
     model: Optional[str]  # Current model for this slot
-    story_id: Optional[str] = None  # Stable creation identity, not the story clock
+    story_id: Optional[str] = None  # story_identity.story_uuid, not the story clock
+    # The pre-#822 protagonist-derived id, only for the client's key migration.
+    legacy_story_id: Optional[str] = None
 
 
 def get_slot_state(slot: int) -> SlotState:
@@ -213,12 +216,12 @@ def get_slot_state(slot: int) -> SlotState:
             elif has_narrative_data:
                 # Narrative mode: chunks or incubator exist
                 narrative_state = _get_narrative_state(cur)
-                # The transition recreates the canonical protagonist for every
-                # story while it keeps the slot's global_variables row, so the
-                # protagonist's non-null row creation timestamp is the identity
-                # that is stable within a story and renewed when the slot is
-                # overwritten. Sequence resets can repeat the id; the
-                # transaction-time timestamp cannot.
+                # The story's identity is its story_identity row; a narrative
+                # slot without exactly one row raises (no fallback).
+                story_id = read_story_uuid(cur)
+                # legacy_story_id exists only for the client's one-time
+                # migration of browser drafts and stored actions keyed by the
+                # pre-#822 id: the protagonist's id and row creation timestamp.
                 cur.execute(
                     "SELECT created_at FROM characters WHERE id = %s",
                     (player_character_id,),
@@ -226,7 +229,7 @@ def get_slot_state(slot: int) -> SlotState:
                 player_row = cur.fetchone()
                 if not player_row or player_row.get("created_at") is None:
                     raise RuntimeError("Story has no stable creation identity")
-                story_id = (
+                legacy_story_id = (
                     f"player:{player_character_id}:"
                     f"{player_row['created_at'].isoformat()}"
                 )
@@ -238,6 +241,7 @@ def get_slot_state(slot: int) -> SlotState:
                     narrative_state=narrative_state,
                     model=current_model,
                     story_id=story_id,
+                    legacy_story_id=legacy_story_id,
                 )
             else:
                 # Empty slot: no wizard cache and no narrative

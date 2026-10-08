@@ -96,6 +96,8 @@ export interface SlotState {
   narrative_generation: GenerationSettings;
   slot: number;
   story_id?: string | null;
+  /** The pre-UUID story id, only for the one-time draft-key migration. */
+  legacy_story_id?: string | null;
   is_empty: boolean;
   is_wizard_mode: boolean;
   phase: string | null;

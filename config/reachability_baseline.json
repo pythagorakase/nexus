@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#842 S2: nexus/runtime/log_capture.py is imported by nexus/runtime/supervisor.py (every captured service's log writer), so it joins production_reachable",
+  "reason": "#822 S1: nexus/api/story_identity.py is imported by nexus/api/slot_state.py (slot state reports story_identity.story_uuid as story_id), so it joins production_reachable",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -208,6 +208,7 @@
     "nexus/api/slot_state.py",
     "nexus/api/slot_utils.py",
     "nexus/api/static_ui.py",
+    "nexus/api/story_identity.py",
     "nexus/api/summary_errors.py",
     "nexus/api/summary_triggers.py",
     "nexus/api/trait_compiler.py",
