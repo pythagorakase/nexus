@@ -186,7 +186,7 @@ ENVELOPE_COMMANDS: FrozenSet[str] = frozenset(
 
 # Commands that diagnose this machine's configuration and role themselves:
 # main() dispatches them without loading the configuration or applying the
-# remote refusal, so a broken nexus.toml is their finding, not a config_error.
+# remote refusal, so a broken nexus.toml never stops them before they run.
 SELF_DIAGNOSTIC_COMMANDS: FrozenSet[str] = frozenset({"doctor", "receipts"})
 
 REFUSED_REMOTE_TRANSPORTS: FrozenSet[Transport] = frozenset(

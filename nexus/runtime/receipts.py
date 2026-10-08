@@ -344,7 +344,7 @@ def _receipt_dir(surface: Surface) -> Path:
     # fallback root; the RuntimeHomeError recorded its own receipt there.
     except (
         RuntimeHomeError
-    ):  # nexus-exception-disposition: safe-continuation; reason=806-Q12; safety=logged
+    ):  # nexus-exception-disposition: safe-continuation; reason=Q12; safety=receipted
         return fallback_receipts_dir()
 
 
@@ -363,7 +363,7 @@ def record_failure(
     # caller re-raises the original exception unchanged.
     except (
         Exception
-    ):  # nexus-exception-disposition: safe-continuation; reason=no mask; safety=raise
+    ):  # nexus-exception-disposition: safe-continuation; reason=no mask; safety=caller
         write_error = sys.exc_info()[1]
         print(
             f"receipt not written for {surface}: {type(write_error).__name__}",
@@ -378,7 +378,9 @@ def _read_receipts(
     receipts: list[tuple[str, FailureReceipt]] = []
     for label, directory in roots.items():
         for path in sorted(directory.glob("failures-*.jsonl")):
-            with path.open("r", encoding="utf-8") as stream:
+            # Binary mode: undecodable bytes fail validation (json_invalid), so
+            # they are reported by path and line like any other invalid line.
+            with path.open("rb") as stream:
                 for number, line in enumerate(stream, start=1):
                     try:
                         receipt = FailureReceipt.model_validate_json(line)

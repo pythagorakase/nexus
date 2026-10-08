@@ -477,9 +477,9 @@ checkout's runtime data into a home. Before the move, run it as
 exists, exporting `NEXUS_HOME=DIR` makes every command, this one included,
 fail on the missing config. Once the home holds its config, the target
 defaults to `NEXUS_HOME`. For the active config, every file under the state,
-usage, cache, backup and upload directories, and every configured model
-directory, it prints a status, the current and proposed paths, and the size
-and SHA-256. A symlink is reported with its target and never followed, in
+usage, cache, backup, receipt and upload directories, and every configured
+model directory, it prints a status, the current and proposed paths, and the
+size and SHA-256. A symlink is reported with its target and never followed, in
 the checkout or in the target; that includes a symlinked `nexus.toml`, which
 is reported as the link the locator selected, not as the file it points to.
 `move` means the proposed path is free, `conflict` that it is taken,
@@ -501,7 +501,7 @@ checksumming anything:
 - two model paths that nest or name one directory, directly or through a
   symlink;
 - a model path that is or contains the checkout, or that overlaps the active
-  config or a state, usage, cache, backup or upload directory;
+  config or a state, usage, cache, backup, receipt or upload directory;
 - two models that would land on one destination, including a moving model
   whose destination overlaps a model that stays in place.
 

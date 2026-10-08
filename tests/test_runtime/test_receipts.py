@@ -38,6 +38,7 @@ from nexus.runtime.home import (
 )
 from nexus.runtime.receipts import (
     FailureReceipt,
+    ReceiptReadError,
     home_receipts_dir,
     read_failure_groups,
 )
@@ -100,6 +101,8 @@ def _invalid_config(tmp_path: Path) -> Path:
 
     ``default_slot`` holds both planted strings, and ``[runtime]`` gains an
     unknown key whose value is the secret and a bare key named the secret.
+    ``[usage.daily_allowance]`` gains a key named the prompt (spaces, so not
+    identifier-shaped) whose value is not an integer.
     """
     text = REPO_CONFIG.read_text(encoding="utf-8")
     assert text.count("\ndefault_slot = 1 ") == 1
@@ -111,6 +114,11 @@ def _invalid_config(tmp_path: Path) -> Path:
     text = text.replace(
         "\n[runtime]\n",
         f'\n[runtime]\nplanted_value = "{PLANTED_SECRET}"\n{PLANTED_SECRET} = 1\n',
+    )
+    assert text.count("\n[usage.daily_allowance]\n") == 1
+    text = text.replace(
+        "\n[usage.daily_allowance]\n",
+        f'\n[usage.daily_allowance]\n"{PLANTED_PROMPT}" = "not-a-number"\n',
     )
     path = tmp_path / "invalid.toml"
     path.write_text(text, encoding="utf-8")
@@ -211,6 +219,11 @@ def test_validation_receipt_keeps_loc_and_type_only(seam: Path, tmp_path: Path) 
     locs = [entry["loc"] for entry in details["errors"]]
     assert ["runtime", "default_slot"] in locs
     assert {"loc": ["runtime", "?"], "type": "extra_forbidden"} in details["errors"]
+    # A user-typed mapping key that is not identifier-shaped is redacted.
+    assert {
+        "loc": ["usage", "daily_allowance", "?"],
+        "type": "int_parsing",
+    } in details["errors"]
     assert all(set(entry) == {"loc", "type"} for entry in details["errors"])
 
 
@@ -340,7 +353,8 @@ def test_repeats_compact_to_one_group(seam: Path, tmp_path: Path) -> None:
     assert len(list((seam / "home").glob("failures-*.jsonl"))) == 1
     roots = {"home": seam / "home", "fallback": seam / "fallback"}
     groups = read_failure_groups(roots)
-    assert sorted(group.count for group in groups) == [1, 5]
+    # The validation failure was recorded last, so its group sorts first.
+    assert [group.count for group in groups] == [1, 5]
     repeated = next(group for group in groups if group.count == 5)
     assert repeated.first == FailureReceipt.model_validate_json(lines[0])
     assert repeated.roots == ["home"]
@@ -359,8 +373,14 @@ def test_repeats_compact_to_one_group(seam: Path, tmp_path: Path) -> None:
     assert text.returncode == 0, text.stderr
     headers = [line for line in text.stdout.splitlines() if not line.startswith(" ")]
     assert len(headers) == 2
-    assert headers[0].startswith(f"{groups[0].count}x {groups[0].fingerprint[:12]} ")
+    assert headers[0].startswith(f"1x {groups[0].fingerprint[:12]} ")
     assert _receipt_lines(seam / "home") == lines
+
+    # One more TOML failure makes its group the newest, so the order flips
+    # whatever the two fingerprints are.
+    with pytest.raises(tomllib.TOMLDecodeError):
+        load_settings(broken)
+    assert [group.count for group in read_failure_groups(roots)] == [6, 1]
 
 
 def test_unwritable_root_does_not_mask_the_error(
@@ -430,3 +450,47 @@ def test_receipts_command_reports_a_broken_home(
     count = len(_receipt_lines(seam / "fallback"))
     assert partial["groups"][0]["count"] == count
     assert count >= 2
+
+
+def test_undecodable_receipt_line_is_a_read_error(seam: Path) -> None:
+    """A line that is not UTF-8 is named by path and line, never a traceback."""
+    home = seam / "home"
+    home.mkdir(parents=True)
+    day_file = home / "failures-2026-10-08.jsonl"
+    day_file.write_bytes(b"\xff\n")
+
+    with pytest.raises(ReceiptReadError, match=r"failures-2026-10-08\.jsonl:1: "):
+        read_failure_groups({"home": home, "fallback": seam / "fallback"})
+
+    completed = _run_cli("--json", "receipts")
+    assert completed.returncode != 0
+    envelope = _failure(completed)
+    assert envelope["code"] == "domain_failure"
+    assert f"{day_file}:1: " in envelope["error"]
+    assert day_file.read_bytes() == b"\xff\n"
+
+
+def test_home_equal_to_user_home_reads_each_receipt_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When ``NEXUS_HOME`` is the user's home, one directory is read once."""
+    monkeypatch.delenv(TEST_RECEIPTS_ENV, raising=False)
+    monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
+    user = tmp_path / "user"
+    monkeypatch.setenv(HOME_ENV, str(user))
+    monkeypatch.setenv("HOME", str(user))
+    with pytest.raises(tomllib.TOMLDecodeError):
+        load_settings(_broken_config(tmp_path))
+    receipts = user.resolve() / RECEIPTS_DIR
+    assert len(_receipt_lines(receipts)) == 1
+
+    completed = _run_cli("receipts", "--json")
+
+    assert completed.returncode == 0, completed.stderr
+    document = json.loads(completed.stdout)
+    assert Path(document["home_dir"]).resolve() == receipts
+    assert Path(document["fallback_dir"]).resolve() == receipts
+    assert len(document["groups"]) == 1
+    assert document["groups"][0]["count"] == 1
+    assert document["groups"][0]["roots"] == ["fallback"]
+    assert len(_receipt_lines(receipts)) == 1

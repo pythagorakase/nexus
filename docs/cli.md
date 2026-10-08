@@ -74,9 +74,10 @@ these tables by `scripts/render_cli_reference.py`;
 
 Expected failures are reported through these codes. A missing or invalid
 active `nexus.toml`, or a `NEXUS_API_URL` without a host, is a `config_error`
-checked for every command but `doctor` before it runs. A `NEXUS_API_URL` that
-is not `http://` or `https://`, and a runtime credential that is missing or
-refused, are a `config_error` when the first request is sent. Every HTTP
+checked for every command but `doctor` and `receipts` before it runs. A
+`NEXUS_API_URL` that is not `http://` or `https://`, and a runtime credential
+that is missing or refused, are a `config_error` when the first request is
+sent. Every HTTP
 command reports these, and an API that refuses or drops the connection or
 does not answer in time (exit 4), the same way.
 

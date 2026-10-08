@@ -4512,7 +4512,9 @@ def run_receipts(args: argparse.Namespace) -> int:
         home_error = str(sys.exc_info()[1])
     fallback_dir = fallback_receipts_dir()
     roots = {"fallback": fallback_dir}
-    if home_dir is not None:
+    # When NEXUS_HOME is the user's home, both labels name one directory;
+    # reading it once keeps each receipt counted once.
+    if home_dir is not None and home_dir.resolve() != fallback_dir.resolve():
         roots = {"home": home_dir, "fallback": fallback_dir}
     try:
         groups = read_failure_groups(roots)
