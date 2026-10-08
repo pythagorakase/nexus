@@ -14,6 +14,7 @@ import threading
 from typing import Any
 
 from nexus.api.db_pool import dispose_database
+from nexus.api.story_identity import detach_clone_identity
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -498,6 +499,7 @@ def main() -> None:
             ],
             check=True,
         )
+        detach_clone_identity(DB)
         print(
             query(
                 DB,

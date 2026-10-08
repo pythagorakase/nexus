@@ -28,6 +28,53 @@ export function readerDraftScope(state: SlotState | undefined): ReaderDraftScope
   };
 }
 
+/** Pairs `legacy->story_uuid` already migrated in this page's lifetime. */
+const migratedStoryKeys = new Set<string>();
+
+/**
+ * Move drafts and stored actions keyed by the pre-UUID story id onto the
+ * story_uuid keys, once, on first read (issue #822). An existing UUID-keyed
+ * record is never overwritten; the legacy key is removed either way. A
+ * storage failure leaves the pair unrecorded, and the draft load that follows
+ * reports it.
+ */
+export function migrateLegacyReaderKeys(state: SlotState | undefined): void {
+  const storyId = state?.story_id;
+  const legacyId = state?.legacy_story_id;
+  if (!state || !storyId || !legacyId || storyId === legacyId) return;
+  const pair = `${legacyId}->${storyId}`;
+  if (migratedStoryKeys.has(pair)) return;
+  const oldPrefix = `${readerDraftStore.prefix}${JSON.stringify([state.slot, legacyId])}:`;
+  const newPrefix = `${readerDraftStore.prefix}${JSON.stringify([state.slot, storyId])}:`;
+  try {
+    const legacyKeys: string[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(oldPrefix)) legacyKeys.push(key);
+    }
+    for (const oldKey of legacyKeys) {
+      const rest = oldKey.slice(oldPrefix.length);
+      const target = newPrefix + rest;
+      if (localStorage.getItem(target) === null) {
+        if (rest === "unconfirmed") {
+          const actions = readerDraftStore.readUnconfirmedActions(oldKey).map((action) =>
+            action.draftKey.startsWith(oldPrefix)
+              ? { ...action, draftKey: newPrefix + action.draftKey.slice(oldPrefix.length) }
+              : action);
+          localStorage.setItem(target, JSON.stringify({ actions }));
+        } else {
+          const draft = readerDraftStore.readDraft(oldKey);
+          if (draft) readerDraftStore.writeDraft(target, draft);
+        }
+      }
+      localStorage.removeItem(oldKey);
+    }
+  } catch {
+    return;
+  }
+  migratedStoryKeys.add(pair);
+}
+
 export const readReaderDraft = readerDraftStore.readDraft;
 export const writeReaderDraft = readerDraftStore.writeDraft;
 export const clearReaderDraft = readerDraftStore.clearDraft;
