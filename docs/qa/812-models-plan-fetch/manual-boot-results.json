@@ -1,0 +1,63 @@
+[
+  {
+    "label": "manual-good-boot",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "/Users/pythagor/nexus/.venv/bin/python",
+      "-m",
+      "uvicorn",
+      "nexus.api.narrative:app",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8013"
+    ],
+    "pid": 135,
+    "admission": {
+      "returncode": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    "health_status": 200,
+    "health_body": "{\"status\":\"healthy\",\"service\":\"narrative_api\"}",
+    "process_returncode": -15,
+    "elapsed_seconds": 1.517,
+    "listener_after": {
+      "returncode": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  {
+    "label": "manual-bad-boot",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "/Users/pythagor/nexus/.venv/bin/python",
+      "-m",
+      "uvicorn",
+      "nexus.api.narrative:app",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "8013"
+    ],
+    "pid": 148,
+    "admission": {
+      "returncode": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    "startup_returncode": 3,
+    "process_returncode": 3,
+    "elapsed_seconds": 1.098,
+    "listener_after": {
+      "returncode": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  }
+]

@@ -1,0 +1,82 @@
+UI build not found at /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/ui/dist/public - the gateway will serve APIs only. Run `npm --prefix ui run build` (or use the Vite dev server).
+INFO:     Started server process [148]
+INFO:     Waiting for application startup.
+ERROR:    Traceback (most recent call last):
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/starlette/routing.py", line 692, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/nexus/api/narrative.py", line 125, in gateway_lifespan
+    summary = await asyncio.to_thread(check_artifacts_at_boot, load_settings())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/nexus/agents/memnon/utils/artifact_manifest.py", line 735, in check_artifacts_at_boot
+    raise ArtifactLockError(
+nexus.agents.memnon.utils.artifact_manifest.ArtifactLockError: The gateway will not start: model artifacts do not match /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/config/model_artifacts.lock.json by file list, size and revision:
+  - reranker 'deberta-v3-trecdl22': missing file .gitattributes
+  - reranker 'deberta-v3-trecdl22': missing file README.md
+  - reranker 'deberta-v3-trecdl22': missing file added_tokens.json
+  - reranker 'deberta-v3-trecdl22': missing file config.json
+  - reranker 'deberta-v3-trecdl22': missing file model.safetensors
+  - reranker 'deberta-v3-trecdl22': missing file pytorch_model.bin
+  - reranker 'deberta-v3-trecdl22': missing file special_tokens_map.json
+  - reranker 'deberta-v3-trecdl22': missing file spm.model
+  - reranker 'deberta-v3-trecdl22': missing file tokenizer_config.json
+  - reranker 'deberta-v3-trecdl22': missing file training_args.bin
+  - reranker 'deberta-v3-trecdl22': unexpected file proof.txt is not in the lock
+Remediation:
+  - Move /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/scratchpad/812-S3/boot/bad-reranker aside (`nexus models fetch` never replaces an existing folder), then run `nexus models fetch` to download reranker 'deberta-v3-trecdl22' again.
+  - If a changed artifact is an intentional upgrade, re-run `nexus models lock` on the host that holds it and commit the lock.
+
+ERROR:    Application startup failed. Exiting.

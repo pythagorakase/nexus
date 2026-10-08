@@ -1,0 +1,9 @@
+{
+  "phase": "post-proof presence-only check of the unchanged launcher environment",
+  "present": {
+    "HF_TOKEN": false,
+    "HUGGING_FACE_HUB_TOKEN": false,
+    "HUGGINGFACE_HUB_TOKEN": false
+  },
+  "values_read_or_recorded": false
+}

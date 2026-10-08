@@ -1,0 +1,12 @@
+{
+  "depends_on": [
+    "config.valid"
+  ],
+  "id": "models.artifacts",
+  "observed": "embedder Octen-Embedding-4B, reranker deberta-v3-trecdl22 match /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/config/model_artifacts.lock.json (sha256)",
+  "remediation": null,
+  "status": "pass",
+  "targets": [
+    "owner-host"
+  ]
+}

@@ -1,0 +1,27 @@
+from pathlib import Path
+import json
+import os
+import tomlkit
+from manual_common import EVIDENCE, ROOT, SCRATCH, proof_env, run
+
+fetch=SCRATCH/'fetch'
+if os.path.lexists(fetch):
+    raise RuntimeError(f'Refusing to reuse {fetch}')
+fetch.mkdir()
+target=fetch/'reranker'
+if os.path.lexists(target):
+    raise RuntimeError(f'Expected absent reranker target: {target}')
+document=tomlkit.parse((ROOT/'nexus.toml').read_text())
+document['memnon']['retrieval']['cross_encoder_reranking']['model_path']=str(target)
+config=fetch/'nexus.toml'
+config.write_text(tomlkit.dumps(document))
+report=json.loads((EVIDENCE/'manual-doctor.stdout.log').read_text())
+check=next(check for check in report['checks'] if check['id']=='models.artifacts')
+assert check['status']=='pass',check
+assert {check['id'] for check in report['checks'] if check['status']=='fail'}=={'ui.bundle','secrets.seat_providers'}
+(EVIDENCE/'manual-doctor-models-artifacts.json').write_text(json.dumps(check,indent=2)+'\n')
+result=run('manual-fetch-plan',['-m','nexus.cli','models','plan','--config',str(config)])
+if result.returncode:
+    raise RuntimeError('Scratch plan failed; download not attempted')
+print((EVIDENCE/'manual-fetch-plan.stdout.log').read_text(),flush=True)
+print('Download has not been invoked; configured target remains absent:',not os.path.lexists(target),flush=True)

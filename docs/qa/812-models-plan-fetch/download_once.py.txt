@@ -1,0 +1,20 @@
+import json
+import os
+from manual_common import EVIDENCE, SCRATCH, proof_env, run
+
+fetch=SCRATCH/'fetch'
+target=fetch/'reranker'
+marker=fetch/'download-attempted.json'
+if os.path.lexists(target) or os.path.lexists(marker):
+    raise RuntimeError('Download already attempted or target exists; refusing another invocation')
+with marker.open('x') as out:
+    json.dump({'target':str(target),'attempts_authorized':1},out)
+result=run('manual-fetch',['-m','nexus.cli','models','fetch','--config',str(fetch/'nexus.toml')],env=proof_env(online=True))
+print((EVIDENCE/'manual-fetch.stdout.log').read_text(),flush=True)
+if result.returncode:
+    print((EVIDENCE/'manual-fetch.stderr.log').read_text()[-6000:],flush=True)
+    raise RuntimeError('The one download failed; stop without retry')
+result=run('manual-fetch-verify',['-m','nexus.cli','models','verify','--config',str(fetch/'nexus.toml')])
+print((EVIDENCE/'manual-fetch-verify.stdout.log').read_text(),flush=True)
+if result.returncode:
+    raise RuntimeError('Downloaded artifact verification failed; stop without retry')
