@@ -271,8 +271,10 @@ restored control subject.
 
 ## Scope and Pending Proof
 
-The coordinator's assembled core gate stopped with 3,685 passes, 52 skips and
-one prompt-lint failure: the new endpoint's developer docstring began “Return
+The coordinator's assembled core gate at `849eeef4` stopped with 3,685 passes,
+52 skips, 30 warnings and one failure in 1840.34 seconds. All three guard
+summaries passed; the API and Orrery pieces were not started. The sole
+prompt-lint failure was the new endpoint's developer docstring beginning “Return
 only,” which the existing embedded-prompt heuristic rejects. The docstring now
 says “Serve the player client's explicitly allowlisted display tunables.”
 No runtime statement, lint rule or exemption changed. The bounded follow-up:
