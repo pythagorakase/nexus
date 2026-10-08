@@ -1,0 +1,12 @@
+nexus/config/settings_models.py:138: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:138: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:139: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:139: error: Unsupported operand types for < ("int" and "None")  [operator]
+nexus/config/settings_models.py:139: error: Unsupported left operand type for > ("None")  [operator]
+nexus/config/settings_models.py:139: note: Both left and right operands are unions
+nexus/config/settings_models.py:146: error: Unsupported operand types for + ("int" and "None")  [operator]
+nexus/config/settings_models.py:146: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:146: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4513: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4513: note: Right operand is of type "int | None"
+Found 7 errors in 1 file (checked 11 source files)

@@ -176,6 +176,32 @@ def _lock(workspace: Workspace) -> Dict[str, Any]:
     return json.loads(workspace.lock.read_text())
 
 
+def test_relative_artifact_paths_lock_and_verify_from_any_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Artifact paths anchor to the home even when the operator runs elsewhere."""
+    home = tmp_path / "home"
+    home.mkdir()
+    workspace = _workspace(home)
+    _write_config(
+        home,
+        Path("models/embedder"),
+        Path("models/reranker"),
+        workspace.lock,
+        name="nexus",
+    )
+    monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
+    monkeypatch.setenv(HOME_ENV, str(home))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    for command in ("lock", "verify"):
+        result = run_models_command(command, None)
+        assert result["success"] is True, result
+    manifest = json.loads(workspace.lock.read_text())
+    assert manifest["artifacts"][1]["name"] == PRODUCTION.reranker
+
+
 def _cli_verify(config: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     """Run ``nexus models verify`` in a subprocess, as a user would."""
 

@@ -1,0 +1,6 @@
+anchor: exit 1, source restored=True
+raw-plan: exit 1, source restored=True
+Traceback (most recent call last):
+  File "/Users/pythagor/nexus/.claude/worktrees/820-home-anchors/temp/820-S2/mutation-controls.py", line 70, in <module>
+    raise RuntimeError('Unexpected mutation artifact: ' + str(artifact))
+RuntimeError: Unexpected mutation artifact: /Users/pythagor/nexus/.claude/worktrees/820-home-anchors/temp/wizard_threads/local_thread_3f0e8eac8f1d4186.json

@@ -1,0 +1,89 @@
+[
+  {
+    "control": "anchor",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "/Users/pythagor/nexus/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "-rs",
+      "-p",
+      "tests.dbname_audit",
+      "tests/test_runtime_home.py::test_relative_model_paths_anchor_once_at_load",
+      "tests/test_runtime_home.py::test_model_readers_use_the_anchored_path_from_any_cwd",
+      "tests/test_embedding_artifacts.py::test_relative_artifact_paths_lock_and_verify_from_any_cwd"
+    ],
+    "exit_code": 1,
+    "path": "nexus/config/loader.py",
+    "before_sha256": "021fa66f7b9b51e8be99b45e53a364db14e8b2a973037b95da5dc52fdb16de64",
+    "restored_sha256": "021fa66f7b9b51e8be99b45e53a364db14e8b2a973037b95da5dc52fdb16de64",
+    "restored_identically": true
+  },
+  {
+    "control": "raw-plan",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "/Users/pythagor/nexus/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "-rs",
+      "-p",
+      "tests.dbname_audit",
+      "tests/test_runtime_home.py::test_home_plan_rewrites_from_the_configured_strings"
+    ],
+    "exit_code": 1,
+    "path": "nexus/runtime/home_plan.py",
+    "before_sha256": "e0c4b3b528321ef62d81058f08403807a1076b82cbe762a04013d3dc43a4cce4",
+    "restored_sha256": "e0c4b3b528321ef62d81058f08403807a1076b82cbe762a04013d3dc43a4cce4",
+    "restored_identically": true
+  },
+  {
+    "control": "wizard-store",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "/Users/pythagor/nexus/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "-rs",
+      "-p",
+      "tests.dbname_audit",
+      "tests/test_runtime_home.py::test_wizard_threads_resolve_under_the_state_dir",
+      "tests/test_api/test_conversations.py::test_file_store_writes_under_the_state_dir"
+    ],
+    "exit_code": 1,
+    "path": "nexus/api/conversations.py",
+    "before_sha256": "7bc4b0ae7720cef5cb9a952297cc774c34c31b125bc76d1ff915e502fcdc92d1",
+    "restored_sha256": "7bc4b0ae7720cef5cb9a952297cc774c34c31b125bc76d1ff915e502fcdc92d1",
+    "restored_identically": true
+  },
+  {
+    "control": "progress",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "/Users/pythagor/nexus/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "-rs",
+      "-p",
+      "tests.dbname_audit",
+      "tests/test_runtime_home.py::test_home_plan_progress_only_on_a_terminal_and_never_with_json"
+    ],
+    "exit_code": 1,
+    "path": "nexus/cli.py",
+    "before_sha256": "ab665831e12df59291289936beabf74eb224cb9d138c126a2bf8399e45a710da",
+    "restored_sha256": "ab665831e12df59291289936beabf74eb224cb9d138c126a2bf8399e45a710da",
+    "restored_identically": true
+  }
+]

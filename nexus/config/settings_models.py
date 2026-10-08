@@ -12,7 +12,14 @@ import logging
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Literal, Optional, Tuple
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 
 
 # Providers with native SDK request paths. Every other provider in
@@ -4349,6 +4356,16 @@ class Settings(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    _configured_model_paths: Dict[str, str] = PrivateAttr(default_factory=dict)
+
+    @property
+    def configured_model_paths(self) -> Dict[str, str]:
+        """Copy validated strings before anchoring, keyed by configuration path.
+
+        Only ``load_settings`` fills this map.
+        """
+        return self._configured_model_paths.copy()
 
     global_: GlobalSettings = Field(..., alias="global")
     local_models: LocalModelsSettings = Field(default_factory=LocalModelsSettings)

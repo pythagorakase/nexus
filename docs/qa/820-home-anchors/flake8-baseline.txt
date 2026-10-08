@@ -1,0 +1,18 @@
+nexus/cli.py:976:89: E501 line too long (92 > 88 characters)
+nexus/cli.py:4330:89: E501 line too long (93 > 88 characters)
+nexus/cli.py:4794:89: E501 line too long (113 > 88 characters)
+nexus/cli.py:4823:89: E501 line too long (118 > 88 characters)
+nexus/cli.py:4863:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:4948:89: E501 line too long (151 > 88 characters)
+nexus/cli.py:4974:89: E501 line too long (94 > 88 characters)
+nexus/cli.py:4975:89: E501 line too long (103 > 88 characters)
+nexus/cli.py:4994:89: E501 line too long (101 > 88 characters)
+nexus/config/loader.py:376:13: F541 f-string is missing placeholders
+nexus/config/loader.py:379:15: F541 f-string is missing placeholders
+nexus/config/loader.py:399:89: E501 line too long (89 > 88 characters)
+nexus/config/settings_models.py:80:89: E501 line too long (89 > 88 characters)
+nexus/config/settings_models.py:127:89: E501 line too long (90 > 88 characters)
+nexus/config/settings_models.py:142:89: E501 line too long (101 > 88 characters)
+nexus/config/settings_models.py:150:89: E501 line too long (91 > 88 characters)
+nexus/config/settings_models.py:2498:89: E501 line too long (93 > 88 characters)
+nexus/config/settings_models.py:4498:89: E501 line too long (131 > 88 characters)

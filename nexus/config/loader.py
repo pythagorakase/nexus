@@ -246,7 +246,7 @@ def load_settings(path: Union[str, Path, None] = None) -> Settings:
               .json paths are accepted only for legacy ir_eval V1 tooling.
 
     Returns:
-        Validated Settings object with type-safe access to configuration
+        Validated Settings with relative model paths anchored at the locator root.
 
     Raises:
         FileNotFoundError: If configuration file doesn't exist
@@ -276,15 +276,20 @@ def load_settings(path: Union[str, Path, None] = None) -> Settings:
 
         # Load based on file extension
         if path.suffix == ".toml":
-            return _load_from_toml(path)
+            settings = _load_from_toml(path)
         elif path.suffix == ".json":
             print(
                 "⚠️  WARNING: Loading settings from a legacy JSON file. "
                 "nexus.toml is the canonical configuration format."
             )
-            return _load_from_json(path)
+            settings = _load_from_json(path)
         else:
             raise ValueError(f"Unsupported configuration format: {path.suffix}")
+        # Deferred import for the runtime/config cycle described above.
+        from nexus.runtime.home import anchor_model_paths, locate_runtime_home
+
+        anchor_model_paths(settings, locate_runtime_home().root)
+        return settings
     except Exception as exc:
         # Deferred import: the nexus.runtime package imports the supervisor,
         # which imports nexus.config, so a module-level import would cycle.

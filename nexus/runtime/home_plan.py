@@ -37,7 +37,7 @@ import hashlib
 import os
 from pathlib import Path
 import stat
-from typing import Dict, Iterator, List, Literal, Optional, Set, Tuple, Union
+from typing import Callable, Dict, Iterator, List, Literal, Optional, Set, Tuple, Union
 
 from nexus.config.loader import load_settings
 from nexus.config.settings_models import Settings
@@ -203,7 +203,19 @@ class HomePlan:
         return lines
 
 
-def _checksum(path: Path) -> Tuple[int, str]:
+@dataclass(frozen=True)
+class ChecksumProgress:
+    """Completed and total entries and bytes in one checksummed home plan."""
+
+    entries_done: int
+    entries_total: int
+    bytes_done: int
+    bytes_total: int
+
+
+def _checksum(
+    path: Path, on_chunk: Optional[Callable[[int], None]] = None
+) -> Tuple[int, str]:
     """Return the byte count and SHA-256 of one regular file's content."""
     digest = hashlib.sha256()
     size = 0
@@ -211,6 +223,8 @@ def _checksum(path: Path) -> Tuple[int, str]:
         while chunk := handle.read(_READ_CHUNK_BYTES):
             digest.update(chunk)
             size += len(chunk)
+            if on_chunk is not None:
+                on_chunk(len(chunk))
     return size, digest.hexdigest()
 
 
@@ -247,7 +261,11 @@ def _status(
 
 
 def _entry(
-    category: str, current: Path, proposed: Path, target_root: Path
+    category: str,
+    current: Path,
+    proposed: Path,
+    target_root: Path,
+    on_chunk: Optional[Callable[[int], None]] = None,
 ) -> PlanEntry:
     """Describe one existing path: its checksum, or its link target."""
     status, conflict_with = _status(current, proposed, target_root)
@@ -269,7 +287,7 @@ def _entry(
             f"{current} is neither a regular file, a directory nor a symlink; "
             "the runtime home plan cannot account for it."
         )
-    size, sha256 = _checksum(current)
+    size, sha256 = _checksum(current, on_chunk)
     return PlanEntry(
         category=category,
         status=status,
@@ -305,12 +323,19 @@ def _tree(root: Path) -> Iterator[Path]:
 def _model_references(settings: Settings) -> List[Tuple[str, str]]:
     """Return (nexus.toml key, configured path) for every referenced model."""
     references = [
-        (f"memnon.models.{name}.local_path", model.local_path)
-        for name, model in sorted(settings.memnon.models.items())
+        (
+            f"memnon.models.{name}.local_path",
+            settings.configured_model_paths[f"memnon.models.{name}.local_path"],
+        )
+        for name in sorted(settings.memnon.models)
     ]
-    reranking = settings.memnon.retrieval.cross_encoder_reranking
     references.append(
-        ("memnon.retrieval.cross_encoder_reranking.model_path", reranking.model_path)
+        (
+            "memnon.retrieval.cross_encoder_reranking.model_path",
+            settings.configured_model_paths[
+                "memnon.retrieval.cross_encoder_reranking.model_path"
+            ],
+        )
     )
     return references
 
@@ -458,7 +483,10 @@ def _require_directory(target_root: Path) -> None:
 
 
 def plan_home_move(
-    target: Union[str, Path, None] = None, *, checkout: Optional[Path] = None
+    target: Union[str, Path, None] = None,
+    *,
+    checkout: Optional[Path] = None,
+    progress: Optional[Callable[[ChecksumProgress], None]] = None,
 ) -> HomePlan:
     """Inventory the checkout's runtime data against a target home layout.
 
@@ -528,14 +556,15 @@ def plan_home_move(
     model_roots = _plan_model_roots(settings, checkout, target_home.models_dir, owners)
 
     claimed: Set[Path] = {source_config}
-    entries = [_entry("config", source_config, target_config, target_root)]
+    pending = [("config", source_config, target_config)]
+    entries: List[PlanEntry] = []
     for category, current_root, proposed_root in roots:
         for path in _tree(current_root):
             if path in claimed:
                 continue
             claimed.add(path)
             proposed = proposed_root / path.relative_to(current_root)
-            entries.append(_entry(category, path, proposed, target_root))
+            pending.append((category, path, proposed))
 
     rewrites: List[ConfigRewrite] = []
     for model in model_roots:
@@ -567,10 +596,43 @@ def plan_home_move(
                 if path == model.current
                 else model.proposed / path.relative_to(model.current)
             )
-            entries.append(_entry(MODELS_CATEGORY, path, proposed, target_root))
+            pending.append((MODELS_CATEGORY, path, proposed))
         for key, configured in model.keys:
             if anchor_path(target_home.root, configured) != model.proposed:
                 rewrites.append(ConfigRewrite(key, configured, str(model.proposed)))
+
+    entries_done = 0
+    bytes_done = 0
+    bytes_total = 0
+    for _, current, _ in pending:
+        info = current.lstat()
+        if stat.S_ISREG(info.st_mode):
+            bytes_total += info.st_size
+
+    def report_progress() -> None:
+        if progress is not None:
+            progress(
+                ChecksumProgress(entries_done, len(pending), bytes_done, bytes_total)
+            )
+
+    def on_chunk(size: int) -> None:
+        nonlocal bytes_done
+        bytes_done += size
+        report_progress()
+
+    report_progress()
+    for category, current, proposed in pending:
+        entries.append(
+            _entry(
+                category,
+                current,
+                proposed,
+                target_root,
+                on_chunk if progress is not None else None,
+            )
+        )
+        entries_done += 1
+        report_progress()
 
     order = CATEGORY_ORDER + (MODELS_CATEGORY,)
     entries.sort(key=lambda entry: (order.index(entry.category), str(entry.current)))

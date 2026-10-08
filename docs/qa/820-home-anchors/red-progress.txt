@@ -1,0 +1,95 @@
+13:39  up 1 day, 19 mins, 5 users, load averages: 4.22 4.13 4.11
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________ test_home_plan_progress_only_on_a_terminal_and_never_with_json ________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-434/test_home_plan_progress_only_o0')
+
+    def test_home_plan_progress_only_on_a_terminal_and_never_with_json(
+        tmp_path: Path,
+    ) -> None:
+        """Actual CLI processes keep pipe/JSON stderr empty and text stdout stable."""
+        state = tmp_path / "state"
+        _write(state / "gateway.log", b"captured\n")
+        models = tmp_path / "model-store"
+        _write(models / "Octen-Embedding-4B-dir/weights.bin", b"x" * 4096)
+        config = _write_config(
+            tmp_path / "nexus.toml",
+            state_dir=str(state),
+            usage_dir=str(tmp_path / "ledger"),
+            edit=_point_models(models),
+        )
+        env = os.environ.copy()
+        for name in (HOME_ENV, GATEWAY_PORT_ENV, "NEXUS_API_URL"):
+            env.pop(name, None)
+        env[RUNTIME_CONFIG_ENV] = str(config)
+        env["PYTHONPATH"] = str(REPO_ROOT)
+        command = [
+            sys.executable,
+            "-m",
+            "nexus.cli",
+            "home",
+            "plan",
+            "--to",
+            str(tmp_path / "target"),
+        ]
+        results = {}
+        for json_mode in (False, True):
+            argv = command + (["--json"] if json_mode else [])
+            pipe = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=60)
+            assert pipe.returncode == 0, pipe.stderr
+            assert pipe.stderr == ""
+            master, slave = os.openpty()
+            with tempfile.TemporaryFile(mode="w+t") as stdout:
+                process = subprocess.Popen(argv, env=env, stdout=stdout, stderr=slave)
+                os.close(slave)
+                chunks = []
+                try:
+                    while True:
+                        assert select.select([master], [], [], 60)[0], "CLI stalled"
+                        try:
+                            chunk = os.read(master, 65536)
+                        except OSError as exc:
+                            if exc.errno != errno.EIO:
+                                raise
+                            break
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                    assert process.wait(timeout=30) == 0
+                finally:
+                    os.close(master)
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+                stdout.seek(0)
+                assert stdout.read() == pipe.stdout
+            terminal_error = b"".join(chunks).decode()
+            if json_mode:
+                assert terminal_error == ""
+                plan = json.loads(pipe.stdout)["home_plan"]
+                count = sum(entry["status"] != "missing" for entry in plan["entries"])
+            else:
+>               assert "\r" in terminal_error and terminal_error.endswith("\n")
+E               AssertionError: assert ('\r' in '')
+
+tests/test_runtime_home.py:754: AssertionError
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 failed, 2 warnings in 3.32s

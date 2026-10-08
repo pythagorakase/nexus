@@ -28,7 +28,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path, PurePath
-from typing import Literal, Optional, Union
+from typing import List, Literal, Optional, Tuple, Union
+
+from pydantic import BaseModel
 
 from nexus.config.loader import load_settings
 from nexus.config.settings_models import Settings
@@ -74,6 +76,41 @@ def anchor_path(root: Path, configured: Union[str, PurePath]) -> Path:
     """
     path = Path(configured).expanduser()
     return path if path.is_absolute() else root / path
+
+
+def model_path_fields(settings: Settings) -> List[Tuple[str, BaseModel, str]]:
+    """Return the configured model-path fields in their stable inventory order."""
+    fields: List[Tuple[str, BaseModel, str]] = [
+        ("local_models.models_dir", settings.local_models, "models_dir"),
+        *[
+            (f"memnon.models.{name}.local_path", model, "local_path")
+            for name, model in sorted(settings.memnon.models.items())
+        ],
+        (
+            "memnon.retrieval.cross_encoder_reranking.model_path",
+            settings.memnon.retrieval.cross_encoder_reranking,
+            "model_path",
+        ),
+    ]
+    if settings.ir_eval is not None:
+        for registry_name in ("embedding_candidates", "reranker_candidates"):
+            registry = getattr(settings.ir_eval, registry_name)
+            fields.extend(
+                (f"ir_eval.{registry_name}.{name}.local_path", model, "local_path")
+                for name, model in sorted(registry.items())
+            )
+    return fields
+
+
+def anchor_model_paths(settings: Settings, root: Path) -> None:
+    """Anchor model paths once at load, retaining configured strings (820-Q5)."""
+    configured = {}
+    for key, model, attribute in model_path_fields(settings):
+        value = getattr(model, attribute)
+        configured[key] = value
+        if value:
+            setattr(model, attribute, str(anchor_path(root, value)))
+    settings._configured_model_paths = configured
 
 
 def resolve_parent(path: Path) -> Path:
@@ -183,7 +220,8 @@ class RuntimeHome:
     log beside its pidfile (issue #842). ``cache_dir``, ``backups_dir``,
     ``models_dir`` and ``uploads_dir`` name the home layout that later #820
     slices move data into; in this slice the upload endpoints still serve the
-    checkout's ``ui/client/public`` and model paths stay as configured.
+    checkout's ``ui/client/public``; relative model paths are anchored when
+    the configuration loads (:func:`anchor_model_paths`).
     ``receipts_dir`` holds failure receipts (issue #806).
     """
 
