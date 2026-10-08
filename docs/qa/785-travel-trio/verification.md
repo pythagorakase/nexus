@@ -12,6 +12,8 @@ this slice. Owner gateways remain stopped; a restart is owed when resumed.
   samples, read-only geodesic calculations and corpus exclusions.
 - Calibration and configured-override tests:22 passed. Black, flake8 and mypy
   passed both changed C test files. Document freshness:42 passed, guard active.
+- Independent A/B review corrected the additional tag-expiry fixture; its
+  PostgreSQL file passes all 7 tests ([proof](parts-a-b.md#independent-ab-review-and-consumer-correction)).
 - Complete combined PostgreSQL gate and PR review are coordinator work;
   these focused results do not claim the full gate.
 

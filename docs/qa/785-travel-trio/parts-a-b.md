@@ -239,9 +239,62 @@ endpoints and a stated elapsed travel duration was found. In particular, chunks
 reply, chunk 107 a shutter deadline, and chunk 142 a partial skiff segment of
 unspecified length. These do not justify a corpus calibration pair.
 
-Remaining work belongs to the coordinator: Part C completion, canonical source
-restamps, final integration gate, independent review and PR creation. Later #785
-slices retain elapsed-time progress, delay factors, crossed-ETA arrival and replay
-provenance. Owner services were not started or restarted; no paid calls occurred.
+At the time of this Parts A/B proof, Part C completion, canonical source
+restamps, final integration and PR creation remained coordinator work. Part C
+subsequently landed on this branch at `3fd10854`; its proof is separate. Later
+#785 slices retain elapsed-time progress, delay factors, crossed-ETA arrival and
+replay provenance. Owner services were not started or restarted; no paid calls
+occurred.
+
+## Independent A/B Review and Consumer Correction
+
+A read-only review against the frozen order at `3fd10854` checked the native
+reproduction, route hydration, substrate/evidence parity, both SQL chooser twins,
+explicit destination precedence and both commit-time duration checks. No runtime
+correction was identified. Searching every caller of the changed routine helper
+signatures found one additional PostgreSQL consumer:
+`test_async_need_destination_tag_expiry` in `test_need_absence_pg.py` omitted the
+new origin argument, seeded uncharted places and expected the origin itself as
+the expired-tag fallback.
+
+That fixture now seeds three distinct charted PointZM places: the origin, a
+lower-id fallback and the dwelling. Before expiry (and with a NULL clock), the
+preferred dwelling wins; at expiry the routine chooser selects the fallback,
+while the class chooser has no dwelling destination. The origin argument is
+explicit. This preserves the nullable-clock and expiry-ordering coverage under
+the new routability contract. All other direct and dynamic routine helper callers
+already pass the origin correctly.
+
+An initial fixture attempt supplied a 2D point, then a 3D point; each run had
+`3 failed, 4 passed` with the explicit PostGIS errors `Column has Z dimension but
+geometry does not` and `Column has M dimension but geometry does not`, respectively.
+The final fixture follows `seed_place`'s four-coordinate PointZM shape. This was a
+test-fixture correction; no production source changed during the independent
+review.
+
+At base `3fd10854` plus this fixture correction, with one-minute load 2.51:
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT \
+  -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH="$PWD" \
+  nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -rs \
+  -p tests.dbname_audit tests/test_orrery/test_need_absence_pg.py
+```
+
+[Full final log](need-absence-review.txt):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 8 targets: postgres, qa640_need_absence_* x7
+dbname audit: owner targets: none
+7 passed in 8.99s
+```
+
+The exact worktree import preflight passed. Black leaves the file unchanged.
+Flake8 reports the same two existing long-line diagnostics at lines 84/165 on
+both branch and main. `mypy --explicit-package-bases` reports the same existing
+untyped `asyncpg` import on line 7; no new diagnostics. Main comparison used a
+snapshot of all 852 tracked Python/config files. Exception-disposition and
+whitespace checks passed. The full integration gate remains coordinator work.
 
 Codex — GPT-6
