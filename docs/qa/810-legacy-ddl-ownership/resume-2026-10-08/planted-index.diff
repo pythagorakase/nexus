@@ -1,0 +1,12 @@
+diff --git a/scripts/update_scene_numbers.py b/scripts/update_scene_numbers.py
+index c50cb75e..adbcfba8 100755
+--- a/scripts/update_scene_numbers.py
++++ b/scripts/update_scene_numbers.py
+@@ -69,6 +69,7 @@ def require_scene_column(conn: psycopg2.extensions.connection) -> None:
+               AND column_name = 'scene'
+         """
+         )
++        cur.execute("CREATE INDEX IF NOT EXISTS idx_chunk_metadata_scene ON chunk_metadata (scene)")
+         if not cur.fetchone():
+             raise RuntimeError(
+                 "Missing chunk_metadata.scene; migration 138 "

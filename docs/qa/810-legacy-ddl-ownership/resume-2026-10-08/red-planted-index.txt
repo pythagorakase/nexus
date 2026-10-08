@@ -1,0 +1,33 @@
+Current source base: b83dd1036fd9884d01ee4be3962002a8728e46ec
+load: (5.80908203125, 5.66552734375, 5.1162109375)
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_schema_ownership.py::test_tree_has_no_unowned_ddl
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________________________ test_tree_has_no_unowned_ddl _________________________
+
+    def test_tree_has_no_unowned_ddl() -> None:
+        """No Python under nexus/ or scripts/ spells DDL outside the allowlist."""
+    
+        stray = unowned(scan_ddl(REPO_ROOT, _tree_paths()))
+>       assert (
+            not stray
+        ), "DDL outside migrations and the reasoned allowlist:\n" + _describe(stray)
+E       AssertionError: DDL outside migrations and the reasoned allowlist:
+E         scripts/update_scene_numbers.py:72 require_scene_column CREATE INDEX
+E       assert not [Finding(path='scripts/update_scene_numbers.py', line=72, scope='require_scene_column', statement='CREATE INDEX')]
+
+tests/test_schema_ownership.py:249: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_schema_ownership.py::test_tree_has_no_unowned_ddl - Asserti...
+1 failed in 1.40s
+
+exit=1
