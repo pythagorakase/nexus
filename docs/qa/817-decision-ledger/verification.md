@@ -19,7 +19,11 @@ open at `5830781b`. `origin/main` was still `b0da93ea`, so no merge was owed.
 | `4c9ebb83` | Review fixes: the Links-position cases, the audit's Fetch column and docstrings, `table_check.py` | This file's fix-pass evidence (next commit) |
 | `e371d45c` | This file's evidence for the `4c9ebb83` fix pass | Nothing |
 | `f7b73277` | Second review fixes: the committed order copy and `table_check.py` default, the audit's strip on both sides and its stray-quote check | This file's evidence (next commit) |
-| (uncommitted) | None | None |
+| `6df5115a` | This file's evidence for the `f7b73277` fix pass | Nothing |
+| `b8c656b6` | Third review fixes: the sources the coordinator's ruling adds to 0009, 0019 and 0023, and the sweep's additions to 0010, 0020, 0024, 0025-0029 and 0034; `table_check.py` appends them | The sweep script (next commit) and this file's evidence |
+| `d338db76` | `source_sweep.py` (the sweep, rerunnable); `table_check.py` types the joined sources list | This file's evidence (next commit) |
+| (next commit) | This file's evidence for `b8c656b6` and `d338db76`, except the offline-suite tails | The offline-suite tails (the commit after) |
+| (last commit) | The offline-suite tails, run on the commit before it | Nothing |
 
 The resume first rechecked the records against the order's table with an
 unrecorded scratch script. The review fix pass below replaced that recheck with
@@ -34,9 +38,10 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 118 passed, 5 warnings in 17.83s
 ```
 
-The offline suites were not rerun on resume: no test or record changed since
-the tails below, and the one-minute load was 23. The quote audit is a
-point-in-time proof; an edit to a cited comment after this run makes it stale.
+The offline suites were not rerun on resume (the one-minute load was 23). The
+third review fix pass superseded those tails with runs at a named commit; see
+"Offline Suites" under "Test Tails". The quote audit is a point-in-time proof;
+an edit to a cited comment after this run makes it stale.
 
 ## Review Fixes on 2026-10-07
 
@@ -139,6 +144,136 @@ and the stamps stay valid.
 - The 819-S3 merge check below now records the command for each line.
 - The focused test set is rerun with `nice -n 15` (Test Tails below).
 
+## Third Review Fixes on 2026-10-07
+
+Astra (Codex GPT-6) reviewed `6df5115a` and returned four P2 findings. The
+coordinator accepted all four and ruled: a record's `sources:` list names every
+file its ruling governs or its reasoning depends on, not only the files that
+implement it. `b8c656b6` applies the ruling to the front matter only, and
+`d338db76` commits the sweep script. No ruling text changes, every existing
+source stays first, and every `verified_commit` stays the merge base
+`b0da93ea`, where the added files hold what the records cite (below).
+
+The three records the review named:
+
+| Record | Added Sources | Where the Record Cites Them |
+|---|---|---|
+| 0009 | `nexus.toml`, `nexus/cli.py` | Ruling: "No price table in nexus.toml, no dollars column in `nexus usage`"; the `usage` command is defined in `nexus/cli.py` (`:5144`, `:5929` at `b0da93ea`) |
+| 0019 | `ui/client/src/components/nexus/NarrativePane.tsx`, `nexus/agents/lore/logon_utility.py` | REFUTED A cites `NarrativePane.tsx:250-255`; REFUTED B cites `logon_utility.py:2457-2476` (the one tracked file of that name) |
+| 0023 | `prompts/storyteller_core.md` | REFUTED B cites `prompts/storyteller_core.md:171` |
+
+The sweep of the other 52 records, under the same rule. The committed
+`docs/qa/817-decision-ledger/source_sweep.py` lists every file a record's body
+names that its sources omit: a tracked path, a bare file name with tracked
+matches, or an untracked path with a file extension. On the records at
+`6df5115a` it found the three rows above and these candidates, each cited as the
+basis of its record's ruling or refutation, so each joins the sources:
+
+| Record | Added Sources | Where the Record Cites Them |
+|---|---|---|
+| 0010 | `nexus.toml` | Ruling: the seat moves are recorded as the `nexus.toml` roster `uses` (`apex.model`, `wizard.default_model`, the removed `apex.gaia_model`) |
+| 0020 | `migrations/091_backstory_secrets.sql` | REFUTED B cites `migrations/091_backstory_secrets.sql:9-41` |
+| 0024 | `nexus.toml`, `docs/orrery_retrograde_spec.md`, `docs/orrery_design_plan.md` | REFUTED B cites `nexus.toml:852-924`; REFUTED C cites `docs/orrery_retrograde_spec.md:157-160,191` and `docs/orrery_design_plan.md:425-427` |
+| 0025, 0026, 0027, 0028 | `docs/dead_retrieval_subtraction.md` | Ruling: the quoted 819-Q1 decision routes the entries into "#813's manifest (`docs/dead_retrieval_subtraction.md`)", and each quoted baseline reason names its section there |
+| 0029 | `docs/dead_retrieval_subtraction.md`, `nexus/agents/memnon/utils/db_access.py` | The same routing; the quoted `hybrid_search` reasons rest on `nexus/agents/memnon/utils/db_access.py:581` |
+| 0034 | `nexus.toml` | Ruling amendment: "Both knobs live in `nexus.toml`." |
+
+Not added, with the reason:
+
+- `doctrine.md` (0018, 0022, 0023) and `coverage_critique.md` (0023): working
+  files of the 2026-09-04 brainstorm under the gitignored `temp/` of the main
+  checkout (`.gitignore:45: /temp/`), not repository files, so no source can
+  name them.
+- `~/.codex/config.toml` (0010): outside the repository.
+- Artifacts a record names without a file: the "pacing brief" (0001) and the
+  "style diet" (0002) have no tracked file of that name (their guidance lives
+  in `prompts/storyteller_core.md`, already a source of both); "both prompts"
+  (0034) names no file; `SkaldWriterWire` (0018), `BleedCandidate.to_prompt_dict`
+  (0019) and `begin_shift` (0021) live in files that are already sources;
+  `save_04` (0020, 0024), `choice_text` and `raw_text` (0006) are database
+  objects, and `memory_embeddings_2560d` (0024) is a proposed table.
+
+The line numbers in the #849 verdicts are those of the 2026-09-04 tree; at
+`b0da93ea` the cited content is still present at other lines (for example
+"Episode boundaries complete arcs." at `prompts/storyteller_core.md:161`, and
+`execute_hybrid_search` delegating at `nexus/agents/memnon/utils/db_access.py:416`).
+The records quote the verdicts and do not restate the line numbers.
+
+```text
+$ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/source_sweep.py $PWD   # on d338db76
+0010-the-gaia-seat.md
+    UNTRACKED:~/.codex/config.toml (body lines 11)
+0018-killed-c003.md
+    UNTRACKED:doctrine.md (body lines 27)
+0022-killed-c068.md
+    UNTRACKED:doctrine.md (body lines 23)
+0023-killed-c100.md
+    UNTRACKED:doctrine.md (body lines 27)
+    UNTRACKED:coverage_critique.md (body lines 27)
+tracked files cited but not in sources: 0
+```
+
+The same sweep on the records at `6df5115a` (`git archive 6df5115a docs/decisions`
+into the scratchpad, swept by the same `sweep()` with the worktree's file
+list):
+
+```text
+0009-dollars-in-the-ledger.md
+    nexus.toml (body lines 11)
+0010-the-gaia-seat.md
+    nexus.toml (body lines 11)
+    UNTRACKED:~/.codex/config.toml (body lines 11)
+0018-killed-c003.md
+    UNTRACKED:doctrine.md (body lines 27)
+0019-killed-c014.md
+    ui/client/src/components/nexus/NarrativePane.tsx (body lines 23)
+    nexus/agents/lore/logon_utility.py (body lines 27)
+0020-killed-c030.md
+    migrations/091_backstory_secrets.sql (body lines 23)
+0022-killed-c068.md
+    UNTRACKED:doctrine.md (body lines 23)
+0023-killed-c100.md
+    prompts/storyteller_core.md (body lines 23)
+    UNTRACKED:doctrine.md (body lines 27)
+    UNTRACKED:coverage_critique.md (body lines 27)
+0024-killed-c102.md
+    nexus.toml (body lines 23)
+    docs/orrery_retrograde_spec.md (body lines 27)
+    docs/orrery_design_plan.md (body lines 27)
+0025-legacy-new-story-seed-columns.md
+    docs/dead_retrieval_subtraction.md (body lines 13, 17, 18, 19, 20, 21)
+0026-entity-tag-clear-on-override.md
+    docs/dead_retrieval_subtraction.md (body lines 13, 17)
+0027-narration-job-provider-columns.md
+    docs/dead_retrieval_subtraction.md (body lines 13, 17, 18)
+0028-world-event-narration-link.md
+    docs/dead_retrieval_subtraction.md (body lines 13, 17)
+0029-legacy-vector-helper-functions.md
+    docs/dead_retrieval_subtraction.md (body lines 13, 17, 18, 19, 20, 21, 22)
+    nexus/agents/memnon/utils/db_access.py (body lines 17, 18, 19)
+0034-conspiracy-channel.md
+    nexus.toml (body lines 31)
+```
+
+(`nexus/cli.py` for 0009 comes from the reading, not the sweep: the record
+names the `nexus usage` command, not the file.)
+
+`table_check.py` now compares each record's sources with the order table's list
+followed by its `SOURCE_ADDITIONS` entry (the table above), so the order copy
+stays byte for byte. Negative control on `d338db76`: `nexus/cli.py` removed from
+0009 and `prompts/storyteller_core.md` removed from 0023, then both files
+restored with `git checkout -- docs/decisions` (`git diff --stat docs/decisions`
+empty after):
+
+```text
+$ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/table_check.py $PWD
+[...]
+MISMATCHES:
+0009: front differs from the order
+0023: front differs from the order
+exit 1
+```
+
 ## 819-S3 Merge Check
 
 819-S3 (#1109, `e0966c6d`) landed before this branch was cut, so rows
@@ -189,7 +324,9 @@ It does not import the generator. For each record it:
 
 Run on `4c9ebb83`: `PYTHONPATH=$PWD $PY docs/qa/817-decision-ledger/quote_audit.py $PWD`.
 Rerun on `f7b73277` as `PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/quote_audit.py $PWD`
-(exit 0); its output is identical to the block below (`diff` empty).
+(exit 0); its output is identical to the block below (`diff` empty). Rerun on
+`d338db76`, after the source additions, the same way: exit 0, and `diff`
+against the block below is empty.
 
 ```text
 | Record | Sources | Fetch | Blocks | Inline quotes | Result |
@@ -297,7 +434,8 @@ Quoted blocks are left to the quote audit above.
 
 Run on `f7b73277` with the committed order copy (exit 0). The table rows are
 identical to the earlier run on `4c9ebb83`, which passed the coordinator's
-order file under `temp/` as the second argument.
+order file under `temp/` as the second argument. Rerun on `d338db76`, with
+`SOURCE_ADDITIONS` (exit 0): `diff` against the block below is empty.
 `PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/table_check.py $PWD`
 
 ```text
@@ -565,33 +703,23 @@ The earlier run on `4c9ebb83` (two more rejection cases than the first
 `118 passed`) was recorded without its command; it gave `120 passed, 5 warnings
 in 20.29s`.
 
-The two offline runs below were recorded before `5830781b` and were not rerun
-in either fix pass. The first changed only the rejection cases of
-`tests/test_doc_front_matter.py` (covered by the run above); the second changed
-only files under `docs/qa/` (the run above covers the doc classification).
+### Offline Suites
 
-`$PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`
-
-```text
-secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2986 passed, 562 skipped, 8 warnings in 643.95s (0:10:43)
-```
-
-`$PY -m pytest -q tests/test_api tests/test_orrery`
-
-```text
-secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1848 passed, 1369 skipped, 7 warnings in 60.06s (0:01:00)
-```
+The Astra review of `6df5115a` found that the earlier offline tails named no
+tested commit and predated the test changes of `4c9ebb83`. Those tails
+(`2986 passed, 562 skipped` and `1848 passed, 1369 skipped`, recorded before
+`5830781b`) are superseded by the runs in the next commit, which name the
+commit they ran on and the state of the tree.
 
 ## Static Checks
 
-On `f7b73277` (the same output as on `4c9ebb83`):
+On `d338db76`:
 
 ```text
-$ $PY -m black --check tests/test_doc_front_matter.py docs/qa/817-decision-ledger/quote_audit.py docs/qa/817-decision-ledger/table_check.py
-3 files would be left unchanged.
-$ $PY -m flake8 tests/test_doc_front_matter.py docs/qa/817-decision-ledger/quote_audit.py docs/qa/817-decision-ledger/table_check.py
+$ $PY -m black --check tests/test_doc_front_matter.py docs/qa/817-decision-ledger/quote_audit.py docs/qa/817-decision-ledger/table_check.py docs/qa/817-decision-ledger/source_sweep.py
+All done!
+4 files would be left unchanged.
+$ $PY -m flake8 tests/test_doc_front_matter.py docs/qa/817-decision-ledger/quote_audit.py docs/qa/817-decision-ledger/table_check.py docs/qa/817-decision-ledger/source_sweep.py
 (no output, exit 0)
 $ nice -n 15 $PY -m mypy --explicit-package-bases tests/test_doc_front_matter.py
 Success: no issues found in 1 source file
@@ -600,4 +728,7 @@ OK: exception disposition coverage and shrink-only baseline verified.
 ```
 
 `origin/main`'s `tests/test_doc_front_matter.py` is likewise clean under flake8
-and mypy (`Success: no issues found in 1 source file`).
+and mypy (`Success: no issues found in 1 source file`). mypy is not a gate for
+the audit scripts; `$PY -m mypy docs/qa/817-decision-ledger/table_check.py`
+reports 5 errors at both `6df5115a` and `d338db76`, so the source additions add
+none.
