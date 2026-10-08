@@ -324,8 +324,15 @@ def initialize_slot_database(
     _initialize_empty_idf_corpora(target_db)
     # Initialization mints the story identity (822-Q13); a reset recreates
     # the database and so mints a new one.
-    with _connect(target_db) as conn, conn.cursor() as cur:
-        replace_story_identity(cur, origin="wizard")
+    connection = _connect(target_db)
+    try:
+        with connection as conn, conn.cursor() as cur:
+            replace_story_identity(cur, origin="wizard")
+    finally:
+        if not USE_POOL:
+            # A direct connection's context manager commits or rolls back but
+            # never closes; a failed write must not hold target_db open.
+            connection.close()
     dispose_database(target_db)
     LOG.info("Database %s ready", target_db)
 
@@ -530,27 +537,34 @@ def clone_slot_with_data(
         _restore_plain_dump(target_db, dump_path, tools)
         _post_clone_cleanup(target_db)
         # A clone is a fork (822-Q4): a new story_uuid with a parent link.
-        with _connect(target_db) as conn, conn.cursor() as cur:
-            cur.execute("SELECT to_regclass('public.story_identity') IS NULL")
-            if cur.fetchone()[0]:
-                raise RuntimeError(
-                    f"{target_db} has no public.story_identity table: the "
-                    f"source {source_db} predates migration 146. Run python "
-                    f"scripts/migrate.py on {source_db}, then clone again."
-                )
-            cur.execute("SELECT story_uuid::text FROM public.story_identity")
-            copied = [row[0] for row in cur.fetchall()]
-            child = replace_story_identity(cur, origin="clone")
-            if copied:
-                record_fork(
-                    cur,
-                    child_uuid=child,
-                    parent_uuid=copied[0],
-                    source_dbname=source_db,
-                    evidence=(
-                        f"clone_slot_with_data copied {source_db} into {target_db}"
-                    ),
-                )
+        connection = _connect(target_db)
+        try:
+            with connection as conn, conn.cursor() as cur:
+                cur.execute("SELECT to_regclass('public.story_identity') IS NULL")
+                if cur.fetchone()[0]:
+                    raise RuntimeError(
+                        f"{target_db} has no public.story_identity table: the "
+                        f"source {source_db} predates migration 146. Run python "
+                        f"scripts/migrate.py on {source_db}, then clone again."
+                    )
+                cur.execute("SELECT story_uuid::text FROM public.story_identity")
+                copied = [row[0] for row in cur.fetchall()]
+                child = replace_story_identity(cur, origin="clone")
+                if copied:
+                    record_fork(
+                        cur,
+                        child_uuid=child,
+                        parent_uuid=copied[0],
+                        source_dbname=source_db,
+                        evidence=(
+                            f"clone_slot_with_data copied {source_db} into {target_db}"
+                        ),
+                    )
+        finally:
+            if not USE_POOL:
+                # As in initialize_slot_database: close the direct connection
+                # on every path so a refusal cannot hold target_db open.
+                connection.close()
         dispose_database(target_db)
         LOG.info("Cloned %s into %s (with data)", source_db, target_db)
     finally:

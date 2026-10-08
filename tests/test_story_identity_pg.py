@@ -197,6 +197,23 @@ def test_clone_forks_with_lineage(monkeypatch: pytest.MonkeyPatch) -> None:
             assert origin == "clone"
             assert _lineage(target) == []
 
+        # A source that predates migration 146 is refused, and the refusal
+        # closes its connection so the target can still be dropped.
+        _execute(source, "DROP TABLE public.story_lineage, public.story_identity")
+        with disposable_database("qa640_822_clone_pre146") as target:
+            with pytest.raises(RuntimeError, match="scripts/migrate.py") as refused:
+                new_story_setup.clone_slot_with_data(
+                    5, source_db=source, force=True, target_db=target
+                )
+            # ``refused`` still holds the traceback and so the failing frames.
+            assert refused.value is not None
+            with closing(connect(source)) as conn, conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT count(*) FROM pg_stat_activity WHERE datname = %s",
+                    (target,),
+                )
+                assert cur.fetchone()[0] == 0
+
 
 def _migration_comments() -> dict[str, str]:
     """Each ``COMMENT ON`` target in migration 146 and its text."""
