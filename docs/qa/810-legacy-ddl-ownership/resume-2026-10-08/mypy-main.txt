@@ -1,0 +1,67 @@
+cwd: /Users/pythagor/nexus/.claude/worktrees/810-legacy-ddl-ownership/temp/codex-810-resume/main-context
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases scripts/create_vector_index.py scripts/extract_scene_numbers.py scripts/extract_season_episode.py scripts/import_narratives.py scripts/migrate_provider_names.py scripts/new_story_setup.py scripts/regenerate_embeddings.py scripts/update_scene_numbers.py scripts/vector_migration.py
+scripts/vector_migration.py:21: error: Skipping analyzing "pgvector.psycopg2": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/extract_season_episode.py:67: error: Variable "scripts.extract_season_episode.Base" is not valid as a type  [valid-type]
+scripts/extract_season_episode.py:67: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/extract_season_episode.py:67: error: Invalid base class "Base"  [misc]
+scripts/extract_season_episode.py:78: error: Variable "scripts.extract_season_episode.Base" is not valid as a type  [valid-type]
+scripts/extract_season_episode.py:78: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/extract_season_episode.py:78: error: Invalid base class "Base"  [misc]
+scripts/extract_season_episode.py:264: error: Argument 1 to "extract_season_episode" of "SeasonEpisodeExtractor" has incompatible type "Column[str]"; expected "str"  [arg-type]
+scripts/extract_season_episode.py:281: error: Incompatible types in assignment (expression has type "int", variable has type "Column[int]")  [assignment]
+scripts/extract_season_episode.py:282: error: Incompatible types in assignment (expression has type "int", variable has type "Column[int]")  [assignment]
+scripts/extract_season_episode.py:283: error: Incompatible types in assignment (expression has type "datetime", variable has type "Column[datetime]")  [assignment]
+scripts/create_vector_index.py:93: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/create_vector_index.py:93: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/create_vector_index.py:93: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:58: error: Library stubs not installed for "tqdm"  [import-untyped]
+scripts/regenerate_embeddings.py:58: note: Hint: "python3 -m pip install types-tqdm"
+scripts/regenerate_embeddings.py:58: note: (or run "mypy --install-types" to install all missing stub packages)
+scripts/regenerate_embeddings.py:157: error: Skipping analyzing "pgvector": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/regenerate_embeddings.py:158: error: Skipping analyzing "pgvector.sqlalchemy": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/regenerate_embeddings.py:284: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:284: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:284: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:374: error: Need type annotation for "other_models" (hint: "other_models: list[<type>] = ...")  [var-annotated]
+scripts/regenerate_embeddings.py:377: error: Incompatible types in assignment (expression has type "Sequence[Row[Any]]", variable has type "list[Any]")  [assignment]
+scripts/regenerate_embeddings.py:548: error: "Result[Any]" has no attribute "rowcount"  [attr-defined]
+scripts/regenerate_embeddings.py:650: error: Incompatible types in assignment (expression has type "str", target has type "int")  [assignment]
+scripts/regenerate_embeddings.py:983: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:983: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:983: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1076: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1076: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1076: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1115: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1219: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1219: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1219: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/regenerate_embeddings.py:1246: error: Incompatible types in assignment (expression has type "str | None", variable has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1292: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/regenerate_embeddings.py:1292: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/regenerate_embeddings.py:1292: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/import_narratives.py:115: error: Skipping analyzing "pgvector": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/import_narratives.py:116: error: Skipping analyzing "pgvector.sqlalchemy": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scripts/import_narratives.py:116: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+scripts/import_narratives.py:128: error: Variable "scripts.import_narratives.Base" is not valid as a type  [valid-type]
+scripts/import_narratives.py:128: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/import_narratives.py:128: error: Invalid base class "Base"  [misc]
+scripts/import_narratives.py:154: error: Variable "scripts.import_narratives.Base" is not valid as a type  [valid-type]
+scripts/import_narratives.py:154: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/import_narratives.py:154: error: Invalid base class "Base"  [misc]
+scripts/import_narratives.py:165: error: Need type annotation for "embedding"  [var-annotated]
+scripts/import_narratives.py:176: error: Variable "scripts.import_narratives.Base" is not valid as a type  [valid-type]
+scripts/import_narratives.py:176: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/import_narratives.py:176: error: Invalid base class "Base"  [misc]
+scripts/import_narratives.py:187: error: Need type annotation for "embedding"  [var-annotated]
+scripts/import_narratives.py:196: error: Variable "scripts.import_narratives.Base" is not valid as a type  [valid-type]
+scripts/import_narratives.py:196: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#variables-vs-type-aliases
+scripts/import_narratives.py:196: error: Invalid base class "Base"  [misc]
+scripts/import_narratives.py:204: error: Need type annotation for "world_layer"  [var-annotated]
+scripts/import_narratives.py:232: error: Incompatible default for argument "db_url" (default has type "None", argument has type "str")  [assignment]
+scripts/import_narratives.py:232: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scripts/import_narratives.py:232: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+scripts/import_narratives.py:545: error: Incompatible types in assignment (expression has type "Any | None", variable has type "int")  [assignment]
+Found 39 errors in 5 files (checked 9 source files)
+
+exit=1

@@ -1,0 +1,16 @@
+migrations/008_populate_mock_database.py
+nexus/api/mock_openai.py
+nexus/config/loader.py
+nexus/config/settings_models.py
+tests/conftest.py
+tests/dbname_audit.py
+tests/pg_fixtures.py
+tests/test_api/test_set_designer_failure.py
+tests/test_config/test_test_provider_database.py
+tests/test_connection_lifecycle.py
+tests/test_dbname_audit.py
+tests/test_mock_openai.py
+tests/test_orrery/test_character_experiences_pg.py
+tests/test_owner_target_guard.py
+tests/test_pg_disposable_target.py
+tests/test_pg_experience_seeds.py

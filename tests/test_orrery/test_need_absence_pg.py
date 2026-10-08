@@ -201,11 +201,15 @@ def test_async_need_destination_tag_expiry(absence_db: str, clock: str | None) -
         )
         zone_id = cur.fetchone()[0]
         place_ids = []
-        for name in ("Origin", "Dwelling"):
+        # Both candidates are routable and distinct from the origin. The
+        # later dwelling wins while its tag is active; expiry restores id order.
+        for index, name in enumerate(("Origin", "Fallback", "Dwelling")):
             cur.execute(
-                "INSERT INTO places (name, type, zone) "
-                "VALUES (%s, 'fixed_location', %s) RETURNING id, entity_id",
-                (name, zone_id),
+                "INSERT INTO places (name, type, zone, coordinates) "
+                "VALUES (%s, 'fixed_location', %s, "
+                "ST_SetSRID(ST_MakePoint(%s, 40.7484, 0, 0), 4326)::geography) "
+                "RETURNING id, entity_id",
+                (name, zone_id, -73.9857 + index * 0.001),
             )
             place_id, entity_id = cur.fetchone()
             place_ids.append(place_id)
@@ -226,13 +230,14 @@ def test_async_need_destination_tag_expiry(absence_db: str, clock: str | None) -
                 zone_id=zone_id,
                 anchor_type="home",
                 current_world_time=world_time,
-            ) == (place_ids[1] if active else place_ids[0])
+                origin_place_id=place_ids[0],
+            ) == (place_ids[2] if active else place_ids[1])
             assert await _location_class_destination_async(
                 conn,
                 origin_place_id=place_ids[0],
                 location_classes=("dwelling",),
                 current_world_time=world_time,
-            ) == (place_ids[1] if active else None)
+            ) == (place_ids[2] if active else None)
         finally:
             await conn.close()
 

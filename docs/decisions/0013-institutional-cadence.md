@@ -2,7 +2,7 @@
 status: canonical
 sources:
   - docs/orrery_faction_vocabulary.md
-verified_commit: "afd034f360e625f8bc4ffa8a717dda28422b19c7"
+verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
 ---
 
 # 0013: Institutional Cadence

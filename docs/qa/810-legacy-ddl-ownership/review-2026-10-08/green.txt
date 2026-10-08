@@ -1,0 +1,13 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+........................................................................ [ 51%]
+...................................................................      [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 26 targets: postgres, qa640_810s3_ann_* x2, qa640_810s3_ann_high_* x2, qa640_810s3_ann_precheck_* x12, qa640_810s3_assets_*, qa640_810s3_importer_*, qa640_810s3_provider_*, qa640_810s3_regen_*, qa640_810s3_scene_* x2, qa640_810s3_season_*, qa640_regen_truncate_* x2
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+139 passed in 103.23s (0:01:43)

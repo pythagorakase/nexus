@@ -570,6 +570,7 @@ class NewStoryDatabaseMapper:
                     # Delete in reverse dependency order (children before parents)
                     cur.execute(
                         """
+                        DELETE FROM chunk_entity_references;
                         DELETE FROM chunk_character_references;
                         DELETE FROM chunk_faction_references;
                         DELETE FROM place_chunk_references;

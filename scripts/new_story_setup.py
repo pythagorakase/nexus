@@ -3,7 +3,7 @@
 Utilities for new-story save slots.
 
 Actions:
-  - Create assets tables (`assets.new_story_creator`)
+  - Check that the assets tables exist (`assets.new_story_creator`)
   - Clone the public schema into a save slot schema (save_02 ... save_05) using pg_dump-based rewrite
 """
 
@@ -68,26 +68,18 @@ def _connect(dbname: Optional[str] = None):
         return psycopg2.connect(**connection_kwargs(resolved_dbname))
 
 
-def create_assets_tables(dbname: Optional[str] = None) -> None:
-    """Create cache/metadata tables in assets schema for the given database."""
-    ddl_creator = """
-    CREATE SCHEMA IF NOT EXISTS assets;
-    CREATE TABLE IF NOT EXISTS assets.new_story_creator (
-        id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
-        thread_id TEXT,
-        setting_draft JSONB,
-        character_draft JSONB,
-        selected_seed JSONB,
-        initial_location JSONB,
-        base_timestamp TIMESTAMPTZ,
-        target_slot INTEGER,
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    """
+def require_assets_tables(dbname: Optional[str] = None) -> None:
+    """Raise unless assets.new_story_creator exists; migration 007 owns it."""
     with _connect(dbname) as conn, conn.cursor() as cur:
-        cur.execute(ddl_creator)
+        cur.execute("SELECT to_regclass('assets.new_story_creator')")
+        if cur.fetchone()[0] is None:
+            raise RuntimeError(
+                "Missing assets.new_story_creator; migration 007 "
+                "(migrations/007_normalize_new_story_creator.sql) owns it. "
+                "Apply migrations with scripts/migrate.py."
+            )
     LOG.info(
-        "Ensured assets tables exist in %s",
+        "assets.new_story_creator exists in %s",
         dbname or os.environ.get("PGDATABASE", "(unspecified)"),
     )
 
@@ -633,7 +625,10 @@ def main():
     parser.add_argument(
         "--create-assets",
         action="store_true",
-        help="Create assets tables in the primary DB",
+        help=(
+            "Check that the assets tables exist in the primary DB; "
+            "migrations own them"
+        ),
     )
     parser.add_argument("--slot", type=int, help="Target slot number (2-5)")
     parser.add_argument(
@@ -660,7 +655,7 @@ def main():
         parser.error("Specify --create-assets and/or --slot")
 
     if args.create_assets:
-        create_assets_tables()
+        require_assets_tables()
 
     if args.slot:
         if args.mode == "clone":

@@ -230,6 +230,46 @@ class ChunkMetadata(Base):
     )
 
 
+def _require_importer_schema(connection: Any) -> None:
+    """Raise unless the objects this importer writes exist; it creates none.
+
+    Args:
+        connection: An open SQLAlchemy connection to the target database
+
+    Raises:
+        RuntimeError: When the vector extension, a baseline table, or
+            public.chunk_embeddings is missing, naming its owner.
+    """
+    has_vector = connection.execute(
+        sa.text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+    ).first()
+    if has_vector is None:
+        raise RuntimeError(
+            "Missing vector extension; migration 022 "
+            "(migrations/022_compound_embedding_pk_lazy_tables.sql) owns it. "
+            "Apply migrations with scripts/migrate.py."
+        )
+    for table in ("narrative_chunks", "chunk_metadata"):
+        found = connection.execute(
+            sa.text("SELECT to_regclass(:name)"), {"name": f"public.{table}"}
+        ).scalar()
+        if found is None:
+            raise RuntimeError(
+                f"Missing public.{table}; it is baseline schema "
+                "(migrations/001_baseline.sql), copied from NEXUS_template by "
+                "scripts/new_story_setup.py."
+            )
+    found = connection.execute(
+        sa.text("SELECT to_regclass('public.chunk_embeddings')")
+    ).scalar()
+    if found is None:
+        raise RuntimeError(
+            "Missing public.chunk_embeddings; no migration owns it, and "
+            "migration 022's dimension-keyed tables replaced it. This script no "
+            "longer creates it."
+        )
+
+
 class NarrativeImporter:
     """Standalone implementation of narrative importing functionality"""
 
@@ -248,31 +288,8 @@ class NarrativeImporter:
         self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
-        # First make sure pgvector extension is available
         with self.engine.connect() as connection:
-            connection.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector;"))
-            connection.commit()
-            logger.info("Created pgvector extension in database")
-
-        # Check if we should drop and recreate tables
-        create_tables = SETTINGS.get("database", {}).get("create_tables", True)
-        drop_existing = SETTINGS.get("database", {}).get("drop_existing", False)
-
-        if drop_existing:
-            # Drop existing tables in reverse dependency order
-            try:
-                ChunkEmbedding.__table__.drop(self.engine, checkfirst=True)
-                ChunkEmbeddingSmall.__table__.drop(self.engine, checkfirst=True)
-                ChunkMetadata.__table__.drop(self.engine, checkfirst=True)
-                NarrativeChunk.__table__.drop(self.engine, checkfirst=True)
-                logger.info("Dropped existing tables")
-            except Exception as e:
-                logger.warning(f"Error dropping tables: {e}")
-
-        if create_tables:
-            # Create tables
-            Base.metadata.create_all(self.engine)
-            logger.info("Created tables with updated schema")
+            _require_importer_schema(connection)
 
         # Initialize embedding models
         self.embedding_models = self._initialize_embedding_models()

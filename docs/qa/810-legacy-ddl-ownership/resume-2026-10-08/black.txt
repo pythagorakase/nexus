@@ -1,0 +1,6 @@
+cwd: /Users/pythagor/nexus/.claude/worktrees/810-legacy-ddl-ownership
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m black --check scripts/create_vector_index.py scripts/extract_scene_numbers.py scripts/extract_season_episode.py scripts/import_narratives.py scripts/migrate_provider_names.py scripts/new_story_setup.py scripts/regenerate_embeddings.py scripts/update_scene_numbers.py scripts/vector_migration.py tests/test_schema_ownership.py
+All done! ✨ 🍰 ✨
+10 files would be left unchanged.
+
+exit=0

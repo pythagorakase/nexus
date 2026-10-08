@@ -1,0 +1,5 @@
+branch=39, main=39
+New diagnostics after normalizing line numbers:
+
+Removed diagnostics:
+

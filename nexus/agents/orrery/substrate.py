@@ -362,6 +362,12 @@ class WorldState:
     location_classes: Mapping[int, frozenset[str]] = field(default_factory=dict)
     location_entity_ids: Mapping[int, int] = field(default_factory=dict)
     location_zones: Mapping[int, int] = field(default_factory=dict)
+    # Route knowledge (785-Q6): places whose coordinates are recorded, and the
+    # directed (origin, destination) pairs an authored edge with a duration
+    # joins (a bidirectional edge adds both directions). ``route_known`` reads
+    # both; graph routes do not count.
+    charted_place_ids: frozenset[int] = frozenset()
+    timed_route_pairs: frozenset[tuple[int, int]] = frozenset()
     # Neutral narrative proximity: shortest unweighted hop count through the
     # current active-character relationship graph, treated as undirected.
     # Quality- or direction-sensitive routing belongs in separate projections.
@@ -1170,6 +1176,27 @@ def in_location_class(location_class: str, slot: Slot = Slot.ACTOR) -> Condition
     return _named(_condition, f"in_location_class({location_class}@{slot.value})")
 
 
+def route_known(
+    state: WorldState, origin_place_id: int, destination_place_id: int
+) -> bool:
+    """Return whether a journey from origin to destination has a known duration.
+
+    Place D is routable from place O when O differs from D and either both
+    places carry coordinates, or an authored edge with a duration runs from O
+    to D (or from D to O when bidirectional). Graph routes do not count, and
+    no fallback duration exists (785-Q6).
+    """
+
+    if origin_place_id == destination_place_id:
+        return False
+    if (
+        origin_place_id in state.charted_place_ids
+        and destination_place_id in state.charted_place_ids
+    ):
+        return True
+    return (origin_place_id, destination_place_id) in state.timed_route_pairs
+
+
 def has_location_class_destination(
     *location_classes: str,
     slot: Slot = Slot.ACTOR,
@@ -1189,14 +1216,14 @@ def has_location_class_destination(
         if current_place_id is None:
             return False
         for place_id, semantic_classes in state.location_classes.items():
-            if place_id == current_place_id:
+            if not class_set & semantic_classes:
                 continue
-            if class_set & semantic_classes:
+            if route_known(state, current_place_id, place_id):
                 return True
         for place_id, location_class in state.location_class.items():
-            if place_id == current_place_id:
+            if location_class not in class_set:
                 continue
-            if location_class in class_set:
+            if route_known(state, current_place_id, place_id):
                 return True
         return False
 
@@ -1789,11 +1816,17 @@ def _routine_anchor_destination_available(
     anchor = _routine_anchor(state, entity_id, anchor_type)
     if anchor is None or anchor.mobility_policy in {"none", "nomadic"}:
         return False
+    origin_place_id = state.locations.get(entity_id)
+    if origin_place_id is None:
+        return False
     if anchor.mobility_policy == "fixed_place":
-        return anchor.place_id is not None
+        return anchor.place_id is not None and route_known(
+            state, origin_place_id, anchor.place_id
+        )
     if anchor.mobility_policy == "zone_resolved":
-        return anchor.zone_id is not None and anchor.zone_id in set(
-            state.location_zones.values()
+        return anchor.zone_id is not None and any(
+            zone_id == anchor.zone_id and route_known(state, origin_place_id, place_id)
+            for place_id, zone_id in state.location_zones.items()
         )
     if anchor.mobility_policy == "works_from_home":
         if anchor_type == "home":

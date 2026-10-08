@@ -1,0 +1,435 @@
+Current source base: b83dd1036fd9884d01ee4be3962002a8728e46ec
+load: (4.60009765625, 5.41650390625, 5.00537109375)
+$ nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_schema_ownership.py
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+F...........FFFFFFFFF                                                    [100%]
+=================================== FAILURES ===================================
+_________________________ test_tree_has_no_unowned_ddl _________________________
+
+    def test_tree_has_no_unowned_ddl() -> None:
+        """No Python under nexus/ or scripts/ spells DDL outside the allowlist."""
+    
+        stray = unowned(scan_ddl(REPO_ROOT, _tree_paths()))
+>       assert (
+            not stray
+        ), "DDL outside migrations and the reasoned allowlist:\n" + _describe(stray)
+E       AssertionError: DDL outside migrations and the reasoned allowlist:
+E         scripts/create_vector_index.py:176 create_vector_indexes DROP INDEX
+E         scripts/create_vector_index.py:194 create_vector_indexes CREATE INDEX
+E         scripts/create_vector_index.py:210 create_vector_indexes CREATE INDEX
+E         scripts/extract_scene_numbers.py:165 add_scene_column_if_not_exists ALTER TABLE
+E         scripts/extract_scene_numbers.py:173 add_scene_column_if_not_exists CREATE INDEX
+E         scripts/extract_scene_numbers.py:176 add_scene_column_if_not_exists CREATE INDEX
+E         scripts/extract_season_episode.py:161 SeasonEpisodeExtractor.initialize_database CREATE TABLE
+E         scripts/import_narratives.py:249 NarrativeImporter.__init__ CREATE EXTENSION
+E         scripts/import_narratives.py:260 NarrativeImporter.__init__ DROP TABLE
+E         scripts/import_narratives.py:261 NarrativeImporter.__init__ DROP TABLE
+E         scripts/import_narratives.py:262 NarrativeImporter.__init__ DROP TABLE
+E         scripts/import_narratives.py:263 NarrativeImporter.__init__ DROP TABLE
+E         scripts/import_narratives.py:270 NarrativeImporter.__init__ CREATE TABLE
+E         scripts/migrate_provider_names.py:28 migrate ALTER TYPE
+E         scripts/migrate_provider_names.py:31 migrate ALTER TYPE
+E         scripts/migrate_provider_names.py:34 migrate ALTER TYPE
+E         scripts/migrate_provider_names.py:99 migrate CREATE TYPE
+E         scripts/migrate_provider_names.py:106 migrate ALTER TABLE
+E         scripts/migrate_provider_names.py:113 migrate DROP TYPE
+E         scripts/migrate_provider_names.py:115 migrate ALTER TYPE
+E         scripts/new_story_setup.py:73 create_assets_tables CREATE TABLE
+E         scripts/regenerate_embeddings.py:354 EmbeddingRegenerator.__init__ CREATE EXTENSION
+E         scripts/regenerate_embeddings.py:446 EmbeddingRegenerator._ensure_dimension_table_exists DROP TABLE
+E         scripts/regenerate_embeddings.py:751 EmbeddingRegenerator.create_vector_indexes CREATE INDEX
+E         scripts/regenerate_embeddings.py:774 EmbeddingRegenerator.create_vector_indexes CREATE INDEX
+E         scripts/update_scene_numbers.py:78 add_scene_column_if_not_exists ALTER TABLE
+E         scripts/update_scene_numbers.py:86 add_scene_column_if_not_exists CREATE INDEX
+E         scripts/update_scene_numbers.py:89 add_scene_column_if_not_exists CREATE INDEX
+E         scripts/vector_migration.py:60 add_dimensions_column ALTER TABLE
+E         scripts/vector_migration.py:197 create_index CREATE INDEX
+E         scripts/vector_migration.py:230 main DROP TABLE
+E       assert not [Finding(path='scripts/create_vector_index.py', line=176, scope='create_vector_indexes', statement='DROP INDEX'), Find...h='scripts/extract_scene_numbers.py', line=176, scope='add_scene_column_if_not_exists', statement='CREATE INDEX'), ...]
+
+tests/test_schema_ownership.py:249: AssertionError
+_ test_scene_scripts_require_the_migration_138_column[scripts/update_scene_numbers.py] _
+
+script = 'scripts/update_scene_numbers.py'
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-389/test_scene_scripts_require_the0')
+
+    @pytest.mark.requires_postgres
+    @pytest.mark.parametrize(
+        "script", ["scripts/update_scene_numbers.py", "scripts/extract_scene_numbers.py"]
+    )
+    def test_scene_scripts_require_the_migration_138_column(
+        script: str, tmp_path: Path
+    ) -> None:
+        """Both scene scripts refuse a missing column and create nothing."""
+    
+        with disposable_database("qa640_810s3_scene") as dbname:
+            _execute(dbname, "CREATE TABLE public.chunk_metadata (chunk_id bigint)")
+    
+>           _refused(
+                _probe(script, "require_scene_column", dbname, tmp_path), _SCENE_MESSAGE
+            )
+
+tests/test_schema_ownership.py:494: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outcome = {'message': "module 'probe_script' has no attribute 'require_scene_column'", 'result': None, 'type': 'builtins.AttributeError'}
+message = 'Missing chunk_metadata.scene; migration 138 (migrations/138_adopt_unowned_fleet_indexes.sql) owns it. Apply migrations with scripts/migrate.py.'
+
+    def _refused(outcome: Dict[str, Any], message: str) -> None:
+>       assert outcome == {
+            "type": "builtins.RuntimeError",
+            "message": message,
+            "result": None,
+        }
+E       assert {'message': "...tributeError'} == {'message': '...RuntimeError'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'message': "module 'probe_script' has no attribute 'require_scene_column'"} != {'message': 'Missing chunk_metadata.scene; migration 138 (migrations/138_adopt_unowned_fleet_indexes.sql) owns it. Apply migrations with scripts/migrate.py.'}
+E         {'type': 'builtins.AttributeError'} != {'type': 'builtins.RuntimeError'}
+E         Use -v to get more diff
+
+tests/test_schema_ownership.py:452: AssertionError
+_ test_scene_scripts_require_the_migration_138_column[scripts/extract_scene_numbers.py] _
+
+script = 'scripts/extract_scene_numbers.py'
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-389/test_scene_scripts_require_the1')
+
+    @pytest.mark.requires_postgres
+    @pytest.mark.parametrize(
+        "script", ["scripts/update_scene_numbers.py", "scripts/extract_scene_numbers.py"]
+    )
+    def test_scene_scripts_require_the_migration_138_column(
+        script: str, tmp_path: Path
+    ) -> None:
+        """Both scene scripts refuse a missing column and create nothing."""
+    
+        with disposable_database("qa640_810s3_scene") as dbname:
+            _execute(dbname, "CREATE TABLE public.chunk_metadata (chunk_id bigint)")
+    
+>           _refused(
+                _probe(script, "require_scene_column", dbname, tmp_path), _SCENE_MESSAGE
+            )
+
+tests/test_schema_ownership.py:494: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outcome = {'message': "module 'probe_script' has no attribute 'require_scene_column'", 'result': None, 'type': 'builtins.AttributeError'}
+message = 'Missing chunk_metadata.scene; migration 138 (migrations/138_adopt_unowned_fleet_indexes.sql) owns it. Apply migrations with scripts/migrate.py.'
+
+    def _refused(outcome: Dict[str, Any], message: str) -> None:
+>       assert outcome == {
+            "type": "builtins.RuntimeError",
+            "message": message,
+            "result": None,
+        }
+E       assert {'message': "...tributeError'} == {'message': '...RuntimeError'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'message': "module 'probe_script' has no attribute 'require_scene_column'"} != {'message': 'Missing chunk_metadata.scene; migration 138 (migrations/138_adopt_unowned_fleet_indexes.sql) owns it. Apply migrations with scripts/migrate.py.'}
+E         {'type': 'builtins.AttributeError'} != {'type': 'builtins.RuntimeError'}
+E         Use -v to get more diff
+
+tests/test_schema_ownership.py:452: AssertionError
+________________ test_require_assets_tables_names_migration_007 ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10f1d7310>
+
+    @pytest.mark.requires_postgres
+    def test_require_assets_tables_names_migration_007(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """--create-assets checks for the migration-007 table and creates nothing."""
+    
+        monkeypatch.setattr(new_story_setup, "USE_POOL", False)
+        with disposable_database("qa640_810s3_assets") as dbname:
+            with pytest.raises(RuntimeError) as refused:
+>               new_story_setup.require_assets_tables(dbname)
+E               AttributeError: module 'scripts.new_story_setup' has no attribute 'require_assets_tables'
+
+tests/test_schema_ownership.py:528: AttributeError
+______________ test_provider_names_script_refuses_a_missing_enum _______________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-389/test_provider_names_script_ref0')
+
+    @pytest.mark.requires_postgres
+    def test_provider_names_script_refuses_a_missing_enum(tmp_path: Path) -> None:
+        """The provider rename alters no enum and creates no apex_audition schema."""
+    
+        with disposable_database("qa640_810s3_provider") as dbname:
+>           _refused(
+                _probe(
+                    "scripts/migrate_provider_names.py",
+                    "migrate_provider_names",
+                    dbname,
+                    tmp_path,
+                ),
+                "Missing apex_audition.provider_enum values "
+                "['Anthropic', 'DeepSeek', 'OpenAI']; no migration owns "
+                "apex_audition.provider_enum, and this script no longer alters it. "
+                "scripts/migrate.py is the only migration runner.",
+            )
+
+tests/test_schema_ownership.py:545: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outcome = {'message': 'schema "apex_audition" does not exist\n', 'result': None, 'type': 'psycopg2.errors.InvalidSchemaName'}
+message = "Missing apex_audition.provider_enum values ['Anthropic', 'DeepSeek', 'OpenAI']; no migration owns apex_audition.provider_enum, and this script no longer alters it. scripts/migrate.py is the only migration runner."
+
+    def _refused(outcome: Dict[str, Any], message: str) -> None:
+>       assert outcome == {
+            "type": "builtins.RuntimeError",
+            "message": message,
+            "result": None,
+        }
+E       assert {'message': '...idSchemaName'} == {'message': '...RuntimeError'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'message': 'schema "apex_audition" does not exist\n'} != {'message': "Missing apex_audition.provider_enum values ['Anthropic', 'DeepSeek', 'OpenAI']; no migration owns apex_audition.provider_enum, and this script no longer alters it. scripts/migrate.py is the only migration runner."}
+E         {'type': 'psycopg2.errors.InvalidSchemaName'} != {'type': 'builtins.RuntimeError'}
+E         Use -v to get more diff
+
+tests/test_schema_ownership.py:452: AssertionError
+______________________ test_importer_requires_its_schema _______________________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-389/test_importer_requires_its_sch0')
+
+    @pytest.mark.requires_postgres
+    def test_importer_requires_its_schema(tmp_path: Path) -> None:
+        """The importer installs no extension and creates or drops no table."""
+    
+        script = "scripts/import_narratives.py"
+        with disposable_database("qa640_810s3_importer") as dbname:
+>           _refused(
+                _probe(script, "narrative_importer", dbname, tmp_path), _VECTOR_MESSAGE
+            )
+
+tests/test_schema_ownership.py:566: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outcome = {'message': "Embedding model 'bge-small-custom' is not installed: local_path /Users/pythagor/nexus/models/bge_small_fi...bge_small_finetuned_20250320_153654, then run `nexus models verify`.", 'result': None, 'type': 'builtins.RuntimeError'}
+message = 'Missing vector extension; migration 022 (migrations/022_compound_embedding_pk_lazy_tables.sql) owns it. Apply migrations with scripts/migrate.py.'
+
+    def _refused(outcome: Dict[str, Any], message: str) -> None:
+>       assert outcome == {
+            "type": "builtins.RuntimeError",
+            "message": message,
+            "result": None,
+        }
+E       assert {'message': '...RuntimeError'} == {'message': '...RuntimeError'}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'message': "Embedding model 'bge-small-custom' is not installed: local_path /Users/pythagor/nexus/models/bge_small_fi...tifact directory at /Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654, then run `nexus models verify`."} != {'message': 'Missing vector extension; migration 022 (migrations/022_compound_embedding_pk_lazy_tables.sql) owns it. Apply migrations with scripts/migrate.py.'}
+E         Use -v to get more diff
+
+tests/test_schema_ownership.py:452: AssertionError
+_ test_ann_steps_build_no_index[scripts/create_vector_index.py-create_vector_index] _
+
+script = 'scripts/create_vector_index.py', call = 'create_vector_index'
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-389/test_ann_steps_build_no_index_0')
+
+    @pytest.mark.requires_postgres
+    @pytest.mark.parametrize(
+        ("script", "call"),
+        [
+            ("scripts/create_vector_index.py", "create_vector_index"),
+            ("scripts/regenerate_embeddings.py", "regenerator_indexes"),
+        ],
+    )
+    def test_ann_steps_build_no_index(script: str, call: str, tmp_path: Path) -> None:
+        """Both ANN steps check for an index and never build one."""
+    
+        with disposable_database("qa640_810s3_ann") as dbname:
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION vector")
+                cur.execute("CREATE TABLE public.narrative_chunks (id bigint PRIMARY KEY)")
+                cur.execute("INSERT INTO public.narrative_chunks (id) VALUES (1)")
+                table = ensure_embedding_table(cur, _DIMENSIONS)
+                vector = "[" + ",".join(["0.5"] * _DIMENSIONS) + "]"
+                cur.execute(
+                    f"INSERT INTO public.{table} (chunk_id, model, embedding) "
+                    "VALUES (1, %s, %s::vector)",
+                    (_MODEL, vector),
+                )
+            assert table == "chunk_embeddings_1024d"
+    
+>           _refused(
+                _probe(script, call, dbname, tmp_path), _ann_message(table, _DIMENSIONS)
+            )
+
+tests/test_schema_ownership.py:614: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outcome = {'message': '', 'result': True, 'type': None}
+message = 'No ANN index exists on chunk_embeddings_1024d, and this script no longer creates one: the only ANN path is the explic...ld_candidate_ann_index, run by scripts/qa_shift/ann_gate.py), and #812 owns the legacy 1024d tables and their indexes.'
+
+    def _refused(outcome: Dict[str, Any], message: str) -> None:
+>       assert outcome == {
+            "type": "builtins.RuntimeError",
+            "message": message,
+            "result": None,
+        }
+E       AssertionError: assert {'message': '... 'type': None} == {'message': '...RuntimeError'}
+E         
+E         Differing items:
+E         {'message': ''} != {'message': 'No ANN index exists on chunk_embeddings_1024d, and this script no longer creates one: the only ANN path i...d_candidate_ann_index, run by scripts/qa_shift/ann_gate.py), and #812 owns the legacy 1024d tables and their indexes.'}
+E         {'type': None} != {'type': 'builtins.RuntimeError'}
+E         {'result': True} != {'result': None}
+E         Use -v to get more diff
+
+tests/test_schema_ownership.py:452: AssertionError
+_ test_ann_steps_build_no_index[scripts/regenerate_embeddings.py-regenerator_indexes] _
+
+script = 'scripts/regenerate_embeddings.py', call = 'regenerator_indexes'
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-389/test_ann_steps_build_no_index_1')
+
+    @pytest.mark.requires_postgres
+    @pytest.mark.parametrize(
+        ("script", "call"),
+        [
+            ("scripts/create_vector_index.py", "create_vector_index"),
+            ("scripts/regenerate_embeddings.py", "regenerator_indexes"),
+        ],
+    )
+    def test_ann_steps_build_no_index(script: str, call: str, tmp_path: Path) -> None:
+        """Both ANN steps check for an index and never build one."""
+    
+        with disposable_database("qa640_810s3_ann") as dbname:
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION vector")
+                cur.execute("CREATE TABLE public.narrative_chunks (id bigint PRIMARY KEY)")
+                cur.execute("INSERT INTO public.narrative_chunks (id) VALUES (1)")
+                table = ensure_embedding_table(cur, _DIMENSIONS)
+                vector = "[" + ",".join(["0.5"] * _DIMENSIONS) + "]"
+                cur.execute(
+                    f"INSERT INTO public.{table} (chunk_id, model, embedding) "
+                    "VALUES (1, %s, %s::vector)",
+                    (_MODEL, vector),
+                )
+            assert table == "chunk_embeddings_1024d"
+    
+>           _refused(
+                _probe(script, call, dbname, tmp_path), _ann_message(table, _DIMENSIONS)
+            )
+
+tests/test_schema_ownership.py:614: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outcome = {'message': '', 'result': True, 'type': None}
+message = 'No ANN index exists on chunk_embeddings_1024d, and this script no longer creates one: the only ANN path is the explic...ld_candidate_ann_index, run by scripts/qa_shift/ann_gate.py), and #812 owns the legacy 1024d tables and their indexes.'
+
+    def _refused(outcome: Dict[str, Any], message: str) -> None:
+>       assert outcome == {
+            "type": "builtins.RuntimeError",
+            "message": message,
+            "result": None,
+        }
+E       AssertionError: assert {'message': '... 'type': None} == {'message': '...RuntimeError'}
+E         
+E         Differing items:
+E         {'message': ''} != {'message': 'No ANN index exists on chunk_embeddings_1024d, and this script no longer creates one: the only ANN path i...d_candidate_ann_index, run by scripts/qa_shift/ann_gate.py), and #812 owns the legacy 1024d tables and their indexes.'}
+E         {'type': None} != {'type': 'builtins.RuntimeError'}
+E         {'result': True} != {'result': None}
+E         Use -v to get more diff
+
+tests/test_schema_ownership.py:452: AssertionError
+________________ test_regenerator_requires_the_vector_extension ________________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-389/test_regenerator_requires_the_0')
+
+    @pytest.mark.requires_postgres
+    def test_regenerator_requires_the_vector_extension(tmp_path: Path) -> None:
+        """The regenerator installs no extension and creates no table on a bare target."""
+    
+        with disposable_database("qa640_810s3_regen") as dbname:
+>           _refused(
+                _probe("scripts/regenerate_embeddings.py", "regenerator", dbname, tmp_path),
+                _VECTOR_MESSAGE,
+            )
+
+tests/test_schema_ownership.py:636: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outcome = {'message': '(psycopg2.errors.UndefinedTable) relation "public.narrative_chunks" does not exist\n\n[SQL: CREATE TABLE ...ackground on this error at: https://sqlalche.me/e/20/f405)', 'result': None, 'type': 'sqlalchemy.exc.ProgrammingError'}
+message = 'Missing vector extension; migration 022 (migrations/022_compound_embedding_pk_lazy_tables.sql) owns it. Apply migrations with scripts/migrate.py.'
+
+    def _refused(outcome: Dict[str, Any], message: str) -> None:
+>       assert outcome == {
+            "type": "builtins.RuntimeError",
+            "message": message,
+            "result": None,
+        }
+E       assert {'message': '...rammingError'} == {'message': '...RuntimeError'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'message': '(psycopg2.errors.UndefinedTable) relation "public.narrative_chunks" does not exist\n\n[SQL: CREATE TABLE ...          PRIMARY KEY (chunk_id, model)\n            )]\n(Background on this error at: https://sqlalche.me/e/20/f405)'} != {'message': 'Missing vector extension; migration 022 (migrations/022_compound_embedding_pk_lazy_tables.sql) owns it. Apply migrations with scripts/migrate.py.'}
+E         {'type': 'sqlalchemy.exc.ProgrammingError'} != {'type': 'builtins.RuntimeError'}
+E         Use -v to get more diff
+
+tests/test_schema_ownership.py:452: AssertionError
+____________ test_season_episode_extractor_requires_chunk_metadata _____________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-389/test_season_episode_extractor_0')
+
+    @pytest.mark.requires_postgres
+    def test_season_episode_extractor_requires_chunk_metadata(tmp_path: Path) -> None:
+        """The extractor refuses a missing baseline table instead of creating it."""
+    
+        with disposable_database("qa640_810s3_season") as dbname:
+>           _refused(
+                _probe(
+                    "scripts/extract_season_episode.py",
+                    "season_episode_extractor",
+                    dbname,
+                    tmp_path,
+                ),
+                _baseline_message("chunk_metadata"),
+            )
+
+tests/test_schema_ownership.py:649: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outcome = {'message': '(psycopg2.errors.UndefinedTable) relation "narrative_chunks" does not exist\n\n[SQL: \nCREATE TABLE chunk...ackground on this error at: https://sqlalche.me/e/20/f405)', 'result': None, 'type': 'sqlalchemy.exc.ProgrammingError'}
+message = 'Missing public.chunk_metadata; it is baseline schema (migrations/001_baseline.sql), copied from NEXUS_template by scripts/new_story_setup.py.'
+
+    def _refused(outcome: Dict[str, Any], message: str) -> None:
+>       assert outcome == {
+            "type": "builtins.RuntimeError",
+            "message": message,
+            "result": None,
+        }
+E       assert {'message': '...rammingError'} == {'message': '...RuntimeError'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'message': '(psycopg2.errors.UndefinedTable) relation "narrative_chunks" does not exist\n\n[SQL: \nCREATE TABLE chunk...ERENCES narrative_chunks (id) ON DELETE CASCADE\n)\n\n]\n(Background on this error at: https://sqlalche.me/e/20/f405)'} != {'message': 'Missing public.chunk_metadata; it is baseline schema (migrations/001_baseline.sql), copied from NEXUS_template by scripts/new_story_setup.py.'}
+E         {'type': 'sqlalchemy.exc.ProgrammingError'} != {'type': 'builtins.RuntimeError'}
+E         Use -v to get more diff
+
+tests/test_schema_ownership.py:452: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_810s3_ann_* x2, qa640_810s3_scene_* x2
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_schema_ownership.py::test_tree_has_no_unowned_ddl - Asserti...
+FAILED tests/test_schema_ownership.py::test_scene_scripts_require_the_migration_138_column[scripts/update_scene_numbers.py]
+FAILED tests/test_schema_ownership.py::test_scene_scripts_require_the_migration_138_column[scripts/extract_scene_numbers.py]
+FAILED tests/test_schema_ownership.py::test_require_assets_tables_names_migration_007
+FAILED tests/test_schema_ownership.py::test_provider_names_script_refuses_a_missing_enum
+FAILED tests/test_schema_ownership.py::test_importer_requires_its_schema - as...
+FAILED tests/test_schema_ownership.py::test_ann_steps_build_no_index[scripts/create_vector_index.py-create_vector_index]
+FAILED tests/test_schema_ownership.py::test_ann_steps_build_no_index[scripts/regenerate_embeddings.py-regenerator_indexes]
+FAILED tests/test_schema_ownership.py::test_regenerator_requires_the_vector_extension
+FAILED tests/test_schema_ownership.py::test_season_episode_extractor_requires_chunk_metadata
+10 failed, 11 passed in 16.78s
+
+exit=1

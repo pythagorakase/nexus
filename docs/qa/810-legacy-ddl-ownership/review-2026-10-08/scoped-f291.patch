@@ -1,0 +1,408 @@
+diff --git a/config/exception_disposition_baseline.json b/config/exception_disposition_baseline.json
+index 8e5468fe..dd8cc3c5 100644
+--- a/config/exception_disposition_baseline.json
++++ b/config/exception_disposition_baseline.json
+@@ -473,7 +473,6 @@
+     "scripts/regenerate_embeddings.py|<module>|31f932a3dfc720fe6b4856f6a41530b76d99685313db2d5af54df22968c06457|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
+     "scripts/regenerate_embeddings.py|<module>|95c1f1206daa82ecbe7c50b3f125f2887bd08ffe956662136f62bc09c1c906fa|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
+     "scripts/regenerate_embeddings.py|<module>|bc16a264337aeff2635fc1fde956a58aa7b4a433e53b52b8772394e36ad69515|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
+-    "scripts/regenerate_embeddings.py|EmbeddingRegenerator.__init__|314c0dabb8b68f65f947a36b4ecfe613de55376f696cbcc8a45274f7ce132b94|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
+     "scripts/regenerate_embeddings.py|EmbeddingRegenerator.__init__|56cf98781a2cdd48fd526f8b0cce4ddb592696510c2429720931e978a6cecc1a|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
+     "scripts/regenerate_embeddings.py|EmbeddingRegenerator.__init__|60d4556e918516f37721851699b95ab35ff1274af03c9131b3176b8daaae6fc9|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
+     "scripts/regenerate_embeddings.py|EmbeddingRegenerator.__init__|8b45aeb9105f690ebae0c255b5d1af528c44b2861367e190c373c64befedb0bf|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
+diff --git a/scripts/regenerate_embeddings.py b/scripts/regenerate_embeddings.py
+index fcb797ce..cb9e181f 100755
+--- a/scripts/regenerate_embeddings.py
++++ b/scripts/regenerate_embeddings.py
+@@ -8,7 +8,7 @@ with different dimensions, creating appropriate tables based on vector size.
+ 
+ USAGE EXAMPLES:
+ ---------------
+-# Generate embeddings for a specific model, then check for an ANN index:
++# Check the ANN prerequisite, then generate embeddings for a specific model:
+ python scripts/regenerate_embeddings.py --model infly/inf-retriever-v1-1.5b --create-indexes
+ 
+ # Generate embeddings for all active models defined in settings.json:
+@@ -33,7 +33,7 @@ ARGUMENTS:
+ --batch-size SIZE         Number of chunks to process in each batch (default: 10)
+ --db-url URL              PostgreSQL database URL (default: from settings.json)
+ --dry-run                 Perform a dry run without making changes
+---create-indexes          Check for an ANN index after data loading
++--create-indexes          Require an ANN index before model loading or data writes
+ --only-indexes            Only check for an ANN index, skip embedding generation
+ --resume-from FILE        Resume from a file of missing chunk IDs
+ --chunk ID                Generate or update embeddings for one chunk ID
+@@ -301,7 +301,7 @@ class EmbeddingRegenerator:
+             batch_size: Number of chunks to process at once
+             db_url: PostgreSQL database URL
+             dry_run: If True, don't actually write to the database
+-            create_indexes: If True, check for an ANN index after data is loaded
++            create_indexes: If True, check for an ANN index before loading or writes
+             truncate_table: If True, completely truncate the table before starting (clean slate)
+             preserve_existing: If True, keep existing rows for this model
+             ensure_table: If True, create the embedding table during initialization
+@@ -334,22 +334,31 @@ class EmbeddingRegenerator:
+                     ) from e
+                 self.db_url = explicit_url
+ 
+-        # Load the model before touching the database: with no Hub fallback a
+-        # missing or broken artifact raises here, and --truncate-table below
+-        # must never delete this model's rows for a model that cannot load.
++        # A requested ANN index is a read-only prerequisite. Check it before
++        # loading a model, lazy table creation, or deleting existing vectors.
++        self.engine = create_slot_engine(self.db_url)
++        self.Session = sessionmaker(bind=self.engine)
++        if self.create_indexes:
++            try:
++                self._require_ann_index_before_generation()
++            except Exception:
++                self.engine.dispose()
++                raise
++
++        # A missing or broken artifact still raises before any database write:
++        # --truncate-table must never delete rows for a model that cannot load.
+         self.model = None
+         if load_model:
+             try:
+                 self.model = ModelLoader.load_model(model_name)
+                 logger.info(f"Successfully loaded {model_name} model")
+-            except Exception as e:
++            except (
++                Exception
++            ) as e:  # nexus-exception-disposition: fail; reason=load; safety=exit 1
+                 logger.error(f"Failed to load {model_name} model: {e}")
++                self.engine.dispose()
+                 sys.exit(1)
+ 
+-        # Initialize database connection
+-        self.engine = create_slot_engine(self.db_url)
+-        self.Session = sessionmaker(bind=self.engine)
+-
+         # First make sure pgvector extension is available and, for write paths,
+         # the dimension-specific table exists.
+         with self.engine.connect() as connection:
+@@ -716,6 +725,22 @@ class EmbeddingRegenerator:
+             session.close()
+             return success_count
+ 
++    def _require_ann_index_before_generation(self) -> None:
++        """Refuse a requested, unsupported ANN plan before loading or writing.
++
++        Dimensions above the legacy pgvector limit retain exact search and
++        lazy table creation. A supported dimension needs its existing index;
++        creating an empty table cannot satisfy that prerequisite.
++        """
++        if not supports_pgvector_ann_index(self.dimensions):
++            return
++        if not self.create_vector_indexes():
++            raise RuntimeError(
++                f"Missing {self.get_table_name()}; --create-indexes requires an "
++                "existing ANN index before generation. #812 owns the legacy "
++                f"{self.dimensions}d tables and their indexes."
++            )
++
+     def create_vector_indexes(self) -> bool:
+         """
+         Check that an ANN index exists on this model's embedding table.
+@@ -931,14 +956,9 @@ class EmbeddingRegenerator:
+                     f"✅ Successfully generated embeddings for all {final_count} chunks"
+                 )
+ 
+-        # Create vector indexes if requested
++        # The requested ANN prerequisite was checked before model loading.
+         if self.create_indexes and success > 0:
+-            logger.info("Checking for an ANN index now that data is loaded...")
+-            index_success = self.create_vector_indexes()
+-            if index_success:
+-                logger.info("✅ ANN index present")
+-            else:
+-                logger.warning("⚠️ ANN index check failed; see the log")
++            logger.info("Requested ANN prerequisite checked before generation")
+         elif success > 0:
+             logger.info("Skipping the ANN index check (use --create-indexes to run it)")
+ 
+@@ -959,7 +979,7 @@ def regenerate_all_models(
+         db_url: Database URL
+         batch_size: Number of chunks to process in each batch
+         dry_run: If True, don't make actual changes
+-        create_indexes: If True, check for an ANN index after data is loaded
++        create_indexes: If True, check for an ANN index before loading or writes
+         truncate_table: If True, completely truncate the table before starting (clean slate)
+     """
+     # Get active models from settings
+@@ -1053,12 +1073,25 @@ def regenerate_missing_chunks(
+         batch_size: Batch size for processing
+         db_url: Database URL
+         dry_run: If True, don't make actual changes
+-        create_indexes: If True, check for an ANN index after data is loaded
++        create_indexes: If True, check for an ANN index before loading or writes
+         truncate_table: If True, completely truncate the table before starting (clean slate)
+ 
+     Returns:
+         Dict with results
+     """
++    # Keep this prerequisite outside the legacy resume error handler, which
++    # returns empty results. A refusal must reach main's nonzero exit path.
++    if create_indexes:
++        checker = EmbeddingRegenerator(
++            model_name=model_name,
++            db_url=db_url,
++            dry_run=dry_run,
++            create_indexes=True,
++            ensure_table=False,
++            load_model=False,
++        )
++        checker.engine.dispose()
++
+     logger.info(f"Reading missing chunk IDs from {missing_file}")
+     try:
+         with open(missing_file, "r") as f:
+@@ -1262,9 +1295,9 @@ def regenerate_specific_chunk(
+     """
+     Generate or update embeddings for one narrative chunk.
+ 
+-    The model loads before the chunk's stored embedding is deleted, so a
+-    missing or broken artifact raises with its restore command and the stored
+-    row survives.
++    Any requested ANN prerequisite and the model load complete before the
++    chunk's stored embedding is deleted. A missing index or artifact therefore
++    refuses without changing the stored row.
+ 
+     Args:
+         model_name: Embedding model to use
+@@ -1272,7 +1305,7 @@ def regenerate_specific_chunk(
+         batch_size: Batch size for processing
+         db_url: Database URL
+         dry_run: If True, don't make actual changes
+-        create_indexes: If True, check for an ANN index after data is loaded
++        create_indexes: If True, check for an ANN index before loading or writes
+ 
+     Returns:
+         Dict with results
+@@ -1284,6 +1317,17 @@ def regenerate_specific_chunk(
+     if chunk_id <= 0:
+         raise ValueError(f"chunk_id must be positive, got {chunk_id}")
+ 
++    if create_indexes:
++        checker = EmbeddingRegenerator(
++            model_name=model_name,
++            db_url=db_url,
++            dry_run=dry_run,
++            create_indexes=True,
++            ensure_table=False,
++            load_model=False,
++        )
++        checker.engine.dispose()
++
+     # With no Hub fallback, a missing or broken artifact raises here, before
+     # the DELETE below commits. The regenerator that embeds the chunk reuses
+     # this process-cached model.
+@@ -1353,7 +1397,7 @@ def main():
+     parser.add_argument(
+         "--create-indexes",
+         action="store_true",
+-        help="Check for an ANN index after data loading",
++        help="Require an ANN index before model loading or data writes",
+     )
+     parser.add_argument(
+         "--only-indexes",
+@@ -1549,9 +1593,10 @@ def main():
+             print(f"Failed embeddings: {results['failed']}")
+ 
+             if not args.create_indexes and results["success"] > 0:
+-                print("\nNote: Vector indexes were not created.")
++                print("\nNote: ANN indexes were not checked.")
+                 print(
+-                    "You can create them later with: python scripts/regenerate_embeddings.py --model "
++                    "You can check them with: "
++                    "python scripts/regenerate_embeddings.py --model "
+                     + f"{args.model} --only-indexes"
+                 )
+ 
+diff --git a/tests/test_schema_ownership.py b/tests/test_schema_ownership.py
+index 6b948027..a2b7b3b7 100644
+--- a/tests/test_schema_ownership.py
++++ b/tests/test_schema_ownership.py
+@@ -368,7 +368,9 @@ def _ann_message(table: str, dimensions: int) -> str:
+ 
+ 
+ _PROBE = r"""
++import contextlib
+ import importlib.util
++import io
+ import json
+ import sys
+ from pathlib import Path
+@@ -383,6 +385,7 @@ module = importlib.util.module_from_spec(spec)
+ spec.loader.exec_module(module)
+ 
+ result = None
++model_load_calls = []
+ try:
+     if call == "require_scene_column":
+         conn = psycopg2.connect(**url_connection_kwargs(url))
+@@ -404,6 +407,50 @@ try:
+         result = regenerator.create_vector_indexes()
+     elif call == "regenerator":
+         module.EmbeddingRegenerator("bge-large", db_url=url, load_model=False)
++    elif call.startswith("regenerator_precheck"):
++        def record_model_load(name):
++            model_load_calls.append(name)
++            return object()
++        module.ModelLoader.load_model = staticmethod(record_model_load)
++        if call == "regenerator_precheck_chunk":
++            result = module.regenerate_specific_chunk(
++                "bge-large", 1, db_url=url, create_indexes=True
++            )
++        elif call in ("regenerator_precheck_resume", "regenerator_precheck_resume_cli"):
++            missing = Path("resume.txt")
++            missing.write_text("1\n")
++            if call.endswith("_cli"):
++                sys.argv = [script, "--model", "bge-large", "--resume-from",
++                            str(missing), "--db-url", url, "--create-indexes",
++                            "--truncate-table"]
++                output = io.StringIO()
++                with contextlib.redirect_stdout(output):
++                    try:
++                        module.main()
++                    except SystemExit as exc:
++                        result = {"exit_code": exc.code}
++                result["stdout"] = output.getvalue()
++            else:
++                result = module.regenerate_missing_chunks(
++                    "bge-large", str(missing), db_url=url,
++                    create_indexes=True, truncate_table=True
++                )
++        elif call == "regenerator_precheck_all":
++            module.SETTINGS["models"] = {
++                "bge-large": {"is_active": True},
++                "e5-large": {"is_active": True},
++            }
++            result = module.regenerate_all_models(
++                db_url=url, create_indexes=True, truncate_table=True
++            )
++        else:
++            high_dimension = call.startswith("regenerator_precheck_high")
++            model = "Octen-Embedding-4B" if high_dimension else "bge-large"
++            regenerator = module.EmbeddingRegenerator(
++                model, db_url=url, create_indexes=True, truncate_table=True,
++                dry_run=call.endswith("_dry")
++            )
++            regenerator.engine.dispose()
+     elif call == "season_episode_extractor":
+         module.SeasonEpisodeExtractor(url)
+     else:
+@@ -415,6 +462,8 @@ except Exception as exc:
+         "message": str(exc),
+         "result": None,
+     }
++if call.startswith("regenerator_precheck"):
++    outcome["model_load_calls"] = model_load_calls
+ print(json.dumps(outcome))
+ """
+ 
+@@ -628,6 +677,104 @@ def test_ann_steps_build_no_index(script: str, call: str, tmp_path: Path) -> Non
+         }
+ 
+ 
++@pytest.mark.requires_postgres
++@pytest.mark.parametrize("shared", [False, True])
++@pytest.mark.parametrize(
++    "call",
++    [
++        "regenerator_precheck",
++        "regenerator_precheck_dry",
++        "regenerator_precheck_chunk",
++        "regenerator_precheck_resume",
++        "regenerator_precheck_resume_cli",
++        "regenerator_precheck_all",
++    ],
++)
++def test_requested_ann_refuses_before_model_load_or_existing_vector_deletion(
++    call: str, shared: bool, tmp_path: Path
++) -> None:
++    """Real missing-ANN refusal precedes TRUNCATE, shared DELETE and chunk DELETE.
++
++    Only model loading is replaced by a recording sentinel: no artifact is read
++    and no inference occurs. Catalog reads and stored-row operations are real.
++    """
++    with disposable_database("qa640_810s3_ann_precheck") as dbname:
++        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
++            cur.execute("CREATE EXTENSION vector")
++            cur.execute(
++                "CREATE TABLE public.narrative_chunks "
++                "(id bigint PRIMARY KEY, raw_text text NOT NULL)"
++            )
++            cur.execute("INSERT INTO public.narrative_chunks VALUES (1, 'the bell')")
++            table = ensure_embedding_table(cur, _DIMENSIONS)
++            vector = "[" + ",".join(["0.5"] * _DIMENSIONS) + "]"
++            models = [_MODEL, "e5-large"] if shared else [_MODEL]
++            for model in models:
++                cur.execute(
++                    f"INSERT INTO public.{table} (chunk_id, model, embedding) "
++                    "VALUES (1, %s, %s::vector)",
++                    (model, vector),
++                )
++        snapshot_sql = (
++            f"SELECT jsonb_agg(to_jsonb(t) ORDER BY model) FROM public.{table} t"
++        )
++        before = _scalar(dbname, snapshot_sql)
++        assert _ann_count(dbname, table) == 0
++
++        outcome = _probe("scripts/regenerate_embeddings.py", call, dbname, tmp_path)
++        after = _scalar(dbname, snapshot_sql)
++        expected: Dict[str, Any] = {
++            "type": "builtins.RuntimeError",
++            "message": _ann_message(table, _DIMENSIONS),
++            "result": None,
++            "model_load_calls": [],
++        }
++        if call == "regenerator_precheck_all":
++            expected = {
++                "type": None,
++                "message": "",
++                "result": {"total": 0, "success": 0, "failed": 2},
++                "model_load_calls": [],
++            }
++        elif call == "regenerator_precheck_resume_cli":
++            expected = {
++                "type": None,
++                "message": "",
++                "result": {
++                    "exit_code": 1,
++                    "stdout": f"Error: {_ann_message(table, _DIMENSIONS)}\n",
++                },
++                "model_load_calls": [],
++            }
++        assert outcome == expected and after == before, {
++            "outcome": outcome,
++            "existing_rows_unchanged": after == before,
++        }
++        assert _ann_count(dbname, table) == 0
++
++
++@pytest.mark.requires_postgres
++@pytest.mark.parametrize("dry_run", [False, True])
++def test_requested_ann_preserves_high_dimension_exemption_and_dry_run(
++    dry_run: bool, tmp_path: Path
++) -> None:
++    """The legacy >2000d exemption retains lazy table ownership and dry-run safety."""
++    with disposable_database("qa640_810s3_ann_high") as dbname:
++        _execute(dbname, "CREATE EXTENSION vector")
++        _execute(dbname, "CREATE TABLE public.narrative_chunks (id bigint PRIMARY KEY)")
++        call = "regenerator_precheck_high" + ("_dry" if dry_run else "")
++        outcome = _probe("scripts/regenerate_embeddings.py", call, dbname, tmp_path)
++        assert outcome == {
++            "type": None,
++            "message": "",
++            "result": None,
++            "model_load_calls": ["Octen-Embedding-4B"],
++        }
++        table = "chunk_embeddings_2560d"
++        assert _regclass(dbname, "public." + table) == (None if dry_run else table)
++        assert _ann_count(dbname, table) == 0
++
++
+ @pytest.mark.requires_postgres
+ def test_regenerator_requires_the_vector_extension(tmp_path: Path) -> None:
+     """The regenerator installs no extension and creates no table on a bare target."""

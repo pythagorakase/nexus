@@ -60,6 +60,7 @@ OWNER_DATABASES = (
     "save_04",
     "save_05",
     "NEXUS_template",
+    "mock",
 )
 
 # Every guarded helper with valid keyword arguments. The guard runs first, so
@@ -155,6 +156,14 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
     "seed_played_story": (pg_fixtures.seed_played_story, {"turns": 1}),
     "seed_starved_story": (pg_fixtures.seed_starved_story, {"slot": 4}),
     "seed_checkpointed_story": (seed_checkpointed_story, {}),
+    "seed_experience_candidates": (
+        pg_fixtures.seed_experience_candidates,
+        {"settings": {}, "label": "x"},
+    ),
+    "seed_experience_render_job": (
+        pg_fixtures.seed_experience_render_job,
+        {"settings": {}, "label": "x", "slot": 736},
+    ),
 }
 
 

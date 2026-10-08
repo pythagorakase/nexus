@@ -1,0 +1,32 @@
+import os
+from pathlib import Path
+import subprocess
+import hashlib
+root=Path('/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus')
+path=root/'migrations/008_populate_mock_database.py'
+original=path.read_bytes()
+plant=b'''        cur.execute("SELECT to_regclass('public.chunk_entity_references')")
+        if cur.fetchone()[0] is not None:
+            cur.execute("DELETE FROM public.chunk_entity_references")
+'''
+assert original.count(plant)==1
+head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
+assert head=='188d9aab3ab2328db0fed9714cd9379537af2010',head
+assert not subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True)
+env=dict(os.environ)
+for name in ['NEXUS_GATEWAY_PORT','NEXUS_API_URL','NEXUS_SLOT','NEXUS_RUN_LIVE_LLM']:
+    env.pop(name,None)
+env.update(NEXUS_RUN_POSTGRES='1',PYTHONPATH=str(root))
+try:
+    path.write_bytes(original.replace(plant,b''))
+    with open('/tmp/816-reseed-148-red.log','w') as log:
+        result=subprocess.run(['nice','-n','15','/Users/pythagor/nexus/.venv/bin/python','-m','pytest','-q','-rs','-p','tests.dbname_audit','tests/test_mock_openai.py::test_reseeding_test_provider_preserves_reference_parity'],cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=120)
+finally:
+    path.write_bytes(original)
+    assert path.read_bytes()==original
+print('Integration head:',head)
+print('Restored seeder sha256:',hashlib.sha256(original).hexdigest())
+print('Mutation exit:',result.returncode)
+print('\n'.join(Path('/tmp/816-reseed-148-red.log').read_text().splitlines()[-22:]))
+assert result.returncode==1
+assert 'assert after["parity"]' in Path('/tmp/816-reseed-148-red.log').read_text()
