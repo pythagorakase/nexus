@@ -3,6 +3,9 @@ status: canonical
 sources:
   - nexus/memory/correspondence.py
   - nexus.toml
+  - prompts/storyteller_writer_pass.md
+  - prompts/storyteller_gaia.md
+  - prompts/correspondence_compaction.md
 verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
 ---
 

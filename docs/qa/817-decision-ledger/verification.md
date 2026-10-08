@@ -175,8 +175,9 @@ basis of its record's ruling or refutation, so each joins the sources:
 | 0020 | `migrations/091_backstory_secrets.sql` | REFUTED B cites `migrations/091_backstory_secrets.sql:9-41` |
 | 0024 | `nexus.toml`, `docs/orrery_retrograde_spec.md`, `docs/orrery_design_plan.md` | REFUTED B cites `nexus.toml:852-924`; REFUTED C cites `docs/orrery_retrograde_spec.md:157-160,191` and `docs/orrery_design_plan.md:425-427` |
 | 0025, 0026, 0027, 0028 | `docs/dead_retrieval_subtraction.md` | Ruling: the quoted 819-Q1 decision routes the entries into "#813's manifest (`docs/dead_retrieval_subtraction.md`)", and each quoted baseline reason names its section there |
+| 0027 | `nexus/agents/orrery/worker.py` | Added in the fourth fix pass (below). The quoted baseline reasons rest on "Worker retains provider-era provenance", which names the Orrery worker by role: `nexus/agents/orrery/worker.py:244-245` at `b0da93ea` ("Existing provider-era jobs ... Their provider/model provenance is retained, but never used to make a call.") |
 | 0029 | `docs/dead_retrieval_subtraction.md`, `nexus/agents/memnon/utils/db_access.py` | The same routing; the quoted `hybrid_search` reasons rest on `nexus/agents/memnon/utils/db_access.py:581` |
-| 0034 | `nexus.toml` | Ruling amendment: "Both knobs live in `nexus.toml`." |
+| 0034 | `nexus.toml`, `prompts/storyteller_writer_pass.md`, `prompts/storyteller_gaia.md`, `prompts/correspondence_compaction.md` | Ruling amendment: "Both knobs live in `nexus.toml`."; the prompt files were added in the fourth fix pass (below): the ruling's "Refine both prompts to this end" names the two persona prompts by role (the writer pass and Gaia), and "folding a judgment call into the compaction call" governs the compaction prompt |
 
 Not added, with the reason:
 
@@ -187,17 +188,26 @@ Not added, with the reason:
 - `~/.codex/config.toml` (0010): outside the repository.
 - Artifacts a record names without a file: the "pacing brief" (0001) and the
   "style diet" (0002) have no tracked file of that name (their guidance lives
-  in `prompts/storyteller_core.md`, already a source of both); "both prompts"
-  (0034) names no file; `SkaldWriterWire` (0018), `BleedCandidate.to_prompt_dict`
+  in `prompts/storyteller_core.md`, already a source of both); `SkaldWriterWire` (0018), `BleedCandidate.to_prompt_dict`
   (0019) and `begin_shift` (0021) live in files that are already sources;
   `save_04` (0020, 0024), `choice_text` and `raw_text` (0006) are database
   objects, and `memory_embeddings_2560d` (0024) is a proposed table.
 
-The line numbers in the #849 verdicts are those of the 2026-09-04 tree; at
-`b0da93ea` the cited content is still present at other lines (for example
-"Episode boundaries complete arcs." at `prompts/storyteller_core.md:161`, and
-`execute_hybrid_search` delegating at `nexus/agents/memnon/utils/db_access.py:416`).
-The records quote the verdicts and do not restate the line numbers.
+Two kinds of stale line number appear in the quoted text, and neither is
+restated or corrected in a record:
+
+- The line numbers in the #849 verdicts are those of the 2026-09-04 tree; at
+  `b0da93ea` the cited content is still present at other lines (for example
+  "Episode boundaries complete arcs.", cited as `prompts/storyteller_core.md:171`,
+  is now at `:161`). The records quote the verdicts byte for byte.
+- The `db_access.py:581` citation that 0029 quotes is not an #849 verdict. It is
+  in the `hybrid_search` reasons of `config/schema_docs_baseline.json`, written
+  by #1020 (`45a14f0c`, 819 slice B), where `:581` was the line of
+  `def execute_multi_model_hybrid_search`. 819-S3 (`e0966c6d`) kept that text
+  and appended the routing sentence; by then, and at `b0da93ea`, the number was
+  already stale (the definition is at `:434`, and `execute_hybrid_search`
+  delegates at `:416`). 0029 keeps the quote byte for byte; the stale number is
+  baseline debt for #819 or #813, not this record's to fix.
 
 ```text
 $ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/source_sweep.py $PWD   # on d338db76
@@ -273,6 +283,63 @@ MISMATCHES:
 0023: front differs from the order
 exit 1
 ```
+
+## Fourth Review Fixes on 2026-10-08
+
+A review of `ba84aeec` returned two findings, both applied:
+
+- The sweep had added `nexus/cli.py` to 0009 by reading (the record names the
+  `nexus usage` command, not a file) but did not read 0027 and 0034 the same
+  way. Both name governing files by role. 0027's quoted baseline reasons rest on
+  "Worker retains provider-era provenance" (`nexus/agents/orrery/worker.py`);
+  0034's ruling says "Refine both prompts to this end" (the writer and Gaia
+  persona prompts, `prompts/storyteller_writer_pass.md` and
+  `prompts/storyteller_gaia.md`) and folds the plan judgment "into the
+  compaction call" (`prompts/correspondence_compaction.md`). Each file joins its
+  record's sources after the existing ones (sweep table above and
+  `SOURCE_ADDITIONS` in `table_check.py`); `verified_commit` stays `b0da93ea`,
+  where all four files exist and hold what the records cite. No ruling text
+  changes.
+- The stale-line paragraph above now separates the #849 verdict line numbers
+  (2026-09-04 tree) from the `db_access.py:581` citation in the baseline reasons
+  that 0029 quotes. That citation came from #1020 (`45a14f0c`), not from #849
+  or 819-S3; `git log -S "db_access.py:581" -- config/schema_docs_baseline.json`
+  names only `45a14f0c`, where `:581` is `def execute_multi_model_hybrid_search`,
+  and at `e0966c6d` and `b0da93ea` that definition is at `:434` with the
+  delegation at `:416`.
+
+Reruns on the working tree before the commit (records and `table_check.py`
+changed, evidence edited):
+
+```text
+$ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/source_sweep.py $PWD
+0010-the-gaia-seat.md
+    UNTRACKED:~/.codex/config.toml (body lines 11)
+0018-killed-c003.md
+    UNTRACKED:doctrine.md (body lines 27)
+0022-killed-c068.md
+    UNTRACKED:doctrine.md (body lines 23)
+0023-killed-c100.md
+    UNTRACKED:doctrine.md (body lines 27)
+    UNTRACKED:coverage_critique.md (body lines 27)
+tracked files cited but not in sources: 0
+
+$ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/table_check.py $PWD
+order: order_817_S3.md
+order table rows: 55; files under docs/decisions/: 56
+lead-ins: 14; fixed Rejected rows: 28; fixed Reopening rows: 13
+[...]
+mismatches: 0
+
+$ PYTHONPATH=$PWD nice -n 15 $PY docs/qa/817-decision-ledger/quote_audit.py $PWD
+[...]
+distinct objects fetched: 90 (45 comments, 45 issues)
+
+all 55 records match (merge base b0da93eaedb4d1661af50742440e7988c7e48185)
+```
+
+Black (`--check`) and flake8 are clean on `table_check.py`. The test tails at
+this pass's tested commit are under Test Tails.
 
 ## 819-S3 Merge Check
 

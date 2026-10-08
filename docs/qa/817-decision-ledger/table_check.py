@@ -57,13 +57,18 @@ SOURCE_ADDITIONS: dict[str, list[str]] = {
     ],
     "0025": ["docs/dead_retrieval_subtraction.md"],
     "0026": ["docs/dead_retrieval_subtraction.md"],
-    "0027": ["docs/dead_retrieval_subtraction.md"],
+    "0027": ["docs/dead_retrieval_subtraction.md", "nexus/agents/orrery/worker.py"],
     "0028": ["docs/dead_retrieval_subtraction.md"],
     "0029": [
         "docs/dead_retrieval_subtraction.md",
         "nexus/agents/memnon/utils/db_access.py",
     ],
-    "0034": ["nexus.toml"],
+    "0034": [
+        "nexus.toml",
+        "prompts/storyteller_writer_pass.md",
+        "prompts/storyteller_gaia.md",
+        "prompts/correspondence_compaction.md",
+    ],
 }
 
 

@@ -4,6 +4,7 @@ sources:
   - config/schema_docs_baseline.json
   - migrations/023_orrery_schema.py
   - docs/dead_retrieval_subtraction.md
+  - nexus/agents/orrery/worker.py
 verified_commit: "b0da93eaedb4d1661af50742440e7988c7e48185"
 ---
 
