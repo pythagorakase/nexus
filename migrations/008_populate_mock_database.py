@@ -231,6 +231,14 @@ def populate_post_transition_data(conn, cache: dict):
     concept = character.get("concept", {})
 
     with conn.cursor() as cur:
+        # TRUNCATE CASCADE clears all three source junctions, but migration
+        # 148's row triggers do not fire for TRUNCATE and the unified rows
+        # reference entities/chunks that survive. Clear that mirror in this
+        # same transaction; the operator also supports pre-148 databases.
+        cur.execute("SELECT to_regclass('public.chunk_entity_references')")
+        if cur.fetchone()[0] is not None:
+            cur.execute("DELETE FROM public.chunk_entity_references")
+
         # Clear existing data (CASCADE handles FKs)
         cur.execute("TRUNCATE layers CASCADE")
         cur.execute("TRUNCATE characters CASCADE")
