@@ -1956,12 +1956,13 @@ def test_continue_weird_accepts_only_the_three_levels(capsys) -> None:
     assert "invalid choice: 'extreme'" in capsys.readouterr().err
 
 
-# The nine legacy HTTP handlers: each reports its own failures or lets them
+# The ten legacy HTTP handlers: each reports its own failures or lets them
 # reach main(), never through a broad except.
 _HTTP_HANDLERS = (
     "run_load",
     "run_continue",
     "run_retry",
+    "run_accept",
     "run_undo",
     "run_regenerate",
     "run_model",

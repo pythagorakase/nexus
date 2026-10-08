@@ -397,8 +397,9 @@ def test_inspect_slot_unreachable_api_exits_four() -> None:
             ("PATCH", "/api/slot/5/settings"),
         ),
         (("regenerate", "--slot", "5"), ("POST", "/api/narrative/regenerate")),
+        (("accept", "--slot", "5"), ("POST", "/api/narrative/approve")),
     ],
-    ids=["inspect-slot", "load", "lock", "model-set", "regenerate"],
+    ids=["inspect-slot", "load", "lock", "model-set", "regenerate", "accept"],
 )
 def test_http_command_unanswered_request_exits_four(
     tmp_path: Path, argv: tuple[str, ...], sent: tuple[str, str]
@@ -411,9 +412,10 @@ def test_http_command_unanswered_request_exits_four(
     ``[runtime.cli].turn_request_timeout_seconds``, once a 120 s literal. Its
     short-request budgets stay at 30 s, so only the turn budget can produce
     ``read timeout=0.5``.
+    ``accept``'s commit POST takes the turn budget too.
     """
     cli_settings = {"request_timeout_seconds": 0.5, "inspect_timeout_seconds": 0.5}
-    if argv[0] == "regenerate":
+    if argv[0] in ("regenerate", "accept"):
         cli_settings = {
             "request_timeout_seconds": 30.0,
             "inspect_timeout_seconds": 30.0,
@@ -698,6 +700,7 @@ _HANDLER_FIRST_REQUESTS: dict[str, tuple[tuple[str, ...], tuple[str, str]]] = {
     ),
     "retry": (("retry", "--slot", "5"), ("GET", "/api/slot/5/state")),
     "undo": (("undo", "--slot", "5"), ("POST", "/api/slot/5/undo")),
+    "accept": (("accept", "--slot", "5"), ("POST", "/api/narrative/approve")),
     "regenerate": (
         ("regenerate", "--slot", "5"),
         ("POST", "/api/narrative/regenerate"),
@@ -759,6 +762,7 @@ def test_http_handler_error_answer_is_an_api_error(
                 "continue",
                 "retry",
                 "undo",
+                "accept",
                 "regenerate",
                 "model-set",
             )
@@ -780,6 +784,7 @@ def test_http_handler_error_answer_is_an_api_error(
                 "continue",
                 "retry",
                 "undo",
+                "accept",
                 "regenerate",
                 "model-set",
             )
@@ -806,6 +811,62 @@ def test_http_handler_non_json_success_is_an_invalid_response(
     assert envelope["error"].startswith(f"{base_url}{first[1]} {message}")
     assert envelope["partial"] == {}
     assert [request[:2] for request in gateway.requests] == [first]
+
+
+def test_accept_sends_slot_and_commit_and_reports_the_chunk() -> None:
+    """Accept commits the pending draft without adding a session or choice."""
+    gateway = Gateway(
+        routes={
+            ("POST", "/api/narrative/approve"): (
+                200,
+                {
+                    "status": "committed",
+                    "message": "Narrative committed as chunk 42",
+                    "chunk_id": 42,
+                },
+            )
+        }
+    )
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "accept", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+        )
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert completed.stderr == ""
+    assert json.loads(completed.stdout) == {
+        "success": True,
+        "message": "Slot 5: committed chunk 42",
+        "chunk_id": 42,
+    }
+    assert gateway.requests == [
+        ("POST", "/api/narrative/approve", {"slot": 5, "commit": True})
+    ]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"status": "reviewed", "chunk_id": 42},
+        {"status": "committed", "chunk_id": None},
+        {"status": "committed", "chunk_id": True},
+    ],
+    ids=["not-committed", "missing-id", "bool-id"],
+)
+def test_accept_refuses_an_answer_without_a_chunk_id(answer: dict[str, Any]) -> None:
+    """A reviewed, absent or boolean chunk ID is not evidence of a commit."""
+    gateway = Gateway(routes={("POST", "/api/narrative/approve"): (200, answer)})
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "accept", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+        )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "invalid_response"
+    assert envelope["error"] == (
+        f"{base_url}/api/narrative/approve returned no committed chunk ID"
+    )
 
 
 @pytest.mark.parametrize(
