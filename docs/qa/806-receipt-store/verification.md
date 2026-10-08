@@ -316,3 +316,138 @@ directly above the handler:
 - `nexus/runtime/receipts.py` `record_failure`: `safe-continuation; reason=no mask; safety=caller` (the handler prints to stderr; the caller re-raises).
 - `nexus/cli.py` `run_receipts`, home locator: `degrade-read-only; reason=no home; safety=exit 1`.
 - `nexus/cli.py` `run_receipts`, read: `fail; reason=bad line; safety=exit 1`.
+
+## Codex Review Fixes, 2026-10-08
+
+The continuation merged `origin/main` (`afd034f3`) in `0bfbdb8a`, without
+rebasing. Implementation and regression tests are committed in `9f728a2a`.
+`AGENTS.md` was re-verified and stamped at that merge base. The shared Python
+interpreter imported this worktree's `nexus/__init__.py`, verified with:
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus;print(nexus.__file__)'
+```
+
+The printed path was
+`/Users/pythagor/nexus/.claude/worktrees/806-receipt-store/nexus/__init__.py`.
+
+### Review Dispositions
+
+- **Mapping keys:** the identifier filter leaked a planted key under
+  `global.model.api_models` on a nested `int_type` validation failure. The
+  replacement walks the known surface model's validation JSON schema. It
+  retains declared fields (including aliases) and array indices, and redacts
+  mapping keys, unknown fields, unknown model paths and ambiguous union
+  components. Tests use the real TOML loader with both the planted secret
+  and `default_slot` as provider keys, proving a global field-name allowlist
+  would also be insufficient. A real preferences-file validation test proves
+  the separate preferences schema preserves `fonts.veil.body` while redacting
+  an unknown key. Both raw receipt files exclude the planted strings.
+- **Unreadable receipt files:** OS failures opening or reading a day file now
+  become `ReceiptReadError`, with the path and next unread line. A real
+  directory named as a day file proves the direct reader and subprocess CLI
+  report `domain_failure`, without deleting or modifying the directory.
+  The earlier UTF-8 fix remains covered.
+- **Relative test seam:** `ReceiptConfigurationError` remains a `ValueError`
+  for direct callers; `nexus receipts` translates it into `config_error`.
+  The subprocess regression proves there is no traceback or receipt write.
+- **Repeated writes, permission modes, external paths and corrupt lines:**
+  retained the explicit order contracts. `docs/runtime.md` now states that
+  every failure appends, no write deduplication/rate limit/pruning exists,
+  filesystem identities remain in paths, new leaf/file permissions do not
+  change existing modes or parent modes, and a corrupt file requires operator
+  repair or archival outside the receipt directory. No skip-invalid mode or
+  permission mutation was added.
+- **Missing optional configuration:** an AST scan of `nexus/` and `scripts/`
+  found two `load_settings` calls guarded by `FileNotFoundError` handlers:
+  `nexus/runtime/readiness.py:253` and
+  `nexus/agents/memnon/utils/artifact_manifest.py:683`. Both report a failed
+  operation and remediation; neither probes an optional configuration file.
+  The receipt is appropriate in both cases.
+- **Coincident roots:** the earlier root-deduplication fix is retained and its
+  CLI regression remains green.
+
+### Regression and Focused Proof
+
+For every pytest command below, `PY=/Users/pythagor/nexus/.venv/bin/python`;
+the environment prefix is:
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT \
+  -u NEXUS_RUN_POSTGRES -u NEXUS_RUN_LIVE_LLM PYTHONPATH=$PWD nice -n 15
+```
+
+Before changing production code, both new mapping-key regressions failed:
+
+```text
+$ <environment prefix> $PY -m pytest -q -p no:warnings tests/test_runtime/test_receipts.py -k identifier_mapping_keys
+FAILED tests/test_runtime/test_receipts.py::test_validation_receipt_redacts_identifier_mapping_keys[sk-planted-806-0123456789abcdef]
+FAILED tests/test_runtime/test_receipts.py::test_validation_receipt_redacts_identifier_mapping_keys[default_slot]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+2 failed, 11 deselected in 0.36s
+```
+
+The first failure found the planted secret in raw JSON bytes. The second
+found the literal provider key `default_slot` where `?` was required.
+
+The focused suite covered the implementation committed in `9f728a2a`:
+
+```text
+$ <environment prefix> $PY -m pytest -q -p no:warnings tests/test_runtime_home.py tests/test_cli_contract.py tests/test_runtime tests/test_config tests/test_cli_reference_doc.py tests/test_doc_front_matter.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+588 passed, 18 skipped in 211.29s (0:03:31)
+```
+
+After the implementation commit, the receipt regressions and document
+freshness checks were rerun at exact HEAD `9f728a2a`:
+
+```text
+$ <environment prefix> $PY -m pytest -q -p no:warnings tests/test_runtime/test_receipts.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+58 passed in 6.02s
+```
+
+The 18 skips are the focused set's PostgreSQL tests, because this continuation
+was assigned offline focused proof only. This is not a whole-tree or
+PostgreSQL landing gate; the coordinator owns that gate. No owner database,
+service, real receipt directory or paid provider was changed or contacted.
+
+### Static Proof
+
+```text
+$ nice -n 15 $PY -m black --check nexus/runtime/receipts.py nexus/cli.py tests/test_runtime/test_receipts.py
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+$ PYTHONPATH=$PWD nice -n 15 $PY -m mypy --explicit-package-bases nexus/runtime/receipts.py nexus/cli.py tests/test_runtime/test_receipts.py
+Success: no issues found in 3 source files
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+$ git diff --check
+```
+
+Flake8 on those three files reports only nine pre-existing `nexus/cli.py`
+E501 lines. The corresponding main file was extracted using
+`git show origin/main:nexus/cli.py` into
+`temp/qa806-codex/static-origin-main/nexus/cli.py`; the same flake8 command on
+that file reports the same lengths and texts at shifted lines. Mypy with
+`--explicit-package-bases` on that baseline file reports no issues.
+
+| Branch Line | Main Line | Diagnostic |
+| --- | --- | --- |
+| 976 | 976 | E501, 92 > 88 characters |
+| 4330 | 4330 | E501, 93 > 88 characters |
+| 4794 | 4696 | E501, 113 > 88 characters |
+| 4823 | 4725 | E501, 118 > 88 characters |
+| 4863 | 4765 | E501, 90 > 88 characters |
+| 4948 | 4850 | E501, 151 > 88 characters |
+| 4974 | 4876 | E501, 94 > 88 characters |
+| 4975 | 4877 | E501, 103 > 88 characters |
+| 4994 | 4896 | E501, 101 > 88 characters |
+
+The implementation commit's catalog, configuration/model-drift and exception
+disposition hooks passed; the migration-comment hook had no matching files.
+
+Codex — GPT-6
