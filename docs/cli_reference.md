@@ -18,7 +18,7 @@ Every command that `nexus.cli.build_parser()` registers, with its arguments and 
 | --- | --- | --- |
 | `http` | The NEXUS API only | `inspect slot`, `inspect chunks`, `inspect chunk`, `inspect incubator`, `inspect characters`, `inspect places`, `inspect factions`, `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `model --set`, `model --clear` |
 | `database` | A slot database directly | `jobs`, `inspect-turn`, `prune-manifests`, `tags audit`, `model`, `trait-audit`, `retrograde-packet`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, `faction-manifest`, `faction-apply`, `character-manifest`, `character-apply`, `place-manifest`, `place-apply`, `retrograde-seed-candidates --slot` |
-| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `receipts`, `window-replay`, `models lock`, `models verify`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
+| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `init`, `usage`, `receipts`, `window-replay`, `models lock`, `models verify`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
 
 Under the remote profile: `up` uses `http`; `status` uses `http`.
 
@@ -104,6 +104,17 @@ Transport: `local_operator`.
 | Argument | Takes | Default | Description |
 | --- | --- | --- | --- |
 | `--target` | `owner-host`, `owner-client`, `ci-runner` | `owner-host` | Machine role whose checks run (default: owner-host) |
+| `--config` | `CONFIG` | — | Path to nexus.toml (default: $NEXUS_HOME/nexus.toml, else NEXUS_RUNTIME_CONFIG, else the checkout's nexus.toml) |
+
+### `nexus init`
+
+Plan this machine's setup as an owner host (read-only).
+
+Transport: `local_operator`.
+
+| Argument | Takes | Default | Description |
+| --- | --- | --- | --- |
+| `--plan` (required) | — | — | Print the ordered steps the failed owner-host checks name; applies no setup changes |
 | `--config` | `CONFIG` | — | Path to nexus.toml (default: $NEXUS_HOME/nexus.toml, else NEXUS_RUNTIME_CONFIG, else the checkout's nexus.toml) |
 
 ### `nexus usage`

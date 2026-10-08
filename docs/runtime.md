@@ -338,6 +338,7 @@ nexus restart [service] [--slot N] [--config PATH]
 nexus status [--config PATH]
 nexus logs [service] [-n LINES] [-f] [--mark | --since MARK] [--config PATH]
 nexus doctor [--target owner-host|owner-client|ci-runner] [--config PATH]
+nexus init --plan [--config PATH]
 nexus receipts
 ```
 
@@ -416,10 +417,21 @@ main checkout's venv, run `PYTHONPATH=$PWD python -m nexus.cli doctor --target
 ci-runner --json` instead. The doctor checks the checkout that its imported
 `nexus` package belongs to; the working directory does not change this.
 
+`nexus init --plan` turns the owner-host report into ordered setup steps. It
+runs the checks `nexus doctor` runs and applies no setup changes. Existing
+diagnostic failure receipts are still recorded when configuration loading
+fails. Each failed check is one step, in registry order, which puts every
+dependency before its dependents, and the step carries that check's remediation
+verbatim. A check skipped behind a failed check is listed as blocked; run the
+plan again once the steps are done. It exits 1 while any step remains and 0
+otherwise. `--json` prints `schema_version`, `target`, `ok`, `steps` (each with
+`number`, `check_id`, `observed` and `remediation`) and `blocked`. There is no
+`--apply`: the operator runs each step.
+
 `/runtime/status` carries the checks the gateway evaluates in-process
 (`config.valid`, `tools.pg_dump`, `ui.bundle`): the gateway's own `PATH` and
-build directory are the ones that matter to it. Guest-host checks, slot
-playability, and `nexus init` are later slices of #803.
+build directory are the ones that matter to it. Guest-host checks and slot
+playability are later slices of #803.
 
 ## The Runtime Home
 
