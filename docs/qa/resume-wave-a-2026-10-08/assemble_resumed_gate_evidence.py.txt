@@ -1,0 +1,405 @@
+"""Assemble completed shared proof into the pinned 820 checkout, on explicit use.
+
+Prepared by source inspection only; do not import or execute during the gate.
+Later invocation requires --assemble. It performs read-only Git inspection and
+writes only one previously absent evidence directory. It never fetches, stages,
+commits, pushes, imports application code, runs tests or accesses a database.
+Failure after directory creation leaves partial evidence WITHOUT COMPLETE.json;
+it does not remove files or retry over an existing directory.
+"""
+
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import stat
+import subprocess
+from string import Template
+import sys
+from typing import Any
+
+
+COORD = Path('/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord')
+INTEGRATION = Path('/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus')
+TARGET = Path('/Users/pythagor/nexus/.claude/worktrees/820-home-anchors')
+OUTPUT_REL = 'docs/qa/resume-wave-a-2026-10-08'
+OUTPUT = TARGET / OUTPUT_REL
+GATE = COORD / 'next-full-gate-resumed-1'
+HISTORICAL = COORD / 'next-full-gate'
+TESTED = '2cc9a5fcff76e0c643ca41490eb2508b870b4850'
+TESTED_TREE = '3804225e54624e7739c6f6d143cc00b804892a3b'
+BASE = '4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8'
+TARGET_HEAD = '4fffb85b6008e76c3d14ce750666cf73bc802c6e'
+HISTORICAL_HEAD = '849eeef4d673277b6f88f9412e2c0643a916e7d7'
+HISTORICAL_TREE = 'c994a0cdb785fae5dbbcd31175c61a637ad5dc6e'
+REPAIR = '16706c35'
+PYTHON = '/Users/pythagor/nexus/.venv/bin/python'
+INPUTS = {
+    '820': TARGET_HEAD,
+    '815': '5fcc76e43428a570f095e10d8944fdc93b321e27',
+    '812': '1b87677113eb0b30003d3b1713e9dd1a89ab4454',
+    '777': '149704d16fa126b8ac9d142a22bf51b42a669552',
+}
+FOCUSED_PATHS = {
+    '820': 'docs/qa/820-home-anchors/verification.md',
+    '815': 'docs/qa/815-chunk-range/verification.md',
+    '812': 'docs/qa/812-models-plan-fetch/verification.md',
+    '777': 'docs/qa/777-shell-ui-bundle/verification.md',
+}
+SELECTORS = {
+    'core': ['tests', '--ignore=tests/test_api', '--ignore=tests/test_orrery'],
+    'api': ['tests/test_api'],
+    'orrery': ['tests/test_orrery'],
+}
+COMMAND_PREFIX = [
+    'nice', '-n', '15', PYTHON, '-m', 'pytest', '-q', '-p',
+    'tests.dbname_audit', '-p', 'no:cacheprovider',
+]
+GUARDS = {
+    'secret_guard': (
+        'secret-store guard: active; nexus-api: denied; disposable keychain: denied'
+    ),
+    'receipt_isolation': 'receipt isolation: checkout and user receipts untouched',
+    'owner_audit': 'dbname audit: owner targets: none',
+}
+RUNNERS = {
+    'run_next_combined_gate_resumed.py': (
+        'd4a87f22fb999003394f1f530e4fc8342fbee8281f6574ae18eb1ec45f4e9798'
+    ),
+    'run_next_combined_gate.py': (
+        '0d8a4d378788d5895efd389a7e8756a948c0e345a253cdd169d4e59a814b599b'
+    ),
+}
+SUMMARY = re.compile(
+    r'^(?P<counts>\d+ [a-z]+(?:, \d+ [a-z]+)*) in '
+    r'(?P<seconds>\d+(?:\.\d+)?)s(?: \([^\n]+\))?$'
+)
+COUNT_NAMES = {
+    'passed', 'skipped', 'warnings', 'failed', 'errors', 'xfailed',
+    'xpassed', 'deselected',
+}
+SIGNATURE = 'Codex — GPT-6'
+
+
+def require(condition: bool, message: str) -> None:
+    """Stop assembly before reporting success when an invariant fails."""
+    if not condition:
+        raise RuntimeError(message)
+
+
+def sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def json_bytes(value: Any) -> bytes:
+    return (json.dumps(value, indent=2, ensure_ascii=False) + '\n').encode()
+
+
+def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        require(key not in result, f'Duplicate JSON key: {key}')
+        result[key] = value
+    return result
+
+
+def read_json(data: bytes) -> dict[str, Any]:
+    result = json.loads(data, object_pairs_hook=unique_object)
+    require(isinstance(result, dict), 'Expected a JSON object')
+    return result
+
+
+def plain_existing(path: Path, *, directory: bool = False) -> None:
+    """Reject symlinks in fixed paths and require their expected file type."""
+    require(path.is_absolute(), f'Not an absolute path: {path}')
+    for parent in reversed(path.parents):
+        info = parent.lstat()
+        require(stat.S_ISDIR(info.st_mode), f'Non-directory/symlink parent: {parent}')
+    info = path.lstat()
+    expected = stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
+    require(expected, f'Unexpected file type or symlink: {path}')
+
+
+def read_bytes(path: Path) -> bytes:
+    plain_existing(path)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode), f'Not a regular input: {path}')
+        require(info.st_size <= 64 * 1024 * 1024, f'Unexpected input size: {path}')
+        return stream.read()
+
+
+def git(root: Path, *args: str) -> bytes:
+    """Read Git without ambient repository overrides or optional index writes."""
+    environment = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+    environment['GIT_OPTIONAL_LOCKS'] = '0'
+    completed = subprocess.run(
+        ['git', '--no-pager', '-c', 'core.fsmonitor=false', *args],
+        cwd=root, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        check=False, timeout=30,
+    )
+    require(
+        completed.returncode == 0,
+        f'Git inspection refused: {args!r}: {completed.stderr.decode(errors="replace")}',
+    )
+    return completed.stdout
+
+
+def git_text(root: Path, *args: str) -> str:
+    return git(root, *args).decode().strip()
+
+
+def status(root: Path) -> bytes:
+    return git(root, 'status', '--porcelain=v1', '-z', '--untracked-files=all')
+
+
+def inspect_checkouts(*, output_created: bool = False) -> dict[str, Any]:
+    """Check exact heads, clean source, frozen main and all source ancestry."""
+    for root, expected in ((INTEGRATION, TESTED), (TARGET, TARGET_HEAD)):
+        plain_existing(root, directory=True)
+        require(git_text(root, 'rev-parse', '--show-toplevel') == str(root), 'Wrong root')
+        require(git_text(root, 'rev-parse', '--is-shallow-repository') == 'false', 'Shallow history')
+        require(git_text(root, 'rev-parse', 'HEAD') == expected, f'Head drift: {root}')
+        require(git_text(root, 'rev-parse', 'origin/main') == BASE, 'Frozen main drift')
+    require(git_text(INTEGRATION, 'rev-parse', 'HEAD^{tree}') == TESTED_TREE, 'Tree drift')
+    require(not status(INTEGRATION), 'Integration is not clean')
+    require(
+        git_text(TARGET, 'symbolic-ref', '--short', 'HEAD') == 'claude/820-home-anchors',
+        'Wrong target branch',
+    )
+    target_status = status(TARGET)
+    if output_created:
+        for entry in target_status.split(b'\0'):
+            if entry:
+                require(
+                    entry.startswith(('?? ' + OUTPUT_REL + '/').encode()),
+                    'Target changed outside the new untracked evidence directory',
+                )
+    else:
+        require(not target_status, '820 target is not clean')
+        require(not os.path.lexists(OUTPUT), 'Evidence destination already exists')
+    ancestry: dict[str, Any] = {}
+    for lane, head in INPUTS.items():
+        git(INTEGRATION, 'merge-base', '--is-ancestor', head, TESTED)
+        require(git_text(INTEGRATION, 'rev-parse', head + '^{commit}') == head, 'Input ref drift')
+        ancestry[lane] = {'head': head, 'included': True}
+    git(INTEGRATION, 'merge-base', '--is-ancestor', BASE, TESTED)
+    git(TARGET, 'merge-base', '--is-ancestor', BASE, TARGET_HEAD)
+    return {
+        'captured_at': datetime.now(timezone.utc).isoformat(),
+        'integration_worktree': str(INTEGRATION), 'head': TESTED,
+        'tree': TESTED_TREE, 'git_status_porcelain': '', 'origin_main_tracking': BASE,
+        'input_ancestry': ancestry, 'target_worktree': str(TARGET),
+        'target_head': TARGET_HEAD,
+        'target_status': target_status.decode().replace('\0', '\n'),
+        'signature': SIGNATURE,
+    }
+
+
+def parse_summary(data: bytes) -> dict[str, Any]:
+    """Parse the last final pytest summary; reject unknown count categories."""
+    lines = data.decode().splitlines()
+    matches = [(line, SUMMARY.fullmatch(line.strip('= '))) for line in lines]
+    matches = [(line, match) for line, match in matches if match is not None]
+    require(bool(matches), 'No recognized final pytest summary')
+    line, match = matches[-1]
+    require(match is not None, 'Missing summary match')
+    counts = {name: 0 for name in COUNT_NAMES}
+    seen: set[str] = set()
+    for fragment in match['counts'].split(', '):
+        number, name = fragment.split(' ')
+        name = {'warning': 'warnings', 'error': 'errors'}.get(name, name)
+        require(name in COUNT_NAMES and name not in seen, f'Unknown/duplicate count: {name}')
+        seen.add(name)
+        counts[name] = int(number)
+    require(counts['passed'] > 0, 'Gate summary has no passes')
+    return {'summary': line.strip(), 'counts': counts, 'seconds': float(match['seconds'])}
+
+
+def validate_piece(item: Any, name: str, folder: Path, raw: bytes, *, failed: bool = False) -> dict[str, Any]:
+    require(isinstance(item, dict), 'Malformed piece')
+    require(item.get('name') == name and item.get('state') == 'complete', f'Incomplete {name}')
+    expected_exit = 1 if failed else 0
+    require(type(item.get('exit_code')) is int and item['exit_code'] == expected_exit, f'Wrong {name} exit')
+    require(item.get('command') == COMMAND_PREFIX + SELECTORS[name], f'Unexpected {name} command')
+    require(item.get('log') == str(folder / f'{name}.log'), f'Unexpected {name} source path')
+    lines = raw.decode().splitlines()
+    for key, marker in GUARDS.items():
+        require(item.get(key) is True and marker in lines, f'Missing/false {name} {key}')
+    summary = parse_summary(raw)
+    counts = summary['counts']
+    require(counts['errors'] == 0, f'{name} has errors')
+    require(counts['failed'] == (1 if failed else 0), f'{name} summary/exit disagreement')
+    require(counts['xpassed'] == 0 and counts['deselected'] == 0, f'{name} unexpected selection/XPASS')
+    return {'name': name, 'command': item['command'], 'exit_code': expected_exit, **summary}
+
+
+def display_counts(counts: dict[str, int]) -> str:
+    labels = ('passed', 'skipped', 'warnings', 'xfailed', 'xpassed', 'failed', 'errors', 'deselected')
+    return ', '.join(f'{counts[key]} {key}' for key in labels if counts[key])
+
+
+def assemble() -> None:
+    """Validate all evidence in memory, then exclusively write the new directory."""
+    require(
+        Path(__file__).absolute() == COORD / 'assemble_resumed_gate_evidence.py',
+        'Invoke the reviewed helper at its original coordination path',
+    )
+    before = inspect_checkouts()
+    inputs: dict[Path, bytes] = {}
+    files: dict[str, bytes] = {}
+    provenance: list[dict[str, Any]] = []
+
+    def retain(source: Path, destination: str) -> bytes:
+        data = read_bytes(source)
+        inputs[source] = data
+        require(destination not in files, f'Duplicate destination: {destination}')
+        files[destination] = data
+        provenance.append({'destination': destination, 'source': str(source), 'sha256': sha(data), 'bytes': len(data)})
+        return data
+
+    results = read_json(retain(GATE / 'results.json', 'results.json'))
+    require(results.get('state') == 'passed', 'Current gate has not passed')
+    require(results.get('head') == TESTED and results.get('tree') == TESTED_TREE, 'Result head/tree mismatch')
+    require(results.get('import_path') == str(INTEGRATION / 'nexus/__init__.py'), 'Wrong imported package')
+    pieces = results.get('pieces')
+    require(isinstance(pieces, list) and len(pieces) == 3, 'Need exactly three completed pieces')
+    started = datetime.fromisoformat(results['started_at'])
+    completed = datetime.fromisoformat(results['completed_at'])
+    require(started.tzinfo is not None and completed.tzinfo is not None, 'Naive timestamps')
+    require(started <= completed <= datetime.now(timezone.utc), 'Invalid completion time')
+    summaries = []
+    for item, name in zip(pieces, SELECTORS):
+        raw = retain(GATE / f'{name}.log', f'{name}.txt')
+        summaries.append(validate_piece(item, name, GATE, raw))
+    runner = retain(COORD / 'run_next_combined_gate_resumed.py', 'run_next_combined_gate_resumed.py.txt')
+    require(sha(runner) == RUNNERS['run_next_combined_gate_resumed.py'], 'Resumed runner source changed')
+
+    historical = read_json(retain(HISTORICAL / 'results.json', 'historical-failed-attempt/results.json'))
+    require(historical.get('state') == 'failed', 'Historical attempt not recorded as failed')
+    require(historical.get('head') == HISTORICAL_HEAD and historical.get('tree') == HISTORICAL_TREE, 'Historical identity changed')
+    old_pieces = historical.get('pieces')
+    require(isinstance(old_pieces, list) and len(old_pieces) == 1, 'Historical attempt scope changed')
+    old_raw = retain(HISTORICAL / 'core.log', 'historical-failed-attempt/core.txt')
+    old_summary = validate_piece(old_pieces[0], 'core', HISTORICAL, old_raw, failed=True)
+    require(
+        'FAILED tests/test_prompt_lint.py::test_python_has_no_embedded_prompt_prose' in old_raw.decode(),
+        'Historical failure identity changed',
+    )
+    old_runner = retain(COORD / 'run_next_combined_gate.py', 'historical-failed-attempt/run_next_combined_gate.py.txt')
+    require(sha(old_runner) == RUNNERS['run_next_combined_gate.py'], 'Historical runner source changed')
+    repair_sha = git_text(INTEGRATION, 'rev-parse', REPAIR + '^{commit}')
+    git(INTEGRATION, 'merge-base', '--is-ancestor', repair_sha, TESTED)
+    repair = git(INTEGRATION, 'show', '--format=', repair_sha, '--', 'nexus/api/ui_config_endpoints.py')
+    require(bool(repair), 'Missing recorded docstring repair')
+    files['historical-failed-attempt/repair.diff'] = repair
+    provenance.append({'destination': 'historical-failed-attempt/repair.diff', 'source': f'git show {repair_sha} -- nexus/api/ui_config_endpoints.py', 'sha256': sha(repair), 'bytes': len(repair)})
+
+    template_path = COORD / 'resumed-gate-verification-template.md'
+    template_raw = retain(template_path, 'verification-template.md.txt')
+    retain(COORD / 'assemble_resumed_gate_evidence.py', 'assemble_resumed_gate_evidence.py.txt')
+    totals = {key: sum(item['counts'][key] for item in summaries) for key in COUNT_NAMES}
+    focused_links = []
+    for lane, head in INPUTS.items():
+        path = FOCUSED_PATHS[lane]
+        git(INTEGRATION, 'cat-file', '-e', f'{head}:{path}')
+        focused_links.append(f'- [{lane}: existing lane evidence](https://github.com/pythagorakase/nexus/blob/{head}/{path}).')
+    metadata = {
+        'tested_head': TESTED, 'tested_tree': TESTED_TREE, 'base': BASE,
+        'inputs': INPUTS, 'pieces': summaries, 'combined_counts': totals,
+        'historical_failed_attempt': old_summary, 'repair_commit': repair_sha,
+        'template_source': str(template_path), 'template_sha256': sha(template_raw),
+        'scope': 'assembled Python gate only; no standalone or separate offline full gate',
+        'signature': SIGNATURE,
+    }
+    table = ['| Piece | Final summary | Exit | Guards |', '| --- | --- | --- | --- |']
+    table += [f'| [{item["name"]}]({item["name"]}.txt) | {item["summary"]} | 0 | All three present |' for item in summaries]
+    table.append(f'| Combined | **{display_counts(totals)}** | All zero | All three in each piece |')
+    values = {
+        'combined_summary': display_counts(totals), 'tested_head': TESTED,
+        'tested_tree': TESTED_TREE, 'base_head': BASE, 'target_head': TARGET_HEAD,
+        'started_at': results['started_at'], 'completed_at': results['completed_at'],
+        'import_path': results['import_path'], 'ui_head': INPUTS['777'],
+        'historical_head': HISTORICAL_HEAD, 'historical_summary': old_summary['summary'],
+        'input_table': '\n'.join(['| Lane | Included input |', '| --- | --- |'] + [f'| {lane} | `{head}` |' for lane, head in INPUTS.items()]),
+        'commands': '\n'.join(shlex.join(item['command']) for item in summaries),
+        'piece_table': '\n'.join(table), 'focused_links': '\n'.join(focused_links),
+    }
+    files['verification.md'] = Template(template_raw.decode()).substitute(values).encode()
+    files['assembly-metadata.json'] = json_bytes(metadata)
+    addendum = (
+        '## Shared Integration Validation\n\n'
+        f'The assembled integration `{TESTED}` includes this lane’s input '
+        f'`{TARGET_HEAD}` and passed the full PostgreSQL-enabled Python gate: '
+        f'{display_counts(totals)}. '
+        '[Exact commands, logs, ancestry and guard limits]'
+        '(../resume-wave-a-2026-10-08/verification.md). '
+        'This is shared assembled-tree coverage; no separate standalone or '
+        'whole-suite offline gate was run. Existing focused/manual evidence '
+        'retains its original source head.\n\n' + SIGNATURE + '\n'
+    )
+    files['820-addendum-proposal.md'] = addendum.encode()
+
+    # All admission checks above precede the first write into a worktree.
+    for source, data in inputs.items():
+        require(read_bytes(source) == data, f'Input changed during admission: {source}')
+    before_write = inspect_checkouts()
+    files['final-head-state.json'] = json_bytes({'initial': before, 'before_write': before_write, 'signature': SIGNATURE})
+    existing_destinations = {item['destination'] for item in provenance}
+    for destination, data in files.items():
+        if destination not in existing_destinations:
+            provenance.append({'destination': destination, 'source': 'generated from validated assembly metadata', 'sha256': sha(data), 'bytes': len(data)})
+    files['artifact-provenance.json'] = json_bytes({'artifacts': provenance, 'template': {'path': str(template_path), 'sha256': sha(template_raw)}, 'signature': SIGNATURE})
+    plain_existing(OUTPUT.parent, directory=True)
+    OUTPUT.mkdir(mode=0o755, exist_ok=False)
+    for destination, data in files.items():
+        path = OUTPUT / destination
+        require(path.is_relative_to(OUTPUT), 'Generated path escapes output')
+        if path.parent != OUTPUT:
+            path.parent.mkdir(mode=0o755, exist_ok=True)
+        plain_existing(path.parent, directory=True)
+        with path.open('xb') as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        require(read_bytes(path) == data, f'Written artifact differs: {destination}')
+    for source, data in inputs.items():
+        require(read_bytes(source) == data, f'Source changed before completion: {source}')
+    after = inspect_checkouts(output_created=True)
+    completion = {
+        'state': 'assembled', 'captured_at': datetime.now(timezone.utc).isoformat(),
+        'post_write_checkouts': after,
+        'files': {name: sha(data) for name, data in files.items()},
+        'signature': SIGNATURE,
+    }
+    with (OUTPUT / 'COMPLETE.json').open('xb') as stream:
+        stream.write(json_bytes(completion))
+        stream.flush()
+        os.fsync(stream.fileno())
+    print(json.dumps({'state': 'assembled', 'directory': str(OUTPUT), 'tested_head': TESTED, 'counts': totals}))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--assemble', action='store_true', help='Explicitly write the one pinned evidence directory')
+    args = parser.parse_args()
+    if not args.assemble:
+        parser.error('No action taken; reviewed explicit execution requires --assemble')
+    try:
+        assemble()
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:
+        print(f'Evidence assembly refused: {exc}', file=sys.stderr)
+        print('No commit or rollback was attempted. An output directory without COMPLETE.json is incomplete; inspect it manually.', file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

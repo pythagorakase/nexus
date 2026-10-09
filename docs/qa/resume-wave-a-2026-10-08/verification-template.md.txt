@@ -1,0 +1,101 @@
+# Remaining Wave A: Shared Integration Verification
+
+**Full Python gate passed: ${combined_summary}.** All three serial pieces
+exited zero and reported the required secret-store, receipt-isolation and
+owner-target summaries. This is evidence for the assembled integration, not
+a claim that each standalone feature branch ran a separate full gate.
+
+Tested head: `${tested_head}`. Tested tree: `${tested_tree}`.
+The frozen comparison base was `${base_head}`. The completed runner records
+`${started_at}` through `${completed_at}`, and imported
+`${import_path}`. The assembly-time [checkout capture](final-head-state.json)
+confirms that exact integration was still clean and contained these inputs:
+
+${input_table}
+
+820 is only the carrier of this common evidence. Its source head at assembly
+was `${target_head}`; this directory adds no production, configuration, UI,
+test or baseline changes. The [provenance manifest](artifact-provenance.json)
+records the source and SHA-256 of retained inputs and generated payloads.
+The final completion record hashes that manifest as well; no file claims to
+contain its own hash.
+`COMPLETE.json` is written last; its absence means assembly did not complete.
+
+## Complete Serial Gate
+
+The [raw runner](run_next_combined_gate_resumed.py.txt) used the integration
+checkout as cwd and exact PYTHONPATH, the shared interpreter, nice15 and the
+load cap. It cleared inherited pytest-selection/plugin, runtime routing,
+database-target/template and paid/corpus/secret-store opt-ins. It checked the
+same clean head before and after each piece. Exact commands:
+
+```sh
+${commands}
+```
+
+Counts below are parsed from each raw log's final pytest summary, not inferred
+from prior runs or manually entered. The [metadata](assembly-metadata.json)
+retains those literal summary lines and command arrays alongside the table.
+
+${piece_table}
+
+The [completed raw result](results.json) records state `passed`. These three
+invocations partition the full `tests/` suite once; offline tests are included
+in the PostgreSQL-enabled run. No separate whole-suite offline run is claimed.
+UI state-surface regeneration and the full UI test suite remain separately
+documented in the 777 lane; this Python gate does not certify those checks.
+
+## Earlier Failed Attempt
+
+The [earlier raw result](historical-failed-attempt/results.json) and
+[core transcript](historical-failed-attempt/core.txt) remain distinct history:
+`${historical_head}`, core exit1, `${historical_summary}`. API and Orrery were
+not started in that attempt. Its passes are not added to the current totals.
+The retained [runner](historical-failed-attempt/run_next_combined_gate.py.txt)
+is the exact earlier source.
+
+The sole recorded failure was the new UI endpoint's docstring triggering the
+existing prompt-prose lint. [The repair diff](historical-failed-attempt/repair.diff)
+changes that docstring only. The existing
+[777 evidence at the included head](https://github.com/pythagorakase/nexus/blob/${ui_head}/docs/qa/777-shell-ui-bundle/verification.md)
+retains the focused repair proof and original stopped-gate disposition. The
+current three-piece result supersedes the failed attempt only for Python gate
+completion; historical logs and their original claims were not rewritten.
+
+## Existing Focused and Manual Evidence
+
+${focused_links}
+
+Those records retain their original source heads and exact outcomes. Their
+links do not imply a new download, model verification, browser run or focused
+test repetition during evidence assembly. Subsequent freshness stamps or
+landing merge resolutions require a separate delta record; they do not change
+which commit this full gate tested.
+
+## Guard Evidence and Limits
+
+Each completed piece contains:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: owner targets: none
+```
+
+The audit covers instrumented psycopg2/asyncpg calls in the pytest process.
+Fixture-registered private clusters may admit save-style database names;
+those are distinct from owner-server slots. The C-level
+`psycopg2.extensions.ReplicationConnection` class, unaudited child processes,
+other drivers and unswept captured constructors remain outside interception.
+Fixture `pg_dump`/`psql` reads of the owner template are outside this driver
+audit. These lines do not establish machine-wide absence of database access.
+The secret-store guard is instrumentation, not an OS sandbox; its documented
+child/exec/native-call limits still apply. Exact limitations are in
+`docs/agent_workflow.md` and `tests/dbname_audit.py` at the tested commit.
+
+Paid/live and corpus opt-ins were unset. Skipped opt-in probes are not claimed
+executed. No migration, fleet application, owner model change, service startup
+or paid inference is part of this evidence assembly. Owner service operations
+remain separate from publication and this gate.
+
+Codex — GPT-6

@@ -1,0 +1,63 @@
+{
+  "initial": {
+    "captured_at": "2026-10-09T00:30:16.194012+00:00",
+    "integration_worktree": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus",
+    "head": "2cc9a5fcff76e0c643ca41490eb2508b870b4850",
+    "tree": "3804225e54624e7739c6f6d143cc00b804892a3b",
+    "git_status_porcelain": "",
+    "origin_main_tracking": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+    "input_ancestry": {
+      "820": {
+        "head": "4fffb85b6008e76c3d14ce750666cf73bc802c6e",
+        "included": true
+      },
+      "815": {
+        "head": "5fcc76e43428a570f095e10d8944fdc93b321e27",
+        "included": true
+      },
+      "812": {
+        "head": "1b87677113eb0b30003d3b1713e9dd1a89ab4454",
+        "included": true
+      },
+      "777": {
+        "head": "149704d16fa126b8ac9d142a22bf51b42a669552",
+        "included": true
+      }
+    },
+    "target_worktree": "/Users/pythagor/nexus/.claude/worktrees/820-home-anchors",
+    "target_head": "4fffb85b6008e76c3d14ce750666cf73bc802c6e",
+    "target_status": "",
+    "signature": "Codex — GPT-6"
+  },
+  "before_write": {
+    "captured_at": "2026-10-09T00:30:16.383001+00:00",
+    "integration_worktree": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus",
+    "head": "2cc9a5fcff76e0c643ca41490eb2508b870b4850",
+    "tree": "3804225e54624e7739c6f6d143cc00b804892a3b",
+    "git_status_porcelain": "",
+    "origin_main_tracking": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+    "input_ancestry": {
+      "820": {
+        "head": "4fffb85b6008e76c3d14ce750666cf73bc802c6e",
+        "included": true
+      },
+      "815": {
+        "head": "5fcc76e43428a570f095e10d8944fdc93b321e27",
+        "included": true
+      },
+      "812": {
+        "head": "1b87677113eb0b30003d3b1713e9dd1a89ab4454",
+        "included": true
+      },
+      "777": {
+        "head": "149704d16fa126b8ac9d142a22bf51b42a669552",
+        "included": true
+      }
+    },
+    "target_worktree": "/Users/pythagor/nexus/.claude/worktrees/820-home-anchors",
+    "target_head": "4fffb85b6008e76c3d14ce750666cf73bc802c6e",
+    "target_status": "",
+    "signature": "Codex — GPT-6"
+  },
+  "signature": "Codex — GPT-6"
+}

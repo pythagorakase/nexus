@@ -1,0 +1,152 @@
+{
+  "tested_head": "2cc9a5fcff76e0c643ca41490eb2508b870b4850",
+  "tested_tree": "3804225e54624e7739c6f6d143cc00b804892a3b",
+  "base": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "inputs": {
+    "820": "4fffb85b6008e76c3d14ce750666cf73bc802c6e",
+    "815": "5fcc76e43428a570f095e10d8944fdc93b321e27",
+    "812": "1b87677113eb0b30003d3b1713e9dd1a89ab4454",
+    "777": "149704d16fa126b8ac9d142a22bf51b42a669552"
+  },
+  "pieces": [
+    {
+      "name": "core",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests",
+        "--ignore=tests/test_api",
+        "--ignore=tests/test_orrery"
+      ],
+      "exit_code": 0,
+      "summary": "3686 passed, 52 skipped, 30 warnings in 1877.30s (0:31:17)",
+      "counts": {
+        "xpassed": 0,
+        "failed": 0,
+        "errors": 0,
+        "passed": 3686,
+        "skipped": 52,
+        "warnings": 30,
+        "deselected": 0,
+        "xfailed": 0
+      },
+      "seconds": 1877.3
+    },
+    {
+      "name": "api",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_api"
+      ],
+      "exit_code": 0,
+      "summary": "897 passed, 4 skipped, 9 warnings in 732.01s (0:12:12)",
+      "counts": {
+        "xpassed": 0,
+        "failed": 0,
+        "errors": 0,
+        "passed": 897,
+        "skipped": 4,
+        "warnings": 9,
+        "deselected": 0,
+        "xfailed": 0
+      },
+      "seconds": 732.01
+    },
+    {
+      "name": "orrery",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_orrery"
+      ],
+      "exit_code": 0,
+      "summary": "2473 passed, 16 skipped, 2 warnings in 4130.57s (1:08:50)",
+      "counts": {
+        "xpassed": 0,
+        "failed": 0,
+        "errors": 0,
+        "passed": 2473,
+        "skipped": 16,
+        "warnings": 2,
+        "deselected": 0,
+        "xfailed": 0
+      },
+      "seconds": 4130.57
+    }
+  ],
+  "combined_counts": {
+    "xpassed": 0,
+    "failed": 0,
+    "errors": 0,
+    "passed": 7056,
+    "skipped": 72,
+    "warnings": 41,
+    "deselected": 0,
+    "xfailed": 0
+  },
+  "historical_failed_attempt": {
+    "name": "core",
+    "command": [
+      "nice",
+      "-n",
+      "15",
+      "/Users/pythagor/nexus/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "tests.dbname_audit",
+      "-p",
+      "no:cacheprovider",
+      "tests",
+      "--ignore=tests/test_api",
+      "--ignore=tests/test_orrery"
+    ],
+    "exit_code": 1,
+    "summary": "1 failed, 3685 passed, 52 skipped, 30 warnings in 1840.34s (0:30:40)",
+    "counts": {
+      "xpassed": 0,
+      "failed": 1,
+      "errors": 0,
+      "passed": 3685,
+      "skipped": 52,
+      "warnings": 30,
+      "deselected": 0,
+      "xfailed": 0
+    },
+    "seconds": 1840.34
+  },
+  "repair_commit": "16706c35e6cbe988c02c4fab7b24a0062c0a57dd",
+  "template_source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/resumed-gate-verification-template.md",
+  "template_sha256": "63fec5370c652c860a9729bcba27bf328e20a4e6802ced44172842b9caca288a",
+  "scope": "assembled Python gate only; no standalone or separate offline full gate",
+  "signature": "Codex — GPT-6"
+}
