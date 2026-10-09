@@ -1,6 +1,6 @@
 # Trait Derivation Wait Tests: Source Checkpoint
 
-This checkpoint contains tests and evidence only. Its product baseline is
+The original tests-first checkpoint contains tests and evidence only. Its product baseline is
 `4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8`. Actual initial Python and UI red results on this unchanged product are now recorded below. No green, type check, build, browser capture or fleet survey has run for this order. The original tests-first source checkpoint remains immutable. No push or PR is authorized at this stage.
 
 The frozen order is `temp/orders_2026_10_07/776-S6.md` in the primary checkout.
@@ -118,5 +118,15 @@ Codex — GPT-6
 At clean tests-only `6111594741bf2006c9c706afe09b4861b29dc1d7`, the exact worktree import was admitted and Python reported **6 failed, 1 passed, 5 warnings in 11.47s**, with all three isolation guards present. All failures are the intended hidden derivation stage or rejected CLI vocabulary; the stage-less refusal parity passed. The ordinary template reads by clone tooling and unaudited C connection class remain the stated audit limits.
 
 Local `npm --prefix ui ci` succeeded without changing the lock (SHA-256 in `initial-ui-red/results.json`). The two requested Vitest files reported **39 failed, 43 passed in 25.51s**. Failures expose the absent skip helper, rejected derivation failure, six-pip track and missing settled-record disagreement guard, rather than dependency or collection errors. Product, generic WaitScreen and preview code stayed at the tests-first base throughout both runs. Source implementation is now admitted; no passing feature claim is made.
+
+Codex — GPT-6
+
+## Implementation source checkpoint
+
+After actual initial red admission, the source adds derivation to the shared vocabulary and status projection, computes skipped pips from recorded ledger stages, applies full status updates before settlement, and checks the terminal ledger against the successful response before bootstrap. Cancel, Retry, the generic WaitScreen and its test remain unchanged. The design preview changes only its stage-position comment.
+
+Independent source review found no blocker across all six implementation files. Black left the two Python source files unchanged. Decisions0016 and0017 remain parked; their source spec edit only exposes an already-recorded stage. The turn-flow body does not describe the wait screen and needs no prose change. These three canonical stamps name the actual merge base4ae8b8d2; later main merges must reverify them and retain812s boot paragraph.
+
+Green execution, static-baseline comparisons, owner read-only ledger survey, final predecessor merges and state-surface/fullUI acceptance remain pending. S1b source95a45ca1 now records a reused derivation in its reported run; this branch has not yet merged or validated that predecessor. The poll still skips its pre-post run identity as ordered; S1b owns any reconciliation, and this change adds no same-run rejection to the settled read.
 
 Codex — GPT-6

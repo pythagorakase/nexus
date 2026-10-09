@@ -287,6 +287,7 @@ export async function getGenerationStatus(slot: number, session: string, signal:
  * in nexus/agents/orrery/retrograde_orchestrator.py, less its terminal "done".
  */
 export const RETROGRADE_STAGES = [
+  "derivation",
   "packet",
   "seed_candidates",
   "expansion",
@@ -380,4 +381,14 @@ export async function getRetrogradeStatus(
 export function retrogradeStageOf(status: RetrogradeStatus): RetrogradeStage | null {
   if (status.stage === "idle" || status.stage === "done") return null;
   return status.stage === "failed" ? status.detail.stage : status.stage;
+}
+
+/** Stages the run passed without a ledger record: every stage before its position, or every stage once it is done. */
+export function skippedRetrogradeStages(status: RetrogradeStatus): RetrogradeStage[] {
+  const recorded = new Set(status.stages.map((item) => item.stage));
+  const position = retrogradeStageOf(status);
+  const end = position !== null
+    ? RETROGRADE_STAGES.indexOf(position)
+    : status.run_status === "done" ? RETROGRADE_STAGES.length : 0;
+  return RETROGRADE_STAGES.slice(0, end).filter((stage) => !recorded.has(stage));
 }

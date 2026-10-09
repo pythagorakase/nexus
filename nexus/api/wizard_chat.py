@@ -1015,8 +1015,9 @@ async def retrograde_status_endpoint(slot: int) -> Dict[str, Any]:
     """
     Report wizard-time Retrograde progress for a slot.
 
-    Stages: packet -> seed_candidates -> expansion -> persistence ->
-    embedding -> done (or failed). ``run`` identifies the transition run that
+    Stages: derivation -> packet -> seed_candidates -> expansion -> persistence ->
+    embedding -> done (or failed); derivation is recorded only when trait inputs
+    are derived. ``run`` identifies the transition run that
     owns the record; it is null, with stage "idle", when no run has started
     for the slot. The record lives in genesis_runs and genesis_run_stages.
     Every answer also carries the configured ``status_poll_interval_seconds``,

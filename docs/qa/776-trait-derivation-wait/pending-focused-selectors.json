@@ -1,0 +1,33 @@
+{
+  "status": "unexecuted source checkpoint",
+  "frozen_focused": [
+    "tests/test_api/test_genesis_ledger_pg.py",
+    "tests/test_api/test_wizard_weird_level.py",
+    "tests/test_api/test_mock_wizard_responses.py",
+    "tests/test_api/test_route_capabilities.py",
+    "tests/test_cli_generation_http.py",
+    "tests/test_orrery/test_retrograde_orchestrator.py",
+    "tests/test_orrery/test_card_identity.py",
+    "tests/test_connection_lifecycle.py"
+  ],
+  "additional": [
+    "tests/test_cli.py",
+    "tests/test_doc_front_matter.py",
+    "tests/test_reachability.py"
+  ],
+  "ui_focused": [
+    "narrative-api",
+    "InteractiveWizard",
+    "WaitScreen",
+    "WizardShell"
+  ],
+  "deferred": [
+    "same-head full integration PostgreSQL",
+    "baseline/branch flake8 and mypy",
+    "baseline/branch typecheck and design previews",
+    "UI build",
+    "fresh six-database read-only genesis_runs count",
+    "final UI baseline after777/809/824",
+    "state-surface regeneration and full UI suite"
+  ]
+}
