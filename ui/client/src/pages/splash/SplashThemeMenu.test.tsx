@@ -1,16 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { KEEPERS } from "@/contexts/FontContext";
+import { SettingsPane } from "@/components/nexus/SettingsPane";
+import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
+import { FontProvider, KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
+import { secretsQueryKey } from "@/hooks/useSecrets";
 import { PREFERENCES_QUERY_KEY, SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
 import type { SettingsPayload } from "@/types/settings";
-import { SplashThemeMenu } from "./shared";
+import SplashPage from "../SplashPage";
 
 const SETTINGS: SettingsPayload = {
   ui: { theme: "veil", fonts: KEEPERS },
   settings_meta: { models: [], apex_allowed_providers: [] },
 };
+
+const STATUS_URL = "/api/secrets/status?slot=4";
 
 function preferencesResponse(theme: string): Response {
   return new Response(
@@ -19,13 +24,26 @@ function preferencesResponse(theme: string): Response {
   );
 }
 
+/** The Settings pane re-reads key status on open; answer it, fail or pass the rest. */
+function spyFetch(answer: () => Response | Promise<Response>) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    if ((init?.method ?? "GET") === "GET" && String(input) === STATUS_URL) {
+      return new Response("[]", { status: 200 });
+    }
+    return answer();
+  });
+}
+
 /** Reads the shared theme context the way the Settings THEME card does. */
 function SaveErrorProbe() {
   const { saveError } = useTheme();
   return <output data-testid="save-error-probe">{saveError ?? "none"}</output>;
 }
 
-function renderMenu() {
+type View = "home" | "settings" | "away";
+
+/** Home as the router renders it, with the real theme provider and query client. */
+function renderHome() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -33,45 +51,80 @@ function renderMenu() {
   queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
     theme: "veil", fonts: KEEPERS, wizard_model: "TEST",
   });
-  const tree = (withMenu: boolean) => (
+  queryClient.setQueryData(["/api/slot/4/settings"], {
+    skald_model: null, gaia_model: null, apex_context_window: null,
+  });
+  queryClient.setQueryData(secretsQueryKey(4), []);
+  queryClient.setQueryData(["/api/dev/backstage/health"], false);
+  const tree = (view: View) => (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        {withMenu && <SplashThemeMenu />}
-        <SaveErrorProbe />
+        <DeveloperModeProvider>
+          <FontProvider>
+            {view === "home" && <SplashPage />}
+            {view === "settings" && <SettingsPane slot={4} />}
+            <SaveErrorProbe />
+          </FontProvider>
+        </DeveloperModeProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
-  const view = render(tree(true));
-  return { rerender: (withMenu: boolean) => view.rerender(tree(withMenu)) };
+  const view = render(tree("home"));
+  return { show: (next: View) => view.rerender(tree(next)) };
+}
+
+function menuTrigger() {
+  return screen.getByRole("button", { expanded: false });
 }
 
 function openMenu() {
-  fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+  fireEvent.keyDown(menuTrigger(), { key: "Enter" });
+}
+
+function item(label: string) {
+  return screen.getByRole("menuitem", { name: new RegExp(`^${label}`) });
 }
 
 function pick(label: string) {
-  fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(`^${label}`) }));
+  fireEvent.click(item(label));
 }
 
-function checked(label: string) {
-  return screen.getByRole("menuitem", { name: new RegExp(`^${label}`) });
+/**
+ * jsdom has no canvas engine. The Veil splash draws its spiral on a 2D canvas,
+ * so give it a context that accepts every call; drawing is not under test here.
+ */
+function stubCanvas() {
+  const context = new Proxy({}, {
+    get: (_target, prop) => (prop === "canvas" ? undefined : () => undefined),
+    set: () => true,
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    () => context as unknown as CanvasRenderingContext2D,
+  );
+  vi.stubGlobal("Path2D", class { addPath() {} });
+  vi.stubGlobal("requestAnimationFrame", () => 1);
+  vi.stubGlobal("cancelAnimationFrame", () => undefined);
 }
 
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.classList.remove("theme-gilded", "theme-vector", "theme-veil");
+  stubCanvas();
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("Home theme menu save failures (#961)", () => {
-  it("shows an online HTTP rejection inside the reopened menu and keeps Veil checked", async () => {
+  it("shows an online HTTP rejection inside the open menu and keeps Veil checked", async () => {
     const calls: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       calls.push(`${init?.method ?? "GET"} ${String(input)}`);
       return new Response("PermissionError: [Errno 13] Permission denied", { status: 500 });
     });
-    renderMenu();
+    renderHome();
     openMenu();
     pick("Gilded");
 
@@ -80,17 +133,15 @@ describe("Home theme menu save failures (#961)", () => {
     expect(alert).toHaveTextContent("WRITE REJECTED");
     expect(alert).toHaveTextContent("500: PermissionError: [Errno 13] Permission denied");
     expect(screen.getByRole("menu")).toContainElement(alert);
-    await waitFor(() => expect(checked("Veil")).toHaveTextContent("Veil ✓"));
-    expect(checked("Gilded")).toHaveTextContent(/^Gilded$/);
+    await waitFor(() => expect(item("Veil")).toHaveTextContent("Veil ✓"));
+    expect(item("Gilded")).toHaveTextContent(/^Gilded$/);
     expect(document.documentElement.classList.contains("theme-gilded")).toBe(false);
     expect(calls).toEqual(["PATCH /api/preferences"]);
   });
 
-  it("shows a network failure inside the reopened menu", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
-      throw new TypeError("Failed to fetch");
-    });
-    renderMenu();
+  it("shows a network failure inside the open menu", async () => {
+    spyFetch(() => { throw new TypeError("Failed to fetch"); });
+    renderHome();
     openMenu();
     pick("Gilded");
 
@@ -98,13 +149,12 @@ describe("Home theme menu save failures (#961)", () => {
     expect(alert).toHaveAttribute("role", "alert");
     expect(alert).toHaveTextContent("WRITE REJECTED");
     expect(alert).toHaveTextContent("Failed to fetch");
-    await waitFor(() => expect(checked("Veil")).toHaveTextContent("Veil ✓"));
+    await waitFor(() => expect(item("Veil")).toHaveTextContent("Veil ✓"));
   });
 
-  it("reopens on a second rejection after the first one cleared", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response("PermissionError: [Errno 13] Permission denied", { status: 500 }));
-    renderMenu();
+  it("shows a second rejection after a new pick cleared the first", async () => {
+    spyFetch(() => new Response("PermissionError: [Errno 13] Permission denied", { status: 500 }));
+    renderHome();
     openMenu();
     pick("Gilded");
     await screen.findByTestId("splash-theme-save-error");
@@ -114,7 +164,7 @@ describe("Home theme menu save failures (#961)", () => {
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
     const alert = await screen.findByTestId("splash-theme-save-error");
     expect(alert).toHaveTextContent("500: PermissionError: [Errno 13] Permission denied");
-    await waitFor(() => expect(checked("Veil")).toHaveTextContent("Veil ✓"));
+    await waitFor(() => expect(item("Veil")).toHaveTextContent("Veil ✓"));
   });
 
   it.each([
@@ -123,8 +173,8 @@ describe("Home theme menu save failures (#961)", () => {
   ])("a successful retry after %s clears the alert, closes the menu and checks Gilded", async (
     _name, fail,
   ) => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => fail());
-    renderMenu();
+    const fetchSpy = spyFetch(fail);
+    renderHome();
     openMenu();
     pick("Gilded");
     await screen.findByTestId("splash-theme-save-error");
@@ -138,34 +188,66 @@ describe("Home theme menu save failures (#961)", () => {
     expect(screen.getByTestId("save-error-probe")).toHaveTextContent("none");
 
     openMenu();
-    expect(checked("Gilded")).toHaveTextContent("Gilded ✓");
-    expect(checked("Veil")).toHaveTextContent(/^Veil$/);
+    expect(item("Gilded")).toHaveTextContent("Gilded ✓");
+    expect(item("Veil")).toHaveTextContent(/^Veil$/);
     expect(screen.queryByTestId("splash-theme-save-error")).not.toBeInTheDocument();
   });
 
-  it("leaves no rejection behind for Settings once Home unmounts", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
-      throw new TypeError("Failed to fetch");
-    });
-    const view = renderMenu();
+  it("shows a held rejection when Home mounts again, and Settings shows none", async () => {
+    spyFetch(() => { throw new TypeError("Failed to fetch"); });
+    const home = renderHome();
     openMenu();
     pick("Gilded");
     await screen.findByTestId("splash-theme-save-error");
-    expect(screen.getByTestId("save-error-probe")).toHaveTextContent("Failed to fetch");
 
-    view.rerender(false);
+    // Leave Home and come back: the rejection is still held, so the menu opens on it.
+    home.show("away");
+    expect(screen.getByTestId("save-error-probe")).toHaveTextContent("Failed to fetch");
+    home.show("home");
+    const alert = await screen.findByTestId("splash-theme-save-error");
+    expect(screen.getByRole("menu")).toContainElement(alert);
+
+    // Settings never inherits it: the THEME card clears it on mount.
+    home.show("settings");
+    await screen.findByTestId("theme-veil");
+    expect(screen.queryByTestId("theme-save-error")).not.toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId("save-error-probe")).toHaveTextContent("none"));
+
+    // Back on Home, nothing is held, so the menu stays closed.
+    home.show("home");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("splash-theme-save-error")).not.toBeInTheDocument();
+  });
+
+  it("shows on return a rejection that completed while the player was elsewhere", async () => {
+    let reject: (error: Error) => void = () => {};
+    spyFetch(() => new Promise<Response>((_resolve, fail) => { reject = fail; }));
+    const home = renderHome();
+    openMenu();
+    pick("Gilded");
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
+
+    home.show("away");
+    reject(new TypeError("Failed to fetch"));
+    await waitFor(() =>
+      expect(screen.getByTestId("save-error-probe")).toHaveTextContent("Failed to fetch"));
+
+    home.show("home");
+    const alert = await screen.findByTestId("splash-theme-save-error");
+    expect(alert).toHaveTextContent("Failed to fetch");
+    await waitFor(() => expect(item("Veil")).toHaveTextContent("Veil ✓"));
   });
 
   it("keeps the success path: a pick saves, closes the menu and shows no alert", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => preferencesResponse("vector"));
-    renderMenu();
+    spyFetch(() => preferencesResponse("vector"));
+    renderHome();
     openMenu();
     pick("Vector");
     await waitFor(() =>
       expect(document.documentElement.classList.contains("theme-vector")).toBe(true));
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(screen.queryByTestId("splash-theme-save-error")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { expanded: false })).toHaveLength(1);
   });
 });
