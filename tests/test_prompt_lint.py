@@ -339,15 +339,15 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
         "You may need to alter the constraint to add ON UPDATE CASCADE",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
     (
-        "scripts/summarize_narrative.py",
+        "nexus/jobs/summarize_narrative.py",
         "Generate comprehensive narrative summaries",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
     (
-        "scripts/summarize_narrative.py",
+        "nexus/jobs/summarize_narrative.py",
         "Do not attempt a fallback model if the primary fails",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
     (
-        "scripts/summarize_narrative.py",
+        "nexus/jobs/summarize_narrative.py",
         "Invalid number of episode arguments. Use one slug for a single episode, or two for a range.",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
     (

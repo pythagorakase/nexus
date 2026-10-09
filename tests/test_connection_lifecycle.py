@@ -162,8 +162,8 @@ def lifecycle_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[RuntimeFixture]:
     """Restore actual schema and start only local deterministic services."""
-    from scripts import migrate
-    from scripts.new_story_setup import (
+    from nexus.maintenance import migrate
+    from nexus.maintenance.new_story_setup import (
         TEMPLATE_SEED_TABLES,
         _initialize_empty_idf_corpora,
         _postgres_tools,

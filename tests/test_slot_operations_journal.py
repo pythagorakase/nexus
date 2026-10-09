@@ -19,7 +19,7 @@ from nexus.runtime.slot_operations import (
     require_authorized,
     staging_dbname,
 )
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import route_slot_to_disposable
 
 

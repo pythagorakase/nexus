@@ -38,7 +38,7 @@ from nexus.database import (
     maintenance_connection,
 )
 from scripts import rebuild_memory_idf as rebuild
-from scripts.migrate import is_db_locked
+from nexus.maintenance.migrate import is_db_locked
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,

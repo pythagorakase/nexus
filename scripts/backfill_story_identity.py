@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from nexus.api.story_identity import record_fork  # noqa: E402
 from nexus.database import maintenance_connection, transaction  # noqa: E402
 from scripts.migrate import SLOT_DBS, is_db_locked  # noqa: E402
-import scripts.migrate as migrate  # noqa: E402
+import nexus.maintenance.migrate as migrate  # noqa: E402
 
 OPERATION = "story_identity_backfill"
 

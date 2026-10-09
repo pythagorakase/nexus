@@ -10,7 +10,7 @@ import sys
 import pytest
 from pydantic import ValidationError
 
-from scripts.database_targets import evaluation_dbname, metrics_dbname
+from nexus.maintenance.database_targets import evaluation_dbname, metrics_dbname
 from scripts.qa_shift.prose_metrics import (
     adapt_chunk,
     legacy_sections,

@@ -11,12 +11,12 @@ runtime_config = "nexus.toml"
 config = "pytest.ini"
 
 [migrations]
-loader = "scripts/migrate.py:_load_python_migration"
+loader = "nexus/maintenance/migrate.py:_load_python_migration"
 loader_expression = "importlib.util.spec_from_file_location(module_name, path)"
 pattern = "migrations/[0-9][0-9][0-9]_*.py"
 symbol = "run"
 script_only_versions = ["008"]
-reason = "scripts/migrate.py discovers managed Python migrations and invokes run(conn); SQL migrations contain no Python imports."
+reason = "nexus/maintenance/migrate.py, behind the scripts/migrate.py command, discovers managed Python migrations and invokes run(conn); SQL migrations contain no Python imports."
 
 [[operators]]
 target = "scripts/character_identity_census.py:main"
@@ -29,6 +29,10 @@ reason = "Natural Earth reference loader named by docs/database.md; loads the ve
 [[operators]]
 target = "scripts/measure_place_coordinate_costs.py:main"
 reason = "Read-only place-coordinate cost report for 840-Q4; offline grammar weights plus read-only place counts (issue 840)."
+[[operators]]
+target = "scripts/summarize_narrative.py:main"
+reason = "Narrative summary CLI; the implementation is nexus/jobs/summarize_narrative.py (issue 811)."
+
 [[operators]]
 target = "scripts/migrate.py:main"
 reason = "CLAUDE.md schema migration workflow."
@@ -344,7 +348,7 @@ paths = [
     { path = "scripts/creative_character_expansion_id_023D.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/creative_character_expansion_id_023E.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/custom_query.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
-    { path = "scripts/database_targets.py", class = "runtime", reason = "production root nexus/api/narrative.py:app" },
+    { path = "scripts/database_targets.py", class = "operator", reason = "operator root scripts/load_natural_earth.py:main" },
     { path = "scripts/edi", class = "dead", reason = "Wraps a client outside the repository (scripts/edi:5); no tracked file runs it." },
     { path = "scripts/entity_reference_parity.py", class = "operator", reason = "operator root scripts/measure_place_coordinate_costs.py:main" },
     { path = "scripts/estimate_time_delta.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
@@ -375,12 +379,12 @@ paths = [
     { path = "scripts/measure_place_scale_grammar.py", class = "operator", reason = "operator root scripts/measure_place_scale_grammar.py:main" },
     { path = "scripts/measure_presence_boost.py", class = "test-only", reason = "test root tests/test_presence_boost.py:<module>" },
     { path = "scripts/memnon_config.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
-    { path = "scripts/migrate.py", class = "runtime", reason = "production root nexus/api/narrative.py:app" },
+    { path = "scripts/migrate.py", class = "operator", reason = "operator root scripts/migrate.py:main" },
     { path = "scripts/migrate_chunk_character_references.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/migrate_provider_names.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/missing_infly_inf-retriever-v1-1.5b_1746404715.txt", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/new_story_cli.py", class = "test-only", reason = "test root tests/test_new_story_cli.py:<module>" },
-    { path = "scripts/new_story_setup.py", class = "runtime", reason = "production root nexus/api/narrative.py:app" },
+    { path = "scripts/new_story_setup.py", class = "operator", reason = "operator root scripts/new_story_setup.py:main" },
     { path = "scripts/orrery_sample.py", class = "operator", reason = "operator root scripts/orrery_sample.py:main" },
     { path = "scripts/place002_silo.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/populate_character_summaries_schema.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
@@ -434,7 +438,7 @@ paths = [
     { path = "scripts/simple_update.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/stamp_lore_pass_baseline.py", class = "operator", reason = "operator root scripts/stamp_lore_pass_baseline.py:main" },
     { path = "scripts/summaries_parsed.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
-    { path = "scripts/summarize_narrative.py", class = "runtime", reason = "production root nexus/api/narrative.py:app" },
+    { path = "scripts/summarize_narrative.py", class = "operator", reason = "operator root scripts/summarize_narrative.py:main" },
     { path = "scripts/sync_secrets.py", class = "documented", reason = "No root reaches it; named by .claude/agents/scribe.md:62" },
     { path = "scripts/test_context.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/test_context2.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },

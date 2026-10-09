@@ -10,7 +10,7 @@ from typing import Any, Iterator
 import psycopg2
 import pytest
 
-import scripts.migrate as migrate
+import nexus.maintenance.migrate as migrate
 from nexus.agents.orrery.needs import NEED_IMMUNITY_TAGS as RUNTIME_NEED_IMMUNITY_TAGS
 from nexus.agents.orrery.needs import NEED_TYPES, need_applies_to_tags
 from tests.pg_fixtures import connect, disposable_slot_database, seed_story_clock

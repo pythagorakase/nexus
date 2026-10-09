@@ -16,7 +16,7 @@ formatted in, or read from a file) is not seen, and SQL and shell files
 
 The PostgreSQL tests run each legacy script in a fresh interpreter against a
 bare disposable database, so no test imports a legacy script in process
-(``scripts/new_story_setup.py`` excepted: the test fixtures already import
+(``nexus/maintenance/new_story_setup.py`` excepted: the test fixtures already import
 it) and the import graph does not change.
 """
 
@@ -38,7 +38,7 @@ import pytest
 
 from nexus.agents.memnon.utils.embedding_tables import ensure_embedding_table
 from nexus.database import database_url
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import connect, disposable_database
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -67,17 +67,21 @@ ALLOWLIST: Dict[tuple[str, str, str], str] = {
     (_EMBEDDING_TABLES, "drop_candidate_ann_index", "DROP INDEX"): (
         "Removes the candidate gate's own ANN index (Decision 810-Q3)."
     ),
-    ("scripts/migrate.py", "ensure_tracking_table", "DROP TABLE"): (
+    ("nexus/maintenance/migrate.py", "ensure_tracking_table", "DROP TABLE"): (
         "The migration runner owns its schema_migrations tracking table."
     ),
-    ("scripts/migrate.py", "ensure_tracking_table", "CREATE TABLE"): (
+    ("nexus/maintenance/migrate.py", "ensure_tracking_table", "CREATE TABLE"): (
         "The migration runner owns its schema_migrations tracking table."
     ),
-    ("scripts/new_story_setup.py", "_build_from_template", "CREATE EXTENSION"): (
+    (
+        "nexus/maintenance/new_story_setup.py",
+        "_build_from_template",
+        "CREATE EXTENSION",
+    ): (
         "Slot initialization installs vector and postgis before the template "
         "schema restores (Decision 810-Q9)."
     ),
-    ("scripts/new_story_setup.py", "_restore_clone", "CREATE EXTENSION"): (
+    ("nexus/maintenance/new_story_setup.py", "_restore_clone", "CREATE EXTENSION"): (
         "Slot cloning installs vector and postgis before the source restores "
         "(Decision 810-Q9)."
     ),
@@ -312,7 +316,7 @@ def test_allowlist_is_scoped_to_its_function(tmp_path: Path) -> None:
 
     findings = _plant(
         tmp_path,
-        "scripts/new_story_setup.py",
+        "nexus/maintenance/new_story_setup.py",
         """
         def _build_from_template():
             run("CREATE EXTENSION IF NOT EXISTS vector;")

@@ -29,7 +29,7 @@ from nexus.api.presence_reconciliation import (
     reconcile_prose_mentions,
 )
 from nexus.memory.manager import empty_pass2_baseline
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import connect
 
 

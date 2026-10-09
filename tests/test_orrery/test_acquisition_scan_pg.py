@@ -18,7 +18,7 @@ from nexus.agents.orrery.experiences import (
 )
 from nexus.api import db_pool
 from nexus.config import load_settings_as_dict
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import connect
 
 

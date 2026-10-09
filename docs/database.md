@@ -43,7 +43,10 @@ disposal does not coordinate transactions in other processes.
 
 `scripts/migrate.py` is the only migration runner: it discovers, applies, and
 stamps migrations in each database's `schema_migrations` table, and
-`scripts/new_story_setup.py` calls it for fresh slots. Do not apply migration SQL
+`scripts/new_story_setup.py` calls it for fresh slots. The implementations live in
+`nexus/maintenance/migrate.py` and `nexus/maintenance/new_story_setup.py`;
+`scripts/migrate.py` and `scripts/new_story_setup.py` are command-line wrappers
+that re-export them. Do not apply migration SQL
 with `psql` or ad hoc scripts; an unstamped change is invisible to the runner.
 Slot initialization and data cloning in `scripts/new_story_setup.py` raise on
 any migration or restore error and never log success, but the partial target

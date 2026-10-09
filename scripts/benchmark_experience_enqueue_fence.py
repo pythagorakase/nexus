@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
 
 from nexus.agents.orrery.experiences import _ENQUEUE_CANDIDATES_SQL  # noqa: E402
 from nexus.config.story_model import resolve_seat  # noqa: E402
-from scripts import new_story_setup  # noqa: E402
+from nexus.maintenance import new_story_setup  # noqa: E402
 
 MIGRATION = ROOT / "migrations" / "111_experience_job_enqueue_gin_fence.sql"
 INDEX_NAME = "ix_character_experience_jobs_pending_experience_ids"

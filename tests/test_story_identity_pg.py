@@ -30,7 +30,8 @@ from nexus.runtime.readiness import (
     _check_template_story_identity,
 )
 from scripts import backfill_story_identity as backfill
-from scripts import migrate, new_story_setup
+from nexus.maintenance import migrate
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import (
     connect,
     disposable_database,
@@ -455,7 +456,7 @@ def _doctor_context(slots: list[int]) -> ReadinessContext:
 def test_doctor_identity_outcomes(monkeypatch: pytest.MonkeyPatch) -> None:
     """Each registered template and slot identity check names its exact remediation.
 
-    The template check reads ``scripts.migrate.TEMPLATE_DB`` at call time and
+    The template check reads ``nexus.maintenance.migrate.TEMPLATE_DB`` at call time and
     the slot check resolves each ``[runtime.readiness].slots`` number through
     ``slot_dbname``, so a patched template name and routed slots carry both
     registered checks to disposable clones.

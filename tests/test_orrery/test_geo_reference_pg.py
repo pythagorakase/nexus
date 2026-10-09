@@ -27,7 +27,8 @@ from nexus.agents.orrery.geo_reference import (
     require_valid_polygon,
 )
 from nexus.database import AmbiguousCommit
-from scripts import load_natural_earth, new_story_setup
+from scripts import load_natural_earth
+from nexus.maintenance import new_story_setup
 from scripts.load_natural_earth import (
     NaturalEarthChecksumError,
     NaturalEarthReadError,

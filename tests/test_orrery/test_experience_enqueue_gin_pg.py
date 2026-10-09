@@ -17,7 +17,7 @@ from nexus.agents.orrery.experiences import (
     enqueue_scene_experience_job_sync,
 )
 from nexus.config import load_settings_as_dict
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import connect
 
 

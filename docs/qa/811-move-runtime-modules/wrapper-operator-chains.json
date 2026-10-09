@@ -1,0 +1,58 @@
+{
+  "migrate": {
+    "path": "scripts/migrate.py",
+    "kind": "operator",
+    "reachable": true,
+    "root": {
+      "path": "scripts/migrate.py",
+      "symbol": "main",
+      "kind": "operator",
+      "reason": "CLAUDE.md schema migration workflow."
+    },
+    "imports": []
+  },
+  "new_story_setup": {
+    "path": "scripts/new_story_setup.py",
+    "kind": "operator",
+    "reachable": true,
+    "root": {
+      "path": "scripts/new_story_setup.py",
+      "symbol": "main",
+      "kind": "operator",
+      "reason": "CLAUDE.md slot initialization workflow."
+    },
+    "imports": []
+  },
+  "database_targets": {
+    "path": "scripts/database_targets.py",
+    "kind": "operator",
+    "reachable": true,
+    "root": {
+      "path": "scripts/load_natural_earth.py",
+      "symbol": "main",
+      "kind": "operator",
+      "reason": "Natural Earth reference loader named by docs/database.md; loads the vendored, checksummed 10m files into natural_earth_features (issue 840)."
+    },
+    "imports": [
+      {
+        "source": "scripts/load_natural_earth.py",
+        "target": "scripts/database_targets.py",
+        "line": 61,
+        "kind": "import",
+        "scope": "<module>"
+      }
+    ]
+  },
+  "summarize_narrative": {
+    "path": "scripts/summarize_narrative.py",
+    "kind": "operator",
+    "reachable": true,
+    "root": {
+      "path": "scripts/summarize_narrative.py",
+      "symbol": "main",
+      "kind": "operator",
+      "reason": "Narrative summary CLI; the implementation is nexus/jobs/summarize_narrative.py (issue 811)."
+    },
+    "imports": []
+  }
+}

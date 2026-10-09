@@ -377,7 +377,7 @@ def validate_staging(
     )
     from nexus.config import load_settings
     from nexus.runtime.home import UPLOADS_DIR, repo_root
-    from scripts.migrate import SCRIPT_ONLY_MIGRATIONS, discover_migrations
+    from nexus.maintenance.migrate import SCRIPT_ONLY_MIGRATIONS, discover_migrations
     from scripts.replay_state import _verify_correspondence_provenance
 
     # #820 moves uploads into the runtime home; until then the endpoints

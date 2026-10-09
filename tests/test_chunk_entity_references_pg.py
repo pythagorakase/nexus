@@ -31,7 +31,7 @@ from nexus.api.db_pool import close_all_pools
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.presence.roster import Kind, PresenceRoster, RosterEntry, write_roster
 from scripts import entity_reference_parity as parity
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import (
     DEFAULT_BASE_TIMESTAMP,
     connect,

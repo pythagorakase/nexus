@@ -62,7 +62,8 @@ from nexus.database import (
     database_url,
     subprocess_env,
 )
-from scripts import migrate, new_story_setup
+from nexus.maintenance import migrate
+from nexus.maintenance import new_story_setup
 
 
 def connection_parameters(dbname: str) -> dict[str, Any]:
@@ -160,7 +161,7 @@ def seat_backfill_job_seats() -> dict[str, str]:
     """Return migration 126's ``JOB_SEATS`` (job table to model seat).
 
     The mapping is read from the migration module itself, loaded through
-    ``scripts.migrate``'s importlib loader, so the guard below cannot drift
+    ``nexus.maintenance.migrate``'s importlib loader, so the guard below cannot drift
     from the tables the migration backfills.
     """
 

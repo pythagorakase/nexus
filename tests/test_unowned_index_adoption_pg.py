@@ -25,7 +25,7 @@ import pytest
 
 from nexus.agents.memnon.utils.db_schema import DatabaseManager
 from nexus.database import database_url
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import connect, disposable_slot_database
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

@@ -32,7 +32,7 @@ from nexus.api import (
 from nexus.api.narrative_generation import generate_narrative_async
 from nexus.config.settings_models import Settings
 from nexus.util.log_safety import quote_log_value
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import connect, route_slot_to_disposable
 from tests.settings_helpers import settings_with
 

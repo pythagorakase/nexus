@@ -28,7 +28,7 @@ from nexus.api import (
     wizard_chat,
 )
 from nexus.runtime.home import anchor_path
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests import scheduler_helpers
 from tests.pg_fixtures import (
     ROUTED_SLOT_DATABASE_ENV,

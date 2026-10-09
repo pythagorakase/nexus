@@ -47,7 +47,7 @@ from nexus.config.settings_models import (
     OrreryKnowledgeSettings,
     OrreryRecallSettings,
 )
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.model_registry_helpers import registry_model
 from tests.settings_helpers import settings_with, table
 from tests.pg_fixtures import (

@@ -59,7 +59,7 @@ from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings_as_dict
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.memory.manager import empty_pass2_baseline
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,

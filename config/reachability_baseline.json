@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#823 S1: staging builds import nexus/runtime/slot_operations.py, scripts/rebuild_memory_idf.py and scripts/replay_state.py (with nexus/agents/orrery/replay.py) from the setup script",
+  "reason": "#811 S3a: migrate, new_story_setup and database_targets move into nexus/maintenance and summarize_narrative into nexus/jobs; the scripts/ wrappers become operator paths",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -237,6 +237,11 @@
     "nexus/jobs/narrative_jobs.py",
     "nexus/jobs/scheduler.py",
     "nexus/jobs/summaries.py",
+    "nexus/jobs/summarize_narrative.py",
+    "nexus/maintenance/__init__.py",
+    "nexus/maintenance/database_targets.py",
+    "nexus/maintenance/migrate.py",
+    "nexus/maintenance/new_story_setup.py",
     "nexus/memory/__init__.py",
     "nexus/memory/baseline_compat.py",
     "nexus/memory/context_state.py",
@@ -281,11 +286,7 @@
     "scripts/__init__.py",
     "scripts/api_anthropic.py",
     "scripts/api_openai.py",
-    "scripts/database_targets.py",
-    "scripts/migrate.py",
-    "scripts/new_story_setup.py",
     "scripts/rebuild_memory_idf.py",
-    "scripts/replay_state.py",
-    "scripts/summarize_narrative.py"
+    "scripts/replay_state.py"
   ]
 }

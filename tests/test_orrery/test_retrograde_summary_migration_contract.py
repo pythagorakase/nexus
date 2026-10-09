@@ -8,7 +8,7 @@ import pytest
 from nexus.agents.orrery.retrograde_maturation import (
     MATURATION_MANIFEST_SCHEMA_VERSION,
 )
-import scripts.migrate as migrate
+import nexus.maintenance.migrate as migrate
 
 
 @pytest.fixture()
