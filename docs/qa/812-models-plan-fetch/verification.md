@@ -210,3 +210,13 @@ The assembled integration `2cc9a5fcff76e0c643ca41490eb2508b870b4850`, including 
 The separate tokenizer policy follow-up was deduplicated and published as [#1126](https://github.com/pythagorakase/nexus/issues/1126). No tokenizer policy or fetch behavior was changed here.
 
 Codex — GPT-6
+
+## Review and landing merge
+
+The review found no blockers. `fetch_remedy_for` deliberately catches nothing, as frozen item5 requires; malformed configuration and locks remain fatal. Empty repo IDs return before settings/lock reads. The exact TEST-only marker and INFO log preserve the ordered contract. The PR now names the missing-lock setup step. Partial-download and durable-proof policies remain unchanged.
+
+Merged current main `81163beb0f02041f2e83c50a96dfa60286cbb28a` by an ordinary conflict-free merge, removing the820 prerequisite from this PR diff and preserving815pagination. Re-read AGENTS and the turn-flow source closure: the deferred-work paragraph accurately names cheap boot admission versus full verification and the TEST-only exception. Decision0009 remains token-only. Re-stamped all three to the new merge base without changing their rulings.
+
+Artifact implementation, readiness, provider guard, CLI contract and associated tests match the assembled gate input; narrative.py differs only by the pending777UI-router registration. The merged CLI differs only by820s type-only import grouping; generated CLI reference matches the tested integration bytes. Final freshness/reference checks follow.
+
+Codex — GPT-6
