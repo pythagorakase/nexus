@@ -145,7 +145,7 @@ def test_reveal_never_merges_or_collides_with_another_identity(kind, name, alias
 @pytest.mark.parametrize(
     "change",
     [
-        {"kind": "place"},
+        {"kind": "place", "coordinates": {"lat": 40.7484, "lon": -73.9857}},
         {"tag_hints": ["human"]},
         {"same_as": {"character_id": 0, "previous_name": OLD, "evidence": QUOTE}},
         {"same_as": {"character_id": True, "previous_name": OLD, "evidence": QUOTE}},

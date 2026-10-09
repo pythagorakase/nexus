@@ -47,4 +47,5 @@ mechanical state (relationship rows, pair-tags, stub entities).
 8. `obligations` counterparties must be bound to a character or faction
    (`counterparty_kind`). An obligation to a pure concept must be bound to the
    entity that enforces or benefits from it.
-9. Return JSON only, matching the response schema exactly.
+9. When the Domain trait is selected, set `domain.coordinates` to a plausible real-Earth point for the claimed place that fits the character sheet and the setting's geography. A point is not a database id; rule 2 does not forbid it.
+10. Return JSON only, matching the response schema exactly.

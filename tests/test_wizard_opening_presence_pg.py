@@ -211,10 +211,11 @@ def _seed_post_transition_world(dbname: str) -> None:
                 """
                 INSERT INTO places (
                     name, type, zone, summary, history, current_status,
-                    secrets, inhabitants, extra_data, entity_id
+                    secrets, inhabitants, extra_data, entity_id, coordinates
                 ) VALUES (
                     %s, 'fixed_location', %s, %s, %s, %s,
-                    %s, %s, %s::jsonb, %s
+                    %s, %s, %s::jsonb, %s,
+                    ST_SetSRID(ST_MakePoint(-90.0715, 29.9511, 0, 0), 4326)::geography
                 ) RETURNING id
                 """,
                 (

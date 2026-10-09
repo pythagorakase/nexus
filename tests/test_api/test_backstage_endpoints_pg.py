@@ -161,8 +161,10 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                 cur.execute("INSERT INTO entities (kind) VALUES ('place') RETURNING id")
                 place_entity = int(cur.fetchone()[0])
                 cur.execute(
-                    "INSERT INTO places (name, type, entity_id) "
-                    "VALUES ('Rootline', 'fixed_location', %s) RETURNING id",
+                    "INSERT INTO places (name, type, entity_id, coordinates) "
+                    "VALUES ('Rootline', 'fixed_location', %s, "
+                    "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                    "4326)::geography) RETURNING id",
                     (place_entity,),
                 )
                 place_id = int(cur.fetchone()[0])

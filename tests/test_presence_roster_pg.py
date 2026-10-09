@@ -58,7 +58,10 @@ def roster_database(
                 )
                 ids["Test Protagonist"] = cur.fetchone()[0]
                 cur.execute(
-                    "INSERT INTO places (name, type) VALUES ('Hall', 'fixed_location') RETURNING id"
+                    "INSERT INTO places (name, type, coordinates) VALUES "
+                    "('Hall', 'fixed_location', "
+                    "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                    "4326)::geography) RETURNING id"
                 )
                 place_id = cur.fetchone()[0]
         yield dbname, ids, place_id
@@ -508,7 +511,10 @@ def test_historical_settings_are_ordered_but_frontier_is_rejected(
     with connect(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+                "INSERT INTO places (name, type, coordinates) VALUES "
+                "('Garden', 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.98, 40.75, 0, 0), "
+                "4326)::geography) RETURNING id"
             )
             garden = cur.fetchone()[0]
             cur.execute(
@@ -533,7 +539,10 @@ def historical_settings(roster_database):
     chunk_id = commit_wire(dbname, 0, wire("The hall opens onto a garden."))
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+            "INSERT INTO places (name, type, coordinates) VALUES "
+            "('Garden', 'fixed_location', "
+            "ST_SetSRID(ST_MakePoint(-73.98, 40.75, 0, 0), "
+            "4326)::geography) RETURNING id"
         )
         garden = cur.fetchone()[0]
         cur.execute(
@@ -594,7 +603,10 @@ def test_recall_scores_any_historical_setting(historical_settings) -> None:
             ).scalar_one()
             outside = session.execute(
                 text(
-                    "INSERT INTO places (name, type) VALUES ('Outside', 'fixed_location') RETURNING id"
+                    "INSERT INTO places (name, type, coordinates) VALUES "
+                    "('Outside', 'fixed_location', "
+                    "ST_SetSRID(ST_MakePoint(-73.97, 40.76, 0, 0), "
+                    "4326)::geography) RETURNING id"
                 )
             ).scalar_one()
             expected = {}
@@ -849,7 +861,10 @@ def test_identity_location_conflict_blocks_before_staging(
     parent = commit_wire(dbname, 0, wire("The hall is quiet."))
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+            "INSERT INTO places (name, type, coordinates) VALUES "
+            "('Garden', 'fixed_location', "
+            "ST_SetSRID(ST_MakePoint(-73.98, 40.75, 0, 0), "
+            "4326)::geography) RETURNING id"
         )
         garden = cur.fetchone()[0]
         cur.execute(
@@ -893,7 +908,10 @@ def test_identity_frontier_location_narrows_without_resolving(roster_database):
             (hall, ids["Remote Friend"]),
         )
         cur.execute(
-            "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+            "INSERT INTO places (name, type, coordinates) VALUES "
+            "('Garden', 'fixed_location', "
+            "ST_SetSRID(ST_MakePoint(-73.98, 40.75, 0, 0), "
+            "4326)::geography) RETURNING id"
         )
         garden = cur.fetchone()[0]
         cur.execute(

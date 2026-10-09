@@ -357,8 +357,9 @@ def _stage_scene_reset_choice_turn(dbname: str) -> tuple[str, int, int]:
             place_name = f"Reset Platform {uuid4().hex}"
             cur.execute(
                 """
-                INSERT INTO places (name, type, entity_id)
-                VALUES (%s, 'fixed_location', %s)
+                INSERT INTO places (name, type, entity_id, coordinates)
+                VALUES (%s, 'fixed_location', %s,
+                    ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography)
                 RETURNING id
                 """,
                 (place_name, place_entity_id),

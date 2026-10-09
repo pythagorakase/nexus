@@ -37,13 +37,17 @@ def place_slot(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
             cur.execute("INSERT INTO layers DEFAULT VALUES RETURNING id")
             layer_id = cur.fetchone()[0]
             cur.execute(
-                "INSERT INTO zones (name, layer) VALUES (%s, %s) RETURNING id",
+                "INSERT INTO zones (name, layer, boundary) VALUES (%s, %s, "
+                "ST_Multi(ST_MakeEnvelope(-74.1, 40.6, -73.8, 40.9, 4326))) "
+                "RETURNING id",
                 ("Administrative Ring", layer_id),
             )
             zone_id = cur.fetchone()[0]
             cur.execute(
-                "INSERT INTO places (name, type, zone) "
-                "VALUES ('Council Office', 'fixed_location', %s) RETURNING id",
+                "INSERT INTO places (name, type, zone, coordinates) "
+                "VALUES ('Council Office', 'fixed_location', %s, "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                "4326)::geography) RETURNING id",
                 (zone_id,),
             )
             place_id = cur.fetchone()[0]
@@ -62,7 +66,12 @@ def test_place_stub_reads_preserve_provenance_and_later_facts(
     sources = [{"plan": "event_plan", "event_ref": "annex_quarantine"}]
     with closing(connect(place_slot, cursor_factory=RealDictCursor)) as conn:
         with conn, conn.cursor() as cur:
-            _insert_place_stub(cur, entity_ref="Old Pump Annex", sources=sources)
+            _insert_place_stub(
+                cur,
+                entity_ref="Old Pump Annex",
+                sources=sources,
+                coordinates={"lon": -73.98, "lat": 40.75},
+            )
             cur.execute("SELECT * FROM places WHERE name = 'Old Pump Annex'")
             inserted = dict(cur.fetchone())
             assert inserted["summary"] is None

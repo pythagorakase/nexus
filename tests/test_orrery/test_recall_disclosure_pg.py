@@ -217,8 +217,10 @@ def _place(session: Session, label: str) -> tuple[int, int]:
     place_id = int(
         session.execute(
             text(
-                "INSERT INTO places (entity_id, name, type) "
-                "VALUES (:entity_id, :name, 'fixed_location') RETURNING id"
+                "INSERT INTO places (entity_id, name, type, coordinates) "
+                "VALUES (:entity_id, :name, 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                "4326)::geography) RETURNING id"
             ),
             {"entity_id": entity_id, "name": f"recall-{label}-{uuid4().hex[:6]}"},
         ).scalar_one()

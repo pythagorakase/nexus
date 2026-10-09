@@ -238,7 +238,10 @@ def test_dossier_place_and_relationship_names(dossier_database, caplog) -> None:
             )
             place_id = session.execute(
                 text(
-                    "INSERT INTO places (name, type) VALUES ('Dossier Hall', 'fixed_location') RETURNING id"
+                    "INSERT INTO places (name, type, coordinates) VALUES "
+                    "('Dossier Hall', 'fixed_location', "
+                    "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                    "4326)::geography) RETURNING id"
                 )
             ).scalar_one()
             session.execute(

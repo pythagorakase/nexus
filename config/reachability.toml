@@ -27,9 +27,6 @@ target = "scripts/load_natural_earth.py:main"
 reason = "Natural Earth reference loader named by docs/database.md; loads the vendored, checksummed 10m files into natural_earth_features (issue 840)."
 
 [[operators]]
-target = "scripts/measure_place_coordinate_costs.py:main"
-reason = "Read-only place-coordinate cost report for 840-Q4; offline grammar weights plus read-only place counts (issue 840)."
-[[operators]]
 target = "scripts/migrate.py:main"
 reason = "CLAUDE.md schema migration workflow."
 [[operators]]
@@ -346,7 +343,7 @@ paths = [
     { path = "scripts/custom_query.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/database_targets.py", class = "runtime", reason = "production root nexus/api/narrative.py:app" },
     { path = "scripts/edi", class = "dead", reason = "Wraps a client outside the repository (scripts/edi:5); no tracked file runs it." },
-    { path = "scripts/entity_reference_parity.py", class = "operator", reason = "operator root scripts/measure_place_coordinate_costs.py:main" },
+    { path = "scripts/entity_reference_parity.py", class = "test-only", reason = "test root tests/test_chunk_entity_references_pg.py:<module>" },
     { path = "scripts/estimate_time_delta.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/extract_scene_numbers.py", class = "documented", reason = "No root reaches it; named by docs/database.md:77" },
     { path = "scripts/extract_season_episode.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
@@ -371,7 +368,6 @@ paths = [
     { path = "scripts/map_builder_legacy.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/map_illustrator.md", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/map_illustrator_progress.md", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
-    { path = "scripts/measure_place_coordinate_costs.py", class = "operator", reason = "operator root scripts/measure_place_coordinate_costs.py:main" },
     { path = "scripts/measure_place_scale_grammar.py", class = "operator", reason = "operator root scripts/measure_place_scale_grammar.py:main" },
     { path = "scripts/measure_presence_boost.py", class = "test-only", reason = "test root tests/test_presence_boost.py:<module>" },
     { path = "scripts/memnon_config.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },

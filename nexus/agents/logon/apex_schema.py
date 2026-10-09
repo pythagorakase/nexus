@@ -169,7 +169,10 @@ class NewEntityDeclaration(BaseModel):
     )
     coordinates: Optional[Coordinates] = Field(
         default=None,
-        description="Optional real-Earth coordinates for a declared place.",
+        description=(
+            "Real-Earth coordinates; required for a place declaration, "
+            "null for other kinds."
+        ),
     )
     tag_hints: List[str] = Field(
         default_factory=list,
@@ -182,8 +185,10 @@ class NewEntityDeclaration(BaseModel):
 
     @model_validator(mode="after")
     def coordinates_are_place_only(self) -> "NewEntityDeclaration":
-        """Reject GIS data on non-place declarations instead of dropping it."""
+        """Require a point on every place declaration; reject GIS data on other kinds."""
 
+        if self.kind == "place" and self.coordinates is None:
+            raise ValueError("coordinates are required for place declarations")
         if self.coordinates is not None and self.kind != "place":
             raise ValueError("coordinates are only valid for place declarations")
         if self.same_as is not None and self.kind != "character":

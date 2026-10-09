@@ -158,15 +158,17 @@ def test_entity_stub_inserts_match_disposable_schema(disposable_cursor: Any) -> 
     cur.execute("INSERT INTO layers DEFAULT VALUES RETURNING id")
     layer_id = cur.fetchone()["id"]
     cur.execute(
-        "INSERT INTO zones (name, layer) VALUES ('Test Story Zone', %s) "
+        "INSERT INTO zones (name, layer, boundary) VALUES ('Test Story Zone', %s, "
+        "ST_Multi(ST_MakeEnvelope(-74.1, 40.6, -73.8, 40.9, 4326))) "
         "RETURNING id",
         (layer_id,),
     )
     zone_id = cur.fetchone()["id"]
     cur.execute(
         """
-        INSERT INTO places (name, type, zone)
-        VALUES ('Test Story Place', 'fixed_location', %s)
+        INSERT INTO places (name, type, zone, coordinates)
+        VALUES ('Test Story Place', 'fixed_location', %s,
+            ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography)
         RETURNING id
         """,
         (zone_id,),
@@ -198,7 +200,12 @@ def test_entity_stub_inserts_match_disposable_schema(disposable_cursor: Any) -> 
 
     _insert_faction_stub(cur, entity_ref=faction_name, sources=sources)
     _insert_character_stub(cur, entity_ref=character_name, sources=sources)
-    _insert_place_stub(cur, entity_ref=place_name, sources=sources)
+    _insert_place_stub(
+        cur,
+        entity_ref=place_name,
+        sources=sources,
+        coordinates={"lon": -73.98, "lat": 40.75},
+    )
 
     cur.execute(
         """

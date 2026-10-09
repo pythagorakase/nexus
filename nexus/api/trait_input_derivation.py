@@ -21,12 +21,14 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, List, Optional, Type
 
-from pydantic import BaseModel, ConfigDict, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from nexus.agents.logon.apex_schema import Coordinates
 from nexus.agents.orrery.status_family import STATUS_LEVELS
 from nexus.api.trait_compiler import FAME_TAGS, RESOURCE_TAGS
 from nexus.api.trait_compiler_schemas import (
     RELATIONSHIP_BEARING_TRAIT_FIELDS,
+    DomainTraitInput,
     TraitCompileInputs,
     canonical_trait_name,
     suppress_cold_start_relationship_inputs,
@@ -93,6 +95,17 @@ def traits_requiring_derived_inputs(character: "CharacterSheet") -> List[str]:
     ]
 
 
+_DerivedDomainTraitInput = create_model(
+    "DomainTraitInput",
+    __base__=DomainTraitInput,
+    __doc__=DomainTraitInput.__doc__,
+    coordinates=(
+        Coordinates,
+        Field(description="Plausible real-Earth point for the claimed place."),
+    ),
+)
+
+
 def selected_trait_compile_inputs_model(selected: List[str]) -> Type[BaseModel]:
     """Return a compact schema model containing only selected trait fields."""
 
@@ -102,7 +115,12 @@ def selected_trait_compile_inputs_model(selected: List[str]) -> Type[BaseModel]:
         if canonical not in _DERIVABLE_TRAITS:
             raise ValueError(f"Cannot derive unknown trait input field: {trait!r}")
         source_field = TraitCompileInputs.model_fields[canonical]
-        fields[canonical] = (source_field.annotation, None)
+        annotation = (
+            Optional[_DerivedDomainTraitInput]
+            if canonical == "domain"
+            else source_field.annotation
+        )
+        fields[canonical] = (annotation, None)
 
     suffix = "".join(part.title() for part in fields) or "Empty"
     return create_model(

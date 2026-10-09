@@ -1,0 +1,14 @@
+{
+  "base": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "documents": [
+    "AGENTS.md",
+    "docs/decisions/0007-secrets-with-authors.md",
+    "docs/decisions/0016-speculative-maturation.md",
+    "docs/decisions/0017-sparse-entity-enrichment.md",
+    "docs/decisions/0034-conspiracy-channel.md",
+    "docs/decisions/0049-faction-seeding.md",
+    "docs/decisions/0055-weirdness-control.md"
+  ],
+  "review": "Source review: place-point enforcement leaves secret disclosure, committed one-shot maturation, story-derived weirdness, correspondence compaction and faction rulings intact. AGENTS structure/schema description remains accurate. Stamps only; quoted rulings unchanged.",
+  "runtime_frontmatter_proof": "pending"
+}

@@ -522,7 +522,10 @@ async def test_staging_resolves_same_turn_declarations_only_on_acceptance(
         # This fixture's parent must carry the canonical setting required by #900.
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO places (name, type) VALUES ('Station', 'fixed_location') RETURNING id"
+                "INSERT INTO places (name, type, coordinates) VALUES "
+                "('Station', 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                "4326)::geography) RETURNING id"
             )
             cur.execute(
                 "INSERT INTO place_chunk_references (place_id, chunk_id, reference_type) "

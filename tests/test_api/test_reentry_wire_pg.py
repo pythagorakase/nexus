@@ -143,7 +143,10 @@ async def test_place_resolution_stages(
         if identity != "declaration":
             name = "Loading Arcade" if identity == "canonical" else "Hall"
             cur.execute(
-                "INSERT INTO places(name,type) VALUES (%s,'fixed_location') RETURNING id",
+                "INSERT INTO places(name,type,coordinates) "
+                "VALUES (%s,'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                "4326)::geography) RETURNING id",
                 (name,),
             )
             place_id = cur.fetchone()[0]
@@ -165,11 +168,14 @@ async def test_place_resolution_stages(
                     (place_id,),
                 )
         else:
-            from nexus.agents.logon.apex_schema import NewEntityDeclaration
+            from nexus.agents.logon.apex_schema import Coordinates, NewEntityDeclaration
 
             gaia.new_entities = [
                 NewEntityDeclaration(
-                    kind="place", name="Loading Arcade", summary="An arcade."
+                    kind="place",
+                    name="Loading Arcade",
+                    summary="An arcade.",
+                    coordinates=Coordinates(lon=-73.9857, lat=40.7484),
                 )
             ]
     validator = build_storyteller_tag_validator(
@@ -196,7 +202,11 @@ async def test_presence_fixture_repairs_alias_and_stages(
     """Resolve a moved alias to the roster identity and retain one staged entry."""
     dbname, parent, _ = acceptance_slot
     with connect(dbname) as conn, conn.cursor() as cur:
-        cur.execute("INSERT INTO places(name,type) VALUES ('Hall','fixed_location')")
+        cur.execute(
+            "INSERT INTO places(name,type,coordinates) "
+            "VALUES ('Hall','fixed_location', "
+            "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography)"
+        )
         cur.execute("SELECT id FROM characters WHERE name='Fixture Player'")
         actor = cur.fetchone()[0]
         cur.execute(
@@ -360,7 +370,9 @@ async def test_place_tag_registry_retry_uses_real_catalog(
     dbname, _, _ = acceptance_slot
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO places(name,type) VALUES ('Loading Arcade','fixed_location')"
+            "INSERT INTO places(name,type,coordinates) "
+            "VALUES ('Loading Arcade','fixed_location', "
+            "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography)"
         )
     gaia = SkaldGaiaWire.model_validate(fixture("place"))
     gaia.updates.places[0].tags_clear = ["human"]
@@ -386,7 +398,10 @@ def test_place_validation_does_not_lock_staging_does(
     dbname, _, _ = acceptance_slot
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO places(name,type) VALUES ('Loading Arcade','fixed_location') RETURNING id"
+            "INSERT INTO places(name,type,coordinates) "
+            "VALUES ('Loading Arcade','fixed_location', "
+            "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+            "4326)::geography) RETURNING id"
         )
         place_id = cur.fetchone()[0]
     gaia = SkaldGaiaWire.model_validate(fixture("place"))

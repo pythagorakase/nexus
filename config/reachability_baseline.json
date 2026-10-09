@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Combined #803 init/desktop readiness and #823 journaled staging closure; final assembled AST admission remains pending",
+  "reason": "Combined #803 init/desktop and #823 journal closure; #840 removes maturation geo_authoring from production while retaining operator backfill. Final assembled AST admission pending",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -121,7 +121,6 @@
     "nexus/agents/orrery/experiences.py",
     "nexus/agents/orrery/explain.py",
     "nexus/agents/orrery/geo.py",
-    "nexus/agents/orrery/geo_authoring.py",
     "nexus/agents/orrery/history.py",
     "nexus/agents/orrery/job_queues.py",
     "nexus/agents/orrery/knowledge_surfacing.py",

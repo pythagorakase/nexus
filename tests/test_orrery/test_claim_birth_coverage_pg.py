@@ -198,9 +198,10 @@ def _seed_world(dbname: str) -> dict[str, Any]:
         place_entity_id = int(cur.fetchone()["id"])
         cur.execute(
             """
-            INSERT INTO places (name, type, summary, entity_id)
+            INSERT INTO places (name, type, summary, entity_id, coordinates)
             VALUES (
-                %s, 'fixed_location', 'Ephemeral issue-679 fixture.', %s
+                %s, 'fixed_location', 'Ephemeral issue-679 fixture.', %s,
+                ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography
             )
             RETURNING id
             """,

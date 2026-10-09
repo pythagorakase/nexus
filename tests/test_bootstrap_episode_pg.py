@@ -35,8 +35,10 @@ def episode_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[str, int
         character_id, _ = seed_protagonist(dbname)
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO places (name, type) "
-                "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
+                "INSERT INTO places (name, type, coordinates) "
+                "VALUES ('Harbor Office', 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                "4326)::geography) RETURNING id"
             )
             place_id = cur.fetchone()[0]
             prologue_id = _insert_prologue_chunk(cur)
