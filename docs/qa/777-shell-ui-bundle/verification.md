@@ -302,4 +302,30 @@ Remaining: the complete bounded state-surface regeneration and full UI suite.
 The coordinator owns the
 combined full gate and PR publication; no push or PR is claimed here.
 
+## Resumed Gate and Capture Checkpoint
+
+After the user resumed the campaign, the coordinator's serial PostgreSQL gate
+passed at `2cc9a5fcff76e0c643ca41490eb2508b870b4850`, tree
+`3804225e54624e7739c6f6d143cc00b804892a3b`, including this lane's input
+`149704d16fa126b8ac9d142a22bf51b42a669552`: 7,056 passed, 72 skipped,
+41 warnings, with all three guard summaries clean. This is coordinator-run
+Python evidence, recorded at the immutable
+[gate verification](https://github.com/pythagorakase/nexus/blob/bf229051e3d046b76ab8d18b34e9ee054a03bbf6/docs/qa/resume-wave-a-2026-10-08/verification.md).
+It does not replace the UI acceptance proof.
+
+All nine bounded captures at that source completed and assembled, but the
+strict UI run found a narrow key-row hover targeting failure: 119 passed,
+four failed. The [preserved capture checkpoint](capture-at-149704d1/README.md)
+contains the exact LFS receipt, all logs, 27-condition legacy comparison,
+108-case interaction diagnosis, and bounded browser geometry/hit-test proof.
+The failed receipt is not the accepted application receipt. Historical PNG
+fixtures were hydrated from their already-present local LFS objects.
+
+The approved harness correction moves the pointer to verified empty key-row
+background and fails on absent geometry or an incorrect hover readback.
+No product source, strict assertion, threshold, palette or media evaluator
+changes. Because tooling belongs to the input closure, a new complete capture,
+comparison, focused acceptance and full UI run remain pending. The coordinator
+temporarily owns the heavy slot for the next lane's initial red proof.
+
 Codex — GPT-6
