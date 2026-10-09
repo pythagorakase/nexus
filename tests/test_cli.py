@@ -80,6 +80,33 @@ def test_terminal_generation_statuses_include_api_and_incubator_values() -> None
     assert not _is_terminal_generation_status("error")
 
 
+@pytest.mark.parametrize(
+    ("stage", "run_status", "detail", "expected"),
+    [
+        ("derivation", "running", {}, "derivation"),
+        ("failed", "failed", {"stage": "derivation"}, "failed (derivation)"),
+    ],
+    ids=["running", "failed"],
+)
+def test_retrograde_status_stage_names_derivation(
+    stage: str,
+    run_status: str,
+    detail: dict[str, str],
+    expected: str,
+) -> None:
+    """The CLI reports derivation and its failure using the shared vocabulary."""
+    status = {
+        "slot": 4,
+        "run": "1" * 32,
+        "run_status": run_status,
+        "stage": stage,
+        "detail": detail,
+        "error": "ValueError: derivation refused" if run_status == "failed" else None,
+        "stages": [{"stage": "derivation", "detail": {}}],
+    }
+    assert cli._retrograde_status_stage(status) == expected
+
+
 def test_every_subcommand_registers_post_command_output_flags() -> None:
     """Every runtime subparser shares exact post-command output options."""
 
