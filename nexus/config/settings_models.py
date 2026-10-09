@@ -920,8 +920,9 @@ class RuntimeCliSettings(BaseModel):
         allow_inf_nan=False,
         description=(
             "Per-request HTTP timeout of the CLI's model-turn requests: wizard "
-            "chat, trait toggles, phase introductions, and the POSTs that "
-            "schedule continue, retry, regenerate and the seed's opening turn; "
+            "chat, trait toggles, phase introductions, the POSTs that schedule "
+            "continue, retry, regenerate and the seed's opening turn, and "
+            "accept's commit POST; "
             "a finite number of seconds greater than 0"
         ),
     )

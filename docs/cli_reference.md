@@ -16,7 +16,7 @@ Every command that `nexus.cli.build_parser()` registers, with its arguments and 
 
 | Transport | Opens | Commands |
 | --- | --- | --- |
-| `http` | The NEXUS API only | `inspect slot`, `inspect chunks`, `inspect chunk`, `inspect incubator`, `inspect characters`, `inspect places`, `inspect factions`, `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `model --set`, `model --clear` |
+| `http` | The NEXUS API only | `inspect slot`, `inspect chunks`, `inspect chunk`, `inspect incubator`, `inspect characters`, `inspect places`, `inspect factions`, `load`, `continue`, `retry`, `accept`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `model --set`, `model --clear` |
 | `database` | A slot database directly | `jobs`, `inspect-turn`, `prune-manifests`, `tags audit`, `model`, `trait-audit`, `retrograde-packet`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, `faction-manifest`, `faction-apply`, `character-manifest`, `character-apply`, `place-manifest`, `place-apply`, `retrograde-seed-candidates --slot` |
 | `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `init`, `usage`, `receipts`, `window-replay`, `models lock`, `models verify`, `models plan`, `models fetch`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
 
@@ -316,6 +316,16 @@ Transport: `http`.
 ### `nexus retry`
 
 Retry the failed continuation of the recorded action.
+
+Transport: `http`.
+
+| Argument | Takes | Default | Description |
+| --- | --- | --- | --- |
+| `--slot` (required) | `SLOT` | — | Slot number (1-5) |
+
+### `nexus accept`
+
+Commit the pending draft.
 
 Transport: `http`.
 

@@ -52,7 +52,7 @@ refused connection, a timeout, an unusable API URL, and a missing or refused
 runtime credential propagate from the HTTP handlers to ``nexus.cli.main()``,
 so every HTTP command reports them alike. An API answer the command cannot
 use propagates to ``main()`` from the play and slot handlers (``load``,
-``continue``, ``retry``, ``undo``, ``regenerate``, ``clear``, ``lock``,
+``continue``, ``retry``, ``accept``, ``undo``, ``regenerate``, ``clear``, ``lock``,
 ``unlock``, ``model --set``/``--clear``) and the ``inspect`` verbs, which
 report it alike: a non-2xx answer is ``api_error`` (``inspect`` reports a 404
 as ``not_found``), a 401, 403 or redirect that is not followed is
@@ -115,6 +115,7 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "load": "http",
         "continue": "http",
         "retry": "http",
+        "accept": "http",
         "undo": "http",
         "regenerate": "http",
         "clear": "http",
