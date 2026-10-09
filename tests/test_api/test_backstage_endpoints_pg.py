@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import closing
 from datetime import datetime
 import json
+import os
 import uuid
 from pathlib import Path
 from typing import Any, Iterator
@@ -12,7 +13,12 @@ from typing import Any, Iterator
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+import requests
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+import tomlkit
 
+from nexus.agents.orrery.backstage import BackstagePayloadError, build_backstage_turn
 from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.agents.orrery.retrograde_persistence import (
     _ensure_prologue_metadata,
@@ -25,14 +31,27 @@ from nexus.memory.correspondence import (
     insert_digest_version,
 )
 from nexus.config import load_settings
-from nexus.database import database_url
+from nexus.database import create_slot_engine, database_url
 from nexus.memory.manager import empty_pass2_baseline
 from tests.pg_fixtures import (
     assert_one_target,
     connect,
     disposable_slot_database,
+    seed_played_story,
     seed_protagonist,
 )
+from tests.scheduler_helpers import (
+    gateway_lane,
+    route_slot,
+    run_cli,
+    test_provider_config as configure_test,
+)
+from tests.test_api.test_attempt_manifest_pg import (
+    FIXTURE_CAST,
+    FIXTURE_TURN_GAP,
+    _stage_pending_turn,
+)
+from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -379,6 +398,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                 )
 
                 provisional_id = latest + 1000
+                provisional_session = str(uuid.uuid4())
                 cur.execute(
                     """
                     INSERT INTO incubator (
@@ -392,7 +412,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                         'pending', 'TEST', '{}'::jsonb
                     )
                     """,
-                    (provisional_id, latest, str(uuid.uuid4())),
+                    (provisional_id, latest, provisional_session),
                 )
     finally:
         conn.close()
@@ -403,6 +423,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
         "prior_relationship_chunk": prior_relationship_chunk,
         "prologue": prologue_id,
         "provisional": provisional_id,
+        "provisional_session": provisional_session,
     }
 
 
@@ -441,6 +462,7 @@ def test_payload_assembles_every_committed_stream(
         "chunk_label": "S01E01_004",
         "turn_label": "t.4",
         "world_time": expected_clock.isoformat().replace("+00:00", "Z"),
+        "elapsed_seconds": 3600,
         "skald_status": "idle",
     }
     correspondence = payload["correspondence"]
@@ -842,3 +864,236 @@ def test_backstage_clock_equals_selected_chunk(
         assert datetime.fromisoformat(header["world_time"]) == expected
         clocks.append(expected)
     assert clocks[0] > clocks[1]
+
+
+def test_backstage_header_elapsed_world_time(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """Fails if elapsed time is absent or counts the non-playable prologue."""
+    chunks = backstage_case["chunks"]
+    assert chunks == [2, 3, 4, 5]
+    elapsed = []
+    for index, chunk_id in enumerate(chunks):
+        response = client.get(
+            "/api/dev/backstage/4/turn", params={"chunk_id": chunk_id}
+        )
+        assert response.status_code == 200, response.text
+        seconds = response.json()["header"]["elapsed_seconds"]
+        elapsed.append(seconds)
+        if index:
+            with closing(connect(disposable_db)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT extract(epoch FROM "
+                    "(selected.world_time - previous.world_time)) "
+                    "FROM chunk_metadata selected CROSS JOIN chunk_metadata previous "
+                    "WHERE selected.chunk_id = %s AND previous.chunk_id = %s",
+                    (chunk_id, chunks[index - 1]),
+                )
+                assert seconds == int(cur.fetchone()[0])
+    assert elapsed == [None, 60, 3600, 3600]
+
+
+def test_backstage_header_missing_world_time_is_500(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """Fails if a missing prior clock silently becomes null or a zero delta."""
+    previous, selected = backstage_case["chunks"][-2:]
+    assert (previous, selected) == (4, 5)
+    engine = create_slot_engine(database_url(disposable_db))
+    try:
+        with Session(engine) as session:
+            try:
+                session.execute(text("SET LOCAL session_replication_role = replica"))
+                session.execute(
+                    text(
+                        "UPDATE chunk_metadata SET world_time = NULL "
+                        "WHERE chunk_id = :chunk_id"
+                    ),
+                    {"chunk_id": previous},
+                )
+                with pytest.raises(BackstagePayloadError) as error:
+                    build_backstage_turn(session, slot=4, chunk_id=selected)
+                assert error.value.status_code == 500
+                assert error.value.detail == (
+                    f"Committed chunk {selected} or its previous turn {previous} "
+                    "has no world_time"
+                )
+            finally:
+                session.rollback()
+    finally:
+        engine.dispose()
+    response = client.get("/api/dev/backstage/4/turn", params={"chunk_id": selected})
+    assert response.status_code == 200, response.text
+    assert response.json()["header"]["elapsed_seconds"] == 3600
+
+
+def test_economics_legacy_and_unbound_pending_are_unavailable(
+    client: TestClient, backstage_case: dict[str, Any]
+) -> None:
+    """Fails if legacy reads escape, the pending parent is ignored, or data vanishes."""
+    response = client.get("/api/dev/backstage/4/turn")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    latest = backstage_case["latest"]
+    provisional = backstage_case["provisional_session"]
+    assert payload["economics"]["accepted"] == {
+        "status": "unavailable",
+        "generation_session": None,
+        "detail": (
+            f"chunk {latest}: no generation session "
+            "(accepted before session binding)"
+        ),
+        "observation": None,
+    }
+    assert payload["economics"]["pending"] == {
+        "status": "unavailable",
+        "generation_session": provisional,
+        "detail": (
+            f"session {provisional}: no generation session "
+            "(staged before session binding)"
+        ),
+        "observation": None,
+    }
+    assert payload["correspondence"]["exchanges"]
+    assert payload["state_writes"]["rows"]
+    assert payload["orrery"]["rows"]
+    earlier = client.get(
+        "/api/dev/backstage/4/turn",
+        params={"chunk_id": backstage_case["chunks"][1]},
+    )
+    assert earlier.status_code == 200, earlier.text
+    assert earlier.json()["economics"]["pending"] is None
+
+
+def _without_read_at(observation: dict[str, Any]) -> dict[str, Any]:
+    """Remove only the read instant; every schema-3 value remains an oracle."""
+    return {key: value for key, value in observation.items() if key != "read_at"}
+
+
+def test_economics_matches_inspect_turn_for_a_test_turn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Fails on another session, changed observation data or post-acceptance pending."""
+    # The provider fixture must first see private runtime state and TEST-only use.
+    config = configure_test(tmp_path, "http://127.0.0.1:1", monkeypatch)
+    provider = request.getfixturevalue("mock_openai_server")
+    configure_test(tmp_path, provider, monkeypatch)
+    doc = tomlkit.parse(config.read_text())
+    doc["storyteller"]["correspondence"]["floor_turns"] = 1
+    config.write_text(tomlkit.dumps(doc))
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
+    with disposable_slot_database("qa640_uib_turn") as dbname:
+        route_slot(monkeypatch, dbname)
+        _route_backstage_to(monkeypatch, dbname)
+        seed_played_story(
+            dbname,
+            turns=3,
+            cast=FIXTURE_CAST,
+            time_delta=FIXTURE_TURN_GAP,
+            correspondence=True,
+            slot=4,
+        )
+        prior_session = _stage_pending_turn(dbname)
+        app = FastAPI()
+        app.include_router(backstage_endpoints.router)
+        with TestClient(app) as backstage:
+            with gateway_lane(monkeypatch):
+                output = run_cli(
+                    monkeypatch, "continue", "--slot", "4", "--choice", "1", "--json"
+                )
+                assert json.loads(output)["success"], output
+                with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT session_id::text, parent_chunk_id FROM incubator"
+                    )
+                    pending_session, parent_chunk = cur.fetchone()
+                response = backstage.get("/api/dev/backstage/4/turn")
+                assert response.status_code == 200, response.text
+                payload = response.json()
+                pending = payload["economics"]["pending"]
+                assert pending["status"] == "observed"
+                assert pending["generation_session"] == pending_session
+                assert pending["detail"] is None
+                observation = pending["observation"]
+                assert observation["schema_version"] == 3
+                assert {item["seat"] for item in observation["attempts"]} >= {
+                    "skald_writer",
+                    "gaia",
+                }
+                cli_observation = json.loads(
+                    run_cli(
+                        monkeypatch,
+                        "inspect-turn",
+                        "--slot",
+                        "4",
+                        "--session",
+                        pending_session,
+                        "--json",
+                    )
+                )["observation"]
+                assert _without_read_at(observation) == _without_read_at(
+                    cli_observation
+                )
+                with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT session_id::text FROM narrative_generation_sessions "
+                        "WHERE chunk_id = %s AND terminal_outcome = 'accepted'",
+                        (payload["header"]["chunk_id"],),
+                    )
+                    assert cur.fetchall() == [(prior_session,)]
+                assert payload["header"]["chunk_id"] == parent_chunk
+                assert payload["economics"]["accepted"]["status"] == "observed"
+                assert (
+                    payload["economics"]["accepted"]["generation_session"]
+                    == prior_session
+                )
+                approved = requests.post(
+                    f"{os.environ['NEXUS_API_URL']}/api/narrative/approve/"
+                    f"{pending_session}?slot=4&commit=true",
+                    timeout=120,
+                )
+                assert approved.status_code == 200, approved.text
+            # The fixture stopped and joined its workers, so job states now hold.
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT chunk_id FROM narrative_generation_sessions "
+                    "WHERE session_id = %s AND terminal_outcome = 'accepted'",
+                    (pending_session,),
+                )
+                (accepted_chunk,) = cur.fetchone()
+                cur.execute(
+                    "SELECT extract(epoch FROM "
+                    "(selected.world_time - parent.world_time)) "
+                    "FROM chunk_metadata selected CROSS JOIN chunk_metadata parent "
+                    "WHERE selected.chunk_id = %s AND parent.chunk_id = %s",
+                    (accepted_chunk, parent_chunk),
+                )
+                elapsed_seconds = int(cur.fetchone()[0])
+            response = backstage.get("/api/dev/backstage/4/turn")
+            assert response.status_code == 200, response.text
+            payload = response.json()
+            accepted = payload["economics"]["accepted"]
+            assert payload["header"]["chunk_id"] == accepted_chunk
+            assert payload["header"]["elapsed_seconds"] == elapsed_seconds
+            assert accepted["status"] == "observed"
+            assert accepted["generation_session"] == pending_session
+            assert accepted["detail"] is None
+            assert payload["economics"]["pending"] is None
+            cli_observation = json.loads(
+                run_cli(
+                    monkeypatch,
+                    "inspect-turn",
+                    "--slot",
+                    "4",
+                    "--chunk",
+                    str(accepted_chunk),
+                    "--json",
+                )
+            )["observation"]
+            assert _without_read_at(accepted["observation"]) == _without_read_at(
+                cli_observation
+            )

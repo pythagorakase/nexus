@@ -181,6 +181,7 @@ function engineOf(slotState: SlotState): NarrativeEngine {
     elapsedMs: 0,
     generationError: null,
     failedGeneration: null,
+    toastedFailureSessionId: null,
     isRecoveryLoading: false,
     retryGeneration: vi.fn(async () => true),
     isGenerating: false,

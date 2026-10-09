@@ -1,0 +1,18 @@
+nexus/config/settings_models.py:131: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:131: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:132: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:132: error: Unsupported operand types for < ("int" and "None")  [operator]
+nexus/config/settings_models.py:132: error: Unsupported left operand type for > ("None")  [operator]
+nexus/config/settings_models.py:132: note: Both left and right operands are unions
+nexus/config/settings_models.py:139: error: Unsupported operand types for + ("int" and "None")  [operator]
+nexus/config/settings_models.py:139: note: Right operand is of type "int | None"
+nexus/config/settings_models.py:139: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4513: error: Unsupported operand types for > ("int" and "None")  [operator]
+nexus/config/settings_models.py:4513: note: Right operand is of type "int | None"
+nexus/api/narrative.py:8: error: Skipping analyzing "frontmatter": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+nexus/api/narrative.py:8: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+nexus/api/narrative.py:238: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+nexus/api/narrative.py:263: error: Incompatible default for argument "data" (default has type "None", argument has type "dict[Any, Any]")  [assignment]
+nexus/api/narrative.py:263: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/api/narrative.py:263: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+Found 9 errors in 2 files (checked 6 source files)

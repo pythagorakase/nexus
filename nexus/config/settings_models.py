@@ -4289,6 +4289,20 @@ class UIReaderSettings(BaseModel):
         return self
 
 
+class UIAnnouncerSettings(BaseModel):
+    """Generation live-region timing exposed through GET /api/config/ui."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hold_ms: int = Field(
+        ...,
+        strict=True,
+        ge=1000,
+        le=60_000,
+        description="Milliseconds a generation announcement stays in the live region",
+    )
+
+
 class UISettings(BaseModel):
     """Settings consumed by the React client.
 
@@ -4323,6 +4337,9 @@ class UISettings(BaseModel):
         description=(
             "Chunk-count bounds for the playable reader feed and the chunk range route"
         ),
+    )
+    announcer: UIAnnouncerSettings = Field(
+        ..., description="Hold duration for generation announcements"
     )
 
 

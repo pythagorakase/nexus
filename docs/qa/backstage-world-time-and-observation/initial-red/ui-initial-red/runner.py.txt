@@ -1,0 +1,425 @@
+#!/usr/bin/env python3
+"""Prepared UI-B tests-only admission. Do not run without the heavy-slot grant.
+
+No implementation, green tests, owner operations, retries or publication are
+performed. Each invocation retains a fresh evidence directory, including failures.
+Codex — GPT-6
+"""
+
+from __future__ import annotations
+
+import argparse
+from collections import Counter
+import fcntl
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+import xml.etree.ElementTree as ET
+
+COORD = Path(__file__).resolve().parent
+ROOT = Path('/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus')
+HEAD = '7557f00c7278d74e203c585d0092436db4f15934'
+TREE = '98e20d9f013579c9f6a6d6189e80a61c2912c618'
+BASE = '28e7070bfaa48e77866f0a11ebce23ca9ec7970f'
+HELPER = COORD / 'run_803_815_proof.py'
+HELPER_SHA = 'e7ff4a62399132d041e54039edc0ec5b926f34c719e292e9871dd90c81cfd27d'
+PYTHON = Path('/Users/pythagor/nexus/.venv/bin/python')
+OS_KEYS = ('PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG',
+           'LC_ALL', 'LC_CTYPE', 'TZ', '__CF_USER_TEXT_ENCODING')
+TEST_FILE = 'tests/test_api/test_backstage_endpoints_pg.py'
+PY_NAMES = (
+    'test_backstage_header_elapsed_world_time',
+    'test_backstage_header_missing_world_time_is_500',
+    'test_economics_legacy_and_unbound_pending_are_unavailable',
+    'test_economics_matches_inspect_turn_for_a_test_turn',
+)
+UI_DIR = 'ui/client/src/components/nexus/'
+DRAWER = UI_DIR + 'BackstageDrawer.test.tsx'
+LAYOUT = UI_DIR + 'NexusLayout.test.tsx'
+ALLOWED_DIFF = {
+    TEST_FILE, DRAWER, LAYOUT,
+    'docs/qa/backstage-world-time-and-observation/verification.md',
+}
+FORMAT_CASES = (
+    (0, '+0 min'), (59, '+0 min'), (420, '+7 min'), (3600, '+1 h'),
+    (3660, '+1 h 1 min'), (86400, '+1 d'), (90000, '+1 d 1 h'), (-120, '−2 min'),
+)
+DRAWER_RED = {
+    'keeps the first header exact and explains an unavailable accepted turn':
+        ('Unable to find', 'ECONOMICS'),
+    'renders both observations with provenance and does not repeat the accepted summary':
+        ('Unable to find', 'slot 04 · t.17 · +7 min'),
+    'keeps the other sections usable when a pending draft has no bound session':
+        ('Unable to find', 'backstage-economics-pending'),
+    **{f'formats {seconds} elapsed seconds as {formatted}':
+       ('formatElapsed', 'not a function') for seconds, formatted in FORMAT_CASES},
+}
+LAYOUT_RED = {
+    'opens, renders, and closes through the sigil and guarded keyboard':
+        ('Unable to find', 'slot 04 · t.17 · +7 min'),
+}
+UI_UNCHANGED = {
+    DRAWER: {'marks each existing row without adding attention text'},
+    LAYOUT: {
+        'hides the sigil when the health probe reports the gate closed',
+        "hands the strip the engine's durable failure for its announcer",
+        'keeps one map view owner across tab switches',
+        'puts the rail after the content at narrow width',
+    },
+}
+
+
+def sha(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+# Import only the reviewed private stdlib harness, never application code here.
+if sha(HELPER.read_bytes()) != HELPER_SHA:
+    raise RuntimeError('Coordinator Proof helper changed; source review is required')
+spec = importlib.util.spec_from_file_location('ui_b_coordinator_proof', HELPER)
+if spec is None or spec.loader is None:
+    raise RuntimeError('Cannot load the pinned coordinator Proof helper')
+proof_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(proof_module)
+proof_module.ROOTS['uib'] = ROOT
+
+
+class InitialRed(proof_module.Proof):
+    """Reuse Proof admission, source guards and evidence with a bounded npm path."""
+
+    def __init__(self, args: argparse.Namespace):
+        self.safe_env = {key: os.environ[key] for key in OS_KEYS if key in os.environ}
+        super().__init__(args)
+        temporary_root = self.out / 'tmp'
+        receipt_root = self.out / 'failure-receipts'
+        temporary_root.mkdir()
+        receipt_root.mkdir()
+        self.env = dict(self.safe_env)
+        self.env.update(
+            PYTHONPATH=str(ROOT), PYTHONDONTWRITEBYTECODE='1', PYTHONUNBUFFERED='1',
+            NEXUS_KEYRING_DISABLE='1', NEXUS_TEST_PROVIDER_ONLY='1',
+            NEXUS_TEST_RECEIPTS_DIR=str(receipt_root), TMPDIR=str(temporary_root),
+            PGCONNECT_TIMEOUT='5', NO_COLOR='1',
+        )
+        # Preserve HOME; npm's mutable cache alone belongs to this fresh evidence root.
+        self.env['npm_config_cache'] = str(self.out / 'npm-cache')
+        for scope in ('user', 'global'):
+            config = self.out / f'npm-{scope}.npmrc'
+            config.write_text('')
+            self.env[f'npm_config_{scope}config'] = str(config)
+        self.env['npm_config_registry'] = 'https://registry.npmjs.org/'
+        self.env['npm_config_update_notifier'] = 'false'
+        self.data.update(
+            state='admission-pending', product_base=BASE,
+            helper_sha256=HELPER_SHA,
+            harness_sha256=sha(Path(__file__).read_bytes()),
+            retained_os_environment_names=sorted(self.safe_env),
+            cleared_environment_names=sorted(set(os.environ) - set(self.safe_env)),
+            admission_note='Expected reds require coordinator review before product edits.',
+        )
+        (self.out / 'runner.py.txt').write_bytes(Path(__file__).read_bytes())
+        (self.out / 'coordinator-proof.py.txt').write_bytes(HELPER.read_bytes())
+        self.package_pins = {
+            relative: sha((ROOT / relative).read_bytes())
+            for relative in ('ui/package.json', 'ui/package-lock.json')
+        }
+        self.data['package_sha256'] = self.package_pins
+        self.data['test_sha256'] = {
+            relative: sha((ROOT / relative).read_bytes())
+            for relative in (TEST_FILE, DRAWER, LAYOUT)
+        }
+        self.save()
+
+    def git(self, *args: str) -> str:
+        return subprocess.check_output(
+            ['git', *args], cwd=ROOT, env=self.safe_env, text=True, timeout=15,
+        ).strip()
+
+    def check_tree(self) -> None:
+        super().check_tree()
+        if self.git('rev-parse', 'HEAD^{tree}') != TREE:
+            raise RuntimeError('Tests-only tree differs from the reviewed tree')
+        if sha(HELPER.read_bytes()) != HELPER_SHA:
+            raise RuntimeError('Coordinator Proof helper changed during admission')
+        for relative, expected in getattr(self, 'package_pins', {}).items():
+            if sha((ROOT / relative).read_bytes()) != expected:
+                raise RuntimeError(f'Package or lockfile changed: {relative}')
+
+    def require_unchanged_product(self) -> None:
+        changed = set(self.git('diff', '--name-only', BASE, HEAD).splitlines())
+        if changed != ALLOWED_DIFF:
+            raise RuntimeError(f'Unexpected tests-only delta: {sorted(changed)}')
+        self.git('merge-base', '--is-ancestor', BASE, HEAD)
+        modules = ROOT / 'ui/node_modules'
+        if modules.is_symlink():
+            raise RuntimeError('Refusing shared/symlinked node_modules')
+        if modules.exists() and not modules.is_dir():
+            raise RuntimeError('node_modules is not a local directory')
+
+    def command(self, name, argv, *, postgres=False, allowed=(0,), cwd=None,
+                executable=None, reserve_seconds=0):
+        self.check_tree()
+        load = os.getloadavg()[0]
+        if load > 24:
+            raise RuntimeError(f'Load {load:.2f} exceeds 24; no command started')
+        remaining = 540 - (time.monotonic() - self.started) - reserve_seconds
+        if remaining < 5:
+            raise RuntimeError('Nine-minute phase budget exhausted; retain and review')
+        command = ['nice', '-n', '15', str(executable or PYTHON), *argv]
+        env = dict(self.env)
+        if postgres:
+            env['NEXUS_RUN_POSTGRES'] = '1'
+        log = self.out / f'{name}.txt'
+        item = {'name': name, 'command': command, 'cwd': str(cwd or ROOT),
+                'pythonpath': env['PYTHONPATH'], 'load': load,
+                'deadline_seconds': remaining, 'silence_limit_seconds': 120,
+                'postgres': postgres, 'log': log.name}
+        self.data['commands'].append(item)
+        self.save()
+        print(f'{name}: {HEAD} -> {log}', flush=True)
+        with log.open('x') as stream:
+            child = subprocess.Popen(command, cwd=cwd or ROOT, env=env, stdout=stream,
+                                     stderr=subprocess.STDOUT, start_new_session=True)
+            item['owned_process_group'] = child.pid
+            self.save()
+            deadline = time.monotonic() + remaining
+            last_output = time.monotonic()
+            previous_size = 0
+            try:
+                while child.poll() is None:
+                    now = time.monotonic()
+                    size = log.stat().st_size
+                    if size != previous_size:
+                        last_output, previous_size = now, size
+                    if now >= deadline or now - last_output >= 120:
+                        raise TimeoutError('Phase deadline or 120-second silence limit')
+                    time.sleep(0.25)
+                code = child.wait()
+            except BaseException as exc:
+                item['interrupted'] = f'{type(exc).__name__}: {exc}'
+                for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+                    try:
+                        os.killpg(child.pid, signum)
+                    except ProcessLookupError:
+                        break
+                    until = time.monotonic() + 5
+                    while time.monotonic() < until:
+                        child.poll()
+                        try:
+                            os.killpg(child.pid, 0)
+                        except ProcessLookupError:
+                            break
+                        time.sleep(0.1)
+                child.wait(timeout=10)
+                raise
+            finally:
+                item.update(exit_code=child.poll(), sha256=sha(log.read_bytes()))
+                self.save()
+        self.check_tree()
+        if code not in allowed:
+            raise RuntimeError(f'{name} exited {code}; see retained {log}')
+        return log.read_text(errors='replace')
+
+    def clone_audit(self, label: str) -> None:
+        # Metadata only, after admission: no connection to an owner database,
+        # no DROP or cleanup command. A leftover is retained for coordinator action.
+        source = '''import json
+import psycopg2
+from nexus.database import connection_kwargs
+conn = psycopg2.connect(**connection_kwargs("postgres", options="-c default_transaction_read_only=on -c statement_timeout=10000"))
+try:
+    conn.set_session(readonly=True)
+    with conn.cursor() as cur:
+        cur.execute("SELECT datname FROM pg_database WHERE starts_with(datname, %s) OR starts_with(datname, %s) ORDER BY datname", ("qa640_778s6a_backstage_", "qa640_uib_turn_"))
+        rows = cur.fetchall()
+        print(json.dumps(rows), flush=True)
+        if rows:
+            raise RuntimeError("UI-B fixture clones exist; no cleanup is authorized here")
+finally:
+    conn.close()
+'''
+        self.command(label, ['-c', source])
+
+    def python_red(self) -> None:
+        self.clone_audit('clone-before-read-only')
+        try:
+            self.record_python_red()
+        except BaseException as exc:
+            self.data['python_red_error'] = f'{type(exc).__name__}: {exc}'
+            self.save()
+            raise
+        finally:
+            try:
+                self.clone_audit('clone-after-read-only')
+            except BaseException as exc:
+                self.data['clone_after_error'] = f'{type(exc).__name__}: {exc}'
+                self.save()
+                raise
+        self.data['state'] = 'expected-python-red-recorded-review-required'
+
+    def record_python_red(self) -> None:
+        junit = self.out / 'python-red.xml'
+        output = self.command(
+            'python-red', ['-m', 'pytest', '-q', '-s', '-ra',
+                           '-p', 'tests.dbname_audit', '-p', 'no:cacheprovider',
+                           '--basetemp', str(self.out / 'pytest-temp'),
+                           '--junitxml', str(junit), '-o', 'junit_logging=all',
+                           *[f'{TEST_FILE}::{name}' for name in PY_NAMES]],
+            postgres=True, allowed=(0, 1, 2, 3, 4, 5), reserve_seconds=45,
+        )
+        command_result = self.data['commands'][-1]
+        cases = list(ET.parse(junit).getroot().iter('testcase')) if junit.exists() else []
+        self.data['junit_sha256'] = sha(junit.read_bytes()) if junit.exists() else None
+        failures = []
+        for case in cases:
+            failure = case.find('failure')
+            failures.append({
+                'name': case.attrib.get('name'),
+                'classname': case.attrib.get('classname'),
+                'failure': None if failure is None else failure.attrib.get('message'),
+                'body': None if failure is None else ''.join(failure.itertext()),
+                'error': case.find('error') is not None,
+                'skipped': case.find('skipped') is not None,
+            })
+        self.data['python_cases'] = failures
+        self.data['guard_summaries'] = {line: line in output for line in proof_module.GUARDS}
+        self.save()
+        if command_result['exit_code'] != 1 or not all(self.data['guard_summaries'].values()):
+            raise RuntimeError('Initial Python red lacks exit 1 or mandatory guards')
+        if Counter(case.attrib.get('name') for case in cases) != Counter(PY_NAMES):
+            raise RuntimeError('Python case identities differ from the exact four nodes')
+        for case in failures:
+            if case['error'] or case['skipped'] or case['failure'] is None:
+                raise RuntimeError('A Python node had setup error, skip or unexpected pass')
+            message = case['failure']
+            index = PY_NAMES.index(case['name'])
+            expected = ("KeyError: 'elapsed_seconds'" if index == 0 else
+                        'DID NOT RAISE' if index == 1 else "KeyError: 'economics'")
+            if expected not in message or (index == 1 and 'BackstagePayloadError' not in message):
+                raise RuntimeError(f'Unexpected red reason for {case["name"]}: {message}')
+
+    def ui_red(self) -> None:
+        if self.args.python_results is None:
+            raise RuntimeError('UI admission needs --python-results from the retained initial red')
+        prior = json.loads(self.args.python_results.read_text())
+        if (prior.get('head') != HEAD or prior.get('tree') != TREE
+                or prior.get('state') != 'expected-python-red-recorded-review-required'):
+            raise RuntimeError('Prior Python evidence did not establish the required red')
+        self.data['python_results'] = {
+            'path': str(self.args.python_results.resolve()),
+            'sha256': sha(self.args.python_results.read_bytes()),
+        }
+        npm = shutil.which('npm', path=self.env.get('PATH'))
+        if npm is None:
+            raise RuntimeError('npm is unavailable; no installation fallback is authorized')
+        self.command('npm-ci', ['--prefix', 'ui', 'ci'], executable=npm)
+        result = self.out / 'ui-red.json'
+        self.command('ui-red', ['--prefix', 'ui', 'test', '--',
+                               'NexusLayout', 'BackstageDrawer',
+                               '--reporter=default', '--reporter=json',
+                               f'--outputFile={result}'], executable=npm, allowed=(0, 1))
+        report = json.loads(result.read_text())
+        self.data['ui_report_sha256'] = sha(result.read_bytes())
+        suites = report.get('testResults', [])
+        actual = {}
+        for suite in suites:
+            path = Path(suite['name']).resolve().relative_to(ROOT).as_posix()
+            if path in actual:
+                raise RuntimeError('Duplicate UI suite result')
+            actual[path] = suite['assertionResults']
+        self.data['ui_assertions'] = actual
+        self.save()
+        if set(actual) != {DRAWER, LAYOUT} or report.get('numRuntimeErrorTestSuites', 0):
+            raise RuntimeError('UI selection/collection differs from the two required suites')
+        for relative, expected_red in ((DRAWER, DRAWER_RED), (LAYOUT, LAYOUT_RED)):
+            cases = actual[relative]
+            expected_titles = set(expected_red) | UI_UNCHANGED[relative]
+            if Counter(case['title'] for case in cases) != Counter(expected_titles):
+                raise RuntimeError(f'UI case identities differ in {relative}')
+            for case in cases:
+                title = case['title']
+                if title not in expected_red:
+                    if case['status'] != 'passed':
+                        raise RuntimeError(f'Unrelated UI regression: {title}')
+                    continue
+                messages = '\n'.join(case.get('failureMessages', []))
+                if case['status'] != 'failed' or not all(
+                    token in messages for token in expected_red[title]
+                ):
+                    raise RuntimeError(f'Unexpected UI red reason: {title}')
+        if self.data['commands'][-1]['exit_code'] != 1:
+            raise RuntimeError('UI expected red did not exit 1')
+        self.data['state'] = 'expected-python-and-ui-reds-recorded-review-required'
+
+    def run_initial(self) -> None:
+        self.require_unchanged_product()
+        self.admission()
+        if self.args.followup_of is not None:
+            prior = json.loads(self.args.followup_of.read_text())
+            if prior.get('head') != HEAD or prior.get('phase') != self.args.phase:
+                raise RuntimeError('Follow-up must retain the same tests-only phase and head')
+            self.data['followup_of'] = {
+                'path': str(self.args.followup_of.resolve()),
+                'sha256': sha(self.args.followup_of.read_bytes()),
+                'reason': self.args.followup_reason,
+            }
+        if self.args.phase == 'uib-python-initial-red':
+            self.python_red()
+        else:
+            self.ui_red()
+        self.check_tree()
+        self.data['complete_at_epoch'] = time.time()
+        self.save()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--phase', required=True,
+                        choices=['uib-python-initial-red', 'uib-ui-initial-red'])
+    parser.add_argument('--expected-main', required=True)
+    parser.add_argument('--python-results', type=Path)
+    parser.add_argument('--followup-of', type=Path)
+    parser.add_argument('--followup-reason')
+    args = parser.parse_args()
+    args.expected_head = HEAD
+    if not re.fullmatch(r'[0-9a-f]{40}', args.expected_main):
+        parser.error('--expected-main must be the coordinator-approved full SHA')
+    if bool(args.followup_of) != bool(args.followup_reason):
+        parser.error('Follow-ups need both the retained results path and an explanation')
+    os.umask(0o077)
+    with (COORD / '803-815-focused.lock').open('a') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        processes = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True,
+                                            timeout=10)
+        active = re.compile(
+            r'(?:^|\s)(?:\S*/)?(?:pytest|vitest|playwright|Chromium)(?:\s|$)'
+            r'|\s-m\s+pytest(?:\s|$)|npm(?:\s+--prefix\s+\S+)?\s+(?:ci|test|run)'
+            r'|resolve-state-surfaces|run_next_combined_gate', re.I,
+        )
+        if active.search(processes):
+            raise RuntimeError('Another heavy command is active; admission is closed')
+        proof = InitialRed(args)
+        try:
+            proof.run_initial()
+        except BaseException as exc:
+            proof.data.update(state='failed-review-required', error=f'{type(exc).__name__}: {exc}')
+            proof.save()
+            raise
+        print(proof.out / 'results.json', flush=True)
+    return 0
+
+
+if __name__ == '__main__':
+    def interrupt(signum, frame):
+        raise KeyboardInterrupt(f'Coordinator interruption: {signum}')
+
+    signal.signal(signal.SIGTERM, interrupt)
+    sys.exit(main())

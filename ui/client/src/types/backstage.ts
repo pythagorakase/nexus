@@ -7,6 +7,7 @@ export interface BackstageTurnResponse {
     chunk_label: string;
     turn_label: string;
     world_time: string | null;
+    elapsed_seconds: number | null;
     skald_status: "writing" | "idle";
   };
   correspondence: {
@@ -48,6 +49,74 @@ export interface BackstageTurnResponse {
     counts: BackstageCounts;
     history: BackstageHistoryLine[];
   };
+  economics: {
+    accepted: BackstageObservationRead;
+    pending: BackstageObservationRead | null;
+  };
+}
+
+export type ObservedCount = number | "unknown";
+
+export interface BackstageUsageTotals {
+  provenance: string | null;
+  events: number;
+  providers: string[];
+  comparable: boolean;
+  input_tokens: ObservedCount;
+  output_tokens: ObservedCount;
+}
+
+export interface BackstageAttempt {
+  generation_session: string;
+  seat: string;
+  attempt: number;
+  model: string;
+  outcome: string | null;
+  window: { provenance: string; input_tokens: ObservedCount };
+  usage: {
+    provenance: string;
+    input_tokens: ObservedCount;
+    output_tokens: ObservedCount;
+  };
+}
+
+export interface BackstageJob {
+  queue: string;
+  id: number;
+  state: string;
+  terminal: boolean;
+  usage?: {
+    provenance: string;
+    input_tokens: ObservedCount;
+    output_tokens: ObservedCount;
+  };
+}
+
+// The subset the drawer reads; the full schema is the docstring of
+// nexus/telemetry/turn_observation.py.
+export interface BackstageTurnObservation {
+  schema_version: number;
+  generation_session: string;
+  read_at: string;
+  ledger_days_read: string[];
+  terminal_outcome: string | null;
+  wall_time: { seconds: number | "unknown" };
+  choice_ready_at: string | null;
+  seconds_to_choice_ready: number | "unknown" | null;
+  attempts: BackstageAttempt[];
+  usage_totals: {
+    critical_path: BackstageUsageTotals;
+    background: BackstageUsageTotals;
+    overall: BackstageUsageTotals;
+  };
+  jobs: { total: number; entries: BackstageJob[] };
+}
+
+export interface BackstageObservationRead {
+  status: "observed" | "unavailable";
+  generation_session: string | null;
+  detail: string | null;
+  observation: BackstageTurnObservation | null;
 }
 
 export interface BackstageCounts {

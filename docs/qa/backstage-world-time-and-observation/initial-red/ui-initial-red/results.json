@@ -1,0 +1,427 @@
+{
+  "phase": "uib-ui-initial-red",
+  "head": "7557f00c7278d74e203c585d0092436db4f15934",
+  "origin_main": "f073b3711a3bd0273943c9defad85913452fd00b",
+  "tree": "98e20d9f013579c9f6a6d6189e80a61c2912c618",
+  "worktree": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus",
+  "started_at": "20261009T015258Z",
+  "state": "failed-review-required",
+  "interpreter": "/Users/pythagor/nexus/.venv/bin/python",
+  "cleared_environment_names": [
+    "ARACHNE_MCP_TOKEN",
+    "BROWSER_USE_ACCESS_VERIFYING_IDENTITY",
+    "CODEX_APP_TOOLS_PIPE_PATH",
+    "CODEX_CI",
+    "CODEX_CLI_PATH",
+    "CODEX_INTERNAL_ORIGINATOR_OVERRIDE",
+    "CODEX_MCP_NODE_PATH",
+    "CODEX_SAGE_BACKFILL_TRACKER_TAB_REUSE",
+    "CODEX_SESSION_ID",
+    "CODEX_SHELL",
+    "CODEX_TASK_WORKSPACE_VERIFYING_IDENTITY",
+    "CODEX_TECTONIC_PATH",
+    "CODEX_THREAD_ID",
+    "CODEX_VERSION",
+    "COLORTERM",
+    "COMMAND_MODE",
+    "DATABASE_URL",
+    "DISABLE_AUTO_UPDATE",
+    "FPATH",
+    "FZF_BASE",
+    "FZF_DEFAULT_COMMAND",
+    "GH_PAGER",
+    "GIT_PAGER",
+    "HOMEBREW_CELLAR",
+    "HOMEBREW_PREFIX",
+    "HOMEBREW_REPOSITORY",
+    "INFOPATH",
+    "LESS",
+    "LOG_FORMAT",
+    "LSCOLORS",
+    "LS_COLORS",
+    "MallocNanoZone",
+    "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S",
+    "NO_COLOR",
+    "OLDPWD",
+    "OSLogRateLimit",
+    "PAGER",
+    "PWD",
+    "PYENV_SHELL",
+    "RUST_LOG",
+    "SHLVL",
+    "SSH_AUTH_SOCK",
+    "TERM",
+    "XPC_FLAGS",
+    "XPC_SERVICE_NAME",
+    "ZSH",
+    "ZSH_TMUX_AUTOSTART",
+    "ZSH_TMUX_AUTOSTARTED",
+    "_"
+  ],
+  "commands": [
+    {
+      "name": "import-path",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-c",
+        "import json,nexus,sys; print(json.dumps({\"module\":nexus.__file__,\"executable\":sys.executable}))"
+      ],
+      "cwd": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus",
+      "pythonpath": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus",
+      "load": 4.1240234375,
+      "deadline_seconds": 539.9089819159999,
+      "silence_limit_seconds": 120,
+      "postgres": false,
+      "log": "import-path.txt",
+      "owned_process_group": 19096,
+      "exit_code": 0,
+      "sha256": "a906a05b8e4b195d42313646c8ace6f9b35f4e22623703bfe174363d74b46d39"
+    },
+    {
+      "name": "npm-ci",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/opt/homebrew/bin/npm",
+        "--prefix",
+        "ui",
+        "ci"
+      ],
+      "cwd": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus",
+      "pythonpath": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus",
+      "load": 4.1240234375,
+      "deadline_seconds": 539.5440710830007,
+      "silence_limit_seconds": 120,
+      "postgres": false,
+      "log": "npm-ci.txt",
+      "owned_process_group": 19107,
+      "exit_code": 0,
+      "sha256": "b7088429a10f5551736b71ab0c160d1ab6f4651ae2abfef8750774ca3755987e"
+    },
+    {
+      "name": "ui-red",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/opt/homebrew/bin/npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "NexusLayout",
+        "BackstageDrawer",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/ui-red.json"
+      ],
+      "cwd": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus",
+      "pythonpath": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus",
+      "load": 4.59423828125,
+      "deadline_seconds": 533.3420994159969,
+      "silence_limit_seconds": 120,
+      "postgres": false,
+      "log": "ui-red.txt",
+      "owned_process_group": 19190,
+      "exit_code": 1,
+      "sha256": "84fc4777987f5fce7c4e4a8ffb0cd49b30a4b988a1b3cd7eeed10425b4217d4d"
+    }
+  ],
+  "harness_sha256": "f3b7a85b2b8451ccba4d372aa56d9e694e62724b782c32602958ea737648f0fa",
+  "evidence_scope": "focused only; no whole-suite or offline-partition claim",
+  "product_base": "28e7070bfaa48e77866f0a11ebce23ca9ec7970f",
+  "helper_sha256": "e7ff4a62399132d041e54039edc0ec5b926f34c719e292e9871dd90c81cfd27d",
+  "retained_os_environment_names": [
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "LOGNAME",
+    "PATH",
+    "SHELL",
+    "TMPDIR",
+    "USER",
+    "__CF_USER_TEXT_ENCODING"
+  ],
+  "admission_note": "Expected reds require coordinator review before product edits.",
+  "package_sha256": {
+    "ui/package.json": "b810f3ae36dca52ea650232a5fd43b06e5b786ed14700eaec87887d73fa24010",
+    "ui/package-lock.json": "0f88785f3d0504d8a6ea5bdc9e82297b49aaf5932cbe4914b5ec3da368c1c4a2"
+  },
+  "test_sha256": {
+    "tests/test_api/test_backstage_endpoints_pg.py": "6c6658bea23590c5ed78db24f13c2c40c1140af4b630c497a5b5bdb96ec48347",
+    "ui/client/src/components/nexus/BackstageDrawer.test.tsx": "863bc80581bdca2d59515f9ce3980ea852130811e7ca156bdf766030f53514f1",
+    "ui/client/src/components/nexus/NexusLayout.test.tsx": "fe0d5642b5fd853c20d4a94ca2119f46128d22aa17b4352c99fd7792b2fc8be4"
+  },
+  "import_proof": {
+    "module": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/nexus/__init__.py",
+    "executable": "/Users/pythagor/nexus/.venv/bin/python"
+  },
+  "followup_of": {
+    "path": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015239Z-a9cd0c86/results.json",
+    "sha256": "cc21a75035f6116ebac683e95e7d46a38e998b511f412802a7b3de11fc72f65d",
+    "reason": "npm rejects sharing /dev/null between user and global config; use two distinct empty private npmrc files. No product/test/source pin changed."
+  },
+  "python_results": {
+    "path": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/results.json",
+    "sha256": "098188146672eeefd5c8d483c92ec12159c3914506f315312cbc40c5462fa0a0"
+  },
+  "ui_report_sha256": "a9a6d2504b79feb8ad5a5e356c5bf701ad57bf42f6e5f86321c2679bade6169f",
+  "ui_assertions": {
+    "ui/client/src/components/nexus/BackstageDrawer.test.tsx": [
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation keeps the first header exact and explains an unavailable accepted turn",
+        "status": "failed",
+        "title": "keeps the first header exact and explains an unavailable accepted turn",
+        "duration": 65.70958399999995,
+        "failureMessages": [
+          "TestingLibraryElementError: Unable to find an accessible element with the role \"button\" and name `/ECONOMICS/`\n\nHere are the accessible roles:\n\n  complementary:\n\n  Name \"Backstage\":\n  \u001b[36m<aside\u001b[39m\n    \u001b[33maria-label\u001b[39m=\u001b[32m\"Backstage\"\u001b[39m\n    \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-drawer\"\u001b[39m\n    \u001b[33mdata-testid\u001b[39m=\u001b[32m\"backstage-drawer\"\u001b[39m\n  \u001b[36m/>\u001b[39m\n\n  --------------------------------------------------\n  banner:\n\n  Name \"\":\n  \u001b[36m<header\u001b[39m\n    \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head\"\u001b[39m\n  \u001b[36m/>\u001b[39m\n\n  --------------------------------------------------\n  button:\n\n  Name \"Close Backstage\":\n  \u001b[36m<button\u001b[39m\n    \u001b[33maria-label\u001b[39m=\u001b[32m\"Close Backstage\"\u001b[39m\n    \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-close\"\u001b[39m\n  \u001b[36m/>\u001b[39m\n\n  Name \"\u2304 CORRESPONDENCE 0 exchanges \u00b7 0 held threads\":\n  \u001b[36m<button\u001b[39m\n    \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n  \u001b[36m/>\u001b[39m\n\n  Name \"\u2304 STATE WRITES 0 writes\":\n  \u001b[36m<button\u001b[39m\n    \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n  \u001b[36m/>\u001b[39m\n\n  Name \"\u2304 ORRERY chunk S01E07_203 \u00b7 2 fired \u00b7 0 pressures \u00b7 2 events\":\n  \u001b[36m<button\u001b[39m\n    \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n  \u001b[36m/>\u001b[39m\n\n  --------------------------------------------------\n  link:\n\n  Name \"audit dashboard \u2197\":\n  \u001b[36m<a\u001b[39m\n    \u001b[33mhref\u001b[39m=\u001b[32m\"/dev/orrery\"\u001b[39m\n  \u001b[36m/>\u001b[39m\n\n  --------------------------------------------------\n  contentinfo:\n\n  Name \"\":\n  \u001b[36m<footer\u001b[39m\n    \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-footer\"\u001b[39m\n  \u001b[36m/>\u001b[39m\n\n  --------------------------------------------------\n\nIgnored nodes: comments, script, style\n\u001b[36m<body>\u001b[39m\n  \u001b[36m<div>\u001b[39m\n    \u001b[36m<aside\u001b[39m\n      \u001b[33maria-label\u001b[39m=\u001b[32m\"Backstage\"\u001b[39m\n      \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-drawer\"\u001b[39m\n      \u001b[33mdata-testid\u001b[39m=\u001b[32m\"backstage-drawer\"\u001b[39m\n    \u001b[36m>\u001b[39m\n      \u001b[36m<header\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-title\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m\u232c BACKSTAGE\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-turn\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0mslot \u001b[0m\n          \u001b[0m04\u001b[0m\n          \u001b[0m \u00b7 \u001b[0m\n          \u001b[0mt.1\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head-spacer\"\u001b[39m\n        \u001b[36m/>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-dismiss\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m` to dismiss\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33maria-label\u001b[39m=\u001b[32m\"Close Backstage\"\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-close\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m\u2715\u001b[0m\n        \u001b[36m</button>\u001b[39m\n      \u001b[36m</header>\u001b[39m\n      \u001b[36m<div\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-scroll\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mCORRESPONDENCE\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m0 exchanges \u00b7 0 held threads\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-correspondence\"\u001b[39m\n        \u001b[36m/>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mSTATE WRITES\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m0 writes\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-writes\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-history\"\u001b[39m\n          \u001b[36m/>\u001b[39m\n        \u001b[36m</section>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mORRERY\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mchunk S01E07_203 \u00b7 2 fired \u00b7 0 pressures \u00b7 2 events\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-orrery\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-row\"\u001b[39m\n            \u001b[33mdata-attention\u001b[39m=\u001b[32m\"background\"\u001b[39m\n            \u001b[33mtitle\u001b[39m=\u001b[32m\"\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-band\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"background: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-actor\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mCelia\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-template\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"color: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mstroll\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-branch\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mPace the near ground\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-event\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mstroll_taken\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-label\u001b[39m=\u001b[32m\"magnitude\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-mag\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<span\u001b[39m\n                \u001b[33mstyle\u001b[39m=\u001b[32m\"width: 10%; background: hsl(var(--chart-3));\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-row\"\u001b[39m\n            \u001b[33mdata-attention\u001b[39m=\u001b[32m\"meaningful\"\u001b[39m\n            \u001b[33mtitle\u001b[39m=\u001b[32m\"\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-band\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"background: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-actor\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mVictor\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-template\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"color: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mevade_pursuers\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-branch\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mTake cover\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-event\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mthreat_issued\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-label\u001b[39m=\u001b[32m\"magnitude\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-mag\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<span\u001b[39m\n                \u001b[33mstyle\u001b[39m=\u001b[32m\"width: 75%; background: hsl(var(--chart-1));\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-foot\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head-spacer\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<a\u001b[39m\n              \u001b[33mhref\u001b[39m=\u001b[32m\"/dev/orrery\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0maudit dashboard \u2197\u001b[0m\n            \u001b[36m</a>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n        \u001b[36m</section>\u001b[39m\n      \u001b[36m</div>\u001b[39m\n      \u001b[36m<footer\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-footer\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[0mread-only \u00b7 entries fade as turns commit \u00b7 #617 exclusions untouched\u001b[0m\n      \u001b[36m</footer>\u001b[39m\n    \u001b[36m</aside>\u001b[39m\n  \u001b[36m</div>\u001b[39m\n\u001b[36m</body>\u001b[39m\n    at Object.getElementError (/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/config.js:37:19)\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/query-helpers.js:76:38\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/query-helpers.js:52:17\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/query-helpers.js:95:19\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:135:19\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation renders both observations with provenance and does not repeat the accepted summary",
+        "status": "failed",
+        "title": "renders both observations with provenance and does not repeat the accepted summary",
+        "duration": 1003.8369580000001,
+        "failureMessages": [
+          "Error: Unable to find an element with the text: slot 04 \u00b7 t.17 \u00b7 +7 min. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.\n\nIgnored nodes: comments, script, style\n\u001b[36m<body>\u001b[39m\n  \u001b[36m<div>\u001b[39m\n    \u001b[36m<aside\u001b[39m\n      \u001b[33maria-label\u001b[39m=\u001b[32m\"Backstage\"\u001b[39m\n      \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-drawer\"\u001b[39m\n      \u001b[33mdata-testid\u001b[39m=\u001b[32m\"backstage-drawer\"\u001b[39m\n    \u001b[36m>\u001b[39m\n      \u001b[36m<header\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-title\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m\u232c BACKSTAGE\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-turn\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0mslot \u001b[0m\n          \u001b[0m04\u001b[0m\n          \u001b[0m \u00b7 \u001b[0m\n          \u001b[0mt.17\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head-spacer\"\u001b[39m\n        \u001b[36m/>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-dismiss\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m` to dismiss\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33maria-label\u001b[39m=\u001b[32m\"Close Backstage\"\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-close\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m\u2715\u001b[0m\n        \u001b[36m</button>\u001b[39m\n      \u001b[36m</header>\u001b[39m\n      \u001b[36m<div\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-scroll\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mCORRESPONDENCE\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m0 exchanges \u00b7 0 held threads\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-correspondence\"\u001b[39m\n        \u001b[36m/>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mSTATE WRITES\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m0 writes\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-writes\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-history\"\u001b[39m\n          \u001b[36m/>\u001b[39m\n        \u001b[36m</section>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mORRERY\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mchunk S01E07_203 \u00b7 2 fired \u00b7 0 pressures \u00b7 2 events\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-orrery\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-row\"\u001b[39m\n            \u001b[33mdata-attention\u001b[39m=\u001b[32m\"background\"\u001b[39m\n            \u001b[33mtitle\u001b[39m=\u001b[32m\"\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-band\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"background: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-actor\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mCelia\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-template\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"color: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mstroll\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-branch\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mPace the near ground\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-event\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mstroll_taken\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-label\u001b[39m=\u001b[32m\"magnitude\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-mag\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<span\u001b[39m\n                \u001b[33mstyle\u001b[39m=\u001b[32m\"width: 10%; background: hsl(var(--chart-3));\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-row\"\u001b[39m\n            \u001b[33mdata-attention\u001b[39m=\u001b[32m\"meaningful\"\u001b[39m\n            \u001b[33mtitle\u001b[39m=\u001b[32m\"\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-band\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"background: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-actor\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mVictor\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-template\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"color: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mevade_pursuers\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-branch\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mTake cover\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-event\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mthreat_issued\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-label\u001b[39m=\u001b[32m\"magnitude\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-mag\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<span\u001b[39m\n                \u001b[33mstyle\u001b[39m=\u001b[32m\"width: 75%; background: hsl(var(--chart-1));\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-foot\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head-spacer\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<a\u001b[39m\n              \u001b[33mhref\u001b[39m=\u001b[32m\"/dev/orrery\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0maudit dashboard \u2197\u001b[0m\n            \u001b[36m</a>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n        \u001b[36m</section>\u001b[39m\n      \u001b[36m</div>\u001b[39m\n      \u001b[36m<footer\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-footer\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[0mread-only \u00b7 entries fade as turns commit \u00b7 #617 exclusions untouched\u001b[0m\n      \u001b[36m</footer>\u001b[39m\n    \u001b[36m</aside>\u001b[39m\n  \u001b[36m</div>\u001b[39m\n\u001b[36m</body>\u001b[39m\n    at waitForWrapper (/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/wait-for.js:163:27)\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/query-helpers.js:86:33\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:143:25\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation keeps the other sections usable when a pending draft has no bound session",
+        "status": "failed",
+        "title": "keeps the other sections usable when a pending draft has no bound session",
+        "duration": 1006.864959,
+        "failureMessages": [
+          "Error: Unable to find an element by: [data-testid=\"backstage-economics-pending\"]\n\nIgnored nodes: comments, script, style\n\u001b[36m<body>\u001b[39m\n  \u001b[36m<div>\u001b[39m\n    \u001b[36m<aside\u001b[39m\n      \u001b[33maria-label\u001b[39m=\u001b[32m\"Backstage\"\u001b[39m\n      \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-drawer\"\u001b[39m\n      \u001b[33mdata-testid\u001b[39m=\u001b[32m\"backstage-drawer\"\u001b[39m\n    \u001b[36m>\u001b[39m\n      \u001b[36m<header\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-title\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m\u232c BACKSTAGE\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-turn\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0mslot \u001b[0m\n          \u001b[0m04\u001b[0m\n          \u001b[0m \u00b7 \u001b[0m\n          \u001b[0mt.17\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head-spacer\"\u001b[39m\n        \u001b[36m/>\u001b[39m\n        \u001b[36m<span\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-dismiss\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m` to dismiss\u001b[0m\n        \u001b[36m</span>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33maria-label\u001b[39m=\u001b[32m\"Close Backstage\"\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-close\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[0m\u2715\u001b[0m\n        \u001b[36m</button>\u001b[39m\n      \u001b[36m</header>\u001b[39m\n      \u001b[36m<div\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-scroll\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mCORRESPONDENCE\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m0 exchanges \u00b7 0 held threads\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-correspondence\"\u001b[39m\n        \u001b[36m/>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mSTATE WRITES\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m0 writes\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-writes\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-history\"\u001b[39m\n          \u001b[36m/>\u001b[39m\n        \u001b[36m</section>\u001b[39m\n        \u001b[36m<button\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-head\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-chevron\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0m\u2304\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-label\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mORRERY\u001b[0m\n          \u001b[36m</span>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section-summary\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[0mchunk S01E07_203 \u00b7 2 fired \u00b7 0 pressures \u00b7 2 events\u001b[0m\n          \u001b[36m</span>\u001b[39m\n        \u001b[36m</button>\u001b[39m\n        \u001b[36m<section\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-section nexus-backstage-orrery\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-row\"\u001b[39m\n            \u001b[33mdata-attention\u001b[39m=\u001b[32m\"background\"\u001b[39m\n            \u001b[33mtitle\u001b[39m=\u001b[32m\"\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-band\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"background: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-actor\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mCelia\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-template\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"color: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mstroll\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-branch\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mPace the near ground\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-event\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mstroll_taken\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-label\u001b[39m=\u001b[32m\"magnitude\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-mag\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<span\u001b[39m\n                \u001b[33mstyle\u001b[39m=\u001b[32m\"width: 10%; background: hsl(var(--chart-3));\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-row\"\u001b[39m\n            \u001b[33mdata-attention\u001b[39m=\u001b[32m\"meaningful\"\u001b[39m\n            \u001b[33mtitle\u001b[39m=\u001b[32m\"\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-band\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"background: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-actor\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mVictor\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-template\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"color: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mevade_pursuers\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-branch\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mTake cover\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-event\"\u001b[39m\n              \u001b[33mstyle\u001b[39m=\u001b[32m\"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mthreat_issued\u001b[0m\n            \u001b[36m</span>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-label\u001b[39m=\u001b[32m\"magnitude\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-mag\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<span\u001b[39m\n                \u001b[33mstyle\u001b[39m=\u001b[32m\"width: 75%; background: hsl(var(--chart-1));\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-orrery-foot\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-head-spacer\"\u001b[39m\n            \u001b[36m/>\u001b[39m\n            \u001b[36m<a\u001b[39m\n              \u001b[33mhref\u001b[39m=\u001b[32m\"/dev/orrery\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0maudit dashboard \u2197\u001b[0m\n            \u001b[36m</a>\u001b[39m\n          \u001b[36m</div>\u001b[39m\n        \u001b[36m</section>\u001b[39m\n      \u001b[36m</div>\u001b[39m\n      \u001b[36m<footer\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-backstage-footer\"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[0mread-only \u00b7 entries fade as turns commit \u00b7 #617 exclusions untouched\u001b[0m\n      \u001b[36m</footer>\u001b[39m\n    \u001b[36m</aside>\u001b[39m\n  \u001b[36m</div>\u001b[39m\n\u001b[36m</body>\u001b[39m\n    at waitForWrapper (/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/wait-for.js:163:27)\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/query-helpers.js:86:33\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:162:34\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation formats 0 elapsed seconds as +0 min",
+        "status": "failed",
+        "title": "formats 0 elapsed seconds as +0 min",
+        "duration": 0.8132920000002741,
+        "failureMessages": [
+          "TypeError: __vite_ssr_import_4__.formatElapsed is not a function\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:179:12\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:629:21\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation formats 59 elapsed seconds as +0 min",
+        "status": "failed",
+        "title": "formats 59 elapsed seconds as +0 min",
+        "duration": 0.37337499999966894,
+        "failureMessages": [
+          "TypeError: __vite_ssr_import_4__.formatElapsed is not a function\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:179:12\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:629:21\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation formats 420 elapsed seconds as +7 min",
+        "status": "failed",
+        "title": "formats 420 elapsed seconds as +7 min",
+        "duration": 0.2722079999998641,
+        "failureMessages": [
+          "TypeError: __vite_ssr_import_4__.formatElapsed is not a function\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:179:12\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:629:21\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation formats 3600 elapsed seconds as +1 h",
+        "status": "failed",
+        "title": "formats 3600 elapsed seconds as +1 h",
+        "duration": 0.25212499999997817,
+        "failureMessages": [
+          "TypeError: __vite_ssr_import_4__.formatElapsed is not a function\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:179:12\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:629:21\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation formats 3660 elapsed seconds as +1 h 1 min",
+        "status": "failed",
+        "title": "formats 3660 elapsed seconds as +1 h 1 min",
+        "duration": 0.28033300000015515,
+        "failureMessages": [
+          "TypeError: __vite_ssr_import_4__.formatElapsed is not a function\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:179:12\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:629:21\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation formats 86400 elapsed seconds as +1 d",
+        "status": "failed",
+        "title": "formats 86400 elapsed seconds as +1 d",
+        "duration": 0.32187500000009095,
+        "failureMessages": [
+          "TypeError: __vite_ssr_import_4__.formatElapsed is not a function\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:179:12\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:629:21\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation formats 90000 elapsed seconds as +1 d 1 h",
+        "status": "failed",
+        "title": "formats 90000 elapsed seconds as +1 d 1 h",
+        "duration": 0.36220800000000963,
+        "failureMessages": [
+          "TypeError: __vite_ssr_import_4__.formatElapsed is not a function\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:179:12\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:629:21\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage elapsed time and observation"
+        ],
+        "fullName": "Backstage elapsed time and observation formats -120 elapsed seconds as \u22122 min",
+        "status": "failed",
+        "title": "formats -120 elapsed seconds as \u22122 min",
+        "duration": 0.23404200000004494,
+        "failureMessages": [
+          "TypeError: __vite_ssr_import_4__.formatElapsed is not a function\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/BackstageDrawer.test.tsx:179:12\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:629:21\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:146:14\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:11\n    at runWithTimeout (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:39:7)\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:17)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)\n    at startTests (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1271:3)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "Backstage attention"
+        ],
+        "fullName": "Backstage attention marks each existing row without adding attention text",
+        "status": "passed",
+        "title": "marks each existing row without adding attention text",
+        "duration": 12.258291999999983,
+        "failureMessages": [],
+        "meta": {}
+      }
+    ],
+    "ui/client/src/components/nexus/NexusLayout.announcer.test.tsx": [
+      {
+        "ancestorTitles": [
+          "generation announcer on the live engine"
+        ],
+        "fullName": "generation announcer on the live engine does not report a failure when a read clears the phase mid-submit",
+        "status": "passed",
+        "title": "does not report a failure when a read clears the phase mid-submit",
+        "duration": 124.53249999999991,
+        "failureMessages": [],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "generation announcer on the live engine"
+        ],
+        "fullName": "generation announcer on the live engine reports a durable failure once, through its toast",
+        "status": "passed",
+        "title": "reports a durable failure once, through its toast",
+        "duration": 72.87716699999999,
+        "failureMessages": [],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "generation announcer on the live engine"
+        ],
+        "fullName": "generation announcer on the live engine stays silent for the failure the engine replays on load",
+        "status": "passed",
+        "title": "stays silent for the failure the engine replays on load",
+        "duration": 60.585915999999884,
+        "failureMessages": [],
+        "meta": {}
+      }
+    ],
+    "ui/client/src/components/nexus/NexusLayout.test.tsx": [
+      {
+        "ancestorTitles": [
+          "NexusLayout Backstage"
+        ],
+        "fullName": "NexusLayout Backstage hides the sigil when the health probe reports the gate closed",
+        "status": "passed",
+        "title": "hides the sigil when the health probe reports the gate closed",
+        "duration": 18.046333000000004,
+        "failureMessages": [],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "NexusLayout Backstage"
+        ],
+        "fullName": "NexusLayout Backstage opens, renders, and closes through the sigil and guarded keyboard",
+        "status": "failed",
+        "title": "opens, renders, and closes through the sigil and guarded keyboard",
+        "duration": 22.66483400000004,
+        "failureMessages": [
+          "TestingLibraryElementError: Unable to find an element with the text: slot 04 \u00b7 t.17 \u00b7 +7 min. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.\n\nIgnored nodes: comments, script, style\n\u001b[36m<body>\u001b[39m\n  \u001b[36m<div>\u001b[39m\n    \u001b[36m<div\u001b[39m\n      \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-shell animate-fade-in \"\u001b[39m\n      \u001b[33mdata-testid\u001b[39m=\u001b[32m\"nexus-layout\"\u001b[39m\n    \u001b[36m>\u001b[39m\n      \u001b[36m<header\u001b[39m\n        \u001b[33mdata-testid\u001b[39m=\u001b[32m\"mock-topbar\"\u001b[39m\n      \u001b[36m/>\u001b[39m\n      \u001b[36m<div\u001b[39m\n        \u001b[33mclass\u001b[39m=\u001b[32m\"nexus-main \"\u001b[39m\n      \u001b[36m>\u001b[39m\n        \u001b[36m<nav\u001b[39m\n          \u001b[33maria-label\u001b[39m=\u001b[32m\"Primary navigation\"\u001b[39m\n          \u001b[33mclass\u001b[39m=\u001b[32m\"rail-left\"\u001b[39m\n        \u001b[36m>\u001b[39m\n          \u001b[36m<button\u001b[39m\n            \u001b[33maria-label\u001b[39m=\u001b[32m\"Home\"\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"rail-btn\"\u001b[39m\n            \u001b[33mdata-testid\u001b[39m=\u001b[32m\"rail-home\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<svg\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"lucide lucide-house\"\u001b[39m\n              \u001b[33mfill\u001b[39m=\u001b[32m\"none\"\u001b[39m\n              \u001b[33mheight\u001b[39m=\u001b[32m\"18\"\u001b[39m\n              \u001b[33mstroke\u001b[39m=\u001b[32m\"currentColor\"\u001b[39m\n              \u001b[33mstroke-linecap\u001b[39m=\u001b[32m\"round\"\u001b[39m\n              \u001b[33mstroke-linejoin\u001b[39m=\u001b[32m\"round\"\u001b[39m\n              \u001b[33mstroke-width\u001b[39m=\u001b[32m\"2\"\u001b[39m\n              \u001b[33mviewBox\u001b[39m=\u001b[32m\"0 0 24 24\"\u001b[39m\n              \u001b[33mwidth\u001b[39m=\u001b[32m\"18\"\u001b[39m\n              \u001b[33mxmlns\u001b[39m=\u001b[32m\"http://www.w3.org/2000/svg\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</svg>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-hidden\u001b[39m=\u001b[32m\"true\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"rail-tip\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mHOME\u001b[0m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</button>\u001b[39m\n          \u001b[36m<div\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"rail-divider\"\u001b[39m\n          \u001b[36m/>\u001b[39m\n          \u001b[36m<button\u001b[39m\n            \u001b[33maria-label\u001b[39m=\u001b[32m\"Narrative\"\u001b[39m\n            \u001b[33maria-pressed\u001b[39m=\u001b[32m\"true\"\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"rail-btn on\"\u001b[39m\n            \u001b[33mdata-testid\u001b[39m=\u001b[32m\"rail-narrative\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<svg\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"lucide lucide-book\"\u001b[39m\n              \u001b[33mfill\u001b[39m=\u001b[32m\"none\"\u001b[39m\n              \u001b[33mheight\u001b[39m=\u001b[32m\"18\"\u001b[39m\n              \u001b[33mstroke\u001b[39m=\u001b[32m\"currentColor\"\u001b[39m\n              \u001b[33mstroke-linecap\u001b[39m=\u001b[32m\"round\"\u001b[39m\n              \u001b[33mstroke-linejoin\u001b[39m=\u001b[32m\"round\"\u001b[39m\n              \u001b[33mstroke-width\u001b[39m=\u001b[32m\"2\"\u001b[39m\n              \u001b[33mviewBox\u001b[39m=\u001b[32m\"0 0 24 24\"\u001b[39m\n              \u001b[33mwidth\u001b[39m=\u001b[32m\"18\"\u001b[39m\n              \u001b[33mxmlns\u001b[39m=\u001b[32m\"http://www.w3.org/2000/svg\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</svg>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-hidden\u001b[39m=\u001b[32m\"true\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"rail-tip\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mNARRATIVE\u001b[0m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</button>\u001b[39m\n          \u001b[36m<button\u001b[39m\n            \u001b[33maria-label\u001b[39m=\u001b[32m\"Map\"\u001b[39m\n            \u001b[33maria-pressed\u001b[39m=\u001b[32m\"false\"\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"rail-btn \"\u001b[39m\n            \u001b[33mdata-testid\u001b[39m=\u001b[32m\"rail-map\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<svg\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"lucide lucide-map\"\u001b[39m\n              \u001b[33mfill\u001b[39m=\u001b[32m\"none\"\u001b[39m\n              \u001b[33mheight\u001b[39m=\u001b[32m\"18\"\u001b[39m\n              \u001b[33mstroke\u001b[39m=\u001b[32m\"currentColor\"\u001b[39m\n              \u001b[33mstroke-linecap\u001b[39m=\u001b[32m\"round\"\u001b[39m\n              \u001b[33mstroke-linejoin\u001b[39m=\u001b[32m\"round\"\u001b[39m\n              \u001b[33mstroke-width\u001b[39m=\u001b[32m\"2\"\u001b[39m\n              \u001b[33mviewBox\u001b[39m=\u001b[32m\"0 0 24 24\"\u001b[39m\n              \u001b[33mwidth\u001b[39m=\u001b[32m\"18\"\u001b[39m\n              \u001b[33mxmlns\u001b[39m=\u001b[32m\"http://www.w3.org/2000/svg\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M15 5.764v15\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M9 3.236v15\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</svg>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-hidden\u001b[39m=\u001b[32m\"true\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"rail-tip\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mMAP\u001b[0m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</button>\u001b[39m\n          \u001b[36m<button\u001b[39m\n            \u001b[33maria-label\u001b[39m=\u001b[32m\"Characters\"\u001b[39m\n            \u001b[33maria-pressed\u001b[39m=\u001b[32m\"false\"\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"rail-btn \"\u001b[39m\n            \u001b[33mdata-testid\u001b[39m=\u001b[32m\"rail-characters\"\u001b[39m\n          \u001b[36m>\u001b[39m\n            \u001b[36m<svg\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"lucide lucide-users\"\u001b[39m\n              \u001b[33mfill\u001b[39m=\u001b[32m\"none\"\u001b[39m\n              \u001b[33mheight\u001b[39m=\u001b[32m\"18\"\u001b[39m\n              \u001b[33mstroke\u001b[39m=\u001b[32m\"currentColor\"\u001b[39m\n              \u001b[33mstroke-linecap\u001b[39m=\u001b[32m\"round\"\u001b[39m\n              \u001b[33mstroke-linejoin\u001b[39m=\u001b[32m\"round\"\u001b[39m\n              \u001b[33mstroke-width\u001b[39m=\u001b[32m\"2\"\u001b[39m\n              \u001b[33mviewBox\u001b[39m=\u001b[32m\"0 0 24 24\"\u001b[39m\n              \u001b[33mwidth\u001b[39m=\u001b[32m\"18\"\u001b[39m\n              \u001b[33mxmlns\u001b[39m=\u001b[32m\"http://www.w3.org/2000/svg\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n              \u001b[36m<circle\u001b[39m\n                \u001b[33mcx\u001b[39m=\u001b[32m\"9\"\u001b[39m\n                \u001b[33mcy\u001b[39m=\u001b[32m\"7\"\u001b[39m\n                \u001b[33mr\u001b[39m=\u001b[32m\"4\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M22 21v-2a4 4 0 0 0-3-3.87\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n              \u001b[36m<path\u001b[39m\n                \u001b[33md\u001b[39m=\u001b[32m\"M16 3.13a4 4 0 0 1 0 7.75\"\u001b[39m\n              \u001b[36m/>\u001b[39m\n            \u001b[36m</svg>\u001b[39m\n            \u001b[36m<span\u001b[39m\n              \u001b[33maria-hidden\u001b[39m=\u001b[32m\"true\"\u001b[39m\n              \u001b[33mclass\u001b[39m=\u001b[32m\"rail-tip\"\u001b[39m\n            \u001b[36m>\u001b[39m\n              \u001b[0mCHARACTERS\u001b[0m\n            \u001b[36m</span>\u001b[39m\n          \u001b[36m</button>\u001b[39m\n          \u001b[36m<span\u001b[39m\n            \u001b[33mclass\u001b[39m=\u001b[32m\"rail-spacer\"\u001b[39m\n          \u001b[36m/>\u001b[39m\n          \u001b[36m<button\u001b[39m\n            \u001b[33maria-label\u001b[39m=\u001b[32m\"Backstage\"\u001b[39m\n            \u001b[33maria-pressed\u001b[39m=\u001b[32m\"true\"\u001b[39m\n    ...\n    at Object.getElementError (/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/config.js:37:19)\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/query-helpers.js:76:38\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/query-helpers.js:52:17\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@testing-library/dom/dist/query-helpers.js:95:19\n    at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client/src/components/nexus/NexusLayout.test.tsx:288:19\n    at file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:533:5\n    at runTest (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1056:11)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runSuite (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1205:15)\n    at runFiles (file:///Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/node_modules/@vitest/runner/dist/index.js:1262:5)"
+        ],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "NexusLayout operator strip"
+        ],
+        "fullName": "NexusLayout operator strip hands the strip the engine's durable failure for its announcer",
+        "status": "passed",
+        "title": "hands the strip the engine's durable failure for its announcer",
+        "duration": 2.581333000000086,
+        "failureMessages": [],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "NexusLayout pane ownership and rail order"
+        ],
+        "fullName": "NexusLayout pane ownership and rail order keeps one map view owner across tab switches",
+        "status": "passed",
+        "title": "keeps one map view owner across tab switches",
+        "duration": 55.412207999999964,
+        "failureMessages": [],
+        "meta": {}
+      },
+      {
+        "ancestorTitles": [
+          "NexusLayout pane ownership and rail order"
+        ],
+        "fullName": "NexusLayout pane ownership and rail order puts the rail after the content at narrow width",
+        "status": "passed",
+        "title": "puts the rail after the content at narrow width",
+        "duration": 11.772333000000003,
+        "failureMessages": [],
+        "meta": {}
+      }
+    ]
+  },
+  "error": "RuntimeError: UI selection/collection differs from the two required suites"
+}

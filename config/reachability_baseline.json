@@ -214,6 +214,7 @@
     "nexus/api/trait_compiler.py",
     "nexus/api/trait_compiler_schemas.py",
     "nexus/api/trait_input_derivation.py",
+    "nexus/api/ui_config_endpoints.py",
     "nexus/api/wizard_agent.py",
     "nexus/api/wizard_chat.py",
     "nexus/api/wizard_confirmation.py",

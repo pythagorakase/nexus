@@ -22,11 +22,13 @@
  * polite status region that tells assistive technology when a turn starts,
  * completes, or fails. Start and completion follow the operator status;
  * failure follows the engine's explicit durable failure, never a status
- * drop. It has no visible text, so it adds nothing to the quiet chrome.
+ * drop. A failure the toast reported is not spoken again; the region clears
+ * after the configured hold. It has no visible text in the quiet chrome.
  */
 import { useEffect, useReducer } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useUiConfig } from "@/hooks/useUiConfig";
 import {
   LOCAL_MODELS_KNOB_DEFAULTS,
   LOCAL_MODELS_STATUS_KEY,
@@ -45,6 +47,7 @@ interface TopBarProps {
   skaldStatus: SkaldStatus;
   /** The engine's latest durable attempt that ended in error, if any. */
   failedGeneration: GenerationSession | null;
+  toastedFailureSessionId: string | null;
   frontierClock: FrontierClock | null;
 }
 
@@ -61,11 +64,13 @@ interface AnnouncerState {
   /** Session of the failure last reported, so a re-report is not new. */
   failure: string | null;
   message: string;
+  serial: number;
 }
 
 type AnnouncerEvent =
   | { kind: "status"; status: SkaldStatus }
-  | { kind: "failure"; sessionId: string | null };
+  | { kind: "failure"; sessionId: string | null; toasted: boolean }
+  | { kind: "clear"; serial: number };
 
 /**
  * Fold one engine observation into the announcer.
@@ -84,18 +89,24 @@ type AnnouncerEvent =
  * flash and the failure that replay the latest attempt on load stay silent.
  * A request refused before the server records an attempt has no durable
  * failure; its toast reports it, and the turn stays open until an outcome.
+ * A failure the toast reported is not spoken again. The region clears after
+ * the configured hold; a stale clear cannot erase a newer announcement.
  */
 function announce(
   state: AnnouncerState,
   event: AnnouncerEvent,
 ): AnnouncerState {
+  if (event.kind === "clear") {
+    return event.serial === state.serial ? { ...state, message: "" } : state;
+  }
   if (event.kind === "failure") {
     if (event.sessionId === state.failure) return state;
     return event.sessionId !== null && state.inFlight
       ? {
           inFlight: false,
           failure: event.sessionId,
-          message: GENERATION_ANNOUNCEMENTS.failed,
+          message: event.toasted ? "" : GENERATION_ANNOUNCEMENTS.failed,
+          serial: state.serial + (event.toasted ? 0 : 1),
         }
       : { ...state, failure: event.sessionId };
   }
@@ -104,10 +115,20 @@ function announce(
     case "GENERATING":
       return state.inFlight
         ? state
-        : { ...state, inFlight: true, message: GENERATION_ANNOUNCEMENTS.started };
+        : {
+            ...state,
+            inFlight: true,
+            message: GENERATION_ANNOUNCEMENTS.started,
+            serial: state.serial + 1,
+          };
     case "RECEIVING":
       return state.inFlight
-        ? { ...state, inFlight: false, message: GENERATION_ANNOUNCEMENTS.complete }
+        ? {
+            ...state,
+            inFlight: false,
+            message: GENERATION_ANNOUNCEMENTS.complete,
+            serial: state.serial + 1,
+          }
         : state;
     case "READY":
     case "OFFLINE":
@@ -124,21 +145,44 @@ function announce(
 function GenerationAnnouncer({
   skaldStatus,
   failedSessionId,
+  toastedFailureSessionId,
 }: {
   skaldStatus: SkaldStatus;
   failedSessionId: string | null;
+  toastedFailureSessionId: string | null;
 }) {
+  const config = useUiConfig();
+  const hold_ms = config?.announcer.hold_ms;
   const [state, observe] = useReducer(
     announce,
     failedSessionId,
-    (failure): AnnouncerState => ({ inFlight: false, failure, message: "" }),
+    (failure): AnnouncerState => ({
+      inFlight: false,
+      failure,
+      message: "",
+      serial: 0,
+    }),
   );
   useEffect(() => {
     observe({ kind: "status", status: skaldStatus });
   }, [skaldStatus]);
   useEffect(() => {
-    observe({ kind: "failure", sessionId: failedSessionId });
-  }, [failedSessionId]);
+    observe({
+      kind: "failure",
+      sessionId: failedSessionId,
+      toasted:
+        failedSessionId !== null && failedSessionId === toastedFailureSessionId,
+    });
+  }, [failedSessionId, toastedFailureSessionId]);
+  const { serial, message } = state;
+  useEffect(() => {
+    if (!message || hold_ms === undefined) return;
+    const timeout = window.setTimeout(
+      () => observe({ kind: "clear", serial }),
+      hold_ms,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [serial, message, hold_ms]);
   return (
     <span
       role="status"
@@ -224,6 +268,7 @@ export function TopBar({
   characterName,
   skaldStatus,
   failedGeneration,
+  toastedFailureSessionId,
   frontierClock,
 }: TopBarProps) {
   return (
@@ -264,6 +309,7 @@ export function TopBar({
       <GenerationAnnouncer
         skaldStatus={skaldStatus}
         failedSessionId={failedGeneration?.session_id ?? null}
+        toastedFailureSessionId={toastedFailureSessionId}
       />
     </header>
   );

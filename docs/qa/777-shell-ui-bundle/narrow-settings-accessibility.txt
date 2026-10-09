@@ -1,0 +1,119 @@
+- banner:
+  - text: NEXUS SLOT 4
+  - status
+- main:
+  - complementary:
+    - text: SETTINGS
+    - list:
+      - listitem:
+        - button "Theme"
+      - listitem:
+        - button "Typography"
+      - listitem:
+        - button "Model"
+      - listitem:
+        - button "API Keys"
+      - listitem:
+        - button "Context Length"
+      - listitem:
+        - button "App Icon"
+  - text: "[ THEME ]"
+  - separator
+  - button "veil menu Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt." [pressed]:
+    - text: veil menu
+    - paragraph: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.
+  - button "gilded menu Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.":
+    - text: gilded menu
+    - paragraph: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.
+  - button "vector menu Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.":
+    - text: vector menu
+    - paragraph: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.
+  - text: "[ TYPOGRAPHY ]"
+  - separator
+  - text: "[ BODY ] The night air shimmered with possibility as the lanterns cast warm halos through the mist."
+  - button "Spectral"
+  - button "Cormorant Garamond"
+  - text: "[ MENU ] STATUS: READY // CHAPTER 01 // SCENE 02"
+  - button "Cinzel"
+  - text: "[ MARQUEE ] NEXUS"
+  - button "Megrim"
+  - button "RESET":
+    - img
+    - text: RESET
+  - text: "[ MODEL ]"
+  - separator
+  - group "Model assignment":
+    - button "Skald fixture-other" [pressed]
+    - button "World State Same as Skald"
+  - list "Skald models":
+    - listitem:
+      - text: local
+      - list:
+        - listitem:
+          - img
+          - text: Fixture 1 on disk
+          - button "Fixture quantizations":
+            - img
+  - text: "[ API KEYS ]"
+  - separator
+  - list:
+    - listitem:
+      - text: required-missing
+      - img
+      - textbox "required-missing API key":
+        - /placeholder: ""
+      - button "Save required-missing API key" [disabled]:
+        - img
+        - text: COMMIT
+      - button "Verify required-missing API key" [disabled]:
+        - img
+        - text: VERIFY
+    - listitem:
+      - text: present
+      - img
+      - textbox "present API key":
+        - /placeholder: ""
+      - button "Save present API key" [disabled]:
+        - img
+        - text: COMMIT
+      - button "Verify present API key":
+        - img
+        - text: VERIFY
+    - listitem:
+      - text: verified
+      - img
+      - textbox "verified API key":
+        - /placeholder: ""
+      - button "Save verified API key" [disabled]:
+        - img
+        - text: COMMIT
+      - button "Verify verified API key":
+        - img
+        - text: VERIFY
+    - listitem:
+      - text: optional-absent
+      - img
+      - textbox "optional-absent API key":
+        - /placeholder: ""
+      - button "Save optional-absent API key" [disabled]:
+        - img
+        - text: COMMIT
+      - button "Verify optional-absent API key" [disabled]:
+        - img
+        - text: VERIFY
+  - text: "[ APP ICON ]"
+  - separator
+  - img "veil app icon"
+  - img "gilded app icon"
+  - img "vector app icon"
+- navigation "Primary navigation":
+  - button "Home":
+    - img
+  - button "Narrative":
+    - img
+  - button "Map":
+    - img
+  - button "Characters":
+    - img
+  - button "Settings" [pressed]:
+    - img

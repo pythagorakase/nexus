@@ -1,0 +1,7 @@
+{
+  "plant": "remove only LocalModelRows internal onBlur handler",
+  "exit_code": 0,
+  "before_sha256": "c99c3df1f8ffab69bb021229992699ba2b5ea5f824a52b8a889a3a3d94cac799",
+  "restored_sha256": "c99c3df1f8ffab69bb021229992699ba2b5ea5f824a52b8a889a3a3d94cac799",
+  "restored_exactly": true
+}

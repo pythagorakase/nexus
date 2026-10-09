@@ -1,0 +1,13 @@
+{
+  "status": "source-reviewed; runtime freshness proof pending",
+  "merge_base": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "records": [
+    {
+      "document": "docs/decisions/0054-responsive-shell.md",
+      "changed_sources": [
+        "ui/client/src/components/nexus/nexus-layout.css"
+      ]
+    }
+  ],
+  "semantic_review": "0054 retains the rail ruling; the CSS addition only styles the Backstage economics section. Final777/809/824 source union and finalmain stamps remain pending."
+}

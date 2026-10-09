@@ -4,8 +4,11 @@ import { getBackstageTurn } from "@/lib/backstage-api";
 import type {
   BackstageCounts,
   BackstageKind,
+  BackstageObservationRead,
   BackstageOrreryRow,
+  BackstageTurnObservation,
   BackstageTurnResponse,
+  ObservedCount,
 } from "@/types/backstage";
 
 const DEFAULT_BUSY_MS = 2000;
@@ -102,6 +105,92 @@ function countsLine(counts: BackstageCounts): string {
   return `${counts.fired} fired · ${counts.pressures} pressures · ${counts.events} events`;
 }
 
+export function formatElapsed(seconds: number): string {
+  const sign = seconds < 0 ? "−" : "+";
+  const s = Math.abs(seconds);
+  if (s < 3600) return `${sign}${Math.floor(s / 60)} min`;
+  if (s < 86400) {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return `${sign}${h} h${m ? ` ${m} min` : ""}`;
+  }
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  return `${sign}${d} d${h ? ` ${h} h` : ""}`;
+}
+
+function tok(value: ObservedCount): string {
+  return typeof value === "number" ? value.toLocaleString("en-US") : value;
+}
+
+function dur(value: number | string | null): string {
+  if (typeof value === "number") return `${value.toFixed(1)}s`;
+  return value === null ? "open" : value;
+}
+
+function readiness(observation: BackstageTurnObservation): string {
+  if (observation.choice_ready_at === null) return "choices not ready";
+  if (observation.choice_ready_at === "unknown") return "choices unknown";
+  return `choices ready ${dur(observation.seconds_to_choice_ready)}`;
+}
+
+function summaryLine(observation: BackstageTurnObservation): string {
+  const cp = observation.usage_totals.critical_path;
+  const bg = observation.usage_totals.background;
+  const providers = observation.usage_totals.overall.comparable
+    ? ""
+    : " · providers differ";
+  return `critical ${tok(cp.input_tokens)}/${tok(cp.output_tokens)} · background ${tok(bg.input_tokens)}/${tok(bg.output_tokens)} · wall ${dur(observation.wall_time.seconds)} · ${readiness(observation)}${providers}`;
+}
+
+function ObservationBody({
+  read,
+  summary,
+}: {
+  read: BackstageObservationRead;
+  summary: boolean;
+}) {
+  if (read.status === "unavailable") {
+    return <div className="nexus-backstage-write-copy">{read.detail}</div>;
+  }
+  const observation = read.observation!;
+  return (
+    <>
+      {summary && (
+        <div className="nexus-backstage-write-copy">{summaryLine(observation)}</div>
+      )}
+      {observation.attempts.map((attempt) => (
+        <div
+          className="nexus-backstage-write-row"
+          title={attempt.generation_session}
+          key={`${attempt.generation_session}-${attempt.seat}-${attempt.attempt}`}
+        >
+          <span className="nexus-backstage-kind">{attempt.seat}</span>
+          <span className="nexus-backstage-write-copy">
+            {`#${attempt.attempt} ${attempt.model} · ${attempt.outcome ?? "open"} · window ${tok(attempt.window.input_tokens)} [${attempt.window.provenance}] · ${tok(attempt.usage.input_tokens)}/${tok(attempt.usage.output_tokens)} [${attempt.usage.provenance}]`}
+          </span>
+        </div>
+      ))}
+      {observation.jobs.entries.map((job) => (
+        <div className="nexus-backstage-write-row" key={`${job.queue}-${job.id}`}>
+          <span className="nexus-backstage-kind">{job.queue}</span>
+          <span className="nexus-backstage-write-copy">
+            {`#${job.id} · ${job.state}`}
+            {job.usage && ` · ${tok(job.usage.input_tokens)}/${tok(job.usage.output_tokens)} [${job.usage.provenance}]`}
+          </span>
+        </div>
+      ))}
+      <div
+        className="nexus-backstage-history"
+        title={read.generation_session ?? undefined}
+      >
+        <span>read {observation.read_at}</span>
+        <span>{observation.ledger_days_read.join(", ")}</span>
+      </div>
+    </>
+  );
+}
+
 function SectionHeader({
   label,
   summary,
@@ -134,6 +223,7 @@ export function BackstageDrawer({
   const [correspondenceOpen, setCorrespondenceOpen] = useState(true);
   const [writesOpen, setWritesOpen] = useState(true);
   const [orreryOpen, setOrreryOpen] = useState(true);
+  const [economicsOpen, setEconomicsOpen] = useState(true);
   const { data, error } = useQuery<BackstageTurnResponse, Error>({
     queryKey: ["/api/dev/backstage", slot, "turn"],
     queryFn: () => getBackstageTurn(slot),
@@ -157,6 +247,7 @@ export function BackstageDrawer({
         {data && (
           <span className="nexus-backstage-turn">
             slot {String(data.header.slot).padStart(2, "0")} · {data.header.turn_label}
+            {data.header.elapsed_seconds !== null && ` · ${formatElapsed(data.header.elapsed_seconds)}`}
           </span>
         )}
         <span className="nexus-backstage-head-spacer" />
@@ -322,6 +413,27 @@ export function BackstageDrawer({
                   <span className="nexus-backstage-head-spacer" />
                   <a href="/dev/orrery">audit dashboard ↗</a>
                 </div>
+              </section>
+            )}
+            <SectionHeader
+              label="ECONOMICS"
+              summary={data.economics.accepted.status === "observed"
+                ? summaryLine(data.economics.accepted.observation!)
+                : "unavailable"}
+              open={economicsOpen}
+              onToggle={() => setEconomicsOpen((open) => !open)}
+            />
+            {economicsOpen && (
+              <section className="nexus-backstage-section nexus-backstage-economics">
+                <ObservationBody read={data.economics.accepted} summary={false} />
+                {data.economics.pending !== null && (
+                  <div
+                    className="nexus-backstage-economics-pending"
+                    data-testid="backstage-economics-pending"
+                  >
+                    <ObservationBody read={data.economics.pending} summary={true} />
+                  </div>
+                )}
               </section>
             )}
           </>

@@ -87,6 +87,7 @@ from nexus.api.local_models_endpoints import router as local_models_router
 from nexus.api.secrets_endpoints import router as secrets_router
 from nexus.api.settings_endpoints import router as settings_router
 from nexus.api.preferences_endpoints import router as preferences_router
+from nexus.api.ui_config_endpoints import router as ui_config_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
 from nexus.api.route_capabilities import require_classified
@@ -184,6 +185,7 @@ async def _validation_error_without_echoed_input(
 # Include modular routers
 app.include_router(settings_router)
 app.include_router(preferences_router)
+app.include_router(ui_config_router)
 app.include_router(secrets_router)
 app.include_router(slot_router)
 app.include_router(setup_router)

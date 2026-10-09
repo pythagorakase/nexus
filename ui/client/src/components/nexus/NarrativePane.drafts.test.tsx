@@ -50,6 +50,7 @@ function mount(
     const engine: NarrativeEngine = {
       slotState: current, slotStateError: null, isSlotStateLoading: false,
       phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
+      toastedFailureSessionId: null,
       isGenerating: false, completedGenerations: 0, submitTurn: send,
       regenerateTurn: vi.fn(async () => true),
     };

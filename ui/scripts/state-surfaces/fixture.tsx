@@ -9,6 +9,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { DeveloperModeProvider } from '@/contexts/DeveloperModeContext';
 import { NexusLayout } from '@/components/nexus/NexusLayout';
 import { LOCAL_PROVIDER } from '@/components/nexus/LocalModelRows';
+import { UI_CONFIG_KEY } from '@/hooks/useUiConfig';
 import { secretsQueryKey } from '@/hooks/useSecrets';
 
 localStorage.removeItem('activeSlot');
@@ -39,6 +40,7 @@ function cache(theme: string, mode: string, terrain: string, over: boolean, need
   const settings = { ui: { theme, local_models: knobs, fonts: KEEPERS }, local_models: { model: 'fixture-local' }, apex: { model: 'fixture-other' },
     settings_meta: { models: [{ id: 'fixture-local', provider: LOCAL_PROVIDER, label: 'Fixture' }], apex_allowed_providers: [LOCAL_PROVIDER] } };
   c.setQueryData(['/api/settings'], settings);
+  c.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
   c.setQueryData(['/api/slot/4/settings'], { skald_model: 'fixture-other', gaia_model: null, apex_context_window: 8192 });
   c.setQueryData(['/api/user-character', 4], null);
   const generation = { poll_interval_seconds: 1e8, request_timeout_seconds: 10 };
