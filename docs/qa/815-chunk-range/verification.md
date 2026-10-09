@@ -207,3 +207,7 @@ Codex — GPT-6
 Merged `origin/main` at `54ee3dc1f811d1504d60bcdf0ecf3440c4e86397` by an ordinary merge, without conflicts. Re-read decisions 0009, 0020 and 0050 against the remaining source delta: chunk pagination does not add prices, revelation-scene links or a different reader policy. Their bodies and rulings remain unchanged; verified stamps now name this merge base. The route matches the assembled gate bytes. CLI differences from that integration are the separately verified type-only grouping and absent, not-yet-landed 812 model verbs; settings also lacks the pending 777 announcer schema and has the docstring-only review fix. No executable source was newly edited during landing.
 
 Codex — GPT-6
+
+Final landing check on `fcfd53599e98b6c31bc83fc6c7da5e184abaf98e`: 76 document-freshness and generated-CLI-reference cases passed, with active secret-store protection, untouched receipts and owner targets none. Commands, exact tree, import admission and logs are under `landing/`. This evidence-only commit does not alter the checked source.
+
+Codex — GPT-6

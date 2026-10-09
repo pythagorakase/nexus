@@ -1,0 +1,113 @@
+{
+  "phase": "815-landing",
+  "head": "fcfd53599e98b6c31bc83fc6c7da5e184abaf98e",
+  "origin_main": "54ee3dc1f811d1504d60bcdf0ecf3440c4e86397",
+  "tree": "90ac8c9a9b24d56c89b38b88c4127c996a4d4d78",
+  "worktree": "/Users/pythagor/nexus/.claude/worktrees/815-chunk-range-and-spoilers",
+  "started_at": "20261009T010001Z",
+  "state": "passed",
+  "interpreter": "/Users/pythagor/nexus/.venv/bin/python",
+  "cleared_environment_names": [
+    "NEXUS_API_URL",
+    "NEXUS_AUTH",
+    "NEXUS_DBNAME_AUDIT",
+    "NEXUS_GATEWAY_PORT",
+    "NEXUS_HOME",
+    "NEXUS_ROUTED_SLOT",
+    "NEXUS_ROUTED_SLOT_DATABASE",
+    "NEXUS_RUNTIME_CONFIG",
+    "NEXUS_RUN_CORPUS",
+    "NEXUS_RUN_LIVE_LLM",
+    "NEXUS_RUN_POSTGRES",
+    "NEXUS_RUN_SECRET_STORE",
+    "NEXUS_SLOT",
+    "NEXUS_TEST_PROVIDER_DATABASE",
+    "NEXUS_TEST_RECEIPTS_DIR",
+    "NEXUS_TEST_TEMPLATE_DB",
+    "PGDATABASE",
+    "PGHOST",
+    "PGHOSTADDR",
+    "PGOPTIONS",
+    "PGPASSFILE",
+    "PGPASSWORD",
+    "PGPORT",
+    "PGSERVICE",
+    "PGSERVICEFILE",
+    "PGUSER",
+    "PYTEST_ADDOPTS",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_PLUGINS",
+    "PYTHONHOME",
+    "PYTHONPATH"
+  ],
+  "commands": [
+    {
+      "name": "import-path",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-c",
+        "import json,nexus,sys; print(json.dumps({\"module\":nexus.__file__,\"executable\":sys.executable}))"
+      ],
+      "load": 3.33203125,
+      "deadline_seconds": 539.9346132089995,
+      "postgres": false,
+      "log": "import-path.txt",
+      "cwd": "/Users/pythagor/nexus/.claude/worktrees/815-chunk-range-and-spoilers",
+      "pythonpath": "/Users/pythagor/nexus/.claude/worktrees/815-chunk-range-and-spoilers",
+      "exit_code": 0,
+      "sha256": "91b311fed43bcf9e08210109e0b2ee42910202adce55704e082f3726874f295b"
+    },
+    {
+      "name": "post-main-docs",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-s",
+        "-ra",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "--junitxml",
+        "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/815-landing-20261009T010001Z-a29009ce/post-main-docs.xml",
+        "-o",
+        "junit_logging=all",
+        "tests/test_doc_front_matter.py",
+        "tests/test_cli_reference_doc.py"
+      ],
+      "load": 3.33203125,
+      "deadline_seconds": 539.8488742089976,
+      "postgres": true,
+      "log": "post-main-docs.txt",
+      "cwd": "/Users/pythagor/nexus/.claude/worktrees/815-chunk-range-and-spoilers",
+      "pythonpath": "/Users/pythagor/nexus/.claude/worktrees/815-chunk-range-and-spoilers",
+      "exit_code": 0,
+      "sha256": "839c4c0d4ef6d2951b0722f8088f97ebcef130b8fa2c72fd8ff49d620719790f",
+      "pytest": {
+        "cases": 76,
+        "failed": 0,
+        "skipped": 0,
+        "guards": [
+          "secret-store guard: active; nexus-api: denied",
+          "dbname audit: owner targets: none",
+          "receipt isolation: checkout and user receipts untouched"
+        ],
+        "junit": "post-main-docs.xml"
+      }
+    }
+  ],
+  "harness_sha256": "e7ff4a62399132d041e54039edc0ec5b926f34c719e292e9871dd90c81cfd27d",
+  "evidence_scope": "focused only; no whole-suite or offline-partition claim",
+  "import_proof": {
+    "module": "/Users/pythagor/nexus/.claude/worktrees/815-chunk-range-and-spoilers/nexus/__init__.py",
+    "executable": "/Users/pythagor/nexus/.venv/bin/python"
+  }
+}
