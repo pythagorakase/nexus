@@ -3,11 +3,14 @@
 from collections.abc import Iterator
 from pathlib import Path
 import socket
+from typing import Any
 
 import pytest
+import tomlkit
 
 from nexus.api import conversations
 from nexus.config import load_settings
+from nexus.runtime.contract import RUNTIME_CONFIG_ENV
 from nexus.util.secret_manager import get_secret
 from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
 
@@ -37,7 +40,7 @@ def empty_memory_conversation_store() -> Iterator[None]:
 
 @pytest.fixture
 def offline_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
-    """Remove every registry credential, refuse sockets, and isolate thread files.
+    """Remove credentials, refuse sockets, and configure a private state directory.
 
     Yields:
         The directory that receives file-backed wizard threads.
@@ -58,7 +61,13 @@ def offline_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterato
     monkeypatch.setattr(socket.socket, "connect", refuse_network)
     monkeypatch.setattr(socket.socket, "connect_ex", refuse_network)
     monkeypatch.setattr(socket, "create_connection", refuse_network)
-    thread_dir = tmp_path / "wizard_threads"
-    monkeypatch.setattr(conversations, "_FILE_STORE_DIR", thread_dir)
+    document: Any = tomlkit.parse(
+        (Path(__file__).resolve().parents[2] / "nexus.toml").read_text()
+    )
+    document["runtime"]["state_dir"] = str(tmp_path / "state")
+    runtime_config = tmp_path / "nexus.toml"
+    runtime_config.write_text(tomlkit.dumps(document))
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(runtime_config))
+    thread_dir = tmp_path / "state" / conversations.WIZARD_THREADS_DIRNAME
     yield thread_dir
     get_secret.cache_clear()

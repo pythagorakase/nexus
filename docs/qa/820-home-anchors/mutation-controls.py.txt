@@ -1,0 +1,86 @@
+"""Four reversible 820 controls; serial focused pytest only. Codex — GPT-6."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+
+ROOT = Path.cwd()
+PROOF = ROOT / 'docs/qa/820-home-anchors'
+PY = '/Users/pythagor/nexus/.venv/bin/python'
+ENV = dict(os.environ, PYTHONPATH=str(ROOT), NEXUS_RUN_POSTGRES='1')
+for key in ('NEXUS_GATEWAY_PORT', 'NEXUS_API_URL', 'NEXUS_SLOT', 'NEXUS_RUN_LIVE_LLM'):
+    ENV.pop(key, None)
+
+def original_function(path, start, end):
+    source = subprocess.check_output(['git', 'show', 'origin/main:' + path], text=True)
+    return source[source.index(start):source.index(end)]
+
+plan = 'nexus/runtime/home_plan.py'
+raw_function = original_function(plan, 'def _model_references(', 'def _inside(')
+controls = [
+    ('anchor', 'nexus/config/loader.py',
+     '        anchor_model_paths(settings, locate_runtime_home().root)',
+     '        # Mutation: omit anchoring.',
+     ['tests/test_runtime_home.py::test_relative_model_paths_anchor_once_at_load',
+      'tests/test_runtime_home.py::test_model_readers_use_the_anchored_path_from_any_cwd',
+      'tests/test_embedding_artifacts.py::test_relative_artifact_paths_lock_and_verify_from_any_cwd']),
+    ('raw-plan', plan, None, raw_function,
+     ['tests/test_runtime_home.py::test_home_plan_rewrites_from_the_configured_strings']),
+    ('wizard-store', 'nexus/api/conversations.py',
+     '    return resolve_runtime_home(settings).state_dir / WIZARD_THREADS_DIRNAME',
+     '    return Path(__file__).resolve().parents[2] / "temp" / WIZARD_THREADS_DIRNAME',
+     ['tests/test_runtime_home.py::test_wizard_threads_resolve_under_the_state_dir',
+      'tests/test_api/test_conversations.py::test_file_store_writes_under_the_state_dir']),
+    ('progress', 'nexus/cli.py',
+     '        plan = plan_home_move(args.target, progress=progress)',
+     '        plan = plan_home_move(args.target, progress=None)',
+     ['tests/test_runtime_home.py::test_home_plan_progress_only_on_a_terminal_and_never_with_json']),
+]
+selected = set(sys.argv[1:])
+report_path = PROOF / 'mutation-restoration.json'
+report = json.loads(report_path.read_text()) if selected else []
+for name, relative, old, new, tests in controls:
+    if selected and name not in selected:
+        continue
+    if os.getloadavg()[0] >= 24:
+        raise RuntimeError('Load exceeds admission bound')
+    path = ROOT / relative
+    before = path.read_bytes()
+    source = before.decode()
+    if old is None:
+        start, end = source.index('def _model_references('), source.index('def _inside(')
+        changed = source[:start] + new + source[end:]
+    else:
+        if source.count(old) != 1:
+            raise RuntimeError('Mutation target is not unique: ' + name)
+        changed = source.replace(old, new)
+    wizard_path = ROOT / 'temp/wizard_threads'
+    if name == 'wizard-store' and wizard_path.exists():
+        raise RuntimeError('Mutation cleanup path already exists')
+    command = ['nice', '-n', '15', PY, '-m', 'pytest', '-q', '-rs', '-p', 'tests.dbname_audit', *tests]
+    try:
+        path.write_text(changed)
+        with (PROOF / ('red-' + name + '.txt')).open('w') as log:
+            log.write(subprocess.check_output(['uptime'], text=True))
+            log.flush()
+            result = subprocess.run(command, env=ENV, stdout=log, stderr=subprocess.STDOUT, timeout=180)
+    finally:
+        path.write_bytes(before)
+        if name == 'wizard-store' and wizard_path.exists():
+            for artifact in wizard_path.iterdir():
+                if not artifact.is_file() or not re.fullmatch(r'local_thread_[0-9a-f]{16}\.json', artifact.name):
+                    raise RuntimeError('Unexpected mutation artifact: ' + str(artifact))
+                artifact.unlink()
+            wizard_path.rmdir()
+    after = path.read_bytes()
+    item = {'control': name, 'command': command, 'exit_code': result.returncode,
+            'path': relative, 'before_sha256': hashlib.sha256(before).hexdigest(),
+            'restored_sha256': hashlib.sha256(after).hexdigest(), 'restored_identically': before == after}
+    report.append(item)
+    (PROOF / 'mutation-restoration.json').write_text(json.dumps(report, indent=2) + '\n')
+    print(name + ': exit ' + str(result.returncode) + ', source restored=' + str(before == after), flush=True)
+    if result.returncode != 1 or before != after:
+        raise RuntimeError('Expected a failing regression and byte-identical restoration')

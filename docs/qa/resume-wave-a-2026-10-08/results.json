@@ -1,0 +1,81 @@
+{
+  "head": "2cc9a5fcff76e0c643ca41490eb2508b870b4850",
+  "tree": "3804225e54624e7739c6f6d143cc00b804892a3b",
+  "import_path": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/nexus/__init__.py",
+  "started_at": "2026-10-08T22:36:27.619288+00:00",
+  "pieces": [
+    {
+      "name": "core",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests",
+        "--ignore=tests/test_api",
+        "--ignore=tests/test_orrery"
+      ],
+      "log": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate-resumed-1/core.log",
+      "state": "complete",
+      "exit_code": 0,
+      "secret_guard": true,
+      "owner_audit": true,
+      "receipt_isolation": true
+    },
+    {
+      "name": "api",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_api"
+      ],
+      "log": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate-resumed-1/api.log",
+      "state": "complete",
+      "exit_code": 0,
+      "secret_guard": true,
+      "owner_audit": true,
+      "receipt_isolation": true
+    },
+    {
+      "name": "orrery",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_orrery"
+      ],
+      "log": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate-resumed-1/orrery.log",
+      "state": "complete",
+      "exit_code": 0,
+      "secret_guard": true,
+      "owner_audit": true,
+      "receipt_isolation": true
+    }
+  ],
+  "state": "passed",
+  "completed_at": "2026-10-09T00:28:53.513912+00:00"
+}

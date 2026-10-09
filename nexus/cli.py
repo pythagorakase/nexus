@@ -58,6 +58,8 @@ from typing import (
     NoReturn,
     Optional,
     Sequence,
+    TextIO,
+    TYPE_CHECKING,
 )
 import uuid
 
@@ -92,6 +94,9 @@ from nexus.runtime.remote_auth import (
     build_runtime_request_auth,
 )
 from nexus.util.secret_manager import MissingSecretError, SecretStoreAccessError
+
+if TYPE_CHECKING:
+    from nexus.runtime.home_plan import ChecksumProgress
 
 logger = logging.getLogger("nexus.cli")
 
@@ -4434,15 +4439,47 @@ def _run_log_mark(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(exc)}
 
 
+class _ChecksumProgressLine:
+    """Render checksum progress on one terminal stderr line (Decision 820-Q8)."""
+
+    def __init__(self, stream: TextIO) -> None:
+        self.stream = stream
+        self.last_text: Optional[str] = None
+
+    def __call__(self, progress: ChecksumProgress) -> None:
+        text = (
+            f"checksummed {progress.entries_done}/{progress.entries_total} entries, "
+            f"{progress.bytes_done / 1e9:.1f}/{progress.bytes_total / 1e9:.1f} GB"
+        )
+        if text != self.last_text:
+            self.stream.write("\r" + text)
+            self.stream.flush()
+            self.last_text = text
+
+    def close(self) -> None:
+        """End a rendered line, including when planning raises."""
+        if self.last_text is not None:
+            self.stream.write("\n")
+            self.stream.flush()
+
+
 def run_home(args: argparse.Namespace) -> Dict[str, Any]:
     """Dry-run the move of the checkout's runtime data into a runtime home."""
     from nexus.runtime.home import RuntimeHomeError
     from nexus.runtime.home_plan import HomePlanError, plan_home_move
 
+    progress = (
+        None
+        if args.json or not sys.stderr.isatty()
+        else _ChecksumProgressLine(sys.stderr)
+    )
     try:
-        plan = plan_home_move(args.target)
+        plan = plan_home_move(args.target, progress=progress)
     except (RuntimeHomeError, HomePlanError, FileNotFoundError) as exc:
         return {"success": False, "error": str(exc)}
+    finally:
+        if progress is not None:
+            progress.close()
     if not args.json:
         for line in plan.render():
             print(line)

@@ -1,0 +1,203 @@
+13:38  up 1 day, 18 mins, 5 users, load averages: 4.41 4.13 4.11
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_____ test_relative_model_paths_anchor_once_at_load[NEXUS_RUNTIME_CONFIG] ______
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-430/test_relative_model_paths_anch0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1670e2850>
+locator = 'NEXUS_RUNTIME_CONFIG'
+
+    @pytest.mark.parametrize("locator", [RUNTIME_CONFIG_ENV, HOME_ENV])
+    def test_relative_model_paths_anchor_once_at_load(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, locator: str
+    ) -> None:
+        """All model registries use the locator root, never cwd or the config parent."""
+        expected: Dict[str, str] = {"local_models.models_dir": "gguf"}
+    
+        def edit(document: Any) -> None:
+            document["local_models"]["models_dir"] = "gguf"
+            for name, model in document["memnon"]["models"].items():
+                expected[f"memnon.models.{name}.local_path"] = f"models/{name}"
+                model["local_path"] = f"models/{name}"
+            document["memnon"]["retrieval"]["cross_encoder_reranking"][
+                "model_path"
+            ] = "models/reranker"
+            expected["memnon.retrieval.cross_encoder_reranking.model_path"] = (
+                "models/reranker"
+            )
+            for name, model in document["ir_eval"]["embedding_candidates"].items():
+                expected[f"ir_eval.embedding_candidates.{name}.local_path"] = (
+                    f"models/{name}"
+                )
+                model["local_path"] = f"models/{name}"
+            candidates = document["ir_eval"]["reranker_candidates"]
+            values = (str(tmp_path / "abs"), "~/nexus-anchor-probe", "")
+            for name, value in zip(sorted(candidates), values):
+                candidates[name]["local_path"] = value
+                expected[f"ir_eval.reranker_candidates.{name}.local_path"] = value
+    
+        home = tmp_path / "home"
+        config = _write_config(
+            (home if locator == HOME_ENV else tmp_path / "other") / "nexus.toml",
+            edit=edit,
+        )
+        monkeypatch.setenv(locator, str(home if locator == HOME_ENV else config))
+        root = home.resolve() if locator == HOME_ENV else REPO_ROOT
+        observed = []
+        for name in ("cwd-one", "cwd-two"):
+            cwd = tmp_path / name
+            cwd.mkdir()
+            monkeypatch.chdir(cwd)
+            settings = load_settings()
+>           assert settings.configured_model_paths == expected
+E           AssertionError: assert {} == {'ir_eval.emb...ding-8B', ...}
+E             
+E             Right contains 14 more items:
+E             {'ir_eval.embedding_candidates.Octen-Embedding-0.6B.local_path': 'models/Octen-Embedding-0.6B',
+E              'ir_eval.embedding_candidates.Octen-Embedding-4B-INT8.local_path': 'models/Octen-Embedding-4B-INT8',
+E              'ir_eval.embedding_candidates.Octen-Embedding-8B-INT8.local_path': 'models/Octen-Embedding-8B-INT8',
+E              'ir_eval.embedding_candidates.Octen-Embedding-8B.local_path': 'models/Octen-Embedding-8B',
+E              'ir_eval.embedding_candidates.bge-large.local_path': 'models/bge-large',...
+E             
+E             ...Full output truncated (10 lines hidden), use '-vv' to show
+
+/Users/pythagor/nexus/.claude/worktrees/820-home-anchors/tests/test_runtime_home.py:480: AssertionError
+__________ test_relative_model_paths_anchor_once_at_load[NEXUS_HOME] ___________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-430/test_relative_model_paths_anch1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x168505bd0>
+locator = 'NEXUS_HOME'
+
+    @pytest.mark.parametrize("locator", [RUNTIME_CONFIG_ENV, HOME_ENV])
+    def test_relative_model_paths_anchor_once_at_load(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, locator: str
+    ) -> None:
+        """All model registries use the locator root, never cwd or the config parent."""
+        expected: Dict[str, str] = {"local_models.models_dir": "gguf"}
+    
+        def edit(document: Any) -> None:
+            document["local_models"]["models_dir"] = "gguf"
+            for name, model in document["memnon"]["models"].items():
+                expected[f"memnon.models.{name}.local_path"] = f"models/{name}"
+                model["local_path"] = f"models/{name}"
+            document["memnon"]["retrieval"]["cross_encoder_reranking"][
+                "model_path"
+            ] = "models/reranker"
+            expected["memnon.retrieval.cross_encoder_reranking.model_path"] = (
+                "models/reranker"
+            )
+            for name, model in document["ir_eval"]["embedding_candidates"].items():
+                expected[f"ir_eval.embedding_candidates.{name}.local_path"] = (
+                    f"models/{name}"
+                )
+                model["local_path"] = f"models/{name}"
+            candidates = document["ir_eval"]["reranker_candidates"]
+            values = (str(tmp_path / "abs"), "~/nexus-anchor-probe", "")
+            for name, value in zip(sorted(candidates), values):
+                candidates[name]["local_path"] = value
+                expected[f"ir_eval.reranker_candidates.{name}.local_path"] = value
+    
+        home = tmp_path / "home"
+        config = _write_config(
+            (home if locator == HOME_ENV else tmp_path / "other") / "nexus.toml",
+            edit=edit,
+        )
+        monkeypatch.setenv(locator, str(home if locator == HOME_ENV else config))
+        root = home.resolve() if locator == HOME_ENV else REPO_ROOT
+        observed = []
+        for name in ("cwd-one", "cwd-two"):
+            cwd = tmp_path / name
+            cwd.mkdir()
+            monkeypatch.chdir(cwd)
+            settings = load_settings()
+>           assert settings.configured_model_paths == expected
+E           AssertionError: assert {} == {'ir_eval.emb...ding-8B', ...}
+E             
+E             Right contains 14 more items:
+E             {'ir_eval.embedding_candidates.Octen-Embedding-0.6B.local_path': 'models/Octen-Embedding-0.6B',
+E              'ir_eval.embedding_candidates.Octen-Embedding-4B-INT8.local_path': 'models/Octen-Embedding-4B-INT8',
+E              'ir_eval.embedding_candidates.Octen-Embedding-8B-INT8.local_path': 'models/Octen-Embedding-8B-INT8',
+E              'ir_eval.embedding_candidates.Octen-Embedding-8B.local_path': 'models/Octen-Embedding-8B',
+E              'ir_eval.embedding_candidates.bge-large.local_path': 'models/bge-large',...
+E             
+E             ...Full output truncated (10 lines hidden), use '-vv' to show
+
+/Users/pythagor/nexus/.claude/worktrees/820-home-anchors/tests/test_runtime_home.py:480: AssertionError
+____________ test_model_readers_use_the_anchored_path_from_any_cwd _____________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-430/test_model_readers_use_the_anc0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x168007310>
+
+    def test_model_readers_use_the_anchored_path_from_any_cwd(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Real readers reject the missing home artifact despite an existing cwd decoy."""
+        home = tmp_path / "home"
+    
+        def edit(document: Any) -> None:
+            document["local_models"]["models_dir"] = "gguf"
+            for model in document["memnon"]["models"].values():
+                model["local_path"] = "models/embedder"
+    
+        _write_config(home / "nexus.toml", edit=edit)
+        elsewhere = tmp_path / "elsewhere"
+        (elsewhere / "gguf").mkdir(parents=True)
+        (elsewhere / "models" / "embedder").mkdir(parents=True)
+        monkeypatch.setenv(HOME_ENV, str(home))
+        monkeypatch.chdir(elsewhere)
+>       assert local_inference._allowed_roots()[0] == (home / "gguf").resolve()
+E       AssertionError: assert PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-430/test_model_readers_use_the_anc0/elsewhere/gguf') == PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-430/test_model_readers_use_the_anc0/home/gguf')
+E        +  where PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-430/test_model_readers_use_the_anc0/home/gguf') = resolve()
+E        +    where resolve = (PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-430/test_model_readers_use_the_anc0/home') / 'gguf').resolve
+
+/Users/pythagor/nexus/.claude/worktrees/820-home-anchors/tests/test_runtime_home.py:546: AssertionError
+__________ test_relative_artifact_paths_lock_and_verify_from_any_cwd ___________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-430/test_relative_artifact_paths_l0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x168215f10>
+
+    def test_relative_artifact_paths_lock_and_verify_from_any_cwd(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Artifact paths anchor to the home even when the operator runs elsewhere."""
+        home = tmp_path / "home"
+        home.mkdir()
+        workspace = _workspace(home)
+        _write_config(
+            home,
+            Path("models/embedder"),
+            Path("models/reranker"),
+            workspace.lock,
+            name="nexus",
+        )
+        monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
+        monkeypatch.setenv(HOME_ENV, str(home))
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        for command in ("lock", "verify"):
+            result = run_models_command(command, None)
+>           assert result["success"] is True, result
+E           AssertionError: {'error': "embedder 'Octen-Embedding-4B': artifact directory models/embedder does not exist or is not a directory. Res...hf download Octen/Octen-Embedding-4B --local-dir models/embedder`, then re-run `nexus models lock`.", 'success': False}
+E           assert False is True
+
+/Users/pythagor/nexus/.claude/worktrees/820-home-anchors/tests/test_embedding_artifacts.py:200: AssertionError
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+4 failed, 2 warnings in 3.21s

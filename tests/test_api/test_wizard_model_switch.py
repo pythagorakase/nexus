@@ -456,7 +456,7 @@ def test_ambiguous_save_keeps_the_copied_thread(
 
 
 def test_switch_replays_player_provenance_in_order(
-    monkeypatch: pytest.MonkeyPatch, hosted: HostedConversations
+    monkeypatch: pytest.MonkeyPatch, hosted: HostedConversations, offline_registry: Path
 ) -> None:
     """Copied user turns keep their origin, including a literal envelope."""
     source_model, target_model = registry_model("local"), registry_model("openai")
@@ -465,9 +465,7 @@ def test_switch_replays_player_provenance_in_order(
     source.add_message(thread_id, "assistant", "Welcome")
     source.add_message(thread_id, "user", "Continue", origin="wizard_control")
     source.add_message(thread_id, "user", "A harbor", origin="user")
-    stored = json.loads(
-        (conversations._FILE_STORE_DIR / f"{thread_id}.json").read_text()
-    )
+    stored = json.loads((offline_registry / f"{thread_id}.json").read_text())
     source.add_message(thread_id, "user", stored[-1]["content"], origin="user")
     expected = source.list_messages(thread_id, limit=0)
     record = SlotRecord(model=source_model, thread_id=thread_id)
