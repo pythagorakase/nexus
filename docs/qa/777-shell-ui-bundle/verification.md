@@ -269,7 +269,7 @@ See [restored focused output](restored-ui-green.txt). The original full focused
 137-test pass remains above; this rerun covers both the repaired test and the
 restored control subject.
 
-## Scope and Pending Proof
+## Historical Pause Checkpoint
 
 The coordinator's assembled core gate at `849eeef4` stopped with 3,685 passes,
 52 skips, 30 warnings and one failure in 1840.34 seconds. All three guard
@@ -289,7 +289,7 @@ env -u NEXUS_RUN_LIVE_LLM -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL \
 
 The [output](prompt-lint-endpoint-fix.txt) confirms active secret isolation,
 untouched receipt roots, zero database targets and no owner targets. The
-combined gate is still incomplete. At the user's packing-up request, no new
+combined gate was incomplete at this checkpoint. At the user's packing-up request, no new
 capture, build or full suite was started; the prepared capture plan remains
 pending.
 
@@ -298,8 +298,71 @@ required, strict, and bounded to 1000–60000. The player route returns only its
 explicitly allowlisted announcer object. The reachability baseline adds exactly
 one sorted path, `nexus/api/ui_config_endpoints.py`.
 
-Remaining: the complete bounded state-surface regeneration and full UI suite.
+At that checkpoint, the complete bounded state-surface regeneration and full UI suite remained.
 The coordinator owns the
 combined full gate and PR publication; no push or PR is claimed here.
+
+## Resumed Gate and Capture Checkpoint
+
+After the user resumed the campaign, the coordinator's serial PostgreSQL gate
+passed at `2cc9a5fcff76e0c643ca41490eb2508b870b4850`, tree
+`3804225e54624e7739c6f6d143cc00b804892a3b`, including this lane's input
+`149704d16fa126b8ac9d142a22bf51b42a669552`: 7,056 passed, 72 skipped,
+41 warnings, with all three guard summaries clean. This is coordinator-run
+Python evidence, recorded at the immutable
+[gate verification](https://github.com/pythagorakase/nexus/blob/bf229051e3d046b76ab8d18b34e9ee054a03bbf6/docs/qa/resume-wave-a-2026-10-08/verification.md).
+It does not replace the UI acceptance proof.
+
+All nine bounded captures at that source completed and assembled, but the
+strict UI run found a narrow key-row hover targeting failure: 119 passed,
+four failed. The [preserved capture checkpoint](capture-at-149704d1/README.md)
+contains the exact LFS receipt, all logs, 27-condition legacy comparison,
+108-case interaction diagnosis, and bounded browser geometry/hit-test proof.
+The failed receipt is not the accepted application receipt. Historical PNG
+fixtures were hydrated from their already-present local LFS objects.
+
+The approved harness correction moves the pointer to verified empty key-row
+background and fails on absent geometry or an incorrect hover readback.
+No product source, strict assertion, threshold, palette or media evaluator
+changes. At that checkpoint, the tooling change required a new complete capture,
+comparison, focused acceptance and full UI run, and the coordinator temporarily
+owned the heavy slot for the next lane's initial red proof.
+
+## V2 Capture and Current Acceptance Stop
+
+The complete second pass at `b6a704caab86c304590785832b665fa98a12ef1c`
+assembled 126,078 captures across all 33 conditions at fingerprint
+`4b8a9bbd8b880dc12ff8a534e7ef819eaa72fe376f0e28a8a295f9754d976fe7`.
+Every calibration passed, with zero network requests or browser errors.
+All 101,520 legacy samples were compared: 71,952 identical stable records,
+13,776 metadata-only changes and 15,792 painted changes, all at narrow widths.
+Wide painted metrics are exact; hover/dismissal metadata and some delete
+origins differ. The [complete retained checkpoint](capture-at-b6a704ca/README.md)
+names every changed sample and preserves the receipt, calibration images,
+logs, table refresh, diagnostics and before/after proposal images.
+
+Full UI acceptance failed: **606 passed, five failed, two uncaught errors**.
+Four wizard failures expose missing legacy listeners in the new jsdom
+`matchMedia` fallback. The other failure is a genuine strict-optimality
+conflict: Gilded's unchanged actual map minimum remains 7.4977986569476665,
+while the changed narrow layout makes 7.709657692104731 attainable in the
+existing candidate domain. A later chosen-versus-shipped check also requires
+a different Vector hovered token. The preliminary inference that all scalar
+bounds passed mistakenly relied on selected-assignment metadata; that claim
+is withdrawn and the actual measured audit is retained.
+
+Exactly two existing color-token changes are proposed through scratch-only
+browser previews. Owner authorization is pending; product palette, evaluator,
+thresholds and input closure rules remain unchanged. The failed active
+receipt/tables were restored after exact evidence preservation. Final capture,
+full UI acceptance, main merge, freshness and final Python-source provenance
+remain pending. This branch is not publication-ready.
+
+The [minimal legacy-listener repair](matchmedia-legacy-repair/README.md) is now
+committed and verified at `772dd499ed5cd00e5ceb5c2577efa428eb8866f8`:
+all four previously affected UI files passed, 77 tests in 5.17s, with no uncaught
+errors. Its new fingerprint changes only `client/src/tests/setup.ts`; no old
+capture is reused. The palette decision and remaining acceptance work above
+are still pending.
 
 Codex — GPT-6

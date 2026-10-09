@@ -1,0 +1,142 @@
+[
+  {
+    "theme": "veil",
+    "surface": "memory",
+    "actual_minimum": 28.723129322326244,
+    "required": 15,
+    "passed": true
+  },
+  {
+    "theme": "veil",
+    "surface": "delete",
+    "actual_minimum": 14.62951503959124,
+    "required": 14.62951503959124,
+    "passed": true
+  },
+  {
+    "theme": "veil",
+    "surface": "map",
+    "actual_minimum": 6.0138381967176775,
+    "required": 6.0138381967176775,
+    "passed": true
+  },
+  {
+    "theme": "veil",
+    "surface": "key",
+    "actual_minimum": 17.266563526815094,
+    "required": 15,
+    "passed": true
+  },
+  {
+    "theme": "gilded",
+    "surface": "memory",
+    "actual_minimum": 33.21169132170665,
+    "required": 15,
+    "passed": true
+  },
+  {
+    "theme": "gilded",
+    "surface": "delete",
+    "actual_minimum": 12.138551025101897,
+    "required": 12.138551025101897,
+    "passed": true
+  },
+  {
+    "theme": "gilded",
+    "surface": "map",
+    "actual_minimum": 7.4977986569476665,
+    "required": 7.709657692104731,
+    "passed": false,
+    "minimizers": [
+      {
+        "theme": "Gilded",
+        "surface": "map",
+        "context": "canvas-sea/ring",
+        "condition": "w768-1023/pointer=fine/motion/start",
+        "states": [
+          "rest",
+          "current"
+        ],
+        "rgb": [
+          [
+            0.6721892111281013,
+            0.31843707334882787,
+            0.10697675896516404
+          ],
+          [
+            0.37940102369107326,
+            0.28747796954900795,
+            0.10416381706498698
+          ]
+        ],
+        "delta": 7.4977986569476665,
+        "signatures": [
+          "filled circle; no ring",
+          "filled circle + circular ring"
+        ]
+      },
+      {
+        "theme": "Gilded",
+        "surface": "map",
+        "context": "canvas-sea/ring",
+        "condition": "w768-1023/pointer=fine/motion/trough",
+        "states": [
+          "rest",
+          "current"
+        ],
+        "rgb": [
+          [
+            0.6721892111281013,
+            0.31843707334882787,
+            0.10697675896516404
+          ],
+          [
+            0.37940102369107326,
+            0.28747796954900795,
+            0.10416381706498698
+          ]
+        ],
+        "delta": 7.4977986569476665,
+        "signatures": [
+          "filled circle; no ring",
+          "filled circle + circular ring"
+        ]
+      }
+    ]
+  },
+  {
+    "theme": "gilded",
+    "surface": "key",
+    "actual_minimum": 16.15062592576154,
+    "required": 15,
+    "passed": true
+  },
+  {
+    "theme": "vector",
+    "surface": "memory",
+    "actual_minimum": 39.07275879212985,
+    "required": 15,
+    "passed": true
+  },
+  {
+    "theme": "vector",
+    "surface": "delete",
+    "actual_minimum": 15.970020623222288,
+    "required": 15,
+    "passed": true
+  },
+  {
+    "theme": "vector",
+    "surface": "map",
+    "actual_minimum": 5.900185376139648,
+    "required": 5.900185376139648,
+    "passed": true
+  },
+  {
+    "theme": "vector",
+    "surface": "key",
+    "actual_minimum": 11.468145729494452,
+    "required": 11.468145729494452,
+    "passed": true
+  }
+]

@@ -141,6 +141,30 @@ async function renderInventory(condition, theme, calibrating = false) {
       await page.locator('body').click({ position: { x: 1, y: 1 } });
       await settled();
     }
+    async function hoverKeyRow(selector) {
+      const row = page.locator(selector);
+      await row.scrollIntoViewIfNeeded();
+      const point = await row.evaluate(n => {
+        const box = n.getBoundingClientRect();
+        const top = Math.max(0, box.top), bottom = Math.min(innerHeight, box.bottom);
+        const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right);
+        const y = (top + bottom) / 2;
+        for (let x = left + 2; x < right - 1; x += 2)
+          if (document.elementFromPoint(x, y) === n) return { x, y };
+        return null;
+      });
+      if (!point) throw new Error(`Measurement failure ${selector}: no visible empty row background for hover`);
+      await page.mouse.move(point.x, point.y);
+      const actual = await row.evaluate((n, point) => ({
+        hitIsRow: document.elementFromPoint(point.x, point.y) === n,
+        rowHover: n.matches(':hover'),
+        glyphHover: n.querySelector('.key-status svg').matches(':hover'),
+        controlHover: [...n.querySelectorAll('button,input,[tabindex]')].some(c => c.matches(':hover')),
+      }), point);
+      if (!actual.hitIsRow || !actual.rowHover || actual.glyphHover || actual.controlHover)
+        throw new Error(`Measurement failure ${selector}: row background hover mismatch ${JSON.stringify({ point, ...actual })}`);
+      return point;
+    }
     async function keyboardFocus(selector) {
       // Click body resets the browser's sequential navigation starting point.
       await reset();
@@ -381,7 +405,10 @@ async function renderInventory(condition, theme, calibrating = false) {
         for (const action of ['rest', 'hover', 'focus-visible']) for (const state of Object.keys(roots.key).filter(s => need === 'required' ? s !== 'optional-absent' : s !== 'required-missing')) {
           const row = `[data-testid="key-row-${state}"]`;
           await reset(); let steps = 'seed status; verified via fixture VERIFY click';
-          if (action === 'hover') { await page.locator(row).hover(); steps += '; mouse hover row'; }
+          if (action === 'hover') {
+            const point = await hoverKeyRow(row);
+            steps += `; mouse hover verified row background at ${point.x},${point.y}`;
+          }
           if (action === 'focus-visible') steps += `; keyboard Tab ×${await keyboardFocus(`${row} input`)}`;
           await captureValues('key', state, `key/${need}/${action}`, `${row} .key-status svg`, steps);
         }

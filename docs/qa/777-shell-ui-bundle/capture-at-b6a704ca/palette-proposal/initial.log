@@ -1,0 +1,14 @@
+node:internal/modules/run_main:105
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for getByTestId('map-place-row-1')[22m
+
+    at /private/tmp/nexus-777-shell-ui-4ae8b8d2/map-palette-proposal.mjs:41:51 {
+  log: [ "  - waiting for getByTestId('map-place-row-1')" ],
+  name: 'TimeoutError'
+}
+
+Node.js v24.3.0

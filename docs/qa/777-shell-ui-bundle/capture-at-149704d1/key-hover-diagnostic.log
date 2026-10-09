@@ -1,0 +1,600 @@
+{
+  "readings": [
+    {
+      "width": 639,
+      "coarse": false,
+      "row": {
+        "x": 240,
+        "y": 326.421875,
+        "width": 245,
+        "height": 52.5
+      },
+      "svg": {
+        "x": 352,
+        "y": 346.671875,
+        "width": 12,
+        "height": 12
+      },
+      "pointer": {
+        "x": 362,
+        "y": 352
+      },
+      "hit": {
+        "tag": "svg",
+        "testid": null,
+        "class": "lucide lucide-triangle-alert key-glyph-required-missing"
+      },
+      "rowHover": true,
+      "svgHover": true,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "testid": "key-input-required-missing",
+          "class": "key-input",
+          "box": {
+            "x": 378,
+            "y": 334.421875,
+            "width": 180,
+            "height": 36.5
+          },
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "tag": "BUTTON",
+          "testid": "key-commit-required-missing",
+          "class": "btn-soft",
+          "box": {
+            "x": 568,
+            "y": 338.421875,
+            "width": 93.015625,
+            "height": 28.5
+          },
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "tag": "BUTTON",
+          "testid": "key-verify-required-missing",
+          "class": "btn-soft",
+          "box": {
+            "x": 671.015625,
+            "y": 338.421875,
+            "width": 83.046875,
+            "height": 28.5
+          },
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "emptyRowPoints": [
+        {
+          "x": 242,
+          "y": 328.421875
+        },
+        {
+          "x": 242,
+          "y": 330.421875
+        },
+        {
+          "x": 242,
+          "y": 332.421875
+        },
+        {
+          "x": 242,
+          "y": 334.421875
+        },
+        {
+          "x": 242,
+          "y": 336.421875
+        },
+        {
+          "x": 242,
+          "y": 338.421875
+        },
+        {
+          "x": 242,
+          "y": 340.421875
+        },
+        {
+          "x": 242,
+          "y": 342.421875
+        },
+        {
+          "x": 242,
+          "y": 344.421875
+        },
+        {
+          "x": 242,
+          "y": 346.421875
+        },
+        {
+          "x": 242,
+          "y": 348.421875
+        },
+        {
+          "x": 242,
+          "y": 350.421875
+        },
+        {
+          "x": 242,
+          "y": 352.421875
+        },
+        {
+          "x": 242,
+          "y": 354.421875
+        },
+        {
+          "x": 242,
+          "y": 356.421875
+        },
+        {
+          "x": 242,
+          "y": 358.421875
+        },
+        {
+          "x": 242,
+          "y": 360.421875
+        },
+        {
+          "x": 242,
+          "y": 362.421875
+        },
+        {
+          "x": 242,
+          "y": 364.421875
+        },
+        {
+          "x": 242,
+          "y": 366.421875
+        },
+        {
+          "x": 242,
+          "y": 368.421875
+        },
+        {
+          "x": 242,
+          "y": 370.421875
+        },
+        {
+          "x": 242,
+          "y": 372.421875
+        },
+        {
+          "x": 242,
+          "y": 374.421875
+        },
+        {
+          "x": 242,
+          "y": 376.421875
+        }
+      ],
+      "rowStyle": {
+        "display": "grid",
+        "padding": "8px 12px"
+      },
+      "scrollerScrollTop": 1514,
+      "emptyPointProbe": {
+        "point": {
+          "x": 242,
+          "y": 352.421875
+        },
+        "hitIsRow": true,
+        "rowHover": true,
+        "svgHover": false,
+        "controls": [
+          {
+            "hover": false,
+            "focusVisible": false
+          },
+          {
+            "hover": false,
+            "focusVisible": false
+          },
+          {
+            "hover": false,
+            "focusVisible": false
+          }
+        ]
+      }
+    },
+    {
+      "width": 760,
+      "coarse": false,
+      "row": {
+        "x": 246,
+        "y": 326.328125,
+        "width": 366,
+        "height": 52.5
+      },
+      "svg": {
+        "x": 358,
+        "y": 346.578125,
+        "width": 12,
+        "height": 12
+      },
+      "pointer": {
+        "x": 429,
+        "y": 352
+      },
+      "hit": {
+        "tag": "INPUT",
+        "testid": "key-input-required-missing",
+        "class": "key-input"
+      },
+      "rowHover": true,
+      "svgHover": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "testid": "key-input-required-missing",
+          "class": "key-input",
+          "box": {
+            "x": 384,
+            "y": 334.328125,
+            "width": 180,
+            "height": 36.5
+          },
+          "hover": true,
+          "focusVisible": false
+        },
+        {
+          "tag": "BUTTON",
+          "testid": "key-commit-required-missing",
+          "class": "btn-soft",
+          "box": {
+            "x": 574,
+            "y": 338.328125,
+            "width": 93.015625,
+            "height": 28.5
+          },
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "tag": "BUTTON",
+          "testid": "key-verify-required-missing",
+          "class": "btn-soft",
+          "box": {
+            "x": 677.015625,
+            "y": 338.328125,
+            "width": 83.046875,
+            "height": 28.5
+          },
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "emptyRowPoints": [
+        {
+          "x": 248,
+          "y": 328.328125
+        },
+        {
+          "x": 248,
+          "y": 330.328125
+        },
+        {
+          "x": 248,
+          "y": 332.328125
+        },
+        {
+          "x": 248,
+          "y": 334.328125
+        },
+        {
+          "x": 248,
+          "y": 336.328125
+        },
+        {
+          "x": 248,
+          "y": 338.328125
+        },
+        {
+          "x": 248,
+          "y": 340.328125
+        },
+        {
+          "x": 248,
+          "y": 342.328125
+        },
+        {
+          "x": 248,
+          "y": 344.328125
+        },
+        {
+          "x": 248,
+          "y": 346.328125
+        },
+        {
+          "x": 248,
+          "y": 348.328125
+        },
+        {
+          "x": 248,
+          "y": 350.328125
+        },
+        {
+          "x": 248,
+          "y": 352.328125
+        },
+        {
+          "x": 248,
+          "y": 354.328125
+        },
+        {
+          "x": 248,
+          "y": 356.328125
+        },
+        {
+          "x": 248,
+          "y": 358.328125
+        },
+        {
+          "x": 248,
+          "y": 360.328125
+        },
+        {
+          "x": 248,
+          "y": 362.328125
+        },
+        {
+          "x": 248,
+          "y": 364.328125
+        },
+        {
+          "x": 248,
+          "y": 366.328125
+        },
+        {
+          "x": 248,
+          "y": 368.328125
+        },
+        {
+          "x": 248,
+          "y": 370.328125
+        },
+        {
+          "x": 248,
+          "y": 372.328125
+        },
+        {
+          "x": 248,
+          "y": 374.328125
+        },
+        {
+          "x": 248,
+          "y": 376.328125
+        }
+      ],
+      "rowStyle": {
+        "display": "grid",
+        "padding": "8px 12px"
+      },
+      "scrollerScrollTop": 1401,
+      "emptyPointProbe": {
+        "point": {
+          "x": 248,
+          "y": 352.328125
+        },
+        "hitIsRow": true,
+        "rowHover": true,
+        "svgHover": false,
+        "controls": [
+          {
+            "hover": false,
+            "focusVisible": false
+          },
+          {
+            "hover": false,
+            "focusVisible": false
+          },
+          {
+            "hover": false,
+            "focusVisible": false
+          }
+        ]
+      }
+    },
+    {
+      "width": 639,
+      "coarse": true,
+      "row": {
+        "x": 240,
+        "y": 326.421875,
+        "width": 245,
+        "height": 52.5
+      },
+      "svg": {
+        "x": 352,
+        "y": 346.671875,
+        "width": 12,
+        "height": 12
+      },
+      "pointer": {
+        "x": 362,
+        "y": 352
+      },
+      "hit": {
+        "tag": "svg",
+        "testid": null,
+        "class": "lucide lucide-triangle-alert key-glyph-required-missing"
+      },
+      "rowHover": true,
+      "svgHover": true,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "testid": "key-input-required-missing",
+          "class": "key-input",
+          "box": {
+            "x": 378,
+            "y": 334.421875,
+            "width": 180,
+            "height": 36.5
+          },
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "tag": "BUTTON",
+          "testid": "key-commit-required-missing",
+          "class": "btn-soft",
+          "box": {
+            "x": 568,
+            "y": 338.421875,
+            "width": 93.015625,
+            "height": 28.5
+          },
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "tag": "BUTTON",
+          "testid": "key-verify-required-missing",
+          "class": "btn-soft",
+          "box": {
+            "x": 671.015625,
+            "y": 338.421875,
+            "width": 83.046875,
+            "height": 28.5
+          },
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "emptyRowPoints": [
+        {
+          "x": 242,
+          "y": 328.421875
+        },
+        {
+          "x": 242,
+          "y": 330.421875
+        },
+        {
+          "x": 242,
+          "y": 332.421875
+        },
+        {
+          "x": 242,
+          "y": 334.421875
+        },
+        {
+          "x": 242,
+          "y": 336.421875
+        },
+        {
+          "x": 242,
+          "y": 338.421875
+        },
+        {
+          "x": 242,
+          "y": 340.421875
+        },
+        {
+          "x": 242,
+          "y": 342.421875
+        },
+        {
+          "x": 242,
+          "y": 344.421875
+        },
+        {
+          "x": 242,
+          "y": 346.421875
+        },
+        {
+          "x": 242,
+          "y": 348.421875
+        },
+        {
+          "x": 242,
+          "y": 350.421875
+        },
+        {
+          "x": 242,
+          "y": 352.421875
+        },
+        {
+          "x": 242,
+          "y": 354.421875
+        },
+        {
+          "x": 242,
+          "y": 356.421875
+        },
+        {
+          "x": 242,
+          "y": 358.421875
+        },
+        {
+          "x": 242,
+          "y": 360.421875
+        },
+        {
+          "x": 242,
+          "y": 362.421875
+        },
+        {
+          "x": 242,
+          "y": 364.421875
+        },
+        {
+          "x": 242,
+          "y": 366.421875
+        },
+        {
+          "x": 242,
+          "y": 368.421875
+        },
+        {
+          "x": 242,
+          "y": 370.421875
+        },
+        {
+          "x": 242,
+          "y": 372.421875
+        },
+        {
+          "x": 242,
+          "y": 374.421875
+        },
+        {
+          "x": 242,
+          "y": 376.421875
+        }
+      ],
+      "rowStyle": {
+        "display": "grid",
+        "padding": "8px 12px"
+      },
+      "scrollerScrollTop": 1514,
+      "emptyPointProbe": {
+        "point": {
+          "x": 242,
+          "y": 352.421875
+        },
+        "hitIsRow": true,
+        "rowHover": true,
+        "svgHover": false,
+        "controls": [
+          {
+            "hover": false,
+            "focusVisible": false
+          },
+          {
+            "hover": false,
+            "focusVisible": false
+          },
+          {
+            "hover": false,
+            "focusVisible": false
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [],
+  "requests": []
+}

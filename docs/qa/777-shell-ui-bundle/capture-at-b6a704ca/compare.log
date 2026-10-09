@@ -1,0 +1,81 @@
+{
+  "source_head": "b6a704caab86c304590785832b665fa98a12ef1c",
+  "legacy_receipt_oid": "70925b79f007e7e632b063ba2434cb68d7769da404fca6b9e60295081c36a6e4",
+  "legacy_conditions_compared": 27,
+  "new_coarse_conditions": [
+    "w1-639/pointer=coarse/reduce",
+    "w1-639/pointer=coarse/motion/start",
+    "w1-639/pointer=coarse/motion/trough",
+    "w640-760/pointer=coarse/reduce",
+    "w640-760/pointer=coarse/motion/start",
+    "w640-760/pointer=coarse/motion/trough"
+  ],
+  "counts": {
+    "compared": 101520,
+    "identical_stable_fields": 71952,
+    "metadata_only_changed": 13776,
+    "wide_changed": 7596,
+    "narrow_changed": 21972,
+    "metric_changed": 15792
+  },
+  "changed_by_condition": {
+    "w1101-1279/pointer=fine/reduce": 376,
+    "w1-639/pointer=fine/reduce": 3662,
+    "w1-639/pointer=fine/motion/start": 3662,
+    "w1-639/pointer=fine/motion/trough": 3662,
+    "w640-760/pointer=fine/reduce": 3662,
+    "w640-760/pointer=fine/motion/start": 3662,
+    "w640-760/pointer=fine/motion/trough": 3662,
+    "w761-767/pointer=fine/reduce": 350,
+    "w761-767/pointer=fine/motion/start": 370,
+    "w761-767/pointer=fine/motion/trough": 330,
+    "w768-1023/pointer=fine/reduce": 364,
+    "w768-1023/pointer=fine/motion/start": 364,
+    "w768-1023/pointer=fine/motion/trough": 364,
+    "w1024-1100/pointer=fine/reduce": 364,
+    "w1024-1100/pointer=fine/motion/start": 364,
+    "w1024-1100/pointer=fine/motion/trough": 350,
+    "w1101-1279/pointer=fine/motion/start": 370,
+    "w1101-1279/pointer=fine/motion/trough": 404,
+    "w1280/pointer=fine/reduce": 384,
+    "w1280/pointer=fine/motion/start": 350,
+    "w1280/pointer=fine/motion/trough": 432,
+    "w1281-1535/pointer=fine/reduce": 384,
+    "w1281-1535/pointer=fine/motion/start": 330,
+    "w1281-1535/pointer=fine/motion/trough": 316,
+    "w1536+/pointer=fine/reduce": 330,
+    "w1536+/pointer=fine/motion/start": 350,
+    "w1536+/pointer=fine/motion/trough": 350
+  },
+  "comparison_fields": {
+    "painted_metrics": [
+      "meanLinear",
+      "controlMeanLinear",
+      "maskSize",
+      "coreSize",
+      "histogram",
+      "width",
+      "height",
+      "effectiveOpacity"
+    ],
+    "geometry": [
+      "box"
+    ],
+    "interactions": [
+      "selector",
+      "pseudos",
+      "target",
+      "stateAttributes",
+      "animationsRunning",
+      "mapPart"
+    ],
+    "settleCriteria": "all fields recursively except settleWaitMs and signature"
+  },
+  "excluded_observational_fields": [
+    "action prose",
+    "settleWaitMs",
+    "settleCriteria timings and DOM signature",
+    "capture filenames"
+  ],
+  "interpretation": "Every changed sample is named; causes require source/geometry review, not automatic acceptance."
+}

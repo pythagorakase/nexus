@@ -1,0 +1,284 @@
+{
+  "input_fingerprint": "4b8a9bbd8b880dc12ff8a534e7ef819eaa72fe376f0e28a8a295f9754d976fe7",
+  "legacy_oid": "70925b79f007e7e632b063ba2434cb68d7769da404fca6b9e60295081c36a6e4",
+  "math_sha256": "e0424ded5d9b8b34748470bffe685bd5cd198344ed89929579e460a3f0ffd401",
+  "cases": [
+    {
+      "receipt": "legacy",
+      "palette": "old",
+      "minimum": 7.4977986569476665,
+      "assignment": {
+        "--state-map-rest": "hsl(30 60% 60%)",
+        "--state-map-current": "hsl(45 55% 70%)",
+        "--state-map-selected": "hsl(43 74% 30%)",
+        "--state-map-hovered": "hsl(45 75% 50%)"
+      },
+      "minimizers": [
+        {
+          "condition": "w768-1023/motion/start",
+          "context": "map/canvas-sea/ring",
+          "states": [
+            "rest",
+            "current"
+          ],
+          "delta": 7.4977986569476665,
+          "phases": [
+            "w768-1023/motion/start",
+            "w768-1023/motion/start"
+          ],
+          "colors": [
+            [
+              0.6721892111281013,
+              0.31843707334882787,
+              0.10697675896516404
+            ],
+            [
+              0.37940102369107326,
+              0.28747796954900795,
+              0.10416381706498698
+            ]
+          ]
+        },
+        {
+          "condition": "w768-1023/motion/trough",
+          "context": "map/canvas-sea/ring",
+          "states": [
+            "rest",
+            "current"
+          ],
+          "delta": 7.4977986569476665,
+          "phases": [
+            "w768-1023/motion/start",
+            "w768-1023/motion/start"
+          ],
+          "colors": [
+            [
+              0.6721892111281013,
+              0.31843707334882787,
+              0.10697675896516404
+            ],
+            [
+              0.37940102369107326,
+              0.28747796954900795,
+              0.10416381706498698
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "receipt": "legacy",
+      "palette": "new_search_choice",
+      "minimum": 7.284937187310594,
+      "assignment": {
+        "--state-map-rest": "hsl(30 70% 50%)",
+        "--state-map-current": "hsl(45 55% 70%)",
+        "--state-map-selected": "hsl(43 74% 30%)",
+        "--state-map-hovered": "hsl(45 75% 50%)"
+      },
+      "minimizers": [
+        {
+          "condition": "w1-639/reduce",
+          "context": "map/canvas-sea/ring",
+          "states": [
+            "rest",
+            "hovered"
+          ],
+          "delta": 7.284937187310594,
+          "phases": [
+            "w1-639/reduce",
+            "w1-639/reduce"
+          ],
+          "colors": [
+            [
+              0.693036232488543,
+              0.21560164354673875,
+              0.019350764001548854
+            ],
+            [
+              0.3664944713883227,
+              0.21449639200941456,
+              0.010112401250329615
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "receipt": "v2",
+      "palette": "old",
+      "minimum": 7.4977986569476665,
+      "assignment": {
+        "--state-map-rest": "hsl(30 60% 60%)",
+        "--state-map-current": "hsl(45 55% 70%)",
+        "--state-map-selected": "hsl(43 74% 30%)",
+        "--state-map-hovered": "hsl(45 75% 50%)"
+      },
+      "minimizers": [
+        {
+          "condition": "w768-1023/pointer=fine/motion/start",
+          "context": "map/canvas-sea/ring",
+          "states": [
+            "rest",
+            "current"
+          ],
+          "delta": 7.4977986569476665,
+          "phases": [
+            "w768-1023/pointer=fine/motion/start",
+            "w768-1023/pointer=fine/motion/start"
+          ],
+          "colors": [
+            [
+              0.6721892111281013,
+              0.31843707334882787,
+              0.10697675896516404
+            ],
+            [
+              0.37940102369107326,
+              0.28747796954900795,
+              0.10416381706498698
+            ]
+          ]
+        },
+        {
+          "condition": "w768-1023/pointer=fine/motion/trough",
+          "context": "map/canvas-sea/ring",
+          "states": [
+            "rest",
+            "current"
+          ],
+          "delta": 7.4977986569476665,
+          "phases": [
+            "w768-1023/pointer=fine/motion/start",
+            "w768-1023/pointer=fine/motion/start"
+          ],
+          "colors": [
+            [
+              0.6721892111281013,
+              0.31843707334882787,
+              0.10697675896516404
+            ],
+            [
+              0.37940102369107326,
+              0.28747796954900795,
+              0.10416381706498698
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "receipt": "v2",
+      "palette": "new_search_choice",
+      "minimum": 7.709657692104731,
+      "assignment": {
+        "--state-map-rest": "hsl(30 70% 50%)",
+        "--state-map-current": "hsl(45 55% 70%)",
+        "--state-map-selected": "hsl(43 74% 30%)",
+        "--state-map-hovered": "hsl(45 75% 50%)"
+      },
+      "minimizers": [
+        {
+          "condition": "w1280/pointer=fine/motion/start",
+          "context": "map/sidebar/rest/ring",
+          "states": [
+            "selected",
+            "hovered"
+          ],
+          "delta": 7.709657692104731,
+          "phases": [
+            "w1280/pointer=fine/motion/start",
+            "w1280/pointer=fine/motion/trough"
+          ],
+          "colors": [
+            [
+              0.11182626421329304,
+              0.06301001765316713,
+              0.005605391624202774
+            ],
+            [
+              0.1738341858549695,
+              0.10657759406159759,
+              0.007415095067232702
+            ]
+          ]
+        },
+        {
+          "condition": "w1280/pointer=fine/motion/start",
+          "context": "map/sidebar/selected-current/ring",
+          "states": [
+            "selected",
+            "hovered"
+          ],
+          "delta": 7.709657692104731,
+          "phases": [
+            "w1280/pointer=fine/motion/start",
+            "w1280/pointer=fine/motion/trough"
+          ],
+          "colors": [
+            [
+              0.11182626421329304,
+              0.06301001765316713,
+              0.005605391624202774
+            ],
+            [
+              0.1738341858549695,
+              0.10657759406159759,
+              0.007415095067232702
+            ]
+          ]
+        },
+        {
+          "condition": "w1280/pointer=fine/motion/trough",
+          "context": "map/sidebar/rest/ring",
+          "states": [
+            "selected",
+            "hovered"
+          ],
+          "delta": 7.709657692104731,
+          "phases": [
+            "w1280/pointer=fine/motion/start",
+            "w1280/pointer=fine/motion/trough"
+          ],
+          "colors": [
+            [
+              0.11182626421329304,
+              0.06301001765316713,
+              0.005605391624202774
+            ],
+            [
+              0.1738341858549695,
+              0.10657759406159759,
+              0.007415095067232702
+            ]
+          ]
+        },
+        {
+          "condition": "w1280/pointer=fine/motion/trough",
+          "context": "map/sidebar/selected-current/ring",
+          "states": [
+            "selected",
+            "hovered"
+          ],
+          "delta": 7.709657692104731,
+          "phases": [
+            "w1280/pointer=fine/motion/start",
+            "w1280/pointer=fine/motion/trough"
+          ],
+          "colors": [
+            [
+              0.11182626421329304,
+              0.06301001765316713,
+              0.005605391624202774
+            ],
+            [
+              0.1738341858549695,
+              0.10657759406159759,
+              0.007415095067232702
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

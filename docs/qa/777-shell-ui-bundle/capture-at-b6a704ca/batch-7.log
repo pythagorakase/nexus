@@ -1,0 +1,54 @@
+
+> nexus-ui@1.0.0 resolve-state-surfaces
+> node scripts/resolve-state-surfaces.mjs
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in "node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+Resolving w1101-1279/pointer=fine/reduce/Veil…
+Completed w1101-1279/pointer=fine/reduce/Veil; renders=74; wall=38.855s
+Calibration Veil: {"memory":{"opaqueMaximum":0.00026414815709771805,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.006002891112468775,"translucentMaximum":0.012334576619474699,"skippedPairs":0},"key":{"opaqueMaximum":0.030457571214044847,"translucentMaximum":0.013459005795140349,"skippedPairs":0},"map":{"opaqueMaximum":0.07468917510215183,"translucentMaximum":0.4165404892186375,"skippedPairs":20}}; passed
+Resolving w1101-1279/pointer=fine/reduce/Gilded…
+Painted capture progress: renders=84; wall=48.260s
+Completed w1101-1279/pointer=fine/reduce/Gilded; renders=148; wall=73.690s
+Calibration Gilded: {"memory":{"opaqueMaximum":0.0002619007277823465,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.008785869899490675,"translucentMaximum":0.0079023496576129,"skippedPairs":0},"key":{"opaqueMaximum":0.04713082389726427,"translucentMaximum":0.02240636952243324,"skippedPairs":0},"map":{"opaqueMaximum":0.07196338979953294,"translucentMaximum":0.4249545915725878,"skippedPairs":19}}; passed
+Resolving w1101-1279/pointer=fine/reduce/Vector…
+Painted capture progress: renders=166; wall=93.260s
+Completed w1101-1279/pointer=fine/reduce/Vector; renders=222; wall=108.759s
+Calibration Vector: {"memory":{"opaqueMaximum":0.0003181767847390889,"translucentMaximum":0,"skippedPairs":0},"delete":{"opaqueMaximum":0.029118582412838427,"translucentMaximum":0.02152663851962112,"skippedPairs":0},"key":{"opaqueMaximum":0.011120218162869937,"translucentMaximum":0.003968024121739456,"skippedPairs":0},"map":{"opaqueMaximum":0.08088889823513667,"translucentMaximum":0.500656347153232,"skippedPairs":19}}; passed
+Resolving w1280/pointer=fine/motion/trough/Veil…
+Resolving w1280/pointer=fine/motion/start/Vector…
+Resolving w1280/pointer=fine/motion/start/Veil…
+Resolving w1280/pointer=fine/motion/trough/Vector…
+Resolving w1280/pointer=fine/reduce/Gilded…
+Resolving w1280/pointer=fine/motion/start/Gilded…
+Resolving w1280/pointer=fine/reduce/Veil…
+Resolving w1280/pointer=fine/reduce/Vector…
+Resolving w1281-1535/pointer=fine/reduce/Gilded…
+Resolving w1280/pointer=fine/motion/trough/Gilded…
+Resolving w1281-1535/pointer=fine/reduce/Vector…
+Resolving w1281-1535/pointer=fine/reduce/Veil…
+Painted capture progress: renders=1438; wall=138.260s
+Painted capture progress: renders=2955; wall=183.260s
+Painted capture progress: renders=5169; wall=228.260s
+Painted capture progress: renders=8388; wall=273.262s
+Painted capture progress: renders=11814; wall=318.262s
+Completed w1281-1535/pointer=fine/reduce/Vector; renders=12485; wall=327.067s
+Completed w1280/pointer=fine/reduce/Vector; renders=12555; wall=328.098s
+Completed w1280/pointer=fine/motion/trough/Vector; renders=13094; wall=336.290s
+Completed w1280/pointer=fine/motion/start/Vector; renders=13113; wall=336.586s
+Painted capture progress: renders=14586; wall=363.261s
+Completed w1281-1535/pointer=fine/reduce/Veil; renders=14832; wall=367.684s
+Completed w1280/pointer=fine/reduce/Veil; renders=14939; wall=369.807s
+Completed w1281-1535/pointer=fine/reduce/Gilded; renders=15064; wall=372.956s
+Completed w1280/pointer=fine/reduce/Gilded; renders=15082; wall=373.437s
+Completed w1280/pointer=fine/motion/start/Veil; renders=15185; wall=376.849s
+Completed w1280/pointer=fine/motion/trough/Gilded; renders=15191; wall=377.231s
+Completed w1280/pointer=fine/motion/trough/Veil; renders=15257; wall=382.036s
+Completed w1280/pointer=fine/motion/start/Gilded; renders=15262; wall=382.640s
+Resolved painted state surfaces: renders=15262; wall=382.644s; Chromium 153.0.8010.12; Playwright 1.63.0
+Emulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 4 media conditions; file://; network aborted; requests=0; errors=0
+Wrote /tmp/nexus-777-shell-ui-4ae8b8d2/capture-v2/shards/batch-7.json; module graph=2098 inputs; SHA-256 4b8a9bbd8b880dc12ff8a534e7ef819eaa72fe376f0e28a8a295f9754d976fe7
