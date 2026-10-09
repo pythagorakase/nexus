@@ -4504,6 +4504,21 @@ def run_doctor(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+def run_init(args: argparse.Namespace) -> int:
+    """Print ordered owner-host setup steps without applying them."""
+    from nexus.runtime.init_plan import build_init_plan, render_plan
+    from nexus.runtime.readiness import ReadinessContext
+
+    config = Path(args.config) if args.config else None
+    plan = build_init_plan(ReadinessContext(config_path=config))
+    if args.json:
+        print(json.dumps(plan.model_dump(mode="json"), indent=2, sort_keys=True))
+    else:
+        for line in render_plan(plan):
+            print(line)
+    return 0 if plan.ok else 1
+
+
 def _receipt_detail_text(details: Mapping[str, Any]) -> str:
     """One line of ``key=value`` pairs; structured values as compact JSON."""
     return " ".join(
@@ -5288,6 +5303,20 @@ Examples:
         help="Machine role whose checks run (default: owner-host)",
     )
     _add_config_arg(doctor_parser)
+
+    init_parser = subparsers.add_parser(
+        "init", help="Plan this machine's setup as an owner host (read-only)"
+    )
+    init_parser.add_argument(
+        "--plan",
+        action="store_true",
+        required=True,
+        help=(
+            "Print the ordered steps the failed owner-host checks name; "
+            "applies no setup changes"
+        ),
+    )
+    _add_config_arg(init_parser)
 
     usage_parser = subparsers.add_parser(
         "usage",
@@ -6143,6 +6172,8 @@ def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
         result = run_home(args)
     elif args.command == "doctor":
         return run_doctor(args)
+    elif args.command == "init":
+        return run_init(args)
     elif args.command == "receipts":
         return run_receipts(args)
     elif args.command == "usage":
@@ -6239,7 +6270,7 @@ def main() -> int:
     if usage_error is not None:
         return _fail(args, "usage_error", usage_error)
 
-    # A self-diagnostic command (doctor, receipts) reports on the
+    # A self-diagnostic command (doctor, init, receipts) reports on the
     # configuration and this machine itself, so neither check below may
     # pre-empt its report.
     if command not in SELF_DIAGNOSTIC_COMMANDS:

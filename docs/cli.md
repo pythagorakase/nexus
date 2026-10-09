@@ -74,7 +74,7 @@ these tables by `scripts/render_cli_reference.py`;
 
 Expected failures are reported through these codes. A missing or invalid
 active `nexus.toml`, or a `NEXUS_API_URL` without a host, is a `config_error`
-checked for every command but `doctor` and `receipts` before it runs. A
+checked for every command but `doctor`, `init` and `receipts` before it runs. A
 `NEXUS_API_URL` that is not `http://` or `https://`, and a runtime credential
 that is missing or refused, are a `config_error` when the first request is
 sent. Every HTTP
@@ -151,10 +151,11 @@ the remote profile itself: `up` and `status` probe the hosted runtime's
 `/runtime/status` over HTTP. The runtime commands that accept `--config`
 (`up`, `down`, `restart`, `status`, `logs`, `models lock`, `models verify`,
 `models plan`, `models fetch`)
-check the profile of that file. `doctor` is exempt from the refusal and from
-the configuration check below: it diagnoses this machine's configuration and
-role itself, so it runs under any profile, and an invalid `nexus.toml` is its
-`config.valid` finding rather than a `config_error`. `receipts` is exempt in
+check the profile of that file. `doctor` and `init` are exempt from the refusal
+and from the configuration check below: they diagnose this machine's
+configuration and role themselves, so they run under any profile, and an
+invalid `nexus.toml` is their `config.valid` finding rather than a `config_error`.
+`receipts` is exempt in
 the same way: it reads this machine's receipts when no configuration loads.
 
 Only the host name decides: a LAN address, a Tailscale name, or `0.0.0.0`
