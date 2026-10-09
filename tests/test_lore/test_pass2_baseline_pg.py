@@ -241,7 +241,10 @@ def _seed_parent(conn: Any, label: str, *, season: int = 1) -> int:
             (chunk_id, season, chunk_id, f"pass2-{chunk_id}"),
         )
         cur.execute(
-            "INSERT INTO places (name, type) VALUES ('Pass Two Hall', 'fixed_location') ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id"
+            "INSERT INTO places (name, type, coordinates) VALUES "
+            "('Pass Two Hall', 'fixed_location', "
+            "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography) "
+            "ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id"
         )
         place_id = cur.fetchone()[0]
         cur.execute(

@@ -46,7 +46,7 @@ from nexus.agents.logon.apex_schema import NewEntityDeclaration
 from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
 )
-from nexus.agents.orrery.geo import resolve_zone_for_point, story_active_zone
+from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.agents.orrery.retrograde_project_dependencies import (
     ProjectStartRelationship,
     load_project_start_relationships,
@@ -440,27 +440,22 @@ def _insert_declared_stub(
             (declaration.name, declaration.summary),
         )
     elif declaration.kind == "place":
-        _sync_id_sequence(cur, "places")
         coordinates = declaration.coordinates
         if coordinates is None:
-            zone_id = story_active_zone(cur)
-        else:
-            zone_id = resolve_zone_for_point(
-                cur,
-                longitude=coordinates.lon,
-                latitude=coordinates.lat,
+            raise ValueError(
+                f"Place declaration {declaration.name!r} has no point; "
+                "a new place needs coordinates"
             )
+        _sync_id_sequence(cur, "places")
+        zone_id = resolve_zone_for_point(
+            cur, longitude=coordinates.lon, latitude=coordinates.lat
+        )
         cur.execute(
             """
             INSERT INTO places (name, type, summary, zone, coordinates)
             VALUES (
                 %s, 'fixed_location', %s, %s,
-                CASE
-                    WHEN %s IS NULL THEN NULL
-                    ELSE ST_SetSRID(
-                        ST_MakePoint(%s, %s, 0, 0), 4326
-                    )::geography
-                END
+                ST_SetSRID(ST_MakePoint(%s, %s, 0, 0), 4326)::geography
             )
             RETURNING id, entity_id
             """,
@@ -468,9 +463,8 @@ def _insert_declared_stub(
                 declaration.name,
                 declaration.summary,
                 zone_id,
-                coordinates.lon if coordinates else None,
-                coordinates.lon if coordinates else None,
-                coordinates.lat if coordinates else None,
+                coordinates.lon,
+                coordinates.lat,
             ),
         )
     else:
@@ -800,12 +794,7 @@ def _mature_one(
     seed_response = seed_result["seed_candidate_response"]
 
     selected_seed_ids = seed_response.get("selected_seed_ids") or []
-    geo_authoring = packet.get("geo_authoring")
-    geo_authoring_required = bool(
-        isinstance(geo_authoring, Mapping) and geo_authoring.get("required")
-    )
-
-    if not selected_seed_ids and not geo_authoring_required:
+    if not selected_seed_ids:
         manifest = _base_manifest(row, cfg)
         manifest.update(
             {
@@ -846,46 +835,6 @@ def _mature_one(
         prefix=f"{MATURATION_EVENT_REF_PREFIX}_{row['job_id']}",
     )
 
-    if not selected_seed_ids:
-        with conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                _require_maturation_lease(cur, row)
-                _apply_maturation_coordinates(
-                    cur,
-                    row=row,
-                    expansion_payload=expansion_payload,
-                )
-                total_elapsed = time.monotonic() - started
-                manifest = _base_manifest(row, cfg)
-                manifest.update(
-                    {
-                        "persisted": False,
-                        "coordinates_persisted": True,
-                        "skipped": "no_seeds_selected",
-                        "seed_model": seed_result["model"],
-                        "expansion_model": expansion_result["model"],
-                        "weird": _manifest_weird_block(packet["weird"]),
-                        "timings_seconds": {
-                            "seed": round(seed_elapsed, 2),
-                            "expansion": round(expansion_elapsed, 2),
-                            "total": round(total_elapsed, 2),
-                        },
-                        "budget_exceeded": total_elapsed > cfg.budget_seconds,
-                    }
-                )
-                _mark_maturation_succeeded(
-                    cur,
-                    row=row,
-                    manifest=manifest,
-                )
-        logger.info(
-            "Maturation job %s authored required coordinates for %r with "
-            "no selected history seeds",
-            row["job_id"],
-            row["entity_name"],
-        )
-        return manifest
-
     persistence_started = time.monotonic()
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -900,11 +849,6 @@ def _mature_one(
                 dbname=dbname,
                 summaries_enabled=retrieval.summaries_enabled,
                 settings=settings,
-            )
-            _apply_maturation_coordinates(
-                cur,
-                row=row,
-                expansion_payload=expansion_payload,
             )
             persistence_elapsed = time.monotonic() - persistence_started
             total_elapsed = time.monotonic() - started
@@ -1068,7 +1012,6 @@ def build_runtime_maturation_packet(
             "declared_pair_tag_hints": declaration.get("pair_tag_hints") or [],
         },
     }
-    geo_context = context.get("geo_authoring")
     scaffolds = {
         "core_entities": [target_card, *context.get("scene_entities", [])],
         "named_seed_npcs": [],
@@ -1169,7 +1112,6 @@ def build_runtime_maturation_packet(
         "dbname": dbname,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "maturation_target": target_card,
-        "geo_authoring": geo_context,
         "project_start_relationships": list(
             context.get("project_start_relationships", [])
         ),
@@ -1462,15 +1404,8 @@ def _load_job_context(
             """
             SELECT p.summary AS entity_summary,
                    p.name AS place_name,
-                   p.coordinates,
-                   z.name AS zone_name,
-                   z.summary AS zone_summary
+                   p.coordinates
             FROM places p
-            -- LEFT JOIN: pre-hygiene stubs may lack a zone; a zone-less
-            -- place is a real place awaiting geo authoring, not a missing
-            -- entity (the required-geo path zones it after coordinates
-            -- are authored).
-            LEFT JOIN zones z ON z.id = p.zone
             WHERE p.id = %s
             """,
             (row["entity_subtype_id"],),
@@ -1495,15 +1430,15 @@ def _load_job_context(
     )
     if not isinstance(canonical_name, str) or not canonical_name.strip():
         raise ValueError(f"Maturation job {row['job_id']} target has no canonical name")
-    geo_authoring = None
-    if row["entity_kind"] == "place":
-        geo_authoring = {
-            "required": _row_value(entity_row, "coordinates", 2) is None,
-            "place_name": _row_value(entity_row, "place_name", 1),
-            "place_summary": entity_summary,
-            "zone_name": _row_value(entity_row, "zone_name", 3),
-            "zone_summary": _row_value(entity_row, "zone_summary", 4),
-        }
+    if (
+        row["entity_kind"] == "place"
+        and _row_value(entity_row, "coordinates", 2) is None
+    ):
+        raise ValueError(
+            f"Maturation job {row['job_id']} targets place "
+            f"{row['entity_subtype_id']} {canonical_name!r}, which has no point; "
+            "a place without a point is not matured"
+        )
 
     cur.execute(
         "SELECT raw_text FROM narrative_chunks WHERE id = %s",
@@ -1551,7 +1486,6 @@ def _load_job_context(
         "entity_summary": entity_summary,
         "chunk_excerpt": excerpt,
         "scene_entities": scene_entities,
-        "geo_authoring": geo_authoring,
         "project_start_relationships": _load_project_start_relationships(
             cur,
             actor_entity_id=int(row["entity_id"]),
@@ -1569,40 +1503,6 @@ def _load_project_start_relationships(
     return load_project_start_relationships(
         cur,
         object_entity_id=actor_entity_id,
-    )
-
-
-def _apply_maturation_coordinates(
-    cur: Any,
-    *,
-    row: Mapping[str, Any],
-    expansion_payload: Mapping[str, Any],
-) -> None:
-    """Persist and re-zone authored coordinates for a maturing place stub."""
-
-    if row["entity_kind"] != "place":
-        return
-    raw = expansion_payload.get("coordinates")
-    if not isinstance(raw, Mapping):
-        return
-    longitude = float(raw["lon"])
-    latitude = float(raw["lat"])
-    zone_id = resolve_zone_for_point(
-        cur,
-        longitude=longitude,
-        latitude=latitude,
-    )
-    cur.execute(
-        """
-        UPDATE places
-        SET coordinates = ST_SetSRID(
-                ST_MakePoint(%s, %s, 0, 0), 4326
-            )::geography,
-            zone = %s
-        WHERE id = %s
-          AND coordinates IS NULL
-        """,
-        (longitude, latitude, zone_id, row["entity_subtype_id"]),
     )
 
 

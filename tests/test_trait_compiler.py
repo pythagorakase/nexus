@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 import pytest
 
+from nexus.agents.logon.apex_schema import Coordinates
 from nexus.api.new_story_schemas import (
     CharacterSheet,
     CharacterTrait,
@@ -274,14 +275,14 @@ class TraitCompilerCursor:
             self.rowcount = 1
             return
 
-        if normalized.startswith("SELECT P.ZONE FROM CHARACTERS"):
-            assert params == (min(self.characters),)
+        if normalized.startswith("WITH POINT AS") and "FROM ZONES Z" in normalized:
+            assert params == (-73.9857, 40.7484)
             self._next_row = (self.story_zone,)
             self.rowcount = 1
             return
 
         if "TRAIT_COMPILER:INSERT_PLACE_STUB" in normalized:
-            name, _summary, _status, extra_data, zone = params
+            name, _summary, _status, extra_data, zone, longitude, latitude = params
             row_id = max(self.places, default=0) + 1
             entity_id = 2000 + row_id
             self.places[row_id] = {
@@ -289,6 +290,7 @@ class TraitCompilerCursor:
                 "name": name,
                 "extra_data": json.loads(extra_data),
                 "zone": zone,
+                "coordinates": {"lon": longitude, "lat": latitude},
             }
             self._next_row = (row_id, entity_id)
             self.rowcount = 1
@@ -1215,7 +1217,11 @@ def test_domain_claims_existing_place_by_name() -> None:
 
 def test_domain_creates_place_stub_for_unknown_name() -> None:
     cur = TraitCompilerCursor()
-    inputs = TraitCompileInputs(domain=DomainTraitInput(name="Hollow Spire"))
+    inputs = TraitCompileInputs(
+        domain=DomainTraitInput(
+            name="Hollow Spire", coordinates=Coordinates(lon=-73.9857, lat=40.7484)
+        )
+    )
 
     result = apply_character_trait_compilation(
         cur,
@@ -1233,12 +1239,18 @@ def test_domain_creates_place_stub_for_unknown_name() -> None:
     assert stub_row["extra_data"]["source"] == "trait_compiler"
     assert stub_row["extra_data"]["stub_kind"] == "trait_compiler_target_ref"
     assert stub_row["extra_data"]["sources"][0]["trait"] == "domain"
+    assert stub_row["coordinates"] == {"lon": -73.9857, "lat": 40.7484}
+    assert stub_row["zone"] == cur.story_zone
     assert cur.entity_pair_tags[0]["object_entity_id"] == created.entity_id
 
 
 def test_domain_dry_run_reports_pending_stub_without_writes() -> None:
     cur = TraitCompilerCursor()
-    inputs = TraitCompileInputs(domain=DomainTraitInput(name="Hollow Spire"))
+    inputs = TraitCompileInputs(
+        domain=DomainTraitInput(
+            name="Hollow Spire", coordinates=Coordinates(lon=-73.9857, lat=40.7484)
+        )
+    )
 
     result = compile_character_traits(
         cur,

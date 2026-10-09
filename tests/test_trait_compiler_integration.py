@@ -5,7 +5,7 @@ clone inside a transaction that is always rolled back; no owner slot is read
 or written. The clone is at the migration head (so migration 061's
 ``sponsors`` pair-tag is registered) and carries a canonical player standing
 at a zoned place, which is the need-clock anchor every character insert
-needs and the zone ``story_active_zone`` resolves for domain stubs.
+needs. Domain stubs resolve their zone from the authored point.
 
 Run with: ``NEXUS_RUN_POSTGRES=1 poetry run pytest
 tests/test_trait_compiler_integration.py``
@@ -20,6 +20,7 @@ from typing import Any, Optional
 
 import pytest
 
+from nexus.agents.logon.apex_schema import Coordinates
 from nexus.api.new_story_schemas import (
     CharacterSheet,
     CharacterTrait,
@@ -751,6 +752,7 @@ def test_full_trait_selection_compiles_on_seeded_clone(trait_compiler_db: str) -
                     place_id=None,
                     place_entity_id=None,
                     name=DOMAIN_PLACE_NAME,
+                    coordinates=Coordinates(lat=40.8, lon=-74.0),
                 ),
                 patron=PatronTraitInput(
                     character_id=None,
@@ -866,11 +868,28 @@ def test_full_trait_selection_compiles_on_seeded_clone(trait_compiler_db: str) -
             )
             assert cur.fetchone() == ("trait_compiler", "trait_compiler_target_ref")
             cur.execute(
-                "SELECT type::text, extra_data->>'stub_kind' FROM places "
-                "WHERE name = %s",
+                """
+                SELECT p.type::text, p.extra_data->>'stub_kind',
+                       ST_X(p.coordinates::geometry),
+                       ST_Y(p.coordinates::geometry),
+                       ST_Z(p.coordinates::geometry),
+                       ST_M(p.coordinates::geometry),
+                       ST_SRID(p.coordinates::geometry), z.name
+                FROM places p JOIN zones z ON z.id = p.zone
+                WHERE p.name = %s
+                """,
                 (DOMAIN_PLACE_NAME,),
             )
-            assert cur.fetchone() == ("other", "trait_compiler_target_ref")
+            assert cur.fetchone() == (
+                "other",
+                "trait_compiler_target_ref",
+                -74.0,
+                40.8,
+                0,
+                0,
+                4326,
+                "Trait Compiler Zone",
+            )
             cur.execute(
                 "SELECT extra_data->>'stub_kind' FROM factions WHERE name = %s",
                 (OBLIGATION_FACTION_NAME,),
@@ -879,6 +898,55 @@ def test_full_trait_selection_compiles_on_seeded_clone(trait_compiler_db: str) -
 
             # Functional trait edges must not add affective-layer drift.
             assert reconcile_trait_relationship_pair_tags(cur) == drift_before
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_domain_stub_without_point_is_refused_on_seeded_clone(
+    trait_compiler_db: str, dry_run: bool
+) -> None:
+    """Both the audit and apply path refuse an unlocated new Domain target."""
+
+    conn = connect(trait_compiler_db)
+    try:
+        with conn.cursor() as cur:
+            character_id, character_entity_id = _insert_protagonist(cur)
+            sheet = _character_sheet(
+                "domain",
+                "resources",
+                "fame",
+                inputs=TraitCompileInputs(
+                    domain=DomainTraitInput(name=DOMAIN_PLACE_NAME),
+                    resources=SingleEntityTraitInput(level="wealthy"),
+                    fame=SingleEntityTraitInput(level="known"),
+                ),
+            )
+            with pytest.raises(
+                ValueError,
+                match=f"domain place '{DOMAIN_PLACE_NAME}'.*carries no point",
+            ):
+                if dry_run:
+                    compile_character_traits(
+                        cur,
+                        character=sheet,
+                        character_id=character_id,
+                        character_entity_id=character_entity_id,
+                        dry_run=True,
+                    )
+                else:
+                    apply_character_trait_compilation(
+                        cur,
+                        character=sheet,
+                        character_id=character_id,
+                        character_entity_id=character_entity_id,
+                    )
+            cur.execute(
+                "SELECT count(*) FROM places WHERE name = %s", (DOMAIN_PLACE_NAME,)
+            )
+            assert cur.fetchone()[0] == 0
     finally:
         conn.rollback()
         conn.close()

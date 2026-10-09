@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#822 S1 and #806 S1: story_identity and receipts join production_reachable through slot_state and runtime.home respectively",
+  "reason": "840-S2 item 7: the maturation geo path is deleted; nexus/agents/orrery/geo_authoring.py keeps render_geo_authoring_prompt and author_place_coordinates only for the operator backfill script scripts/gis_backfill.py, so it leaves production_reachable",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -121,7 +121,6 @@
     "nexus/agents/orrery/experiences.py",
     "nexus/agents/orrery/explain.py",
     "nexus/agents/orrery/geo.py",
-    "nexus/agents/orrery/geo_authoring.py",
     "nexus/agents/orrery/history.py",
     "nexus/agents/orrery/job_queues.py",
     "nexus/agents/orrery/knowledge_surfacing.py",

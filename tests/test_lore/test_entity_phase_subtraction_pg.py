@@ -49,8 +49,10 @@ def entity_corpus() -> Iterator[dict[str, Any]]:
             cur.execute("INSERT INTO entities (kind) VALUES ('place') RETURNING id")
             place_entity_id = int(cur.fetchone()[0])
             cur.execute(
-                "INSERT INTO places (name, type, entity_id) "
-                "VALUES ('Glass Atrium', 'fixed_location', %s) RETURNING id",
+                "INSERT INTO places (name, type, entity_id, coordinates) "
+                "VALUES ('Glass Atrium', 'fixed_location', %s, "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                "4326)::geography) RETURNING id",
                 (place_entity_id,),
             )
             place_id = int(cur.fetchone()[0])

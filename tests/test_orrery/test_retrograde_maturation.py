@@ -10,6 +10,7 @@ set.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Any, Iterator, Mapping
 
 import pytest
@@ -19,12 +20,14 @@ from pydantic import ValidationError
 import nexus.agents.orrery.retrograde_maturation as retrograde_maturation
 from nexus.presence.identity import CharacterIdentityAmbiguity
 from nexus.agents.logon.apex_schema import (
+    Coordinates,
     NewEntityDeclaration,
     StorytellerResponseExtended,
 )
 from nexus.agents.orrery.retrograde_maturation import (
     MaturationEnqueueResult,
     RetrogradeMaturationVocabularyError,
+    _load_job_context,
     _mature_one,
     _load_story_weird_inputs,
     _resolve_maturation_weird,
@@ -58,6 +61,7 @@ def test_new_entity_declaration_minimal() -> None:
         kind="place",
         name="The Drowned Atrium",
         summary="A flooded arcology lobby repurposed as a black market.",
+        coordinates=Coordinates(lat=40.8, lon=-74.0),
     )
     assert declaration.tag_hints == []
     assert declaration.pair_tag_hints == []
@@ -824,150 +828,6 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
     )
 
 
-def test_required_geo_runs_expansion_when_seed_selection_is_empty(
-    monkeypatch: Any,
-) -> None:
-    """A place point is authored even when R5 selects no history seeds."""
-
-    class Cursor:
-        def __init__(self) -> None:
-            self.executed: list[tuple[str, Any]] = []
-
-        def __enter__(self) -> "Cursor":
-            return self
-
-        def __exit__(self, *_args: Any) -> bool:
-            return False
-
-        def execute(self, sql: str, params: Any = None) -> None:
-            self.executed.append((sql, params))
-
-        def fetchone(self):
-            return {"id": 7}
-
-    class Connection:
-        def __init__(self) -> None:
-            self.cursor_obj = Cursor()
-
-        def __enter__(self) -> "Connection":
-            return self
-
-        def __exit__(self, *_args: Any) -> bool:
-            return False
-
-        info = type("Info", (), {"dbname": FAKE_SLOT_DBNAME})()
-
-        def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
-            return self.cursor_obj
-
-    settings = retrograde_maturation.load_settings_as_dict()
-    typed_settings = Settings.model_validate(
-        {
-            key: value
-            for key, value in settings.items()
-            if key not in {"Agent Settings", "API Settings"}
-        }
-    )
-    expansion_calls: list[dict[str, Any]] = []
-    applied_coordinates: list[Mapping[str, Any]] = []
-
-    route_slot_to_disposable(monkeypatch.setattr, slot=2, dbname=FAKE_SLOT_DBNAME)
-    monkeypatch.setattr(retrograde_maturation, "_entity_event_count", lambda *_: 0)
-    monkeypatch.setattr(
-        retrograde_maturation,
-        "_load_job_context",
-        lambda *_args, **_kwargs: {"entity_summary": "A remote station."},
-    )
-    monkeypatch.setattr(
-        retrograde_maturation,
-        "_load_story_weird_inputs",
-        lambda *_: ({"genre": "noir"}, None),
-    )
-    monkeypatch.setattr(
-        "nexus.agents.orrery.retrograde_vocabulary.enumerate_seed_eligible_vocabulary",
-        lambda _dbname: object(),
-    )
-    cfg = OrreryRetrogradeMaturationSettings()
-    stub_weird = _resolve_maturation_weird(
-        settings=typed_settings,
-        setting={"genre": "noir"},
-        genesis_weird=None,
-        cfg=cfg,
-    )
-    monkeypatch.setattr(
-        retrograde_maturation,
-        "build_runtime_maturation_packet",
-        lambda **_kwargs: {"geo_authoring": {"required": True}, "weird": stub_weird},
-    )
-    monkeypatch.setattr(
-        "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage",
-        lambda **_kwargs: {
-            "model": "seed-model",
-            "seed_candidate_response": {"selected_seed_ids": []},
-        },
-    )
-
-    def generate_expansion(**kwargs: Any) -> dict[str, Any]:
-        expansion_calls.append(kwargs)
-        return {
-            "model": "expansion-model",
-            "retrograde_expansion_plan": {
-                "coordinates": {"lat": 50.0, "lon": 50.0},
-                "event_plan": [],
-                "thread_plan": [],
-                "entity_tag_plan": [],
-                "pair_tag_plan": [],
-                "relationship_plan": [],
-                "death_plan": [],
-            },
-        }
-
-    monkeypatch.setattr(
-        "nexus.agents.orrery.retrograde_expansion.generate_expansion_with_skald",
-        generate_expansion,
-    )
-    monkeypatch.setattr(
-        retrograde_maturation,
-        "_apply_maturation_coordinates",
-        lambda _cur, **kwargs: applied_coordinates.append(kwargs["expansion_payload"]),
-    )
-
-    manifest = _mature_one(
-        Connection(),
-        row={
-            "job_id": 8,
-            "resolved_model": typed_settings.orrery.retrograde.maturation.model_ref,
-            "resolved_source": "seat_default",
-            "locked_by": "fixture",
-            "lease_nonce": "00000000-0000-0000-0000-000000000001",
-            "entity_id": 78,
-            "entity_kind": "place",
-            "entity_subtype_id": 18,
-            "entity_name": "Remote Observatory",
-            "requesting_chunk_id": 102,
-            "declaration": {"summary": "A remote station."},
-            "result_manifest": {},
-            "slot": "2",
-        },
-        cfg=cfg,
-        settings_dict=settings,
-        settings=typed_settings,
-        slot=2,
-    )
-
-    assert len(expansion_calls) == 1
-    assert applied_coordinates[0]["coordinates"] == {"lat": 50.0, "lon": 50.0}
-    assert manifest["coordinates_persisted"] is True
-    assert manifest["skipped"] == "no_seeds_selected"
-    assert manifest["weird"] == _expected_manifest_weird(
-        typed_settings,
-        cfg,
-        genre="noir",
-        level="medium",
-        level_source="no_genesis_record",
-    )
-
-
 def test_seedless_skip_manifest_records_weird(monkeypatch: Any) -> None:
     """The no-seeds skip manifest records the story's genesis level."""
 
@@ -1137,6 +997,61 @@ def maturation_conn(maturation_story: str) -> Iterator[Any]:
     finally:
         conn.rollback()
         conn.close()
+
+
+@pytest.mark.requires_postgres
+def test_pointless_place_target_is_not_matured(maturation_conn: Any) -> None:
+    """A legacy job cannot mature a place whose pre-149 row lacks a point."""
+
+    name = "Legacy Pointless Atrium (Rollback)"
+    declaration = {
+        "kind": "place",
+        "name": name,
+        "summary": "A pre-149 place whose missing point remains unauthored.",
+    }
+    chunk_id = _latest_chunk_id(maturation_conn)
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
+        # This test's subject is pre-149 data. Disable only the insert guard
+        # for this one legacy row on the disposable clone, then restore it
+        # before exercising the real job loader. The transaction rolls back.
+        cur.execute("ALTER TABLE places DISABLE TRIGGER trg_places_require_point")
+        cur.execute(
+            """
+            INSERT INTO places (name, type, summary)
+            VALUES (%s, 'other', %s) RETURNING id, entity_id
+            """,
+            (name, declaration["summary"]),
+        )
+        place = cur.fetchone()
+        cur.execute("ALTER TABLE places ENABLE TRIGGER trg_places_require_point")
+        cur.execute(
+            """
+            INSERT INTO orrery_maturation_jobs (
+                entity_id, entity_kind, entity_subtype_id, entity_name,
+                slot, requesting_chunk_id, declaration
+            ) VALUES (%s, 'place', %s, %s, '2', %s, %s::jsonb)
+            RETURNING id AS job_id, entity_id, entity_kind, entity_subtype_id,
+                      entity_name, requesting_chunk_id
+            """,
+            (place["entity_id"], place["id"], name, chunk_id, json.dumps(declaration)),
+        )
+        job = cur.fetchone()
+        with pytest.raises(ValueError, match="which has no point") as caught:
+            _load_job_context(cur, row=job, cfg=OrreryRetrogradeMaturationSettings())
+        assert str(caught.value) == (
+            f"Maturation job {job['job_id']} targets place {place['id']} {name!r}, "
+            "which has no point; a place without a point is not matured"
+        )
+        cur.execute(
+            """
+            SELECT j.state::text AS state, p.coordinates
+            FROM orrery_maturation_jobs j
+            JOIN places p ON p.id = j.entity_subtype_id
+            WHERE j.id = %s
+            """,
+            (job["job_id"],),
+        )
+        assert dict(cur.fetchone()) == {"state": "queued", "coordinates": None}
 
 
 @pytest.mark.requires_postgres

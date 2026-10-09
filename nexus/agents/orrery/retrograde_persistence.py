@@ -19,7 +19,7 @@ from nexus.agents.orrery.epistemics import (
     mechanical_claim_summary,
     mint_claim_for_event,
 )
-from nexus.agents.orrery.geo import story_active_zone
+from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.agents.orrery.retrograde_expansion import (
     RetrogradeExpansionDeathPlan,
@@ -368,6 +368,7 @@ def _build_plan(
             protagonist_identity=protagonist_identity,
         )
     )
+    execute_blockers.extend(_place_stub_point_blockers(entity_stub_rows))
     creatable_refs = frozenset(
         (row["entity_kind"], normalize_entity_ref(row["entity_ref"]))
         for row in entity_stub_rows
@@ -2937,6 +2938,10 @@ def _plan_entity_stubs(
             for record in values
         ],
     )
+    points = {
+        normalize_entity_ref(point.place_ref): point.coordinates
+        for point in expansion.new_place_points
+    }
     rows = []
     for key, ref in sorted(refs.items()):
         matches = list(entity_index.get(key, []))
@@ -2962,10 +2967,33 @@ def _plan_entity_stubs(
             "status": status,
             "sources": ref["sources"],
         }
+        if status == "would_insert" and ref["entity_kind"] == "place":
+            point = points.get(normalize_entity_ref(ref["entity_ref"]))
+            if point is not None:
+                row["coordinates"] = point.model_dump(mode="json")
         if matches:
             row["candidates"] = [_entity_record_json(match) for match in matches]
         rows.append(row)
     return rows
+
+
+def _place_stub_point_blockers(
+    entity_stub_rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, str]]:
+    """Refuse a new place stub whose producer supplied no point."""
+    return [
+        {
+            "id": "place_stub_without_point",
+            "reason": (
+                f"Retrograde place stub {row['entity_ref']!r} has no point in "
+                "new_place_points; a new place needs coordinates"
+            ),
+        }
+        for row in entity_stub_rows
+        if row["status"] == "would_insert"
+        and row["entity_kind"] == "place"
+        and not row.get("coordinates")
+    ]
 
 
 def _protagonist_duplicate_stub_blockers(
@@ -3171,7 +3199,17 @@ def _insert_missing_entity_stubs(
             ):
                 continue
         elif entity_kind == "place":
-            _insert_place_stub(cur, entity_ref=entity_ref, sources=row["sources"])
+            if not row.get("coordinates"):
+                raise ValueError(
+                    f"Retrograde place stub {entity_ref!r} has no point in "
+                    "new_place_points; a new place needs coordinates"
+                )
+            _insert_place_stub(
+                cur,
+                entity_ref=entity_ref,
+                sources=row["sources"],
+                coordinates=row["coordinates"],
+            )
         elif entity_kind == "faction":
             _insert_faction_stub(cur, entity_ref=entity_ref, sources=row["sources"])
         else:
@@ -3211,20 +3249,26 @@ def _insert_place_stub(
     *,
     entity_ref: str,
     sources: Any,
+    coordinates: Mapping[str, Any],
 ) -> None:
-    zone_id = story_active_zone(cur)
+    longitude = float(coordinates["lon"])
+    latitude = float(coordinates["lat"])
+    zone_id = resolve_zone_for_point(cur, longitude=longitude, latitude=latitude)
     cur.execute(
         """
         /* orrery:retrograde:insert_place_stub */
         INSERT INTO places (
-            name, type, summary, current_status, extra_data, zone
+            name, type, summary, current_status, extra_data, zone, coordinates
         )
-        VALUES (%s, 'other'::place_type, NULL, NULL, %s::jsonb, %s)
+        VALUES (%s, 'other'::place_type, NULL, NULL, %s::jsonb, %s,
+                ST_SetSRID(ST_MakePoint(%s, %s, 0, 0), 4326)::geography)
         """,
         (
             entity_ref,
             json.dumps(_stub_extra_data(sources)),
             zone_id,
+            longitude,
+            latitude,
         ),
     )
 

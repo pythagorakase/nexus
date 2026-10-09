@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexus.agents.logon.apex_schema import Coordinates
 from nexus.agents.orrery.substrate import ContactKind
 
 
@@ -148,6 +149,13 @@ class DomainTraitInput(BaseModel):
         None,
         description="Place name for exact lookup or stub creation.",
         min_length=1,
+    )
+    coordinates: Optional[Coordinates] = Field(
+        None,
+        description=(
+            "Real-Earth point for the place; required when the name matches "
+            "no existing place."
+        ),
     )
 
 

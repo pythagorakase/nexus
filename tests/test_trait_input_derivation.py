@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import List
 
 import pytest
+from pydantic import ValidationError
 
 from nexus.api.new_story_schemas import (
     CharacterSheet,
@@ -124,6 +125,30 @@ def test_selected_trait_schema_coerces_to_full_contract() -> None:
     assert coerced.dependents is not None
     assert coerced.resources is not None
     assert coerced.status is None
+
+
+def test_derived_domain_requires_point() -> None:
+    """The derivation grammar requires and preserves an authored Domain point."""
+
+    schema_model = selected_trait_compile_inputs_model(["domain"])
+    with pytest.raises(ValidationError) as caught:
+        schema_model.model_validate({"domain": {"name": "The Stacks"}})
+    assert any(
+        error["loc"] == ("domain", "coordinates") and error["type"] == "missing"
+        for error in caught.value.errors()
+    )
+
+    point = {"lat": 50.0, "lon": 50.0}
+    selected_output = schema_model.model_validate(
+        {"domain": {"name": "The Stacks", "coordinates": point}}
+    )
+    coerced = coerce_selected_trait_inputs(selected_output)
+
+    assert coerced.domain is not None
+    assert coerced.domain.name == "The Stacks"
+    assert coerced.domain.coordinates is not None
+    assert coerced.domain.coordinates.model_dump(mode="json") == point
+    assert derived_input_issues(coerced, selected=["domain"]) == []
 
 
 def test_valid_inputs_produce_no_issues() -> None:

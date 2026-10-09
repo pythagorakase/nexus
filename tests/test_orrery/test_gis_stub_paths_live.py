@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Any, Iterator
 
 import pytest
+from pydantic import ValidationError
 
-from nexus.agents.logon.apex_schema import NewEntityDeclaration
+from nexus.agents.logon.apex_schema import Coordinates, NewEntityDeclaration
 from nexus.agents.orrery.retrograde_maturation import (
-    _apply_maturation_coordinates,
     _insert_declared_stub,
 )
 from nexus.agents.orrery.retrograde_persistence import (
@@ -62,8 +62,9 @@ def stub_cur() -> Iterator[Any]:
                 place_entity_id = int(cur.fetchone()[0])
                 cur.execute(
                     """
-                    INSERT INTO places (id, entity_id, name, type, zone)
-                    VALUES (100, %s, 'Story Place', 'fixed_location', 10)
+                    INSERT INTO places (id, entity_id, name, type, zone, coordinates)
+                    VALUES (100, %s, 'Story Place', 'fixed_location', 10,
+                            ST_SetSRID(ST_MakePoint(0, 0, 0, 0), 4326)::geography)
                     """,
                     (place_entity_id,),
                 )
@@ -112,9 +113,10 @@ def test_trait_compiler_place_stub_is_zoned(stub_cur: Any) -> None:
         name="Trait Domain",
         trait="domain",
         role="domain",
+        coordinates=Coordinates(lat=50, lon=50),
     )
 
-    assert _place_row(stub_cur, "Trait Domain")[1:] == (10, None, None)
+    assert _place_row(stub_cur, "Trait Domain")[1:] == (20, 50.0, 50.0)
 
 
 def test_retrograde_persistence_place_stub_is_zoned(stub_cur: Any) -> None:
@@ -122,24 +124,23 @@ def test_retrograde_persistence_place_stub_is_zoned(stub_cur: Any) -> None:
         stub_cur,
         entity_ref="Retrograde Place",
         sources=["seed_1"],
+        coordinates={"lat": 50, "lon": 50},
     )
 
-    assert _place_row(stub_cur, "Retrograde Place")[1:] == (10, None, None)
+    assert _place_row(stub_cur, "Retrograde Place")[1:] == (20, 50.0, 50.0)
 
 
-def test_declared_place_stub_uses_story_zone_without_coordinates(
-    stub_cur: Any,
-) -> None:
-    _insert_declared_stub(
-        stub_cur,
-        NewEntityDeclaration(
-            kind="place",
-            name="Declared Place",
-            summary="A location declared during play.",
-        ),
-    )
-
-    assert _place_row(stub_cur, "Declared Place")[1:] == (10, None, None)
+def test_declared_place_without_coordinates_refused(stub_cur: Any) -> None:
+    payload = {
+        "kind": "place",
+        "name": "Missing Point",
+        "summary": "No authored point.",
+    }
+    with pytest.raises(ValidationError, match="coordinates are required"):
+        NewEntityDeclaration.model_validate(payload)
+    with pytest.raises(ValueError, match="Missing Point.*has no point"):
+        _insert_declared_stub(stub_cur, NewEntityDeclaration.model_construct(**payload))
+    assert _place_row(stub_cur, "Missing Point") is None
 
 
 def test_declared_place_coordinates_persist_and_resolve(stub_cur: Any) -> None:
@@ -158,23 +159,3 @@ def test_declared_place_coordinates_persist_and_resolve(stub_cur: Any) -> None:
         50.0,
         50.0,
     )
-
-
-def test_maturation_coordinates_rezone_stub(stub_cur: Any) -> None:
-    _insert_declared_stub(
-        stub_cur,
-        NewEntityDeclaration(
-            kind="place",
-            name="Maturing Place",
-            summary="A stub whose authored point belongs elsewhere.",
-        ),
-    )
-    place_id = _place_row(stub_cur, "Maturing Place")[0]
-
-    _apply_maturation_coordinates(
-        stub_cur,
-        row={"entity_kind": "place", "entity_subtype_id": place_id},
-        expansion_payload={"coordinates": {"lat": 50, "lon": 50}},
-    )
-
-    assert _place_row(stub_cur, "Maturing Place")[1:] == (20, 50.0, 50.0)
