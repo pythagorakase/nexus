@@ -1,0 +1,34 @@
+{
+  "head": "849eeef4d673277b6f88f9412e2c0643a916e7d7",
+  "tree": "c994a0cdb785fae5dbbcd31175c61a637ad5dc6e",
+  "import_path": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/nexus/__init__.py",
+  "started_at": "2026-10-08T19:23:37.007973+00:00",
+  "pieces": [
+    {
+      "name": "core",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "tests",
+        "--ignore=tests/test_api",
+        "--ignore=tests/test_orrery"
+      ],
+      "log": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate/core.log",
+      "state": "complete",
+      "exit_code": 1,
+      "secret_guard": true,
+      "owner_audit": true,
+      "receipt_isolation": true
+    }
+  ],
+  "state": "failed"
+}

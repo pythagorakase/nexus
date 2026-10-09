@@ -21,6 +21,8 @@ import sys
 from typing import Any
 
 import pytest
+import requests  # type: ignore[import-untyped]
+import tomlkit
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from tests.pg_fixtures import (
@@ -74,7 +76,11 @@ def test_continue_waits_then_inspect_reads_the_played_clone(
     monkeypatch, tmp_path, mock_openai_server  # noqa: F811
 ) -> None:
     """``continue`` waits through the helper; inspect reads what it produced."""
-    configure_test(tmp_path, mock_openai_server, monkeypatch)
+    config = configure_test(tmp_path, mock_openai_server, monkeypatch)
+    document: Any = tomlkit.parse(config.read_text())
+    reader: Any = document["ui"]["reader"]
+    reader.update(default_page_size=2, max_page_size=2)
+    config.write_text(tomlkit.dumps(document))
     with disposable_slot_database("qa640_815_inspect") as dbname:
         route_slot(monkeypatch, dbname)
         committed = seed_played_story(
@@ -132,11 +138,19 @@ def test_continue_waits_then_inspect_reads_the_played_clone(
             assert all(
                 chunk["metadata"]["chunkId"] == chunk["id"] for chunk in last_two
             )
+            last_three = _envelope("chunks", "--last", "3")
+            assert [chunk["id"] for chunk in last_three] == [
+                row[0] for row in playable[-3:]
+            ]
 
             first, second = playable[0][0], playable[1][0]
             ranged = _envelope("chunks", "--from", str(first), "--to", str(second))
             assert [chunk["id"] for chunk in ranged] == [first, second]
             assert _envelope("chunk", str(second)) == ranged[1]
+            all_chunks = _envelope(
+                "chunks", "--from", str(first), "--to", str(playable[-1][0])
+            )
+            assert [chunk["id"] for chunk in all_chunks] == [row[0] for row in playable]
 
             draft = _envelope("incubator")
             assert draft["session_id"] == turn["session_id"]
@@ -155,3 +169,14 @@ def test_continue_waits_then_inspect_reads_the_played_clone(
             assert [(row["id"], row["name"]) for row in listed_factions] == factions
             assert factions == [(faction_id, "The Lamplighters")]
             assert _envelope("factions", str(faction_id)) == listed_factions[0]
+
+            # #769 owns spoiler gating at the serving boundary. Inspection
+            # must preserve every field that each player route actually serves.
+            for family in ("characters", "places", "factions"):
+                response = requests.get(
+                    f"{os.environ['NEXUS_API_URL']}/api/{family}",
+                    params={"slot": 4},
+                    timeout=30,
+                )
+                response.raise_for_status()
+                assert response.json() == _envelope(family)

@@ -1,0 +1,53 @@
+{
+  "state": "assembled",
+  "captured_at": "2026-10-09T00:30:16.535078+00:00",
+  "post_write_checkouts": {
+    "captured_at": "2026-10-09T00:30:16.535048+00:00",
+    "integration_worktree": "/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus",
+    "head": "2cc9a5fcff76e0c643ca41490eb2508b870b4850",
+    "tree": "3804225e54624e7739c6f6d143cc00b804892a3b",
+    "git_status_porcelain": "",
+    "origin_main_tracking": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+    "input_ancestry": {
+      "820": {
+        "head": "4fffb85b6008e76c3d14ce750666cf73bc802c6e",
+        "included": true
+      },
+      "815": {
+        "head": "5fcc76e43428a570f095e10d8944fdc93b321e27",
+        "included": true
+      },
+      "812": {
+        "head": "1b87677113eb0b30003d3b1713e9dd1a89ab4454",
+        "included": true
+      },
+      "777": {
+        "head": "149704d16fa126b8ac9d142a22bf51b42a669552",
+        "included": true
+      }
+    },
+    "target_worktree": "/Users/pythagor/nexus/.claude/worktrees/820-home-anchors",
+    "target_head": "4fffb85b6008e76c3d14ce750666cf73bc802c6e",
+    "target_status": "?? docs/qa/resume-wave-a-2026-10-08/820-addendum-proposal.md\n?? docs/qa/resume-wave-a-2026-10-08/api.txt\n?? docs/qa/resume-wave-a-2026-10-08/artifact-provenance.json\n?? docs/qa/resume-wave-a-2026-10-08/assemble_resumed_gate_evidence.py.txt\n?? docs/qa/resume-wave-a-2026-10-08/assembly-metadata.json\n?? docs/qa/resume-wave-a-2026-10-08/core.txt\n?? docs/qa/resume-wave-a-2026-10-08/final-head-state.json\n?? docs/qa/resume-wave-a-2026-10-08/historical-failed-attempt/core.txt\n?? docs/qa/resume-wave-a-2026-10-08/historical-failed-attempt/repair.diff\n?? docs/qa/resume-wave-a-2026-10-08/historical-failed-attempt/results.json\n?? docs/qa/resume-wave-a-2026-10-08/historical-failed-attempt/run_next_combined_gate.py.txt\n?? docs/qa/resume-wave-a-2026-10-08/orrery.txt\n?? docs/qa/resume-wave-a-2026-10-08/results.json\n?? docs/qa/resume-wave-a-2026-10-08/run_next_combined_gate_resumed.py.txt\n?? docs/qa/resume-wave-a-2026-10-08/verification-template.md.txt\n?? docs/qa/resume-wave-a-2026-10-08/verification.md\n",
+    "signature": "Codex — GPT-6"
+  },
+  "files": {
+    "results.json": "688b4233ae20d8817ec4256c4314a51d2c5ed9547516ca7692bd7554afafadd4",
+    "core.txt": "62c770ad919a56aeb6d8e79cf0413cd121990ec5eea3e5ea691b350372a42ffd",
+    "api.txt": "4778ff184e897ba3239cde48470b50743ccd764d8b892e238e9f1eb3cb5403c9",
+    "orrery.txt": "8d2f31c170fcc084465097b9a87d59165fe517472bfc67cc03f88b9d2534dd55",
+    "run_next_combined_gate_resumed.py.txt": "d4a87f22fb999003394f1f530e4fc8342fbee8281f6574ae18eb1ec45f4e9798",
+    "historical-failed-attempt/results.json": "fb54d471718365663267c456380d619c04f6d5d11223868003d8a681b047d441",
+    "historical-failed-attempt/core.txt": "589b655340686a919959a79183c3f234ae76782437369123a8d8425bbd2114b5",
+    "historical-failed-attempt/run_next_combined_gate.py.txt": "0d8a4d378788d5895efd389a7e8756a948c0e345a253cdd169d4e59a814b599b",
+    "historical-failed-attempt/repair.diff": "31c4ac7f5d80e1a0a698f84b255eac94e08370ce3eb539c5741ad052a290787a",
+    "verification-template.md.txt": "63fec5370c652c860a9729bcba27bf328e20a4e6802ced44172842b9caca288a",
+    "assemble_resumed_gate_evidence.py.txt": "6f556d7356f6049c033d27000cf3c9bdf3da43dbcda39d35a4c52e32e973ae94",
+    "verification.md": "cc7daebdf6cc0970144efc867ce10c69dc1412dff88b7f2106418ebeedda20bc",
+    "assembly-metadata.json": "d748d27c043c10a3055412a3de877f45d85190e5baa39a180bc12ec8f811c74d",
+    "820-addendum-proposal.md": "5fd5fabb98d1b6d3153ec98cd5a6d30f750e47c99ba82d07d14377eae76dcf01",
+    "final-head-state.json": "5683cb84ea330e7d28b0b8b4e197f174942b05d2febb01b290d51871795f9aff",
+    "artifact-provenance.json": "8b40f30a8d606232ec3f06d02aae8bec8bb339bd4615dc0aca77277e44f3c308"
+  },
+  "signature": "Codex — GPT-6"
+}

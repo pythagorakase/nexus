@@ -199,8 +199,8 @@ Transport: `http`.
 | Argument | Takes | Default | Description |
 | --- | --- | --- | --- |
 | `--slot` (required) | `SLOT` | — | Slot number (1-5) |
-| `--last` | `LAST` | — | The newest N committed chunks (one request per chunk) |
-| `--from` | `FROM_ID` | — | First chunk id of the range (default: the first chunk); needs --to. One request per chunk in the range, one more if chunk --to does not exist |
+| `--last` | `LAST` | — | The newest N committed chunks |
+| `--from` | `FROM_ID` | — | First chunk id of the range (default: the first chunk); needs --to |
 | `--to` | `TO_ID` | — | Last chunk id of the range; required with --from (alone, the range starts at the first chunk) |
 
 ### `nexus inspect chunk`

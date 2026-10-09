@@ -63,9 +63,6 @@ from typing import (
 )
 import uuid
 
-if TYPE_CHECKING:
-    from nexus.runtime.home_plan import ChecksumProgress
-
 import requests  # type: ignore[import-untyped]
 from urllib3.exceptions import ReadTimeoutError
 
@@ -97,6 +94,9 @@ from nexus.runtime.remote_auth import (
     build_runtime_request_auth,
 )
 from nexus.util.secret_manager import MissingSecretError, SecretStoreAccessError
+
+if TYPE_CHECKING:
+    from nexus.runtime.home_plan import ChecksumProgress
 
 logger = logging.getLogger("nexus.cli")
 
@@ -1418,8 +1418,6 @@ class InspectFailure(Exception):
 
 # The body GET /api/narrative/incubator answers when no draft is pending.
 _EMPTY_INCUBATOR = {"message": "Incubator is empty"}
-# The detail GET /api/narrative/latest-chunk answers for a story with no chunks.
-_NO_CHUNKS_DETAIL = "No chunks found"
 
 
 def _inspect_response(
@@ -1492,67 +1490,83 @@ def _inspect_slot(args: argparse.Namespace) -> Any:
     return _require_shape(state, dict, f"Slot {args.slot} state")
 
 
-def _adjacent_chunk(slot: int, chunk_id: int, side: str) -> Optional[Dict[str, Any]]:
-    """The committed chunk before or after ``chunk_id`` (``previous``/``next``)."""
-    adjacent = _require_shape(
-        _inspect_read(
-            f"/api/narrative/chunks/{chunk_id}/adjacent", params={"slot": slot}
-        ),
-        dict,
-        f"Chunks adjacent to {chunk_id}",
-    )
-    if side not in adjacent:
+def _chunk_page(
+    slot: int,
+    params: Mapping[str, Any],
+    *,
+    descending: bool,
+    last_id: Optional[int],
+) -> tuple[List[Dict[str, Any]], Optional[int]]:
+    """Read one bounded chunk page; reject malformed or nonadvancing responses."""
+    body = _inspect_read("/api/narrative/chunks", params={**params, "slot": slot})
+    if not isinstance(body, dict) or set(body) != {"chunks", "nextCursor"}:
+        raise InspectFailure("invalid_response", "Chunk page has an invalid shape")
+    chunks = _require_records(body["chunks"], "Chunk page")
+    if len(chunks) > params["limit"]:
         raise InspectFailure(
-            "invalid_response", f"Chunks adjacent to {chunk_id} name no {side} chunk"
+            "invalid_response", "Chunk page exceeds the requested limit"
         )
-    neighbour = adjacent[side]
-    if neighbour is None:
-        return None
-    return _require_records([neighbour], f"The {side} chunk of {chunk_id}")[0]
+    previous = last_id
+    for chunk in chunks:
+        chunk_id = chunk["id"]
+        if previous is not None and (
+            chunk_id >= previous if descending else chunk_id <= previous
+        ):
+            raise InspectFailure("invalid_response", "Chunk page ids do not advance")
+        if "before" in params and chunk_id >= params["before"]:
+            raise InspectFailure(
+                "invalid_response", "Chunk page exceeds its upper bound"
+            )
+        previous = chunk_id
+    cursor = body["nextCursor"]
+    if cursor is not None and (
+        type(cursor) is not int or not chunks or cursor != chunks[-1]["id"]
+    ):
+        raise InspectFailure("invalid_response", "Chunk page has an invalid nextCursor")
+    return chunks, cursor
 
 
 def _inspect_chunks(args: argparse.Namespace) -> Any:
-    """Committed chunks, oldest first: the last N, or those in an id range.
+    """Page GET /api/narrative/chunks and display committed chunks oldest first.
 
-    ``--last N`` reads GET /api/narrative/latest-chunk, then walks
-    GET /api/narrative/chunks/{id}/adjacent backwards. ``--from``/``--to``
-    walk the same route forwards from the first committed chunk at or after
-    ``--from`` (default: the first chunk) through ``--to``, which is required
-    whenever ``--from`` is given, and stop at the chunk with id ``--to``.
-    Each chunk costs one sequential request, so a wide range or a large N
-    sends that many requests; a range sends one more when no committed chunk
-    has id ``--to``, to find where it ends. Every chunk is the route's own
-    payload.
+    ``--last N`` reads descending pages, then reverses them for display.
+    ``--from``/``--to`` read ascending pages between exclusive id bounds.
+    Every chunk is the route's own payload; gaps do not end the range.
     """
     slot = args.slot
     chunks: List[Dict[str, Any]] = []
     if args.last is not None:
-        response = _inspect_response(
-            "/api/narrative/latest-chunk", params={"slot": slot}
-        )
-        if response.status_code == 404:
-            try:
-                detail = response.json().get("detail")
-            except (ValueError, AttributeError):
-                detail = None
-            if detail == _NO_CHUNKS_DETAIL:
-                return chunks
-        latest: Optional[Dict[str, Any]] = _require_records(
-            [_inspect_body(response)], "The latest chunk"
-        )[0]
-        while latest is not None and len(chunks) < args.last:
-            chunks.append(latest)
-            if len(chunks) < args.last:
-                latest = _adjacent_chunk(slot, latest["id"], "previous")
+        remaining = args.last
+        cursor: Optional[int] = None
+        while remaining > 0:
+            params = {"order": "desc", "limit": remaining}
+            if cursor is not None:
+                params["before"] = cursor
+            page, cursor = _chunk_page(slot, params, descending=True, last_id=cursor)
+            chunks.extend(page)
+            remaining -= len(page)
+            if cursor is None:
+                break
         chunks.reverse()
         return chunks
-    first = 1 if args.from_id is None else args.from_id
-    cursor = _adjacent_chunk(slot, first - 1, "next")
-    while cursor is not None and cursor["id"] <= args.to_id:
-        chunks.append(cursor)
-        if cursor["id"] == args.to_id:
+    after = (1 if args.from_id is None else args.from_id) - 1
+    before = args.to_id + 1
+    while True:
+        page, cursor = _chunk_page(
+            slot,
+            {
+                "order": "asc",
+                "after": after,
+                "before": before,
+                "limit": before - after - 1,
+            },
+            descending=False,
+            last_id=after,
+        )
+        chunks.extend(page)
+        if cursor is None:
             break
-        cursor = _adjacent_chunk(slot, cursor["id"], "next")
+        after = cursor
     return chunks
 
 
@@ -5371,17 +5385,13 @@ Examples:
     inspect_chunks_parser.add_argument(
         "--last",
         type=int,
-        help="The newest N committed chunks (one request per chunk)",
+        help="The newest N committed chunks",
     )
     inspect_chunks_parser.add_argument(
         "--from",
         dest="from_id",
         type=int,
-        help=(
-            "First chunk id of the range (default: the first chunk); needs --to."
-            " One request per chunk in the range, one more if chunk --to does"
-            " not exist"
-        ),
+        help="First chunk id of the range (default: the first chunk); needs --to",
     )
     inspect_chunks_parser.add_argument(
         "--to",

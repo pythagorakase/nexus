@@ -14,6 +14,8 @@ The one deliberate break is player safety (issue #769): authored place
 ``secrets`` and the hidden character psychology profile are not served.
 ``GET /api/narrative/recap`` (issue #832) is new rather than ported; it
 serves its typed ``ReturnRecap`` model's snake_case field names.
+``GET /api/narrative/chunks`` (issue #815) is new as well: a keyset page in
+either id order for the CLI.
 
 Queries are written against the LIVE database schema (``psql -d save_NN -c
 '\\d+ <table>'``), not the retired Drizzle typings, which had drifted
@@ -26,7 +28,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import timezone
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
@@ -293,6 +295,53 @@ async def get_reader_feed(
             previousCursor=rows[0]["id"] if predecessor else None,
             nextCursor=rows[-1]["id"] if successor else None,
         )
+
+
+class ChunkRangeResponse(BaseModel):
+    """One page of committed playable chunks in order, and the id to continue from."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunks: list[dict[str, Any]]
+    nextCursor: int | None
+
+
+@router.get("/api/narrative/chunks", response_model=ChunkRangeResponse)
+async def get_chunk_range(
+    order: Annotated[Literal["asc", "desc"], Query()],
+    limit: Annotated[int, Query(ge=1)],
+    after: Annotated[int | None, Query(ge=0)] = None,
+    before: Annotated[int | None, Query(ge=1)] = None,
+    slot: int | None = None,
+) -> ChunkRangeResponse:
+    """Return an ordered page within exclusive, combinable ``after``/``before`` bounds.
+
+    A page holds at most ``[ui.reader].max_page_size`` chunks, whatever ``limit``
+    asks. Continue with ``before=nextCursor`` (desc) or ``after=nextCursor`` (asc).
+    """
+    page_size = min(limit, load_settings().ui.reader.max_page_size)
+    dbname = resolve_dbname(slot)
+    query = (
+        _CHUNK_SELECT + " FROM narrative_chunks nc"
+        " JOIN chunk_metadata cm ON cm.chunk_id = nc.id"
+        f" WHERE {playable_narrative_predicate('nc')}"
+    )
+    params: list[int] = []
+    if after is not None:
+        query += " AND nc.id > %s"
+        params.append(after)
+    if before is not None:
+        query += " AND nc.id < %s"
+        params.append(before)
+    direction = "ASC" if order == "asc" else "DESC"
+    query += f" ORDER BY nc.id {direction} LIMIT %s"
+    params.append(page_size + 1)
+    rows = _fetch_all(dbname, query, tuple(params))
+    page = rows[:page_size]
+    return ChunkRangeResponse(
+        chunks=[_chunk_payload(row) for row in page],
+        nextCursor=page[-1]["id"] if len(rows) > page_size else None,
+    )
 
 
 @router.get("/api/narrative/outline")

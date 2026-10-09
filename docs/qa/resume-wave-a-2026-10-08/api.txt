@@ -1,0 +1,48 @@
+........................................................................ [  7%]
+........s............................................................... [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 31%]
+....................................................s................... [ 39%]
+........................................................................ [ 47%]
+........................................................................ [ 55%]
+........................................................................ [ 63%]
+........................................ss.............................. [ 71%]
+........................................................................ [ 79%]
+........................................................................ [ 87%]
+........................................................................ [ 95%]
+.....................................                                    [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../../nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_api/test_attempt_manifest_pg.py::test_manifest_real_test_turn_and_child_job_correlation
+  /Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/nexus/agents/memnon/utils/cross_encoder.py:151: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+    elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
+
+tests/test_api/test_attempt_manifest_pg.py::test_manifest_real_test_turn_and_child_job_correlation
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/convert_slow_tokenizer.py:559: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 223 targets: nexus_test_continue_* x10, nexus_test_correspondence_* x2, nexus_test_issue_613_*, nexus_test_retry_* x17, postgres, qa640_764_jobs_*, qa640_764_manifest_*, qa640_764_turn_*, qa640_767s1_feed_* x3, qa640_775_errors_* x2, qa640_775_left_*, qa640_775_right_*, qa640_775_status_*, qa640_778s6a_backstage_*, qa640_778s6a_empty_*, qa640_800_call_gate_*, qa640_800_corpus_*, qa640_800_kill_*, qa640_800_renew_* x4, qa640_800_turn_*, qa640_800b_inspect_*, qa640_802_reported_*, qa640_804_* x12, qa640_814_backfill_*, qa640_814_benchmark_*, qa640_814_seats_*, qa640_815s2_range_*, qa640_815s2_range_empty_*, qa640_840s3a_slot_* x2, qa640_840s3a_source_* x2, qa640_937_budget_* x2, qa640_938_usage_* x2, qa640_acceptance_* x44, qa640_offline_gate_* x73, qa640_reader_assets_*, qa640_reader_reads_*, qa640_renamed_test_model_*, qa654_*, qa832_recap_* x10, qa885_orrery_dev_*, qa946_character_* x3, qa950_place_* x2, qa951_identity_* x4, qa951_no_identity_*, qa951_overwrite_*, test_slot_guard_4824205382094c89abc777356d303e27
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+897 passed, 4 skipped, 9 warnings in 732.01s (0:12:12)

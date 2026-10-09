@@ -3,7 +3,7 @@ status: canonical
 sources:
   - ui/client/src/components/nexus/NarrativePane.tsx
   - nexus/api/reader_endpoints.py
-verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
+verified_commit: "54ee3dc1f811d1504d60bcdf0ecf3440c4e86397"
 ---
 
 # 0050: Continuous Book
