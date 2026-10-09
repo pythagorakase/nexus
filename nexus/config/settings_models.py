@@ -4248,9 +4248,7 @@ class UIRecapSettings(BaseModel):
 
 
 class UIReaderSettings(BaseModel):
-    """Required chunk-count bounds for the playable reader feed and the chunk range
-    route.
-    """
+    """Required chunk-count bounds for the reader feed and chunk range route."""
 
     model_config = ConfigDict(extra="forbid")
 
