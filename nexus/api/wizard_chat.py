@@ -45,7 +45,7 @@ from nexus.api.new_story_cache import (
 )
 from nexus.api.new_story_flow import (
     build_transition_data_from_cache,
-    perform_transition_with_retrograde,
+    run_genesis_transition,
     record_drafts,
     switch_wizard_model,
 )
@@ -906,82 +906,88 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
     require_writable_slot(request.slot)
     dbname = slot_dbname(request.slot)
 
-    # Read the setup cache
-    cache = read_cache(dbname)
-    if not cache:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No setup data found for slot {request.slot}. Complete the wizard first.",
-        )
+    def prepare():
+        # Read the setup cache
+        cache = read_cache(dbname)
+        if not cache:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"No setup data found for slot {request.slot}. "
+                    "Complete the wizard first."
+                ),
+            )
 
-    if cache.character_revision_pending:
-        raise HTTPException(
-            status_code=409,
-            detail="Finish the character revision before starting the story.",
-        )
+        if cache.character_revision_pending:
+            raise HTTPException(
+                status_code=409,
+                detail="Finish the character revision before starting the story.",
+            )
 
-    if not cache.setting_confirmed or not cache.character_confirmed:
-        raise HTTPException(
-            status_code=409,
-            detail="Confirm the setting and character before starting the story.",
-        )
+        if not cache.setting_confirmed or not cache.character_confirmed:
+            raise HTTPException(
+                status_code=409,
+                detail="Confirm the setting and character before starting the story.",
+            )
 
-    # Validate all phases are complete
-    if not cache.setting_complete():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: setting"
-        )
-    if not cache.character_complete():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: character"
-        )
-    if not cache.seed_complete():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: seed"
-        )
-    if cache.base_timestamp is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Incomplete setup data. Missing: base_timestamp",
-        )
-    if not cache.get_layer_dict():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: layer"
-        )
-    if not cache.get_zone_dict():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: zone"
-        )
-    if not cache.get_initial_location():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: initial_location"
-        )
+        # Validate all phases are complete
+        if not cache.setting_complete():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: setting"
+            )
+        if not cache.character_complete():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: character"
+            )
+        if not cache.seed_complete():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: seed"
+            )
+        if cache.base_timestamp is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Incomplete setup data. Missing: base_timestamp",
+            )
+        if not cache.get_layer_dict():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: layer"
+            )
+        if not cache.get_zone_dict():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: zone"
+            )
+        if not cache.get_initial_location():
+            raise HTTPException(
+                status_code=422,
+                detail="Incomplete setup data. Missing: initial_location",
+            )
 
-    # A supplied strangeness is persisted first, so a retry after a failed
-    # transition runs with the same level; the stored selection applies
-    # otherwise (None resolves to the configured default in Retrograde).
-    if request.weird_level is not None:
-        cache = _record_weird_level(dbname, cache, request.weird_level)
+        # A supplied strangeness is persisted first, so a retry after a failed
+        # transition runs with the same level; the stored selection applies
+        # otherwise (None resolves to the configured default in Retrograde).
+        if request.weird_level is not None:
+            cache = _record_weird_level(dbname, cache, request.weird_level)
 
-    # Build TransitionData from cache
-    try:
-        transition_data = build_transition_data_from_cache(cache)
-    except ValidationError as e:
-        # Fail loudly per user directive
-        logger.error(f"Validation error building TransitionData: {e}")
-        raise HTTPException(
-            status_code=422, detail=f"Setup data validation failed: {e.errors()}"
-        )
+        # Build TransitionData from cache
+        try:
+            transition_data = build_transition_data_from_cache(cache)
+        except ValidationError as e:
+            # Fail loudly per user directive
+            logger.error(f"Validation error building TransitionData: {e}")
+            raise HTTPException(
+                status_code=422, detail=f"Setup data validation failed: {e.errors()}"
+            )
+
+        return transition_data, cache.weird_level
 
     # Perform atomic transition with Retrograde cold-start history. The
     # frontier generation takes minutes, so it runs in a worker thread to
     # keep the event loop (and the progress endpoint) responsive.
     try:
         result = await asyncio.to_thread(
-            perform_transition_with_retrograde,
+            run_genesis_transition,
             request.slot,
-            transition_data,
-            weird_level=cache.weird_level,
+            prepare,
         )
         logger.info(
             "Transition complete for slot %s: character_id=%s retrograde=%s",
@@ -992,14 +998,17 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
 
         return TransitionResponse(
             status="transitioned",
+            run=result["run"],
             character_id=result["character_id"],
             place_id=result["place_id"],
             layer_id=result["layer_id"],
             zone_id=result["zone_id"],
-            message=f"Welcome to {transition_data.setting.world_name}. Your story begins.",
+            message=f"Welcome to {result['world_name']}. Your story begins.",
             retrograde=result.get("retrograde"),
             trait_inputs=result.get("trait_inputs"),
         )
+    except HTTPException:
+        raise
     except ValueError as e:
         # Includes RetrogradePersistenceBlockedError: the transaction rolled
         # back, the wizard cache is intact, and the transition is retryable.

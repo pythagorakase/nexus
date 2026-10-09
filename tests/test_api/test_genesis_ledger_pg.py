@@ -11,16 +11,21 @@ import json
 import os
 import subprocess
 import sys
+import time
 import threading
 import uuid
 from contextlib import closing
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 import pytest
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.orrery.retrograde_orchestrator import (
     finish_genesis_persistence,
+    genesis_slot_claim,
+    load_genesis_run,
+    record_genesis_input_fingerprint,
     get_retrograde_progress,
     record_genesis_failure,
     record_genesis_stage_output,
@@ -29,7 +34,12 @@ from nexus.agents.orrery.retrograde_orchestrator import (
 )
 from nexus.api.new_story_flow import perform_transition_with_retrograde
 from nexus.api.save_slots import upsert_slot
-from nexus.api.wizard_chat import retrograde_status_endpoint
+from nexus.api.narrative_schemas import TransitionRequest
+from nexus.api.wizard_chat import (
+    retrograde_status_endpoint,
+    transition_to_narrative_endpoint,
+)
+from fastapi import HTTPException
 from tests.pg_fixtures import connect, routed_slot_environment
 from tests.test_orrery.test_retrograde_wizard_live import stage_fixture_world
 
@@ -79,7 +89,10 @@ def test_stage_rows_and_outputs_persist(staged: tuple[str, Any]) -> None:
     with pytest.raises(ValueError, match="Transition data is incomplete"):
         perform_transition_with_retrograde(4, data)
     rows = {row["stage"]: row for row in _rows(dbname, "genesis_run_stages")}
-    assert rows["derivation"]["output"] is None
+    assert rows["derivation"]["output"] == {
+        "trait_compile_inputs": None,
+        "outcome": {"derived": False},
+    }
     assert rows["derivation"]["finished_at"] is not None
     assert rows["packet"]["output"]["weird"]
     assert rows["seed_candidates"]["output"] == {
@@ -218,7 +231,10 @@ def test_skipped_run_commits_with_the_world(staged: tuple[str, Any]) -> None:
     assert result["character_id"]
     [run] = _rows(dbname, "genesis_runs")
     assert (run["status"], run["skip_reason"]) == ("done", "mock_wizard_model")
-    assert run["input_fingerprint"] is None and run["opening_session_id"] is None
+    fingerprint = run["input_fingerprint"]
+    assert isinstance(fingerprint, str) and len(fingerprint) == 64
+    assert int(fingerprint, 16) >= 0
+    assert run["opening_session_id"] is None
     assert asyncio.run(retrograde_status_endpoint(4))["stage"] == "idle"
 
 
@@ -256,3 +272,196 @@ def test_unknown_stage_and_foreign_run_fail_loudly(offline_gate_db: str) -> None
             with pytest.raises(RuntimeError, match=foreign):
                 writer()
     assert len(_rows(offline_gate_db, "genesis_run_stages")) == 1
+
+
+def _confirm_staged_world(dbname: str) -> None:
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE assets.new_story_creator SET "
+            "setting_confirmed = TRUE, character_confirmed = TRUE"
+        )
+
+
+def _seed_failed_output(slot: int, fingerprint: str, output: Any) -> str:
+    run = start_genesis_run(slot)
+    record_genesis_input_fingerprint(slot, run, fingerprint)
+    record_retrograde_progress(slot, run, "derivation", {})
+    record_genesis_stage_output(slot, run, "derivation", output)
+    record_genesis_failure(slot, run, "ValueError: seeded failure")
+    return run
+
+
+def test_invalid_saved_output_fails_before_any_provider_call(
+    staged: tuple[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A malformed saved prefix fails without spending, then forces a fresh run."""
+    dbname, _ = staged
+    _confirm_staged_world(dbname)
+
+    def stop_derivation(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("fingerprint probe")
+
+    monkeypatch.setattr(
+        "nexus.api.trait_input_derivation.ensure_trait_compile_inputs", stop_derivation
+    )
+    with pytest.raises(HTTPException, match="fingerprint probe") as initial:
+        asyncio.run(transition_to_narrative_endpoint(TransitionRequest(slot=4)))
+    assert initial.value.status_code == 400
+    failed = load_genesis_run(4)
+    assert failed is not None and failed.input_fingerprint is not None
+    seeded = _seed_failed_output(4, failed.input_fingerprint, {"unexpected": 1})
+    boundaries = {
+        "derivation": "nexus.api.trait_input_derivation.ensure_trait_compile_inputs",
+        "packet": (
+            "nexus.agents.orrery.retrograde_packet.build_retrograde_dry_run_packet"
+        ),
+        "seed_candidates": (
+            "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage"
+        ),
+        "expansion": (
+            "nexus.agents.orrery.retrograde_expansion.generate_expansion_with_skald"
+        ),
+    }
+    calls: list[str] = []
+
+    def boundary(stage: str) -> Callable[..., None]:
+        def refuse(*args: Any, **kwargs: Any) -> None:
+            calls.append(stage)
+            raise AssertionError(f"{stage} provider called")
+
+        return refuse
+
+    for stage, target in boundaries.items():
+        monkeypatch.setattr(target, boundary(stage))
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(transition_to_narrative_endpoint(TransitionRequest(slot=4)))
+    assert refused.value.status_code == 500
+    assert "Saved derivation output" in refused.value.detail
+    assert seeded in refused.value.detail
+    assert calls == []
+    invalid = load_genesis_run(4)
+    assert invalid is not None and invalid.status == "failed" and invalid.stages == {}
+    with pytest.raises(HTTPException) as retry:
+        asyncio.run(transition_to_narrative_endpoint(TransitionRequest(slot=4)))
+    assert retry.value.status_code == 500
+    assert "derivation provider called" in retry.value.detail
+    assert calls == ["derivation"]
+
+
+def test_claim_is_exclusive_and_dies_with_its_process(
+    offline_gate_db: str, tmp_path: Path
+) -> None:
+    """A real child owns a session claim; SIGKILL releases it without a commit."""
+    ready = tmp_path / "claim-ready"
+    script = """
+import sys, time
+from pathlib import Path
+from tests.pg_fixtures import route_slot_from_environment
+route_slot_from_environment()
+from nexus.agents.orrery.retrograde_orchestrator import genesis_slot_claim
+with genesis_slot_claim(4) as won:
+    if not won:
+        raise RuntimeError('child could not claim fixture slot')
+    Path(sys.argv[1]).write_text('held')
+    time.sleep(60)
+"""
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+        **routed_slot_environment(4, offline_gate_db),
+    }
+    with (tmp_path / "child.log").open("w") as output:
+        child = subprocess.Popen(
+            [sys.executable, "-c", script, str(ready)],
+            env=environment,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + 10
+            while (
+                not ready.exists()
+                and child.poll() is None
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.05)
+            assert ready.read_text() == "held"
+            with genesis_slot_claim(4) as won:
+                assert won is False
+            child.kill()
+            child.wait(timeout=10)
+            deadline = time.monotonic() + 10
+            acquired = False
+            while time.monotonic() < deadline:
+                with genesis_slot_claim(4) as won:
+                    acquired = won
+                if acquired:
+                    break
+                time.sleep(0.05)
+            assert acquired, "The killed child's session claim did not release"
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=10)
+
+
+def test_skipped_run_reports_reused_derivation_in_direct_and_ledger_answers(
+    staged: tuple[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Skipping Retrograde does not erase an actually reused derivation stage."""
+    import tomlkit
+
+    from nexus.api.new_story_flow import transition_result_from_ledger
+    from nexus.config import load_settings
+    from nexus.runtime.home import resolve_config_path
+
+    config: Any = tomlkit.parse(resolve_config_path().read_text())
+    config["orrery"]["enabled"] = False
+    config["wizard"]["trait_inputs"]["derive_at_transition"] = True
+    config["runtime"]["state_dir"] = str(tmp_path / "state")
+    config_path = tmp_path / "skip-retrograde.toml"
+    config_path.write_text(tomlkit.dumps(config))
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config_path))
+    dbname, _ = staged
+    _confirm_staged_world(dbname)
+    assert load_settings().wizard.trait_inputs.derive_at_transition
+
+    def first_derivation(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("capture skip fingerprint")
+
+    monkeypatch.setattr(
+        "nexus.api.trait_input_derivation.ensure_trait_compile_inputs", first_derivation
+    )
+    with pytest.raises(HTTPException) as first:
+        asyncio.run(transition_to_narrative_endpoint(TransitionRequest(slot=4)))
+    assert first.value.status_code == 400
+    assert "capture skip fingerprint" in first.value.detail
+    failed = load_genesis_run(4)
+    assert failed is not None and failed.input_fingerprint is not None
+    seeded = _seed_failed_output(
+        4,
+        failed.input_fingerprint,
+        {"trait_compile_inputs": None, "outcome": {"derived": False}},
+    )
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("reused derivation must not call a provider")
+
+    monkeypatch.setattr(
+        "nexus.api.trait_input_derivation.ensure_trait_compile_inputs", forbidden
+    )
+    answer = asyncio.run(transition_to_narrative_endpoint(TransitionRequest(slot=4)))
+    reconstructed = transition_result_from_ledger(4, answer.run)
+    assert (
+        answer.retrograde
+        == reconstructed["retrograde"]
+        == {
+            "enabled": False,
+            "skip_reason": "orrery_disabled",
+            "reused_stages": ["derivation"],
+        }
+    )
+    assert answer.trait_inputs == reconstructed["trait_inputs"] == {"derived": False}
+    completed = load_genesis_run(4, answer.run)
+    assert completed is not None and completed.status == "done"
+    assert completed.stages["derivation"].detail["reused_from"] == seeded

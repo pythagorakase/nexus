@@ -84,6 +84,21 @@ def _gateway(gateway: Gateway) -> Iterator[str]:
                     }
                 )
             elif (
+                not gateway.wizard
+                and url.path == "/api/story/new/retrograde/status"
+                and parse_qs(url.query) == {"slot": ["5"]}
+            ):
+                self._respond(
+                    {
+                        "slot": 5,
+                        "run": None,
+                        "run_status": None,
+                        "error": None,
+                        "stage": "idle",
+                        "stages": [],
+                    }
+                )
+            elif (
                 gateway.scheduled is not None
                 and url.path == f"/api/narrative/status/{gateway.scheduled}"
                 and parse_qs(url.query) == {"slot": ["5"]}
