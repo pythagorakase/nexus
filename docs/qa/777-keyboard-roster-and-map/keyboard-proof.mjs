@@ -60,12 +60,25 @@ async function active(label) {
     return { tag: el.tagName, role: el.getAttribute('role') ?? (el.tagName === 'BUTTON' ? 'button' : null),
       name, testid: el.getAttribute('data-testid'), ariaSelected: el.getAttribute('aria-selected'),
       tabindex: el.getAttribute('tabindex'), focusVisible: el.matches(':focus-visible'),
-      outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}`, boxShadow: style.boxShadow,
+      outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}`, outlineOffset: style.outlineOffset,
+      borderColor: style.borderTopColor, boxShadow: style.boxShadow,
       dossier: document.querySelector('[data-testid="text-dossier-name"]')?.textContent ?? null,
       dialogOpen: document.querySelector('[role="dialog"]') !== null };
   });
   steps.push({ step: label, ...reading });
   return reading;
+}
+
+/** One roster row's frame: border, outline and shadow, focused or not. */
+async function rowFrame(testid) {
+  return page.evaluate(testid => {
+    const el = document.querySelector(`[data-testid="${testid}"]`);
+    const style = getComputedStyle(el);
+    return { testid, name: el.getAttribute('aria-label'), ariaSelected: el.getAttribute('aria-selected'),
+      focused: document.activeElement === el, borderColor: style.borderTopColor,
+      outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}`, outlineOffset: style.outlineOffset,
+      boxShadow: style.boxShadow };
+  }, testid);
 }
 
 async function mount(mode) {
@@ -101,6 +114,13 @@ try {
     await page.keyboard.press('Tab');
     r = await active(`${pass}: Tab`);
     assert.deepEqual([r.role, r.name, r.ariaSelected, r.tabindex, r.focusVisible], ['option', 'Ivo Sato', 'true', '0', true]);
+    // The ring is drawn inside the row (negative offset), so the list's
+    // overflow box cannot clip it.
+    assert.deepEqual([r.outline, r.outlineOffset], ['solid 2px rgb(184, 61, 122)', '-5px']);
+    if (pass === 'first') {
+      await page.screenshot({ path: resolve(evidence, 'roster-keyboard-focus-selected.png') });
+      readings.focusedSelectedRow = await rowFrame('cast-member-1');
+    }
     await page.keyboard.press('Shift+Tab');
     r = await active(`${pass}: Shift+Tab`);
     assert.equal(r.name, 'Settings');
@@ -110,8 +130,14 @@ try {
     await page.keyboard.press('ArrowDown');
     r = await active(`${pass}: ArrowDown`);
     assert.deepEqual([r.role, r.name, r.ariaSelected, r.dossier, r.focusVisible], ['option', 'Pela', 'false', 'Ivo Sato', true]);
-    assert.notEqual(r.boxShadow, 'none');
+    assert.deepEqual([r.outline, r.outlineOffset], ['solid 2px rgb(184, 61, 122)', '-5px']);
     if (pass === 'first') {
+      // Focus and selection read apart by geometry: the focused row carries
+      // the inner ring, the selected row only its brass edge.
+      readings.focusedUnselectedRow = await rowFrame('cast-member-2');
+      readings.selectedUnfocusedRow = await rowFrame('cast-member-1');
+      assert.notEqual(readings.focusedUnselectedRow.outline, readings.selectedUnfocusedRow.outline);
+      assert.equal(readings.selectedUnfocusedRow.outline.split(' ')[0], 'none');
       await page.screenshot({ path: resolve(evidence, 'roster-keyboard-focus.png') });
       writeFileSync(resolve(evidence, 'roster-accessibility.txt'),
         await page.locator('.charspane-list').ariaSnapshot() + '\n');
@@ -122,11 +148,25 @@ try {
     r = await active(`${pass}: Enter`);
     assert.deepEqual([r.name, r.ariaSelected, r.dossier], ['Pela', 'true', 'Pela']);
     await page.keyboard.press('ArrowDown');
-    const scrollBefore = await page.evaluate(() => document.querySelector('.charspane-list').scrollTop);
+    // Space's default action (scrolling) is cancelled: a window bubble
+    // listener runs after React's root handler and reads defaultPrevented.
+    // The seven-row list does not overflow, so its scrollTop proves nothing.
+    await page.evaluate(() => {
+      window.spaceKeydowns = [];
+      window.addEventListener('keydown', event => {
+        if (event.key === ' ') window.spaceKeydowns.push(event.defaultPrevented);
+      });
+    });
     await page.keyboard.press('Space');
     r = await active(`${pass}: ArrowDown, Space`);
     assert.deepEqual([r.name, r.ariaSelected, r.dossier], ['Mara Quill', 'true', 'Mara Quill']);
-    assert.equal(await page.evaluate(() => document.querySelector('.charspane-list').scrollTop), scrollBefore);
+    const space = await page.evaluate(() => {
+      const list = document.querySelector('.charspane-list');
+      return { defaultPrevented: window.spaceKeydowns,
+        listOverflows: list.scrollHeight > list.clientHeight };
+    });
+    readings[`${pass}Space`] = space;
+    assert.deepEqual(space.defaultPrevented, [true]);
     await page.keyboard.press('End');
     r = await active(`${pass}: End`);
     assert.equal(r.name, 'Juno Halloran');
@@ -169,6 +209,43 @@ try {
     if (pass === 'first pass')
       await page.screenshot({ path: resolve(evidence, 'map-focus-return.png') });
   }
+
+  // Pin: an SVG group, not a control, so a close lands on the pane root.
+  // The root is a programmatic focus target only: no UA ring around it.
+  // The glyph fill ignores pointers; its transparent hit path takes the
+  // press, so click the glyph's centre as a player would.
+  const pinBox = await page.locator('[data-testid="map-pin-2"] [data-map-part="fill"]').boundingBox();
+  await page.mouse.click(pinBox.x + pinBox.width / 2, pinBox.y + pinBox.height / 2);
+  await page.getByRole('dialog').waitFor();
+  r = await active('map pin pass: mouse click pin');
+  assert.deepEqual([r.name, r.dialogOpen], ['Close', true]);
+  readings.pinDialogTitle = await page.getByRole('dialog').getByRole('heading').first().textContent();
+  assert.equal(readings.pinDialogTitle, 'Ring Two Market');
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'detached' });
+  r = await active('map pin pass: Escape');
+  assert.deepEqual([r.tag, r.testid, r.dialogOpen, r.focusVisible], ['DIV', 'map-pane', false, true]);
+  assert.equal(r.outline.split(' ')[0], 'none');
+  await page.screenshot({ path: resolve(evidence, 'map-pin-focus-return.png') });
+  // A mouse drag on the canvas afterwards keeps focus on the root, unframed.
+  const svgBox = await page.locator('[data-testid="map-svg"]').boundingBox();
+  await page.mouse.move(svgBox.x + 40, svgBox.y + svgBox.height - 40);
+  await page.mouse.down();
+  await page.mouse.move(svgBox.x + 140, svgBox.y + svgBox.height - 90, { steps: 5 });
+  await page.mouse.up();
+  r = await active('map pin pass: mouse pan');
+  assert.deepEqual([r.testid, r.outline.split(' ')[0]], ['map-pane', 'none']);
+
+  // Blank canvas click, then a key press: the root matches :focus-visible
+  // and still shows no outline.
+  await page.locator('[data-testid="map-zone-1"]').focus();
+  await page.mouse.click(svgBox.x + 40, svgBox.y + svgBox.height - 40);
+  r = await active('map canvas pass: mouse click blank canvas');
+  assert.equal(r.testid, 'map-pane');
+  await page.keyboard.press('a');
+  r = await active('map canvas pass: key press');
+  assert.deepEqual([r.testid, r.focusVisible, r.outline.split(' ')[0]], ['map-pane', true, 'none']);
+
   assert.deepEqual(errors, []);
   assert.deepEqual(requests, []);
   readings.fixtureTransport = await page.evaluate(() => window.fixtureTransport);

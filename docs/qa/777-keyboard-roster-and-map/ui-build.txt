@@ -77,18 +77,18 @@ computing gzip size...
 ../dist/public/assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB
 ../dist/public/assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB
 ../dist/public/assets/r1c1-CzjRNMRW.png                            95.61 kB
-../dist/public/assets/index-DntCEJHP.css                          202.76 kB │ gzip:  37.21 kB
-../dist/public/assets/index-cdTliB28.js                         1,775.74 kB │ gzip: 529.87 kB
+../dist/public/assets/index--rSWnyHd.css                          202.82 kB │ gzip:  37.23 kB
+../dist/public/assets/index-0JLMDDXt.js                         1,775.74 kB │ gzip: 529.87 kB
 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 2.76s
+✓ built in 2.57s
 
 PWA v1.0.3
 mode      generateSW
-precache  22 entries (2323.38 KiB)
+precache  22 entries (2323.44 KiB)
 files generated
   ../dist/public/sw.js
   ../dist/public/workbox-40c80ae4.js
