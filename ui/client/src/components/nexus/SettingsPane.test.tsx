@@ -505,10 +505,10 @@ describe("SettingsPane model IDs", () => {
   });
 
   it("projects player preferences without changing story defaults", () => {
-    const patched = applySettingsPatch(settings, { theme: "vector", wizard_model: "vendor/model-next" });
+    const patched = applySettingsPatch(settings, { theme: "vector" });
     expect(patched.apex).toEqual(settings.apex);
     expect(patched.ui?.theme).toBe("vector");
-    expect(patched.wizard?.default_model).toBe("vendor/model-next");
+    expect(patched).not.toHaveProperty("wizard");
   });
 
   it("shows both assignments and switches which model is selected", () => {

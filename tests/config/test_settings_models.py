@@ -478,6 +478,23 @@ def test_global_default_slot_model_unknown_role_rejected():
         Settings(**raw)
 
 
+def test_retired_default_slot_model_is_rejected():
+    """The retired slot default fails as an explicit key and as a roster use."""
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["default_slot_model"] = "TEST"
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        Settings(**raw)
+
+    with open("nexus.toml", "rb") as handle:
+        raw = tomllib.load(handle)
+    test_entry = raw["global"]["model"]["api_models"]["test"]["models"][0]
+    test_entry["uses"] = ["global.model.default_slot_model"]
+    with pytest.raises(
+        ValidationError, match="Unknown model use 'global.model.default_slot_model'"
+    ):
+        Settings(**raw)
+
+
 def test_llama_server_port_drift_rejected_when_enabled():
     """An enabled llama_server whose port differs from the local base_url fails."""
     raw = _nexus_toml_dict()
