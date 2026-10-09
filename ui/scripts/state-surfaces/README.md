@@ -120,12 +120,17 @@ enter an acceptance receipt or redefine the expected state at a narrow width.
 The inventory holds reachable states only. Hovered glyphs in sidebar row-hover contexts, absent
 keys in required rows, missing keys in optional rows, and the absent/missing
 pair without a shared context are excluded and documented in the evidence.
-The focus-visible-with-tooltip-open delete variant is unmeasured: Radix row
-focus/blur makes it nondeterministic as Tab moves to the nested trash button.
-Across the 114 varying samples in the two regenerations compared at `61fb421c`,
-its painted-core effect was at most 0.0097 Euclidean in linear sRGB (well under
-1 deutan ΔE). The coordinator owns the component issue; this oracle change
-leaves the production component intact.
+The focus-visible-with-tooltip-open delete variant is unmeasured. Since #1102,
+moving focus within the row keeps the tooltip open; Escape and ancestor
+scrolling retain Radix's dismissal behavior. The focus trace makes the row
+fully visible and settles scrolling while the preceding family toggle has
+focus, then uses real Tab and one reading at each focus position. It proves
+focus transitions in a stationary viewport, not persistence through natural
+Tab auto-scroll. The oracle still measures the dismissed state.
+Before #1102, Radix row focus/blur made that
+variant nondeterministic; across the 114 varying samples in the two
+regenerations compared at `61fb421c`, its painted-core effect was at most
+0.0097 Euclidean in linear sRGB.
 
 Freshness hashes every esbuild metafile input, recursive CSS imports, tooling,
 configs, lockfile, browser versions, production font files and the full

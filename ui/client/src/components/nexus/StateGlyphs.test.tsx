@@ -1,3 +1,4 @@
+import { UI_CONFIG_KEY } from "@/hooks/useUiConfig";
 /** Real component/cache/timer/event proof; no module, hook, fetch or action mocks. */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -12,6 +13,7 @@ import type { Place } from "@shared/schema";
 import { KeyStatusGlyph } from "./SettingsPane";
 import { LocalModelRows } from "./LocalModelRows";
 import { MapPane } from "./MapPane";
+import { MapViewProvider } from "./MapViewContext";
 import { TopBar } from "./TopBar";
 const KNOBS = { poll_busy_ms: 1e8, poll_idle_ms: 1e8, download_poll_ms: 1e8, delete_arm_ms: 250 };
 const STATUS: LocalModelsStatus = {
@@ -24,6 +26,7 @@ const clients: QueryClient[] = [];
 function client(status = STATUS) {
   const c = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } });
   c.setQueryData([...LOCAL_MODELS_STATUS_KEY], status);
+  c.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
   c.setQueryData([...LOCAL_MODELS_DOWNLOAD_KEY], { state: "idle" });
   c.setQueryData(["/api/settings"], { ui: { local_models: KNOBS, theme: "veil" } });
   c.setQueryData(["/api/preferences"], { ui: { theme: "veil" } });
@@ -50,7 +53,7 @@ function map() {
   c.setQueryData(["/api/zones", 4], [{ id: 1, name: "Fixture", summary: null, boundary: null }]);
   c.setQueryData(["/api/current-place", 4], [{ placeId: 4, name: "Place 4", chunkId: 1 }]);
   for (const p of PLACES) c.setQueryData(["/api/places", p.id, "images", 4], []);
-  render(withClient(c, <ThemeProvider><MapPane slot={4} /></ThemeProvider>));
+  render(withClient(c, <ThemeProvider><MapViewProvider><MapPane slot={4} /></MapViewProvider></ThemeProvider>));
   const svg = screen.getByTestId("map-svg");
   svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600 }) as DOMRect;
   act(() => CanvasResizeObserver.latest.deliver());
@@ -84,14 +87,14 @@ describe("glyph-first states", () => {
   it("memory_over_budget_has_a_static_warning_and_normal_does_not", () => {
     for (const ratio of [.5, 1, 1.1]) {
       const c = client({ ...STATUS, catalog: [{ ...STATUS.catalog[0], size_gb: STATUS.catalog[0].size_gb * ratio }], active: { gguf_path: "/models/fixture/model.gguf", ready: true, failed: false } });
-      const view = render(withClient(c, <TopBar slot={4} characterName={null} skaldStatus="READY" failedGeneration={null} frontierClock={null} />));
+      const view = render(withClient(c, <TopBar slot={4} characterName={null} skaldStatus="READY" failedGeneration={null} toastedFailureSessionId={null} frontierClock={null} />));
       const warning = view.container.querySelector(".mem-over-glyph");
       expect(Boolean(warning)).toBe(ratio > 1);
       if (warning) { expect(warning).toHaveAttribute("aria-hidden", "true"); expect(warning).toHaveAttribute("width", "12"); }
       expect(view.container.querySelector(".mem-fill")).toHaveStyle({ width: `${Math.min(ratio * 100, 100).toFixed(1)}%` });
       view.unmount();
     }
-    render(withClient(client(), <TopBar slot={4} characterName={null} skaldStatus="READY" failedGeneration={null} frontierClock={null} />));
+    render(withClient(client(), <TopBar slot={4} characterName={null} skaldStatus="READY" failedGeneration={null} toastedFailureSessionId={null} frontierClock={null} />));
     expect(screen.queryByTestId("mem-meter")).not.toBeInTheDocument();
   });
   it("armed_delete_changes_glyph_and_disarming_restores_trash", async () => {

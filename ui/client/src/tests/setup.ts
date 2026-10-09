@@ -7,3 +7,18 @@ globalThis.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+
+
+// jsdom has no media-query engine. Narrow-layout tests supply change events.
+if (window.matchMedia === undefined) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (media: string) => ({
+      matches: false,
+      media,
+      addEventListener() {},
+      removeEventListener() {},
+    }),
+  });
+}

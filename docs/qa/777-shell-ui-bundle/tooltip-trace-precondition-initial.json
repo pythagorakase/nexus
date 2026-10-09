@@ -1,0 +1,21 @@
+{
+  "condition": {
+    "viewport": {
+      "width": 1200,
+      "height": 900
+    },
+    "deviceScaleFactor": 4,
+    "colorScheme": "dark",
+    "reducedMotion": "reduce",
+    "hasTouch": false,
+    "isMobile": false
+  },
+  "counts": {
+    "rowOpen": 0,
+    "trashOpen": 0,
+    "outsideClosed": 0
+  },
+  "runs": [],
+  "pageErrors": [],
+  "requests": []
+}

@@ -2362,6 +2362,25 @@
   .rail-right { display: none; }
 }
 @media (max-width: 760px) {
+  .nexus-main,
+  .nexus-main.no-ledger {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .rail-left {
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: 4px calc(12px + env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+  }
+  .rail-divider { width: 1px; height: 22px; margin: 0 6px; }
+  .rail-btn.on::before {
+    left: 50%; top: -5px; transform: translateX(-50%); width: 22px; height: 3px;
+  }
+  .rail-btn .rail-tip {
+    left: 50%; top: auto; bottom: calc(100% + 10px); transform: translateX(-50%);
+  }
+  .nexus-backstage-drawer { left: 0; bottom: calc(49px + env(safe-area-inset-bottom)); }
   .nexus-shell { grid-template-rows: 40px 1fr; }
   .topbar { padding: 0 12px; }
   .topbar-left .wordmark { font-size: 20px; }
@@ -2371,6 +2390,11 @@
   .scene-title { font-size: 26px; }
   .charspane { grid-template-columns: 1fr; }
   .mappane { grid-template-columns: 1fr; grid-template-rows: 220px 1fr; }
+}
+
+@media (max-width: 760px) and (pointer: coarse) {
+  .nexus-main:has(.nexus-content :is(input, textarea, [contenteditable="true"]):focus) > .rail-left { display: none; }
+  .rail-btn .rail-tip { display: none; }
 }
 
 /* ─── Reduced motion (#777) ───

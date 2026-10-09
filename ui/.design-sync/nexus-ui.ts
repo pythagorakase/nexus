@@ -38,6 +38,7 @@ export * from "@/components/nexus/Intertitle";
 export * from "@/components/nexus/LeftRail";
 export * from "@/components/nexus/LocalModelRows";
 export * from "@/components/nexus/MapPane";
+export * from "@/components/nexus/MapViewContext";
 export * from "@/components/nexus/MapPlaceDialog";
 export * from "@/components/nexus/NarrativePane";
 export * from "@/components/nexus/NexusLayout";

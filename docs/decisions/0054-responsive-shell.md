@@ -1,7 +1,9 @@
 ---
 status: canonical
 sources:
+  - ui/client/src/components/nexus/NexusLayout.tsx
   - ui/client/src/components/nexus/nexus-layout.css
+  - ui/client/src/hooks/useNarrowShell.ts
 verified_commit: "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8"
 ---
 

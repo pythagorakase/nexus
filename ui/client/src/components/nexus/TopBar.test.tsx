@@ -1,9 +1,10 @@
+import { UI_CONFIG_KEY } from "@/hooks/useUiConfig";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type {
@@ -52,6 +53,7 @@ function renderTopBar(
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], status);
+  queryClient.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
   // /api/settings intentionally unseeded: the meter must render from knob
   // defaults while settings are in flight.
 
@@ -61,6 +63,7 @@ function renderTopBar(
       characterName={null}
       skaldStatus="READY"
       failedGeneration={null}
+      toastedFailureSessionId={null}
       frontierClock={frontierClock}
     />,
     {
@@ -89,6 +92,7 @@ describe("TopBar frontier clock", () => {
         characterName={null}
         skaldStatus="GENERATING"
         failedGeneration={null}
+        toastedFailureSessionId={null}
         frontierClock={{
           instant: "2189-10-17T22:42:00Z",
           face: "17 Oct 2189 · 22:42",
@@ -105,6 +109,7 @@ describe("TopBar frontier clock", () => {
         characterName={null}
         skaldStatus="READY"
         failedGeneration={null}
+        toastedFailureSessionId={null}
         frontierClock={null}
       />,
     );
@@ -234,12 +239,18 @@ function renderStrip(
   skaldStatus: SkaldStatus,
   characterName: string | null,
   failedGeneration: GenerationSession | null = null,
+  holdMs = 5000,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], BASE);
-  let engine = { skaldStatus, failedGeneration };
+  queryClient.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: holdMs } });
+  let engine = {
+    skaldStatus,
+    failedGeneration,
+    toastedFailureSessionId: null as string | null,
+  };
   const strip = () => (
     <div className="nexus-shell">
       <TopBar
@@ -247,6 +258,7 @@ function renderStrip(
         characterName={characterName}
         skaldStatus={engine.skaldStatus}
         failedGeneration={engine.failedGeneration}
+        toastedFailureSessionId={engine.toastedFailureSessionId}
         frontierClock={null}
       />
     </div>
@@ -362,7 +374,7 @@ describe("TopBar generation announcer", () => {
     expect(spoken).toEqual(["Generation started", "Generation complete"]);
   });
 
-  it("announces the engine's failure for a turn it saw start, once", () => {
+  it("speaks a failure the toast did not report, once", () => {
     const { setEngine, setStatus, setFailure, spoken } = renderStrip("READY", null);
 
     setStatus("TRANSMITTING");
@@ -381,6 +393,38 @@ describe("TopBar generation announcer", () => {
       "Generation failed",
       "Generation started",
     ]);
+  });
+
+  it("stays silent for a failure its toast reported", () => {
+    const { setStatus, setEngine, spoken } = renderStrip("READY", null);
+    setStatus("TRANSMITTING");
+    setEngine({
+      skaldStatus: "READY",
+      failedGeneration: failedAttempt("failed-toast"),
+      toastedFailureSessionId: "failed-toast",
+    });
+    expect(announcer()).toBeEmptyDOMElement();
+    expect(spoken).toEqual(["Generation started"]);
+  });
+
+  it("clears the region after the configured hold", () => {
+    vi.useFakeTimers();
+    try {
+      const { setStatus, unmount } = renderStrip("READY", null, null, 4321);
+      setStatus("TRANSMITTING");
+      act(() => vi.advanceTimersByTime(4320));
+      expect(announcer()).toHaveTextContent("Generation started");
+      act(() => vi.advanceTimersByTime(1));
+      expect(announcer()).toBeEmptyDOMElement();
+      setStatus("RECEIVING");
+      setStatus("READY");
+      act(() => vi.advanceTimersByTime(4321));
+      setStatus("TRANSMITTING");
+      expect(announcer()).toHaveTextContent("Generation started");
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stays silent for a failure it never saw start", () => {
