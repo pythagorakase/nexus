@@ -190,4 +190,8 @@ coordinator later starts services. `nexus.toml` remains unchanged, including its
 now-incomplete “Feed page bounds” comment, as explicitly deferred by the order.
 Other #815 slices and owner question 815-Q1 remain outside this scope.
 
+## Shared Integration Validation
+
+The assembled integration `2cc9a5fcff76e0c643ca41490eb2508b870b4850`, including this lane input `5fcc76e43428a570f095e10d8944fdc93b321e27`, passed the full PostgreSQL-enabled Python gate: **7,056 passed, 72 skipped, 41 warnings**. [Exact commands, immutable tree/input ancestry, complete logs and audit limits](https://github.com/pythagorakase/nexus/blob/bf229051e3d046b76ab8d18b34e9ee054a03bbf6/docs/qa/resume-wave-a-2026-10-08/verification.md). All three pieces reported active secret-store protection, untouched receipts and owner targets none. This is assembled-tree coverage; no separate standalone branch full gate or whole-suite offline run is claimed. Later changes here are evidence only; any landing merge/freshness changes require their own delta record.
+
 Codex — GPT-6
