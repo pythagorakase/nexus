@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CornerSunburst } from "@/components/deco";
 import { ThemeMenu } from "@/components/ThemeMenu";
-import { useOpenOnThemeSaveError } from "@/components/ThemeSaveRejected";
+import { ThemeSaveRejected, useOpenOnThemeSaveError } from "@/components/ThemeSaveRejected";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -246,7 +246,8 @@ export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
                                 </div>
                             </Link>
                         </DropdownMenuItem>
-                        <ThemeMenu saveErrorTestId="wizard-theme-save-error" />
+                        <ThemeMenu />
+                        <ThemeSaveRejected testId="wizard-theme-save-error" />
                     </DropdownMenuContent>
                 </DropdownMenu>
 
