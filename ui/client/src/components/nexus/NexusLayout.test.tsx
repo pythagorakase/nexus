@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
-import type { BackstageTurnResponse } from "@/types/backstage";
+import type { BackstageTurnObservation, BackstageTurnResponse } from "@/types/backstage";
 import type { GenerationSession } from "@/types/narrative";
 import type { SettingsPayload } from "@/types/settings";
 import { NexusLayout } from "./NexusLayout";
@@ -79,6 +79,28 @@ vi.mock("./MapPane", () => ({
 }));
 vi.mock("./SettingsPane", () => ({ SettingsPane: () => <div /> }));
 
+const ACCEPTED_OBSERVATION: BackstageTurnObservation = {
+  schema_version: 3,
+  generation_session: "a-1",
+  read_at: "2026-10-07T23:00:00Z",
+  ledger_days_read: ["2026-10-07"],
+  terminal_outcome: "accepted",
+  wall_time: { seconds: 11.059 },
+  choice_ready_at: "2026-10-07T22:59:58Z",
+  seconds_to_choice_ready: 11.059,
+  attempts: ["skald_writer", "gaia"].map((seat) => ({
+    generation_session: "a-1", seat, attempt: 1, model: "TEST", outcome: "accepted",
+    window: { provenance: "attempt_manifest", input_tokens: 4420 },
+    usage: { provenance: "provider_usage_ledger", input_tokens: 1000, output_tokens: 800 },
+  })),
+  usage_totals: {
+    critical_path: { provenance: "provider_usage_ledger", events: 2, providers: ["test"], comparable: true, input_tokens: 2000, output_tokens: 1600 },
+    background: { provenance: "unknown", events: 0, providers: [], comparable: true, input_tokens: "unknown", output_tokens: "unknown" },
+    overall: { provenance: "provider_usage_ledger", events: 2, providers: ["test"], comparable: true, input_tokens: "unknown", output_tokens: "unknown" },
+  },
+  jobs: { total: 1, entries: [{ queue: "correspondence_compaction", id: 4, state: "queued", terminal: false, usage: { provenance: "unknown", input_tokens: "unknown", output_tokens: "unknown" } }] },
+};
+
 const PAYLOAD: BackstageTurnResponse = {
   header: {
     slot: 4,
@@ -86,6 +108,7 @@ const PAYLOAD: BackstageTurnResponse = {
     chunk_label: "S01E07_203",
     turn_label: "t.17",
     world_time: "2189-10-17T18:24:00-04:00",
+    elapsed_seconds: 420,
     skald_status: "idle",
   },
   correspondence: {
@@ -181,6 +204,15 @@ const PAYLOAD: BackstageTurnResponse = {
       },
     ],
   },
+  economics: {
+    accepted: { status: "observed", generation_session: "a-1", detail: null, observation: ACCEPTED_OBSERVATION },
+    pending: {
+      status: "unavailable",
+      generation_session: "p-1",
+      detail: "session p-1: no generation session (staged before session binding)",
+      observation: null,
+    },
+  },
 };
 
 function renderLayout(settings: SettingsPayload) {
@@ -253,6 +285,13 @@ describe("NexusLayout Backstage", () => {
     expect(await screen.findByTestId("backstage-digest")).toHaveTextContent(
       "Victor is cultivating Celia as an informant.",
     );
+    expect(screen.getByText("slot 04 · t.17 · +7 min")).toBeInTheDocument();
+    expect(screen.getByText("critical 2,000/1,600 · background unknown/unknown · wall 11.1s · choices ready 11.1s")).toBeInTheDocument();
+    const gaiaAttempt = screen.getByText("gaia").closest(".nexus-backstage-write-row");
+    expect(gaiaAttempt).toHaveTextContent("#1 TEST · accepted · window 4,420 [attempt_manifest] · 1,000/800 [provider_usage_ledger]");
+    expect(screen.getByText("#4 · queued · unknown/unknown [unknown]")).toBeInTheDocument();
+    expect(screen.getByText("read 2026-10-07T23:00:00Z")).toBeInTheDocument();
+    expect(screen.getByTestId("backstage-economics-pending")).toHaveTextContent("session p-1: no generation session (staged before session binding)");
     expect(screen.getByText(/SKALD → GAIA/)).toBeInTheDocument();
     expect(screen.getByText(/GAIA → SKALD/)).toBeInTheDocument();
     expect(screen.getByText(/SKALD → GAIA · t\.17/)).toBeInTheDocument();
