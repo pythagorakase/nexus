@@ -2,9 +2,9 @@
  * Shared utilities for splash page variants.
  * Contains navigation hooks, animation constants, and common types.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocation } from 'wouter';
-import { Menu, Sparkles, Monitor, Wand2 } from 'lucide-react';
+import { AlertTriangle, Menu, Sparkles, Monitor, Wand2 } from 'lucide-react';
 import { useTheme, Theme } from '@/contexts/ThemeContext';
 import {
   DropdownMenu,
@@ -71,11 +71,31 @@ export const useSplashNavigation = () => {
 };
 
 /**
+ * The Settings card's danger alert reads --danger, which nexus-layout.css
+ * defines only inside the Settings pane; the menu portal sits outside it,
+ * so map the same token here.
+ */
+const SPLASH_ALERT_STYLE = { '--danger': 'hsl(var(--destructive))' } as CSSProperties;
+
+/**
  * Theme switcher menu for splash screens.
  * Positioned in top-left corner with theme-aware styling.
+ * A rejected save reopens the menu and shows the reason below the themes.
  */
 export const SplashThemeMenu = () => {
-  const { theme, setTheme, glowClass } = useTheme();
+  const { theme, setTheme, glowClass, saveError, clearSaveError } = useTheme();
+  const [open, setOpen] = useState(false);
+  const lastError = useRef(saveError);
+
+  // Show a rejection where the pick happened: open the menu when a save
+  // fails, not when the menu mounts with an earlier failure.
+  useEffect(() => {
+    if (saveError !== null && lastError.current === null) setOpen(true);
+    lastError.current = saveError;
+  }, [saveError]);
+
+  // Settings must not inherit a failure caused on Home.
+  useEffect(() => clearSaveError, [clearSaveError]);
 
   const themeOptions: { value: Theme; label: string; icon: typeof Sparkles }[] = [
     { value: 'gilded', label: 'Gilded', icon: Sparkles },
@@ -85,7 +105,7 @@ export const SplashThemeMenu = () => {
 
   return (
     <div style={{ position: 'absolute', top: 28, left: 28, zIndex: 50 }}>
-      <DropdownMenu>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
@@ -107,6 +127,20 @@ export const SplashThemeMenu = () => {
               </div>
             </DropdownMenuItem>
           ))}
+          {saveError !== null && (
+            <div
+              className="alert danger mt-1 max-w-[280px] break-words"
+              role="alert"
+              data-testid="splash-theme-save-error"
+              style={SPLASH_ALERT_STYLE}
+            >
+              <AlertTriangle size={14} />
+              <div className="min-w-0">
+                <div className="alert-title">WRITE REJECTED</div>
+                <div className="alert-body">{saveError}</div>
+              </div>
+            </div>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
