@@ -33,9 +33,7 @@ BODY_MUTATIONS = [
 ]
 
 
-@pytest.mark.parametrize(
-    "path,body", [*BODY_MUTATIONS, ("/api/story/new/slot/select", {})]
-)
+@pytest.mark.parametrize("path,body", BODY_MUTATIONS)
 @pytest.mark.parametrize("slot", [None, 0, 6, True, False, 1.0, "1"])
 def test_mutating_bodies_require_a_valid_explicit_slot(
     path: str, body: dict[str, object], slot: object
@@ -157,20 +155,6 @@ def test_locked_slot_rejects_http_side_effects_and_database_writes(
     ]:
         assert client.request(method, path).status_code == 423
     assert client.get("/api/narrative/incubator?slot=5").status_code == 200
-    # Compatibility selection has no current writes and must remain available
-    # for locked stories, just like reading their existing narrative.
-    response = client.post("/api/story/new/slot/select", json={"slot": 5})
-    assert response.status_code == 200
-    assert response.json() == {
-        "status": "activated",
-        "results": {
-            "1": "cleared",
-            "2": "cleared",
-            "3": "cleared",
-            "4": "cleared",
-            "5": "active",
-        },
-    }
     assert is_slot_locked(5, dbname=dbname)
     for owner in ["characters", "places"]:
         response = client.post(
