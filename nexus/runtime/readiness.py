@@ -7,7 +7,8 @@ A machine plays one of three roles:
   PostgreSQL client tools, the built UI, and the keys the model seats read.
 - ``owner-client`` talks to a runtime: configuration, the gateway's
   ``/runtime/status`` reached with the runtime's auth headers, and a matching
-  version.
+  version, and the desktop shell's effective config, credentials and runtime
+  command.
 - ``ci-runner`` checks the repository: configuration and the static import
   reachability gate.
 
@@ -48,6 +49,12 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from nexus.config.loader import load_settings, settings_path_scope
 from nexus.config.settings_models import RuntimeSettings, Settings
 from nexus.runtime.contract import RUNTIME_STATUS_PATH
+from nexus.runtime.desktop_config import (
+    DesktopConfigError,
+    EffectiveDesktopConfig,
+    load_effective_desktop_config,
+    resolve_runtime_program,
+)
 from nexus.runtime.home import (
     RuntimeHome,
     RuntimeHomeError,
@@ -142,6 +149,7 @@ class ReadinessContext:
     settings: Optional[Settings] = None
     home: Optional[RuntimeHome] = None
     runtime_status: Optional[dict[str, Any]] = None
+    desktop: Optional[EffectiveDesktopConfig] = None
 
     def require_settings(self) -> Settings:
         """Return the settings config.valid validated."""
@@ -452,6 +460,17 @@ def _check_template_present(ctx: ReadinessContext) -> Outcome:
 _STALE_CHECKOUT = (
     "update this checkout (git pull): the database has migrations it lacks"
 )
+INSTALL_REMEDIATION = (
+    "Restore the locked installation from the main checkout (poetry install there, "
+    "never in a worktree, which repoints the shared environment), then run nexus "
+    "doctor again."
+)
+
+
+def _import_failure(check_id: str, exc: ImportError) -> Outcome:
+    """Name the failing check and import without hiding its installation defect."""
+    prefix = f"import of {exc.name} failed" if exc.name else "import failed"
+    return _failed(f"{prefix} in {check_id}: {one_line(exc)}", INSTALL_REMEDIATION)
 
 
 def _discovered_migrations() -> tuple[list[tuple[str, str, Path]], Optional[Outcome]]:
@@ -1157,6 +1176,137 @@ def _check_gateway_version(ctx: ReadinessContext) -> Outcome:
 
 
 # ---------------------------------------------------------------------------
+# Desktop shell installation
+# ---------------------------------------------------------------------------
+
+
+def _check_desktop_config(ctx: ReadinessContext) -> Outcome:
+    """The effective shell config names this profile's runtime status endpoint."""
+    from nexus.runtime.remote_auth import _same_origin
+    from nexus.runtime.supervisor import RuntimeError_, Supervisor
+
+    try:
+        effective = load_effective_desktop_config(ctx.checkout)
+    except (
+        DesktopConfigError
+    ) as exc:  # nexus-exception-disposition: fail; reason=config; safety=failed check
+        return _failed(
+            one_line(exc),
+            "Set NEXUS_DESKTOP_CONFIG to the desktop config the shell reads, "
+            "or correct the file named (docs/desktop.md).",
+        )
+    try:
+        supervisor = Supervisor(
+            ctx.require_settings().model_copy(deep=True), ctx.require_home().config_path
+        )
+    except (
+        RuntimeError_
+    ) as exc:  # nexus-exception-disposition: fail; reason=config; safety=failed check
+        return _failed(one_line(exc), "Correct [runtime] in nexus.toml.")
+    gateway_url = supervisor.gateway_url()
+    if not _same_origin(effective.runtime_origin, gateway_url):
+        return _failed(
+            f"{effective.path} ({effective.source}): runtimeOrigin "
+            f"{effective.runtime_origin} differs from the profile's gateway {gateway_url}",
+            f"Point runtimeOrigin at {gateway_url}: edit {effective.path}, "
+            "or set NEXUS_DESKTOP_RUNTIME_ORIGIN.",
+        )
+    status_path = effective.config.status_path
+    if not status_path.startswith("/"):
+        status_path = "/" + status_path
+    if status_path != RUNTIME_STATUS_PATH:
+        return _failed(
+            f"{effective.path}: statusPath {effective.config.status_path!r} "
+            f"differs from {RUNTIME_STATUS_PATH}",
+            f"Set statusPath to {RUNTIME_STATUS_PATH} in {effective.path}.",
+        )
+    ctx.desktop = effective
+    return _passed(
+        f"{effective.path} ({effective.source}): "
+        f"{effective.runtime_origin}{RUNTIME_STATUS_PATH}"
+    )
+
+
+def _check_desktop_credentials(ctx: ReadinessContext) -> Outcome:
+    """The shell can supply the headers that the actual runtime requires."""
+    from nexus.runtime.remote_auth import _same_origin
+
+    if ctx.desktop is None:
+        raise RuntimeError("desktop.config has not passed in this readiness run")
+    effective = ctx.desktop
+    config = effective.config
+    origin = effective.runtime_origin
+    runtime = ctx.require_runtime()
+    remote = runtime.remote
+    if (
+        runtime.profile == "remote"
+        and remote is not None
+        and remote.cloudflare_access is not None
+        and _same_origin(origin, remote.base_url)
+    ):
+        return _failed(
+            f"{origin} sits behind Cloudflare Access; "
+            f"the desktop shell sends only {config.auth_header}",
+            "The desktop shell sends no Cloudflare Access service-token headers; "
+            "point runtimeOrigin at a runtime that does not sit behind Access.",
+        )
+    auth = (ctx.runtime_status or {}).get("auth")
+    if (
+        not isinstance(auth, dict)
+        or not isinstance(auth.get("enforced"), bool)
+        or not isinstance(auth.get("header"), str)
+    ):
+        return _failed(
+            "the runtime's /runtime/status carries no auth block",
+            "Update the older side (git pull, poetry install), then restart the "
+            "runtime with nexus restart.",
+        )
+    header = auth["header"]
+    if not auth["enforced"]:
+        return _passed(f"{origin} does not enforce {header}")
+    if config.auth_header.lower() != header.lower():
+        return _failed(
+            f"{origin} requires {header}; the desktop shell sends {config.auth_header}",
+            f"Set authHeader to {header} in {effective.path}.",
+        )
+    env = config.auth_token_env
+    if not env.strip() or not os.environ.get(env):
+        return _failed(
+            f"{origin} requires {header}; {env} is not set",
+            f"Export {env} with the runtime's credential before launching the shell.",
+        )
+    return _passed(f"{env} is set for {header}")
+
+
+def _check_desktop_runtime_command(ctx: ReadinessContext) -> Outcome:
+    """Resolve the shell's CLI program without spawning it."""
+    if ctx.desktop is None:
+        raise RuntimeError("desktop.config has not passed in this readiness run")
+    effective = ctx.desktop
+    remedy = (
+        f"Install the nexus CLI there, or set runtimeCommand in {effective.path} "
+        "to its absolute path."
+    )
+    if not effective.config.runtime_command:
+        return _failed("runtimeCommand must contain at least the CLI program", remedy)
+    directory = effective.working_directory
+    if not directory.is_dir():
+        return _failed(
+            f"workingDirectory {directory} is not an existing directory",
+            f"Set workingDirectory in {effective.path} to an existing directory.",
+        )
+    program = effective.config.runtime_command[0]
+    resolved, via = resolve_runtime_program(program, directory)
+    if resolved is None:
+        return _failed(
+            f"{program} not found on PATH or the shell's fixed directories", remedy
+        )
+    if not resolved.is_file() or not os.access(resolved, os.X_OK):
+        return _failed(f"{resolved} is missing or not executable", remedy)
+    return _passed(f"{resolved} (via {via}) in {directory}")
+
+
+# ---------------------------------------------------------------------------
 # CI runner
 # ---------------------------------------------------------------------------
 
@@ -1288,6 +1438,24 @@ REGISTRY: tuple[CheckSpec, ...] = (
         _check_gateway_version,
     ),
     CheckSpec(
+        "desktop.config",
+        ("owner-client",),
+        ("config.valid",),
+        _check_desktop_config,
+    ),
+    CheckSpec(
+        "desktop.credentials",
+        ("owner-client",),
+        ("desktop.config", "gateway.reachable"),
+        _check_desktop_credentials,
+    ),
+    CheckSpec(
+        "desktop.runtime_command",
+        ("owner-client",),
+        ("desktop.config",),
+        _check_desktop_runtime_command,
+    ),
+    CheckSpec(
         "reachability.gate",
         ("ci-runner",),
         ("config.valid",),
@@ -1329,6 +1497,16 @@ def validate_registry(registry: Sequence[CheckSpec]) -> None:
 
 
 validate_registry(REGISTRY)
+
+
+def _run_check(spec: CheckSpec, ctx: ReadinessContext) -> Outcome:
+    """Turn only import failures from a check into an installation finding."""
+    try:
+        return spec.run(ctx)
+    except (
+        ImportError
+    ) as exc:  # nexus-exception-disposition: fail; reason=import; safety=failed check
+        return _import_failure(spec.id, exc)
 
 
 def run_readiness(
@@ -1381,7 +1559,7 @@ def run_readiness(
                 else nullcontext()
             )
             with scope:
-                outcome = spec.run(ctx)
+                outcome = _run_check(spec, ctx)
             outcome_status = "pass" if outcome.passed else "fail"
             observed = outcome.observed
             remediation = outcome.remediation

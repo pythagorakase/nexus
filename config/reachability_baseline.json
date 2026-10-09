@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#822 S1 and #806 S1: story_identity and receipts join production_reachable through slot_state and runtime.home respectively",
+  "reason": "#803 S7: nexus/runtime/desktop_config.py is imported by nexus/runtime/readiness.py (owner-client desktop checks), so it joins production_reachable",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -256,6 +256,7 @@
     "nexus/prompts/registry.py",
     "nexus/runtime/__init__.py",
     "nexus/runtime/contract.py",
+    "nexus/runtime/desktop_config.py",
     "nexus/runtime/home.py",
     "nexus/runtime/home_plan.py",
     "nexus/runtime/log_capture.py",

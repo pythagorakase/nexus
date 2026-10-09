@@ -389,6 +389,9 @@ is the second.
 | `runtime.log_writers` | owner-host | `config.valid` | no live supervised service runs without the log writer its pidfile records; a dead writer names `nexus restart <service>` (restart the service by name) |
 | `gateway.reachable` | owner-client | `config.valid` | the profile's gateway answers `/runtime/status` with the runtime's auth headers |
 | `gateway.version` | owner-client | `gateway.reachable` | client and runtime report the same `nexus` version |
+| `desktop.config` | owner-client | `config.valid` | the effective desktop config parses, its runtime origin matches the profile's gateway, and its status path is `/runtime/status` |
+| `desktop.credentials` | owner-client | `desktop.config`, `gateway.reachable` | the target is not behind Cloudflare Access, its auth block is valid, and any enforced header matches the shell's header with a nonempty credential environment variable |
+| `desktop.runtime_command` | owner-client | `desktop.config` | the working directory exists and the runtime command resolves to an executable file using the shell's lookup order |
 | `reachability.gate` | ci-runner | `config.valid` | `python -S scripts/check_reachability.py` passes |
 
 Each report entry carries `id`, `targets`, `status` (`pass`, `fail`, or
@@ -398,6 +401,21 @@ failed at the root of the chain. The report adds `schema_version`, `target`,
 `ok` (no check failed), and `omitted`. Stamps a database carries that this
 checkout lacks fail the migration checks too: the code is older than the
 schema.
+
+A check that raises `ImportError` fails with an `observed` that names the
+check and the module; its remediation says to restore the locked installation
+from the main checkout. `--json` still prints the report, and `nexus doctor`
+exits 1.
+
+The `desktop.*` checks read the desktop config in the shell's order
+(`read_config_source` in `ui/src-tauri/src/lib.rs`): `NEXUS_DESKTOP_CONFIG`,
+then `ui/src-tauri/nexus.desktop.json` in the checkout above the working
+directory, then that file beside the doctor's own `nexus` package (the
+checkout, or the copy an installed package ships), the file a shell built
+from this checkout compiles in. The order is a shared contract; change both
+readers together. `PATH` comes from the doctor's environment. A shell started
+from the Finder sees a shorter `PATH`, so `observed` says whether the program
+came from `PATH` or from the shell's fixed directories.
 
 `[runtime.readiness]` in `nexus.toml` bounds the checks:
 `gateway_timeout_seconds` for the owner-client probe,

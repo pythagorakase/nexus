@@ -1,10 +1,13 @@
-# Readiness Import Failure Tests-Only Checkpoint
+# Readiness Imports and Desktop Install Checks
 
-Status: the two ordered 803-S1 initial red cases and separate manual before
-reproduction completed with the intended failures on tests-only head
-`d9b26cfc6d7b95901b9a8e467ce1c9cdb556dc5d`. Product code remains byte-identical to main
-`4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8`. No passing proof, implementation
-completion or publication readiness is claimed.
+Status: S1/S7 implementation and authored tests are ready for source review;
+green, after-reproduction, packaging and broader proof remain pending. The
+two ordered S1 initial red cases and separate manual before reproduction
+completed with the intended failures on tests-only head
+`d9b26cfc6d7b95901b9a8e467ce1c9cdb556dc5d`, when product code was byte-identical
+to main `4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8`. Initial evidence was
+committed as `be88df8de6e4b9be3a49016e648c44562867b8f5` before any product
+change. No green proof or publication readiness is claimed.
 
 The frozen order is `temp/orders_2026_10_07/803-S1.md`, including the 803-S7
 install-check scope and its settled Q13 bundled-copy amendment. The live
@@ -78,14 +81,71 @@ loader's diagnostic and failure receipt are preserved behavior. The raw
 sources remain in private scratch; [SHA256 provenance](initial-proof-provenance.json)
 verifies every copied artifact byte-for-byte. No scratch cleanup is claimed.
 
-## Remaining Work
+## Source Implementation Checkpoint
 
-Implementation, green/after proof, mypy, wheel packaging, build, owner doctor,
-broader tests and the final coordinated gate remain pending. No database
-operation, service startup or paid call ran for this checkpoint.
-The later implementation must preserve 806 receipts, 812 artifact checks,
-822 registry entries and dynamic 803-S6 init-plan behavior on integration.
-Its strict Rust u64 fields require both zero and `2**64 - 1` bounds; packaging
-is one include entry with no lock/dependency change or installation.
+The source now adds only the runner's narrow `ImportError` finding around
+`spec.run(ctx)`, inside its existing settings scope. Other exceptions and
+dependency skipping retain their behavior. The loader's existing stderr,
+exception and private receipt paths are unchanged, as are all existing
+readiness exception handlers and their baseline entries.
+
+`desktop_config.py` mirrors the current Rust struct's aliases, defaults,
+lookup precedence, origin override/normalization, working-directory anchor
+and program search. Its three strict integer fields reject bool/coercion,
+negatives and values above `2**64 - 1`; neither timeout clamp is copied.
+The module uses only stdlib and existing Pydantic. Its documented residual
+is that Python cannot discover the running shell executable or build tree;
+the fallback JSON ships beside the Python package. `pyproject.toml` adds
+exactly that include entry; the lock and installed environment are unchanged.
+
+The three owner-client checks follow `gateway.version`: config compares the
+actual profile gateway origin and status path, credentials diagnoses Access
+and the target's auth contract without printing token values, and command
+resolution checks a real executable and working directory without spawning
+it. Existing 822 checks remain. The separate 812 artifact check and 803-S6
+init-plan implementation are not on this frozen base; integration must keep
+their registry entries and dynamic behavior when merging them.
+
+Authored tests use actual files and executables plus the existing loopback
+runtime fixture. They cover precedence with invalid/missing/empty explicit
+paths, packaged fallback, Rust field-name parity, all three u64 boundaries,
+PATH/fixed-directory resolution, the nine ordered target cases plus wrong
+status path/blank credential variable/empty command/missing working directory,
+and a no-network Access refusal with the in-memory secret store. The three
+existing owner-client CLI tests gain the auth block, private desktop config
+and exact six-check output; the unreadable Access-store test is unchanged.
+
+At load 11.662109375, Black completed over the four changed/new Python files:
+two reformatted and two unchanged. The prescribed source-only reachability
+generator completed with no findings and exactly one production-path
+addition, `nexus/runtime/desktop_config.py`, plus the recorded reason. It
+reports `route_reachability: not_proven`; no dynamic route proof is claimed.
+Current actual canonical frontmatter declares none of these changed source
+paths, so no freshness stamp is changed in this checkpoint. Recalculate
+closure after predecessor landings rather than rewriting decision quotations.
+
+## Remaining Proof
+
+The next admitted focused run must cover `test_readiness.py`, new
+`test_desktop_config.py`, `test_readiness_pg.py`, `test_runtime_status.py`,
+`test_supervisor.py`, `test_cli_contract.py`, card identity and connection
+lifecycle, followed by the coordinator's doc/reachability and static checks.
+The two S1 cases need green on the implementation, and the exact private
+manual-before reproduction needs an after counterpart with its receipt
+retained. No further test or manual run has occurred since the initial red.
+
+Two independent restoring controls remain required: remove only `_run_check`'s
+guard and require both S1 cases to fail; swap explicit-env and checkout lookup
+precedence and require `test_lookup_follows_the_shell_order` to fail. Record
+before/planted/restored hashes, exact failure identities and every guard.
+
+Packaging (`poetry check --lock`, a scratch-only wheel, member listing and
+exact artifact cleanup), the bounded owner-client diagnostic, changed-file
+flake8/mypy comparisons, full focused PG proof and the coordinator's final
+gate all await admission. Owner-host doctor, installation, provider calls,
+services and owner database operations remain excluded. No migration,
+fleet application, UI source/build/receipt or shell rebuild is owed. A
+gateway restart is owed when owner services next run; publication and
+landing remain coordinator-owned.
 
 Codex — GPT-6

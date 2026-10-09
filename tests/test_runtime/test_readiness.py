@@ -36,7 +36,6 @@ from nexus.runtime.contract import (
     RUNTIME_STATUS_PATH,
     TEST_RECEIPTS_ENV,
 )
-from nexus.runtime.receipts import FailureReceipt
 from nexus.runtime.readiness import (
     REGISTRY,
     REQUIRED_EXTENSIONS,
@@ -53,6 +52,7 @@ from nexus.runtime.readiness import (
     slot_idf_targets,
     validate_registry,
 )
+from nexus.runtime.receipts import FailureReceipt
 from nexus.util.secret_manager import (
     InMemorySecretBackend,
     SecretStoreAccessError,
@@ -84,6 +84,9 @@ EXPECTED_REGISTRY = [
     ("runtime.log_writers", ["owner-host"], ["config.valid"]),
     ("gateway.reachable", ["owner-client"], ["config.valid"]),
     ("gateway.version", ["owner-client"], ["gateway.reachable"]),
+    ("desktop.config", ["owner-client"], ["config.valid"]),
+    ("desktop.credentials", ["owner-client"], ["desktop.config", "gateway.reachable"]),
+    ("desktop.runtime_command", ["owner-client"], ["desktop.config"]),
     ("reachability.gate", ["ci-runner"], ["config.valid"]),
 ]
 
@@ -91,7 +94,14 @@ EXPECTED_REGISTRY = [
 @pytest.fixture(autouse=True)
 def _developer_mode(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Resolve the checkout config, the configured gateway port, fresh secrets."""
-    for name in (HOME_ENV, RUNTIME_CONFIG_ENV, GATEWAY_PORT_ENV, "NEXUS_AUTH"):
+    for name in (
+        HOME_ENV,
+        RUNTIME_CONFIG_ENV,
+        GATEWAY_PORT_ENV,
+        "NEXUS_AUTH",
+        "NEXUS_DESKTOP_CONFIG",
+        "NEXUS_DESKTOP_RUNTIME_ORIGIN",
+    ):
         monkeypatch.delenv(name, raising=False)
     get_secret.cache_clear()
     yield
@@ -739,15 +749,197 @@ def _external_config(tmp_path: Path, gateway_url: str) -> Path:
     return _write_config(tmp_path, attach)
 
 
+def _desktop_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runtime_origin: str,
+    **overrides: Any,
+) -> Path:
+    """Give the shell diagnostics an owned executable and an actual config file."""
+    program = _executable(tmp_path / "desktop-bin", "qa803-cli")
+    path = tmp_path / "desktop.json"
+    path.write_text(
+        json.dumps(
+            {
+                "runtimeOrigin": runtime_origin,
+                "runtimeCommand": [str(program)],
+                "workingDirectory": str(tmp_path),
+                **overrides,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("NEXUS_DESKTOP_CONFIG", str(path))
+    return path
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "all-pass",
+        "other-port",
+        "relative-status-path",
+        "wrong-status-path",
+        "enforced-no-token",
+        "enforced-token-set",
+        "blank-token-env",
+        "header-mismatch",
+        "no-auth-block",
+        "missing-program",
+        "not-executable",
+        "empty-command",
+        "missing-working-directory",
+    ],
+)
+def test_desktop_checks_against_a_runtime(
+    case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real config files, executables and a loopback target expose shell defects."""
+    payload: dict[str, Any] = {
+        "ok": True,
+        "profile": "local",
+        "version": runtime_version(),
+        "auth": {"header": NEXUS_AUTH_HEADER, "enforced": False},
+    }
+    overrides: dict[str, Any] = {}
+    token = "qa803-do-not-print-the-credential"
+    if case in {
+        "enforced-no-token",
+        "enforced-token-set",
+        "header-mismatch",
+        "blank-token-env",
+    }:
+        payload["auth"]["enforced"] = True
+    if case == "enforced-token-set":
+        monkeypatch.setenv("NEXUS_AUTH", token)
+        overrides["authHeader"] = NEXUS_AUTH_HEADER.lower()
+    elif case == "blank-token-env":
+        overrides["authTokenEnv"] = " "
+    elif case == "header-mismatch":
+        overrides["authHeader"] = "X-Other-Auth"
+    elif case == "no-auth-block":
+        del payload["auth"]
+    elif case == "relative-status-path":
+        overrides["statusPath"] = "runtime/status"
+    elif case == "wrong-status-path":
+        overrides["statusPath"] = "/not-runtime-status"
+    elif case == "missing-program":
+        overrides["runtimeCommand"] = [str(tmp_path / "absent")]
+    elif case == "not-executable":
+        path = tmp_path / "not-executable"
+        path.write_text("not executable")
+        path.chmod(0o644)
+        overrides["runtimeCommand"] = [str(path)]
+    elif case == "empty-command":
+        overrides["runtimeCommand"] = []
+    elif case == "missing-working-directory":
+        overrides["workingDirectory"] = str(tmp_path / "no-directory")
+
+    with _RuntimeEndpoint(payload) as endpoint:
+        config = _external_config(tmp_path, endpoint.url)
+        origin = "http://127.0.0.1:1" if case == "other-port" else endpoint.url
+        _desktop_config(tmp_path, monkeypatch, origin, **overrides)
+        report = run_readiness("owner-client", ReadinessContext(config_path=config))
+    checks = _by_id(report)
+    assert checks["config.valid"].status == "pass"
+    assert checks["gateway.reachable"].status == "pass"
+    assert checks["gateway.version"].status == "pass"
+    if case in {"other-port", "wrong-status-path"}:
+        assert checks["desktop.config"].status == "fail"
+        assert checks["desktop.credentials"].status == "skip"
+        assert checks["desktop.runtime_command"].status == "skip"
+        label = "runtimeOrigin" if case == "other-port" else "statusPath"
+        assert label in checks["desktop.config"].observed
+    else:
+        assert checks["desktop.config"].status == "pass"
+        credentials_fail = case in {
+            "enforced-no-token",
+            "blank-token-env",
+            "header-mismatch",
+            "no-auth-block",
+        }
+        command_fail = case in {
+            "missing-program",
+            "not-executable",
+            "empty-command",
+            "missing-working-directory",
+        }
+        assert checks["desktop.credentials"].status == (
+            "fail" if credentials_fail else "pass"
+        )
+        assert checks["desktop.runtime_command"].status == (
+            "fail" if command_fail else "pass"
+        )
+    assert report.ok is (
+        case in {"all-pass", "relative-status-path", "enforced-token-set"}
+    )
+    assert token not in report.model_dump_json()
+    if case == "enforced-no-token":
+        assert "NEXUS_AUTH is not set" in checks["desktop.credentials"].observed
+    elif case == "enforced-token-set":
+        assert (
+            checks["desktop.credentials"].observed
+            == f"NEXUS_AUTH is set for {NEXUS_AUTH_HEADER}"
+        )
+    elif case == "header-mismatch":
+        assert NEXUS_AUTH_HEADER in checks["desktop.credentials"].observed
+        assert "X-Other-Auth" in checks["desktop.credentials"].observed
+    elif case == "no-auth-block":
+        assert (
+            checks["desktop.credentials"].observed
+            == "the runtime's /runtime/status carries no auth block"
+        )
+
+
+def test_desktop_credentials_refuse_an_access_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    in_memory_secret_store: InMemorySecretBackend,
+) -> None:
+    """Access refusal needs no network request or platform secret-store access."""
+    del in_memory_secret_store
+
+    def remote(document: Any) -> None:
+        document["runtime"]["profile"] = "remote"
+
+    config = _write_config(tmp_path, remote)
+    _desktop_config(tmp_path, monkeypatch, "https://nexus.pythagora.net")
+    registry = [
+        spec for spec in REGISTRY if spec.id in {"config.valid", "desktop.config"}
+    ]
+    credentials = next(spec for spec in REGISTRY if spec.id == "desktop.credentials")
+    registry.append(
+        CheckSpec(
+            credentials.id, credentials.targets, ("desktop.config",), credentials.run
+        )
+    )
+    report = run_readiness(
+        "owner-client", ReadinessContext(config_path=config), registry=registry
+    )
+    checks = _by_id(report)
+    assert checks["desktop.config"].status == "pass"
+    assert checks["desktop.credentials"].status == "fail"
+    assert "Cloudflare Access" in checks["desktop.credentials"].observed
+    assert "no Cloudflare Access service-token headers" in (
+        checks["desktop.credentials"].remediation or ""
+    )
+
+
 def test_doctor_owner_client_reaches_the_runtime_with_its_auth_header(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The real entry point probes /runtime/status and matches the version."""
-    payload = {"ok": True, "profile": "local", "version": runtime_version()}
+    payload = {
+        "ok": True,
+        "profile": "local",
+        "version": runtime_version(),
+        "auth": {"header": NEXUS_AUTH_HEADER, "enforced": False},
+    }
     with _RuntimeEndpoint(payload) as endpoint:
         config = _external_config(tmp_path, endpoint.url)
+        _desktop_config(tmp_path, monkeypatch, endpoint.url)
         exit_code, out, err = _run_cli(
             monkeypatch,
             capsys,
@@ -767,6 +959,9 @@ def test_doctor_owner_client_reaches_the_runtime_with_its_auth_header(
         ("config.valid", "pass"),
         ("gateway.reachable", "pass"),
         ("gateway.version", "pass"),
+        ("desktop.config", "pass"),
+        ("desktop.credentials", "pass"),
+        ("desktop.runtime_command", "pass"),
     ]
     assert report["checks"][1]["observed"] == (
         f"{endpoint.url}{RUNTIME_STATUS_PATH} answered (profile local, runtime ok)"
@@ -781,9 +976,15 @@ def test_doctor_owner_client_fails_on_a_version_mismatch(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A runtime on another version fails gateway.version and exits 1."""
-    payload = {"ok": False, "profile": "local", "version": "0.0.0-other"}
+    payload = {
+        "ok": False,
+        "profile": "local",
+        "version": "0.0.0-other",
+        "auth": {"header": NEXUS_AUTH_HEADER, "enforced": False},
+    }
     with _RuntimeEndpoint(payload) as endpoint:
         config = _external_config(tmp_path, endpoint.url)
+        _desktop_config(tmp_path, monkeypatch, endpoint.url)
         exit_code, out, err = _run_cli(
             monkeypatch,
             capsys,
@@ -796,14 +997,17 @@ def test_doctor_owner_client_fails_on_a_version_mismatch(
 
     assert (exit_code, err) == (1, "")
     lines = out.splitlines()
-    assert len(lines) == 3
-    assert lines[1].startswith("pass  gateway.reachable  ")
+    assert len(lines) == 6
+    assert lines[1].startswith(f"pass  {'gateway.reachable':<23}  ")
     assert lines[1].endswith("answered (profile local, runtime not ok)")
     assert lines[2] == (
-        f"fail  gateway.version    client {runtime_version()}, runtime 0.0.0-other"
+        f"fail  {'gateway.version':<23}  client {runtime_version()}, runtime 0.0.0-other"
         "  -> Update the older side (git pull, poetry install), then restart the "
         "runtime with nexus restart."
     )
+    assert lines[3].startswith(f"pass  {'desktop.config':<23}  ")
+    assert lines[4].startswith(f"pass  {'desktop.credentials':<23}  ")
+    assert lines[5].startswith(f"pass  {'desktop.runtime_command':<23}  ")
 
 
 def test_doctor_owner_client_reports_an_unreachable_runtime(
@@ -815,6 +1019,7 @@ def test_doctor_owner_client_reports_an_unreachable_runtime(
     with _RuntimeEndpoint({}) as endpoint:
         closed = endpoint.url
     config = _external_config(tmp_path, closed)
+    _desktop_config(tmp_path, monkeypatch, closed)
     exit_code, out, _ = _run_cli(
         monkeypatch,
         capsys,
@@ -834,6 +1039,9 @@ def test_doctor_owner_client_reports_an_unreachable_runtime(
         "Start the gateway [runtime.external].gateway_url names."
     )
     assert checks["gateway.version"]["status"] == "skip"
+    assert checks["desktop.config"]["status"] == "pass"
+    assert checks["desktop.credentials"]["status"] == "skip"
+    assert checks["desktop.runtime_command"]["status"] == "pass"
 
 
 # ---------------------------------------------------------------------------
