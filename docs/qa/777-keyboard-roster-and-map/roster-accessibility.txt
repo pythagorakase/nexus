@@ -1,0 +1,8 @@
+- listbox "Characters":
+  - option "Ivo Sato" [selected]: I Ivo Sato
+  - option "Pela": P Pela
+  - option "Mara Quill": M Mara Quill
+  - option "Tobias Fenn": T Tobias Fenn
+  - option "Rhea Lind": R Rhea Lind
+  - option "Osei Vance": O Osei Vance
+  - option "Juno Halloran": J Juno Halloran
