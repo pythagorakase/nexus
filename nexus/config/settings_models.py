@@ -2350,6 +2350,23 @@ class OrreryEpistemicsSettings(BaseModel):
             raise ValueError(
                 f"claim_event_types contains unknown event types: {unknown}"
             )
+        from nexus.agents.orrery.substrate import AttentionClass
+        from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+        background_event_types = {
+            event_type
+            for template in BUILTIN_TEMPLATES
+            for branch in template.branches
+            if branch.attention is AttentionClass.BACKGROUND
+            for event_type in (branch.event_type, branch.signal_event_type)
+            if event_type is not None
+        }
+        sorted_overlap = sorted(set(normalized) & background_event_types)
+        if sorted_overlap:
+            raise ValueError(
+                "claim_event_types contains event types emitted by background "
+                f"branches: {sorted_overlap}"
+            )
         missing_policy = sorted(set(normalized) - set(CLAIM_BIRTH_ROLE_POLICY))
         if missing_policy:
             raise ValueError(

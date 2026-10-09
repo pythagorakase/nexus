@@ -47,6 +47,7 @@ function OrreryRows({ rows }: { rows: BackstageOrreryRow[] }) {
         return (
           <div
             className="nexus-backstage-orrery-row"
+            data-attention={row.attention ?? undefined}
             title={[row.proposal_id, row.evaluated_at]
               .filter(Boolean)
               .join(" · ")}

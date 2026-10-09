@@ -74,6 +74,7 @@ export interface BackstageOrreryRow {
   branch_label: string | null;
   event_type: string | null;
   drive_band: string | null;
+  attention?: "background" | "meaningful" | "urgent" | null;
   proposal_id?: string | null;
   position?: number | null;
   binding_names?: Record<string, string>;

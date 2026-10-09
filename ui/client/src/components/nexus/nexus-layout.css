@@ -1852,6 +1852,7 @@
   padding: 2px 0;
   animation: row-in .25s ease-out;
 }
+.nexus-backstage-orrery-row[data-attention="background"] { opacity: .55; }
 .nexus-backstage-band {
   width: 3px;
   align-self: stretch;

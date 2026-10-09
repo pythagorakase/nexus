@@ -6,10 +6,12 @@ import re
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from nexus.agents.orrery.demo import run_preset
 from nexus.agents.orrery.substrate import (
     ALWAYS,
+    AttentionClass,
     Branch,
     CompoundCondition,
     DriveBand,
@@ -69,6 +71,141 @@ from nexus.agents.orrery.templates import (
     EXTRACT_VENGEANCE,
     RECREATE,
 )
+from nexus.config import load_settings
+from nexus.config.settings_models import OrreryEpistemicsSettings
+
+
+def _attention_template(
+    branch: Branch, *, band: DriveBand = DriveBand.ANCHORED_ROUTINE
+) -> Template:
+    """Construct one authored branch without any database or resolver effects."""
+    return Template(
+        id="attention_fixture",
+        priority=1,
+        drive_band=band,
+        blurb="Attention authoring fixture.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(branch,),
+    )
+
+
+def test_attention_defaults_to_meaningful() -> None:
+    """A new branch is meaningful and never an authored deviation by default."""
+    branch = Branch("Ordinary", ALWAYS, "{actor} waits.")
+    assert branch.attention is AttentionClass.MEANINGFUL
+    assert branch.deviation is False
+
+
+def test_background_branch_refuses_crisis_band() -> None:
+    """Crisis templates cannot conceal a branch as ordinary background."""
+    branch = Branch(
+        "Ordinary", ALWAYS, "{actor} waits.", attention=AttentionClass.BACKGROUND
+    )
+    with pytest.raises(ValueError, match="cannot carry a crisis_constraint drive band"):
+        _attention_template(branch, band=DriveBand.CRISIS_CONSTRAINT)
+
+
+def test_background_branch_refuses_milestone() -> None:
+    """A project milestone remains consequential regardless of magnitude."""
+    branch = Branch(
+        "Ordinary",
+        ALWAYS,
+        "{actor} waits.",
+        state_delta={"project.advance": {"milestone": True}},
+        attention=AttentionClass.BACKGROUND,
+    )
+    with pytest.raises(ValueError, match="cannot carry a project milestone"):
+        _attention_template(branch)
+
+
+@pytest.mark.parametrize(
+    ("state_delta", "changed_fields"),
+    [
+        ({"entity_pair_tags.add_outbound": "contact:social"}, ()),
+        ({}, ("character_relationships.relationship_type",)),
+        ({}, ("entity_pair_tags",)),
+    ],
+)
+def test_background_branch_refuses_relationship_effects(
+    state_delta: dict[str, Any], changed_fields: tuple[str, ...]
+) -> None:
+    """Pair tags and relationship fields cannot pass as ordinary background."""
+    branch = Branch(
+        "Ordinary",
+        ALWAYS,
+        "{actor} waits.",
+        state_delta=state_delta,
+        changed_fields=changed_fields,
+        attention=AttentionClass.BACKGROUND,
+    )
+    with pytest.raises(ValueError, match="cannot carry a relationship effect"):
+        _attention_template(branch)
+
+
+def test_background_branch_refuses_status_effect() -> None:
+    """An institutional status change is not a background effect."""
+    branch = Branch(
+        "Ordinary",
+        ALWAYS,
+        "{actor} waits.",
+        state_delta={"status.bestow": {"level": "junior"}},
+        attention=AttentionClass.BACKGROUND,
+    )
+    with pytest.raises(ValueError, match="cannot carry a status effect"):
+        _attention_template(branch)
+
+
+def test_deviation_requires_background() -> None:
+    """Deviation marks a departure from background, not a second attention class."""
+    branch = Branch("Ordinary", ALWAYS, "{actor} waits.", deviation=True)
+    with pytest.raises(ValueError, match="declares deviation but is not background"):
+        _attention_template(branch)
+
+
+def test_attention_roster_matches_ruling() -> None:
+    """The owner roster is explicit; no deviation or urgent roster is inferred."""
+    roster = {
+        "train",
+        "run_errands",
+        "stroll",
+        "upkeep",
+        "recreate",
+        "sleep",
+        "drink",
+        "eat",
+    }
+    expected = {
+        (template.id, branch.label)
+        for template in BUILTIN_TEMPLATES
+        if template.id in roster
+        for branch in template.branches
+    }
+    actual = {
+        (template.id, branch.label)
+        for template in BUILTIN_TEMPLATES
+        for branch in template.branches
+        if branch.attention is AttentionClass.BACKGROUND
+    }
+    assert len(expected) == 35
+    assert actual == expected
+    branches = [
+        branch for template in BUILTIN_TEMPLATES for branch in template.branches
+    ]
+    assert not any(branch.deviation for branch in branches)
+    nonpromotable = [branch for branch in branches if not branch.promotable]
+    assert len(nonpromotable) == 29
+    assert all(
+        branch.attention is AttentionClass.MEANINGFUL for branch in nonpromotable
+    )
+    assert not any(branch.attention is AttentionClass.URGENT for branch in branches)
+    assert load_settings().orrery is not None
+
+
+def test_claim_event_types_refuse_background_event() -> None:
+    """The background-event refusal precedes the missing birth-role policy check."""
+    with pytest.raises(ValidationError, match="background branches"):
+        OrreryEpistemicsSettings(claim_event_types=["slept"])
 
 
 _SINCE_LAST_EVENT_RE = re.compile(r"since_last_event_at_least\(([^,()]+),")

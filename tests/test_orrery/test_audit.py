@@ -51,6 +51,32 @@ def _catalog() -> dict:
     )
 
 
+def test_catalog_payload_carries_branch_attention() -> None:
+    """Every audit branch carries the authored class independently of promotion."""
+    catalog = build_catalog(BUILTIN_TEMPLATES)
+    templates = {
+        template["template_id"]: template
+        for band in catalog["drive_bands"]
+        for template in band["templates"]
+    }
+    for template in templates.values():
+        for branch in template["branches"]:
+            assert {"attention", "deviation"} <= branch.keys()
+    stroll = next(
+        branch
+        for branch in templates["stroll"]["branches"]
+        if branch["label"] == "Pace the near ground"
+    )
+    assert stroll["attention"] == "background"
+    acquaintance = next(
+        branch
+        for branch in templates["make_acquaintance"]["branches"]
+        if branch["label"] == "Exchange names"
+    )
+    assert acquaintance["attention"] == "meaningful"
+    assert acquaintance["promotable"] is False
+
+
 def test_cognition_config_projection_names_missing_sections_and_keys() -> None:
     """The dev trace reports config truth instead of dashboard defaults."""
 

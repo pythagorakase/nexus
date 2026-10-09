@@ -536,6 +536,7 @@ def test_payload_assembles_every_committed_stream(
             "branch_label": "danger closes in",
             "event_type": "threat_issued",
             "drive_band": "crisis_constraint",
+            "attention": None,
             "proposal_id": "evade_pursuers:resolution-binding",
             "position": None,
             "binding_names": {},
@@ -543,6 +544,80 @@ def test_payload_assembles_every_committed_stream(
         }
     ]
     assert [entry["turn_label"] for entry in orrery["history"]] == ["t.3", "t.2"]
+
+
+def test_payload_reports_known_branch_attention(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """Real endpoint assembly resolves both classes on a template-only clone."""
+
+    chunk_id = backstage_case["chunks"][0]
+    expected = {
+        ("stroll", "Pace the near ground"): "background",
+        ("evade_pursuers", "Go to ground in flooded tunnels"): "meaningful",
+    }
+    resolution_ids: list[int] = []
+    pressure_ids: list[int] = []
+    try:
+        with closing(connect(disposable_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT orrery_proposal FROM narrative_chunks WHERE id = %s",
+                (chunk_id,),
+            )
+            assert cur.fetchone()[0] is None
+            cur.execute("SELECT entity_id FROM characters WHERE name = 'Celia'")
+            actor_id = int(cur.fetchone()[0])
+            for template_id, branch_label in expected:
+                binding_hash = f"attention-proof-{template_id}"
+                cur.execute(
+                    """
+                    INSERT INTO orrery_resolutions (
+                        tick_chunk_id, template_id, binding_hash,
+                        actor_entity_id, priority, magnitude, state_delta, brief
+                    ) VALUES (%s, %s, %s, %s, 1, 0.25, '{}'::jsonb, %s)
+                    RETURNING id
+                    """,
+                    (chunk_id, template_id, binding_hash, actor_id, branch_label),
+                )
+                resolution_ids.append(int(cur.fetchone()[0]))
+                cur.execute(
+                    """
+                    INSERT INTO orrery_scene_pressures (
+                        tick_chunk_id, template_id, binding_hash,
+                        actor_entity_id, priority, magnitude, branch_label,
+                        pressure_stub, prompt_text, bindings
+                    ) VALUES (%s, %s, %s, %s, 1, 0.25, %s,
+                              'attention proof', 'attention proof', '{}'::jsonb)
+                    RETURNING id
+                    """,
+                    (chunk_id, template_id, binding_hash, actor_id, branch_label),
+                )
+                pressure_ids.append(int(cur.fetchone()[0]))
+
+        response = client.get(
+            "/api/dev/backstage/4/turn", params={"chunk_id": chunk_id}
+        )
+        assert response.status_code == 200
+        orrery = response.json()["orrery"]
+        for key in ("rows", "inventory"):
+            rows = orrery[key]
+            assert len(rows) == len(expected) == 2
+            assert {
+                (row["template_id"], row["branch_label"]): row["attention"]
+                for row in rows
+            } == expected
+    finally:
+        with closing(connect(disposable_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM orrery_scene_pressures WHERE id = ANY(%s)",
+                (pressure_ids,),
+            )
+            cur.execute(
+                "DELETE FROM orrery_resolutions WHERE id = ANY(%s)",
+                (resolution_ids,),
+            )
 
 
 def test_history_counts_field_level_relationship_writes(

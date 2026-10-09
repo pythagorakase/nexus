@@ -1064,6 +1064,8 @@ def build_catalog(
                     "label": branch.label,
                     "magnitude": branch.magnitude,
                     "promotable": branch.promotable,
+                    "attention": branch.attention.value,
+                    "deviation": branch.deviation,
                     "event_type": branch.event_type,
                     "signal_event_type": branch.signal_event_type,
                     "has_scene_pressure_stub": branch.scene_pressure_stub is not None,
