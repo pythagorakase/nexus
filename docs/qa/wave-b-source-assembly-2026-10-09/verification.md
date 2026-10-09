@@ -24,4 +24,28 @@ are present; no migration was applied by this source assembly. The 776-S1b
 paid-probe decision remains gated behind concrete Phase 1 readiness. The final
 817 lane follows the other landed Wave B lanes.
 
+## UI-B source merge follow-up
+
+The fifteen-lane source assembly now includes UI-B at
+`9e61307194699f202ad226d1b3af6e1b9350c2cd`, normally merged at
+`f755a209b64cd67f8feaaa774dbcd0679863452b`. That incoming branch brings its
+original 777 parent `149704d1`; the corrected final 777 capture branch, Wave A 809 and
+Wave A 824 still must merge. The original fourteen-lane evidence above remains
+pinned to its own source.
+
+Independent review found no product merge blocker. UI-B's five product files
+match its reviewed input, six shared paths preserve their earlier lane changes,
+and the remaining 198 previously changed runtime/test/config paths are unchanged.
+The fresh AST-only graph has 406 maintained and 225 production modules with no
+findings; route reachability is explicitly unproven. Exact raw review, command,
+closure and graph evidence is retained in `ui-b-source-merge/`.
+
+The actual canonical closure is 24 documents. Ten bodies were reviewed against
+the incremental source; their decisions and quotations remain intact. The three
+newly affected 777 records 0008, 0051 and 0052 now name the actual main merge base
+`f073b3711a3bd0273943c9defad85913452fd00b`; no body, status or source list changed
+in this follow-up. All final predecessor, freshness and runtime acceptance
+remains pending. No application import, test, database or browser operation
+was performed for this source-merge checkpoint.
+
 Codex — GPT-6

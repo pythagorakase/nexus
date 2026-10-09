@@ -1,0 +1,26 @@
+{
+  "reviewed_head": "f755a209b64cd67f8feaaa774dbcd0679863452b",
+  "actual_merge_base": "f073b3711a3bd0273943c9defad85913452fd00b",
+  "scope": "Source semantic review and three stamp-only updates; no freshness test or runtime execution",
+  "records": [
+    {
+      "path": "docs/decisions/0008-the-story-clock-in-chrome.md",
+      "body_sha256": "2b8f4cee44193acbed6eaab41e179c57920747ad797971ca863c7172480d73d2",
+      "body_status_quotes_sources": "unchanged",
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "path": "docs/decisions/0051-time-lens.md",
+      "body_sha256": "3867c92ed2219805e5448f69775d2f2176366068c5578b1fa337e1188ee7f36e",
+      "body_status_quotes_sources": "unchanged",
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "path": "docs/decisions/0052-story-map.md",
+      "body_sha256": "722e2e63403ab3ff40293c29082f82ed3090ba0942f039f96c8d8ef0891730a9",
+      "body_status_quotes_sources": "unchanged",
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b"
+    }
+  ],
+  "reviewer": "Codex \u2014 GPT-6"
+}
