@@ -463,7 +463,7 @@ selects a configuration.
 
 | Layout entry | Location | Holds |
 |---|---|---|
-| `state_dir` | `[runtime].state_dir` | pidfiles, `logging.json`, `preferences.toml`, local-model state, file-backed wizard threads (`wizard_threads/`) |
+| `state_dir` | `[runtime].state_dir` | pidfiles, `logging.json`, `preferences.toml`, local-model state |
 | `logs_dir` | the same directory | captured `<service>.log` files and rotated segments |
 | `usage_dir` | `[usage].usage_dir` | usage and prompt-window ledgers |
 | `uploads_dir` | `ui/client/public` | `character_portraits/` and `place_images/` |

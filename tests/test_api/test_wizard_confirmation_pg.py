@@ -5,19 +5,18 @@ Needs assets.new_story_creator and assets.traits; no provider calls or real save
 
 from contextlib import closing
 from pathlib import Path
-from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from psycopg2.errors import RaiseException
 
 from nexus.api import setup_endpoints
+from nexus.api.conversations import ConversationsClient, new_conversation_id
 from nexus.api.new_story_cache import (
-    IntroductionClaim,
-    claim_wizard_introduction,
-    complete_wizard_introduction,
     init_cache,
     read_cache,
+    record_wizard_reply,
     write_cache,
     write_wizard_choices,
 )
@@ -36,7 +35,7 @@ pytestmark = pytest.mark.requires_postgres
 
 @pytest.fixture
 def saved_character(offline_gate_db: str) -> str:
-    init_cache(offline_gate_db, "saved-thread", 4)
+    init_cache(offline_gate_db, new_conversation_id(), 4)
     write_cache(
         dbname=offline_gate_db,
         setting_draft=sample_setting().model_dump(),
@@ -441,10 +440,11 @@ async def test_stale_client_trait_submission_preserves_revised_concept(
     ("accepted", "introduced"), [("setting", "character"), ("character", "seed")]
 )
 def test_accepted_transition_awaits_introduction_until_its_reply_persists(
-    offline_gate_db: str, monkeypatch, accepted: str, introduced: str
+    offline_gate_db: str, accepted: str, introduced: str
 ) -> None:
     """Reload after Confirm restores the accepted artifact, not an empty phase."""
-    init_cache(offline_gate_db, "saved-thread", 4)
+    thread = new_conversation_id()
+    init_cache(offline_gate_db, thread, 4)
     write_cache(
         dbname=offline_gate_db,
         setting_draft=sample_setting().model_dump(),
@@ -460,92 +460,118 @@ def test_accepted_transition_awaits_introduction_until_its_reply_persists(
     write_wizard_choices(
         ["Keep this draft", "Change it"],
         offline_gate_db,
-        expected_thread_id="saved-thread",
+        expected_thread_id=thread,
     )
     pending = read_cache(offline_gate_db)
+    assert pending is not None
     assert pending.pending_confirmation() == accepted
     assert pending.awaiting_introduction() is None
-
     confirm_artifact(
         offline_gate_db,
-        thread_id="saved-thread",
+        thread_id=thread,
         phase=accepted,
         artifact_token=pending.artifact_token(),
     )
-    # The introduction's control was written; its reply has not arrived.
-    control = {
-        "role": "user",
-        "content": f"[SYSTEM] Phase {accepted} complete. Proceeding to {introduced}.",
-        "origin": "wizard_control",
-    }
-    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
-    monkeypatch.setattr(
-        setup_endpoints,
-        "ConversationsClient",
-        lambda model: SimpleNamespace(
-            list_messages=lambda *a, **k: [control], client=None
-        ),
+    # The control is durable; the reply and its choices have not arrived.
+    ConversationsClient(offline_gate_db).add_message(
+        thread,
+        "user",
+        f"[SYSTEM] Phase {accepted} complete. Proceeding to {introduced}.",
+        origin="wizard_control",
     )
     app = FastAPI()
     app.include_router(setup_endpoints.router)
     client = TestClient(app)
-    interrupted = client.get("/api/story/new/setup/resume?slot=4").json()
+    response = client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    interrupted = response.json()
     assert interrupted["current_phase"] == introduced
     assert interrupted["awaiting_introduction"] == introduced
     assert interrupted["pending_confirmation"] is None
     assert interrupted["choices"] == []
     assert (interrupted["character_sheet"] is not None) is (accepted == "character")
+    assert interrupted["messages"] == []
 
-    # A claimed reply is not yet an introduction; only one claim can be taken.
-    claim_id = claim_wizard_introduction(
-        ["Here", "There"],
+    record_wizard_reply(
         offline_gate_db,
-        expected_thread_id="saved-thread",
-        replaces_claim=None,
-    )
-    claimed = read_cache(offline_gate_db)
-    assert claimed.awaiting_introduction() == introduced
-    assert claimed.introduction_claim == IntroductionClaim(claim_id, ["Here", "There"])
-    assert claimed.choices == []
-    with pytest.raises(WizardStateConflict, match="already introduced"):
-        claim_wizard_introduction(
-            ["Late"],
-            offline_gate_db,
-            expected_thread_id="saved-thread",
-            replaces_claim=None,
-        )
-    assert (
-        client.get("/api/story/new/setup/resume?slot=4").json()["awaiting_introduction"]
-        == introduced
-    )
-
-    # A request that found the claim undelivered replaces exactly that claim.
-    replacement = claim_wizard_introduction(
-        [],
-        offline_gate_db,
-        expected_thread_id="saved-thread",
-        replaces_claim=claim_id,
-    )
-    with pytest.raises(WizardStateConflict):
-        complete_wizard_introduction(
-            claim_id,
-            ["Here", "There"],
-            offline_gate_db,
-            expected_thread_id="saved-thread",
-        )
-
-    # Completion records the reply's choice set, even an empty one.
-    complete_wizard_introduction(
-        replacement, [], offline_gate_db, expected_thread_id="saved-thread"
+        expected_thread_id=thread,
+        message="Here is the next phase.",
+        choices=[],
+        introduction=True,
     )
     introduced_state = client.get("/api/story/new/setup/resume?slot=4").json()
     assert introduced_state["current_phase"] == introduced
     assert introduced_state["awaiting_introduction"] is None
+    assert introduced_state["messages"] == [
+        {"role": "assistant", "content": "Here is the next phase."}
+    ]
     with pytest.raises(WizardStateConflict, match="already introduced"):
-        claim_wizard_introduction(
-            ["A second introduction", "Its twin"],
+        record_wizard_reply(
             offline_gate_db,
-            expected_thread_id="saved-thread",
-            replaces_claim=replacement,
+            expected_thread_id=thread,
+            message="A second introduction",
+            choices=["Its twin"],
+            introduction=True,
         )
-    assert read_cache(offline_gate_db).choices == []
+    cache = read_cache(offline_gate_db)
+    assert cache is not None and cache.choices == []
+
+
+@pytest.mark.parametrize("introduction", [False, True])
+def test_reply_and_choices_commit_together(
+    offline_gate_db: str, introduction: bool
+) -> None:
+    """A real choices-update trigger rolls back the preceding transcript INSERT."""
+    thread = new_conversation_id()
+    init_cache(offline_gate_db, thread, 4)
+    with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "CREATE FUNCTION assets.refuse_wizard_choices() RETURNS trigger "
+            "LANGUAGE plpgsql AS $$ BEGIN "
+            "RAISE EXCEPTION 'choices rejected by proof trigger'; END $$"
+        )
+        cur.execute(
+            "CREATE TRIGGER refuse_wizard_choices BEFORE UPDATE OF choice_object "
+            "ON assets.new_story_creator FOR EACH ROW "
+            "EXECUTE FUNCTION assets.refuse_wizard_choices()"
+        )
+    with pytest.raises(RaiseException, match="choices rejected by proof trigger"):
+        record_wizard_reply(
+            offline_gate_db,
+            expected_thread_id=thread,
+            message="This must not survive the rollback.",
+            choices=["Continue"],
+            introduction=introduction,
+        )
+    with closing(connect(offline_gate_db)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM assets.wizard_messages")
+        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT choice_object FROM assets.new_story_creator WHERE id")
+        assert cur.fetchone()[0] is None
+
+
+def test_second_introduction_is_refused(offline_gate_db: str) -> None:
+    """The cache row lock admits only one introduction and one transcript row."""
+    thread = new_conversation_id()
+    init_cache(offline_gate_db, thread, 4)
+    assert (
+        record_wizard_reply(
+            offline_gate_db,
+            expected_thread_id=thread,
+            message="The first introduction.",
+            choices=[],
+            introduction=True,
+        )
+        == 1
+    )
+    with pytest.raises(WizardStateConflict, match="already introduced"):
+        record_wizard_reply(
+            offline_gate_db,
+            expected_thread_id=thread,
+            message="The duplicate introduction.",
+            choices=["Duplicate"],
+            introduction=True,
+        )
+    assert ConversationsClient(offline_gate_db).list_messages(thread, limit=0) == [
+        {"role": "assistant", "content": "The first introduction.", "phase": "setting"}
+    ]

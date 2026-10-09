@@ -1,7 +1,7 @@
 """Draft completion, revision and player confirmation are distinct transitions."""
 
 from copy import deepcopy
-from functools import partial
+from contextlib import closing
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -15,7 +15,6 @@ from nexus.api import (
     new_story_cache,
     setup_endpoints,
     slot_endpoints,
-    slot_state,
     wizard_agent,
     wizard_chat,
 )
@@ -23,13 +22,13 @@ from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import (
     WizardCache,
     CharacterData,
-    IntroductionClaim,
     SettingData,
     SuggestedTrait,
     _row_to_cache,
 )
 from nexus.api.new_story_schemas import WizardResponse, CharacterCreationState
-from nexus.api.slot_state import SlotState, WizardState, _get_wizard_state_from_row
+from nexus.api.slot_state import _get_wizard_state_from_row
+from tests.pg_fixtures import connect
 from tests.test_cli_wizard_confirmation import Response, arguments
 from tests.test_wizard_agent import sample_concept_submission, DummyRunContext
 
@@ -105,26 +104,29 @@ def test_slot_projection_waits_for_both_phase_confirmations() -> None:
     assert _get_wizard_state_from_row(row).phase == "seed"
 
 
-def test_resume_restores_complete_character_card_without_inference(monkeypatch) -> None:
-    cache = character_cache()
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **kw: "TEST")
-    monkeypatch.setattr(
-        setup_endpoints,
-        "ConversationsClient",
-        lambda *a, **kw: SimpleNamespace(
-            list_messages=lambda *a, **kw: [], client=None
-        ),
-    )
+@pytest.mark.requires_postgres
+def test_resume_restores_complete_character_card_without_inference(
+    offline_gate_db: str, seed_wizard_cache
+) -> None:
+    cache = seed_wizard_cache(character_cache())
     app = FastAPI()
     app.include_router(setup_endpoints.router)
-    data = TestClient(app).get("/api/story/new/setup/resume?slot=4").json()
+    client = TestClient(app)
+    response = client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    data = response.json()
     assert data["current_phase"] == data["pending_confirmation"] == "character"
     assert data["artifact_token"] == cache.artifact_token()
     assert data["character_sheet"]["name"] == "Mara"
     assert data["character_state"]["concept"]["background"].startswith("Age 38")
-    cache.character_revision_pending = True
-    revised = TestClient(app).get("/api/story/new/setup/resume?slot=4").json()
+    with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE assets.new_story_creator SET character_revision_pending = TRUE "
+            "WHERE id = TRUE"
+        )
+    response = client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    revised = response.json()
     assert revised["current_phase"] == "character"
     assert revised["pending_confirmation"] is None
     assert revised["character_revision_pending"] is True
@@ -181,34 +183,14 @@ async def test_revision_requires_actual_replacement_and_preserves_mechanics(
         )
 
 
+@pytest.mark.requires_postgres
 @pytest.mark.parametrize("stale", ["thread", "phase", "complete"])
 def test_chat_rejects_stale_or_unconfirmed_character_before_provider_setup(
-    monkeypatch, stale
+    monkeypatch, seed_wizard_cache, stale
 ) -> None:
-    cache = character_cache()
-    monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
-    monkeypatch.setattr(wizard_chat, "read_cache", lambda db: cache)
-    monkeypatch.setattr(
-        slot_state,
-        "get_slot_state",
-        lambda slot: SlotState(
-            slot=4,
-            is_empty=False,
-            is_wizard_mode=True,
-            wizard_state=WizardState(
-                phase="character",
-                thread_id=cache.thread_id,
-                choices=[],
-                has_concept=True,
-                has_traits=True,
-                has_wildcard=True,
-            ),
-            narrative_state=None,
-            model="TEST",
-        ),
-    )
+    cache = seed_wizard_cache(character_cache())
     provider = Mock(side_effect=AssertionError("must reject before provider access"))
-    monkeypatch.setattr(wizard_chat, "ConversationsClient", provider)
+    monkeypatch.setattr(wizard_chat, "build_pydantic_ai_model_with_provider", provider)
     app = FastAPI()
     app.include_router(wizard_chat.router)
     response = TestClient(app).post(
@@ -320,16 +302,15 @@ def test_stale_client_context_cannot_restore_prose_after_revision(monkeypatch):
     assert stale["concept"]["background"].startswith("Age 38")
 
 
+@pytest.mark.requires_postgres
 @pytest.mark.asyncio
 async def test_accept_fate_prose_fallback_carries_committed_confirmation_metadata(
     monkeypatch,
+    offline_gate_db: str,
+    seed_wizard_cache,
 ) -> None:
-    """A bare wildcard reply after auto-confirmed traits must still pass the gate."""
-    from contextlib import nullcontext
-
-    cache = character_cache(complete=False)
-    committed = deepcopy(cache)
-    committed.character.traits_confirmed = True
+    """A bare wildcard reply after real trait acceptance still passes the gate."""
+    cache = seed_wizard_cache(character_cache(complete=False))
     context = wizard_agent.WizardContext(
         slot=4,
         cache=cache,
@@ -354,14 +335,8 @@ async def test_accept_fate_prose_fallback_carries_committed_confirmation_metadat
                 )
             )
 
-    monkeypatch.setattr(wizard_chat, "guarded_wizard_write", lambda *a: nullcontext())
-    monkeypatch.setattr(wizard_chat, "clear_suggested_traits", lambda dbname: None)
-    monkeypatch.setattr(wizard_chat, "record_drafts", lambda slot, **drafts: None)
-    monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: committed)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
     monkeypatch.setattr(wizard_chat, "record_pydantic_ai_result", lambda *a, **k: None)
-    monkeypatch.setattr(wizard_chat, "write_wizard_choices", lambda *a, **k: None)
-
     result = await wizard_chat._handle_accept_fate_traits(
         context=context,
         accept_fate=True,
@@ -372,16 +347,19 @@ async def test_accept_fate_prose_fallback_carries_committed_confirmation_metadat
         model_name="TEST",
         provider_name="test",
         model_settings=None,
-        client=Mock(),
+        client=ConversationsClient(offline_gate_db),
         thread_id=cache.thread_id,
     )
-
+    committed = new_story_cache.read_cache(offline_gate_db)
+    assert committed is not None and committed.character.traits_confirmed
     assert result is not None
     assert result["traits_auto_confirmed"] is True
     for key, value in committed.confirmation_metadata().items():
         assert result[key] == value, key
-    # The same consistency gate every other artifact path passes through.
     assert wizard_chat._artifact_response(result, 4, cache.thread_id) is result
+    saved = new_story_cache.read_cache(offline_gate_db)
+    assert saved is not None
+    assert saved.choices == ["Answer the bell", "Ignore the bell"]
 
 
 # Each accepted checkpoint and the phase its acceptance enters (#955).
@@ -435,22 +413,6 @@ def test_acceptance_awaits_the_next_introduction_until_a_reply_is_recorded(
     assert replied.current_phase() == introduced
     assert replied.awaiting_introduction() is None
 
-    # A claimed reply is not an introduction until its transcript proves it.
-    claimed = accepted_row(
-        accepted, {"introduction_claim": {"id": "c1", "presented": ["A", "B"]}}
-    )
-    assert claimed.awaiting_introduction() == introduced
-    assert claimed.choices == []
-    assert claimed.introduction_claim == IntroductionClaim("c1", ["A", "B"])
-    control = {"role": "user", "content": "[SYSTEM]", "origin": "wizard_control"}
-    assert claimed.settle_introduction_claim([control]) is claimed
-    settled = claimed.settle_introduction_claim(
-        [control, {"role": "assistant", "content": "Where does it begin?"}]
-    )
-    assert settled.awaiting_introduction() is None
-    assert settled.choices == ["A", "B"]
-    assert settled.introduction_claim is None
-
     # Completion without acceptance is a pending confirmation, never a transition.
     unaccepted = accepted_row(accepted, None)
     setattr(unaccepted, f"{accepted}_confirmed", False)
@@ -466,26 +428,19 @@ def test_acceptance_awaits_the_next_introduction_until_a_reply_is_recorded(
     assert drafted.awaiting_introduction() is None
 
 
+@pytest.mark.requires_postgres
 @pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
 def test_resume_restores_accepted_artifact_while_its_introduction_is_missing(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+    offline_gate_db: str, seed_wizard_cache, accepted: str, introduced: str
 ) -> None:
-    """An interrupted transition resumes as accepted, not as an empty next phase."""
-    cache = accepted_cache(accepted, reply_recorded=False)
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **kw: "TEST")
-    monkeypatch.setattr(
-        setup_endpoints,
-        "ConversationsClient",
-        lambda *a, **kw: SimpleNamespace(
-            list_messages=lambda *a, **kw: [], client=None
-        ),
-    )
+    """An interrupted transition resumes as accepted, not an empty next phase."""
+    cache = seed_wizard_cache(accepted_cache(accepted, reply_recorded=False))
     app = FastAPI()
     app.include_router(setup_endpoints.router)
     client = TestClient(app)
-
-    data = client.get("/api/story/new/setup/resume?slot=4").json()
+    response = client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    data = response.json()
     assert data["current_phase"] == data["awaiting_introduction"] == introduced
     assert data["pending_confirmation"] is None
     assert data["choices"] == []
@@ -494,32 +449,35 @@ def test_resume_restores_accepted_artifact_while_its_introduction_is_missing(
         assert data["character_sheet"]["name"] == "Mara"
     else:
         assert data["character_sheet"] is None
-
-    cache.choices_recorded = True
-    introduced_data = client.get("/api/story/new/setup/resume?slot=4").json()
+    new_story_cache.record_wizard_reply(
+        offline_gate_db,
+        expected_thread_id=cache.thread_id,
+        message="Where does it begin?",
+        choices=[],
+        introduction=True,
+    )
+    response = client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    introduced_data = response.json()
     assert introduced_data["current_phase"] == introduced
     assert introduced_data["awaiting_introduction"] is None
     assert introduced_data["character_sheet"] is None
 
 
 def introduction_routes(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str, replies: list
+    monkeypatch: pytest.MonkeyPatch,
+    dbname: str,
+    seed_wizard_cache,
+    accepted: str,
+    introduced: str,
+    replies: list,
 ) -> SimpleNamespace:
-    """Mount the chat and resume routes on an accepted, unintroduced wizard.
-
-    The choice-store fakes follow the database contract: a claim replaces only
-    no reply or the named unfinished claim, and completion needs its own claim.
-    """
-    from nexus.api.wizard_confirmation import WizardStateConflict
-
-    cache = accepted_cache(accepted, reply_recorded=False)
-    storage = ConversationsClient("TEST")
-    thread_id = storage.create_thread()
-    cache.thread_id = thread_id
+    """Mount chat/resume/state on a real accepted, unintroduced slot wizard."""
+    cache = seed_wizard_cache(accepted_cache(accepted, reply_recorded=False))
+    storage = ConversationsClient(dbname)
+    thread_id = cache.thread_id
     storage.add_message(thread_id, "assistant", "Anything else before we finish?")
-    storage.add_message(thread_id, "user", "That is everything.")
-    claims: list[str | None] = []
-    faults: dict[str, Exception | None] = {"complete": None}
+    storage.add_message(thread_id, "user", "That is everything.", origin="user")
 
     class Agent:
         async def run(self, *args, **kwargs):
@@ -528,78 +486,20 @@ def introduction_routes(
                 raise reply
             return SimpleNamespace(output=reply() if callable(reply) else reply)
 
-    def record_choices(choices, dbname, *, expected_thread_id):
-        assert expected_thread_id == thread_id
-        cache.choices = choices
-        cache.choices_recorded = True
-        cache.introduction_claim = None
-
-    def claim(choices, dbname, *, expected_thread_id, replaces_claim):
-        assert expected_thread_id == thread_id
-        claims.append(replaces_claim)
-        current = cache.introduction_claim.id if cache.introduction_claim else None
-        if cache.choices_recorded or current != replaces_claim:
-            raise WizardStateConflict(
-                "This phase was already introduced. Resume before continuing."
-            )
-        cache.introduction_claim = IntroductionClaim(f"claim-{len(claims)}", choices)
-        return cache.introduction_claim.id
-
-    def complete(claim_id, choices, dbname, *, expected_thread_id):
-        assert expected_thread_id == thread_id
-        if faults["complete"] is not None:
-            raise faults["complete"]
-        if cache.introduction_claim is None or cache.introduction_claim.id != claim_id:
-            raise WizardStateConflict("The introduction changed while it was saved.")
-        cache.introduction_claim = None
-        cache.choices = choices
-        cache.choices_recorded = True
-
-    state = SlotState(
-        slot=4,
-        is_empty=False,
-        is_wizard_mode=True,
-        wizard_state=WizardState(
-            phase=introduced,
-            thread_id=thread_id,
-            choices=[],
-            has_concept=accepted == "character",
-            has_traits=accepted == "character",
-            has_wildcard=accepted == "character",
-        ),
-        narrative_state=None,
-        model="TEST",
-    )
-    monkeypatch.setattr(slot_state, "get_slot_state", lambda slot: state)
-    monkeypatch.setattr(wizard_agent, "read_cache", lambda dbname: cache)
-    monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
-    monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
-    monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: storage)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
     monkeypatch.setattr(
         wizard_chat, "build_pydantic_ai_model_with_provider", lambda m: (None, "test")
     )
     monkeypatch.setattr(wizard_chat, "record_pydantic_ai_result", lambda *a, **k: None)
-    monkeypatch.setattr(wizard_chat, "write_wizard_choices", record_choices)
-    monkeypatch.setattr(wizard_chat, "claim_wizard_introduction", claim)
-    monkeypatch.setattr(wizard_chat, "complete_wizard_introduction", complete)
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
-    monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
-    # Slot state reads the cache through a call-time import.
-    monkeypatch.setattr(new_story_cache, "read_cache", lambda dbname: cache)
-    monkeypatch.setattr(slot_endpoints, "ConversationsClient", lambda model: storage)
     app = FastAPI()
     app.include_router(wizard_chat.router)
     app.include_router(setup_endpoints.router)
     app.include_router(slot_endpoints.router)
     return SimpleNamespace(
         client=TestClient(app, raise_server_exceptions=False),
-        cache=cache,
+        dbname=dbname,
         storage=storage,
         thread_id=thread_id,
-        claims=claims,
-        faults=faults,
         introduction={
             "slot": 4,
             "thread_id": thread_id,
@@ -636,9 +536,14 @@ def slot_state_of(routes: SimpleNamespace) -> dict:
     return response.json()
 
 
+@pytest.mark.requires_postgres
 @pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
 def test_interrupted_introduction_is_retried_once_then_refused(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+    monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
+    seed_wizard_cache,
+    accepted: str,
+    introduced: str,
 ) -> None:
     """A failed introduction stays requestable; a completed one cannot repeat."""
     replies: list = [
@@ -650,7 +555,9 @@ def test_interrupted_introduction_is_retried_once_then_refused(
             message="Tell me about the harbor.", choices=["Its lamps", "Its debts"]
         ),
     ]
-    routes = introduction_routes(monkeypatch, accepted, introduced, replies)
+    routes = introduction_routes(
+        monkeypatch, offline_gate_db, seed_wizard_cache, accepted, introduced, replies
+    )
     client, introduction = routes.client, routes.introduction
 
     assert client.post("/api/story/new/chat", json=introduction).status_code == 500
@@ -685,159 +592,69 @@ def test_interrupted_introduction_is_retried_once_then_refused(
     )
     assert player.status_code == 200, player.text
     assert replies == []
-    assert routes.claims == [None]
 
 
+@pytest.mark.requires_postgres
 @pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
-def test_crash_between_claim_and_transcript_write_is_recoverable(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
-) -> None:
-    """A claim whose reply never reached the transcript is not an introduction."""
-    routes = introduction_routes(
-        monkeypatch,
-        accepted,
-        introduced,
-        [
-            WizardResponse(message="Lost on the way.", choices=["One", "Two"]),
-            WizardResponse(message="Where does it begin?", choices=["Here", "There"]),
-        ],
-    )
-    add_message = routes.storage.add_message
-
-    def crash_on_first_reply(thread_id, role, content, **kwargs):
-        if role == "assistant" and content == "Lost on the way.":
-            raise RuntimeError("Process terminated")
-        return add_message(thread_id, role, content, **kwargs)
-
-    routes.storage.add_message = crash_on_first_reply
-    crashed = routes.client.post("/api/story/new/chat", json=routes.introduction)
-    assert crashed.status_code == 500
-    # The claim committed, but only as a claim.
-    assert routes.cache.introduction_claim is not None
-    interrupted = resume(routes)
-    assert interrupted["awaiting_introduction"] == introduced
-    assert interrupted["choices"] == []
-    assert assistant_messages(routes) == []
-    state = slot_state_of(routes)
-    assert (state["awaiting_introduction"], state["choices"]) == (introduced, [])
-
-    retried = routes.client.post("/api/story/new/chat", json=routes.introduction)
-    assert retried.status_code == 200, retried.text
-    # The retry replaced exactly the undelivered claim.
-    assert routes.claims == [None, "claim-1"]
-    resumed = resume(routes)
-    assert resumed["awaiting_introduction"] is None
-    assert resumed["choices"] == ["Here", "There"]
-    assert assistant_messages(routes) == ["Where does it begin?"]
-
-
-@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
-def test_crash_after_transcript_write_settles_the_delivered_claim(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
-) -> None:
-    """A delivered reply whose claim never completed is refused, not repeated."""
-    routes = introduction_routes(
-        monkeypatch,
-        accepted,
-        introduced,
-        [WizardResponse(message="Where does it begin?", choices=["Here", "There"])],
-    )
-    routes.faults["complete"] = RuntimeError("Process terminated")
-    crashed = routes.client.post("/api/story/new/chat", json=routes.introduction)
-    assert crashed.status_code == 500
-    assert routes.cache.introduction_claim is not None
-    assert assistant_messages(routes) == ["Where does it begin?"]
-
-    # Reload shows the delivered introduction with its claimed choices.
-    delivered = resume(routes)
-    assert delivered["awaiting_introduction"] is None
-    assert delivered["choices"] == ["Here", "There"]
-    assert delivered["messages"][-1]["content"] == "Where does it begin?"
-    state = slot_state_of(routes)
-    assert state["awaiting_introduction"] is None
-    assert state["choices"] == ["Here", "There"]
-
-    # A retry settles the claim from the transcript instead of introducing again.
-    routes.faults["complete"] = None
-    retried = routes.client.post("/api/story/new/chat", json=routes.introduction)
-    assert retried.status_code == 409
-    assert "already introduced" in retried.json()["detail"]
-    assert routes.cache.introduction_claim is None
-    assert routes.cache.choices == ["Here", "There"]
-    assert routes.claims == [None]
-    assert assistant_messages(routes) == ["Where does it begin?"]
-
-
-@pytest.mark.parametrize("winner", ["completed", "claimed"])
-@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
-def test_introduction_that_loses_the_claim_never_reaches_the_transcript(
+def test_concurrent_introduction_keeps_only_the_committed_reply(
     monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
+    seed_wizard_cache,
     accepted: str,
     introduced: str,
-    winner: str,
 ) -> None:
-    """Concurrent introductions: only the reply holding the claim is kept."""
+    """An introduction committed during generation wins the actual row lock."""
     routes: SimpleNamespace
 
     def concurrent_winner_goes_first() -> WizardResponse:
-        # Another request claimed or completed the introduction meanwhile.
-        if winner == "completed":
-            routes.cache.choices = ["The winner's option", "Another"]
-            routes.cache.choices_recorded = True
-        else:
-            routes.cache.introduction_claim = IntroductionClaim(
-                "winner", ["The winner's option", "Another"]
-            )
+        new_story_cache.record_wizard_reply(
+            offline_gate_db,
+            expected_thread_id=routes.thread_id,
+            message="The winning introduction.",
+            choices=["The winner's option", "Another"],
+            introduction=True,
+        )
         return WizardResponse(
             message="A second introduction.", choices=["Late one", "Late two"]
         )
 
     routes = introduction_routes(
-        monkeypatch, accepted, introduced, [concurrent_winner_goes_first]
+        monkeypatch,
+        offline_gate_db,
+        seed_wizard_cache,
+        accepted,
+        introduced,
+        [concurrent_winner_goes_first],
     )
     response = routes.client.post("/api/story/new/chat", json=routes.introduction)
-    assert response.status_code == 409
+    assert response.status_code == 409, response.text
     assert "already introduced" in response.json()["detail"]
-    assert assistant_messages(routes) == []
-    assert routes.claims == [None]
-    if winner == "completed":
-        assert routes.cache.choices == ["The winner's option", "Another"]
-    else:
-        assert routes.cache.introduction_claim.id == "winner"
+    assert assistant_messages(routes) == ["The winning introduction."]
+    cache = new_story_cache.read_cache(offline_gate_db)
+    assert cache is not None and cache.choices == ["The winner's option", "Another"]
 
 
-def test_introduction_delivery_is_read_after_the_latest_control() -> None:
-    """Only a reply after the latest control message delivers the introduction."""
-    from nexus.api.wizard_transcript import introduction_delivered
-
-    before = {"role": "assistant", "content": "Anything else?"}
-    control = {"role": "user", "content": "[SYSTEM]", "origin": "wizard_control"}
-    reply = {"role": "assistant", "content": "Where does it begin?"}
-    player = {"role": "user", "content": "The harbor.", "origin": "user"}
-    assert introduction_delivered([before, control]) is False
-    assert introduction_delivered([before, control, reply]) is True
-    assert introduction_delivered([before, control, reply, player]) is True
-    # A retry's control after an undelivered claim still awaits its reply.
-    assert introduction_delivered([before, control, control]) is False
-    with pytest.raises(ValueError, match="no control message"):
-        introduction_delivered([before, player])
-
-
+@pytest.mark.requires_postgres
 @pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
-def test_cli_uses_the_delivered_introduction_after_a_crash(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+def test_cli_uses_the_committed_introduction(
+    monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
+    seed_wizard_cache,
+    accepted: str,
+    introduced: str,
 ) -> None:
-    """Slot state settles the claim, so the CLI never asks for it again."""
+    """Real slot state shows delivered choices, so the CLI cannot reintroduce."""
     routes = introduction_routes(
         monkeypatch,
+        offline_gate_db,
+        seed_wizard_cache,
         accepted,
         introduced,
         [WizardResponse(message="Where does it begin?", choices=["Here", "There"])],
     )
-    routes.faults["complete"] = RuntimeError("Process terminated")
-    crashed = routes.client.post("/api/story/new/chat", json=routes.introduction)
-    assert crashed.status_code == 500
-    assert routes.cache.introduction_claim is not None
+    response = routes.client.post("/api/story/new/chat", json=routes.introduction)
+    assert response.status_code == 200, response.text
+    assert assistant_messages(routes) == ["Where does it begin?"]
 
     posts: list[tuple[str, dict]] = []
 
@@ -866,67 +683,3 @@ def test_cli_uses_the_delivered_introduction_after_a_crash(
         ("story/new/chat", "Here")
     ]
     assert "message_origin" not in posts[0][1]
-
-
-def test_concurrent_settlement_of_a_delivered_claim_is_stale_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Losing the race to settle a delivered claim is a 409."""
-    from nexus.api.wizard_confirmation import WizardStateConflict
-
-    routes = introduction_routes(
-        monkeypatch,
-        "character",
-        "seed",
-        [WizardResponse(message="Where does it begin?", choices=["Here", "There"])],
-    )
-    routes.faults["complete"] = RuntimeError("Process terminated")
-    assert (
-        routes.client.post("/api/story/new/chat", json=routes.introduction).status_code
-        == 500
-    )
-    # Another request settles the same claim at the same moment.
-    routes.faults["complete"] = WizardStateConflict(
-        "The introduction changed while it was saved. Resume before continuing."
-    )
-    response = routes.client.post("/api/story/new/chat", json=routes.introduction)
-    assert response.status_code == 409
-    assert response.json()["detail"] == (
-        "The introduction changed while it was saved. Resume before continuing."
-    )
-    assert assistant_messages(routes) == ["Where does it begin?"]
-
-
-@pytest.mark.parametrize("fails", [False, True])
-def test_reconciliation_closes_its_transcript_client(
-    monkeypatch: pytest.MonkeyPatch, fails: bool
-) -> None:
-    """The claim's transcript client is closed, even when the read fails."""
-    cache = accepted_cache("character", reply_recorded=False)
-    cache.introduction_claim = IntroductionClaim("c1", ["Here", "There"])
-    close = Mock()
-
-    def list_messages(thread_id, limit):
-        if fails:
-            raise RuntimeError("Conversation store unavailable")
-        return [{"role": "user", "content": "[SYSTEM]", "origin": "wizard_control"}]
-
-    store = SimpleNamespace(
-        list_messages=list_messages, client=SimpleNamespace(close=close)
-    )
-    monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: store)
-    monkeypatch.setattr(wizard_chat, "resolve_wizard_model", lambda *a: "TEST")
-    reconcile = partial(
-        wizard_chat._reconcile_introduction,
-        cache,
-        "wizard_control",
-        slot=4,
-        request_model=None,
-        slot_model="TEST",
-    )
-    if fails:
-        with pytest.raises(RuntimeError, match="unavailable"):
-            reconcile()
-    else:
-        assert reconcile() == "c1"
-    close.assert_called_once_with()

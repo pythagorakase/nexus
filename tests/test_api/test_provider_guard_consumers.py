@@ -6,9 +6,7 @@ from threading import Thread
 
 from pydantic_ai import Agent
 
-from nexus.api.conversations import ConversationsClient
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model_with_provider
-from scripts.api_openai import OpenAIProvider
 from tests.scheduler_helpers import test_provider_config as configure_test
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
@@ -22,52 +20,6 @@ def test_pydantic_consumer_test_request(monkeypatch, tmp_path, mock_openai_serve
     result = Agent(model).run_sync("Say hello.")
     assert result.output
     assert result.usage().requests == 1
-
-
-def test_conversations_test_request(monkeypatch):
-    """Exercise the Conversations SDK path over a real TEST loopback socket.
-
-    TEST normally stores conversation history in memory. Select its existing
-    SDK branch explicitly, as the protocol test does, with a guarded real client.
-    """
-    monkeypatch.setenv("NEXUS_TEST_PROVIDER_ONLY", "1")
-    received = []
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_POST(self):
-            received.append((self.path, self.headers.get("Authorization")))
-            body = json.dumps(
-                {"id": "conv_guard", "object": "conversation", "created_at": 1}
-            ).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *args):
-            pass
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    wrapper = OpenAIProvider(
-        model="TEST",
-        api_key="test-key",
-        base_url=f"http://127.0.0.1:{server.server_port}/v1",
-    )
-    try:
-        consumer = ConversationsClient("TEST")
-        consumer._store_mode = "openai"
-        consumer.client = wrapper.client
-        assert consumer.create_thread() == "conv_guard"
-        assert received == [("/v1/conversations", "Bearer test-key")]
-    finally:
-        if wrapper._client is not None:
-            wrapper.client.close()
-        server.shutdown()
-        server.server_close()
-        thread.join()
 
 
 def test_openrouter_http_loads_credential_without_sdk(monkeypatch):

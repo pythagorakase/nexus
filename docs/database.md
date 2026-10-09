@@ -240,6 +240,10 @@ that world. The Retrograde status route reads the latest run from these tables,
 so every gateway worker reports the same durable record. Rows are kept after
 completion.
 
+## Wizard Transcript
+
+assets.wizard_messages holds the new-story wizard transcript for every provider, keyed by the conversation UUID in assets.new_story_creator.thread_id. Each message records its role, origin and the wizard phase at the time it was written. A reply and its presented choices commit in one transaction under the wizard cache row lock. A model switch changes only the slot model. Rows are kept after the cache is cleared. Migration 150 discarded incomplete wizards on hosted OpenAI conversations and refuses any other legacy thread.
+
 ## Story Identity
 
 `story_identity` holds one row per slot database: the story's `story_uuid`, its title and its origin. `NEXUS_template` carries the table and no row. Slot initialization mints a row, every wizard transition replaces it, and `clone_slot_with_data` gives the copy a new `story_uuid` with a `story_lineage` fork row naming the source. Disposable and rehearsal clones get a fresh identity with no lineage. Slots that predate migration 146 are minted once with `python scripts/backfill_story_identity.py --all --write-locked-slot`, which also records that `save_02` forks `save_01`; `nexus doctor` checks both rules (`template.story_identity_absent`, `slots.story_identity_present`).

@@ -323,23 +323,18 @@ async def test_transition_reports_a_concurrent_wizard_change_without_running(
 # ── Resume and slot state ────────────────────────────────────────────────
 
 
+@pytest.mark.requires_postgres
 @pytest.mark.parametrize("stored", [*LEVELS, None])
 def test_resume_restores_the_stored_selection(
-    monkeypatch: pytest.MonkeyPatch, stored: WeirdLevel | None
+    seed_wizard_cache, stored: WeirdLevel | None
 ) -> None:
-    cache = ready_cache(weird_level=stored)
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "saved")
-    monkeypatch.setattr(
-        setup_endpoints,
-        "ConversationsClient",
-        lambda model: SimpleNamespace(list_messages=lambda *a, **k: [], client=None),
-    )
+    cache = seed_wizard_cache(ready_cache(weird_level=stored))
     app = FastAPI()
     app.include_router(setup_endpoints.router)
-
-    data = TestClient(app).get("/api/story/new/setup/resume?slot=4").json()
-
+    response = TestClient(app).get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["thread_id"] == cache.thread_id
     assert data["current_phase"] == "ready"
     assert data["weird_level"] == stored
 

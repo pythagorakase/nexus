@@ -20,7 +20,7 @@ import requests  # type: ignore[import-untyped]
 import uvicorn
 
 from nexus.api import mock_openai
-from nexus.api.conversations import ConversationsClient
+from nexus.api.conversations import new_conversation_id
 from nexus.api.new_story_cache import (
     init_cache,
     read_cache,
@@ -189,56 +189,50 @@ def design_gateway(
             route_test_provider_database(monkeypatch.setenv, source)
             model = load_settings().wizard.default_model
             assert load_settings().is_test_model(model)
-            client = ConversationsClient(model=model)
-            thread_id = client.create_thread()
-            try:
-                init_cache(dbname, thread_id, 4)
-                write_cache(
-                    dbname=dbname,
-                    setting_draft=setting,
-                    character_draft=character_cache().get_character_state_dict(),
-                )
-                for phase in ("setting", "character"):
-                    cache = read_cache(dbname)
-                    assert cache is not None
-                    token = cache.artifact_token(phase)
-                    assert token is not None
-                    confirm_artifact(
-                        dbname, thread_id=thread_id, phase=phase, artifact_token=token
-                    )
+            thread_id = new_conversation_id()
+            init_cache(dbname, thread_id, 4)
+            write_cache(
+                dbname=dbname,
+                setting_draft=setting,
+                character_draft=character_cache().get_character_state_dict(),
+            )
+            for phase in ("setting", "character"):
                 cache = read_cache(dbname)
-                assert cache is not None and cache.current_phase() == "seed"
-                assert cache.phase_untouched()
-                server = uvicorn.Server(
-                    uvicorn.Config(mock_openai.app, log_level="warning")
+                assert cache is not None
+                token = cache.artifact_token(phase)
+                assert token is not None
+                confirm_artifact(
+                    dbname, thread_id=thread_id, phase=phase, artifact_token=token
                 )
-                thread = threading.Thread(
-                    target=server.run, kwargs={"sockets": [listener]}
-                )
-                thread.start()
-                try:
-                    deadline = time.monotonic() + 15
-                    while (
-                        not server.started
-                        and thread.is_alive()
-                        and time.monotonic() < deadline
-                    ):
-                        time.sleep(0.01)
-                    assert server.started, "Fixture TEST server failed to start"
-                    with gateway_lane(monkeypatch):
-                        yield DesignGateway(
-                            dbname,
-                            source,
-                            thread_id,
-                            design,
-                            tmp_path / "response.json",
-                        )
-                finally:
-                    server.should_exit = True
-                    thread.join(timeout=30)
-                    assert not thread.is_alive(), "Fixture TEST server did not stop"
+            cache = read_cache(dbname)
+            assert cache is not None and cache.current_phase() == "seed"
+            assert cache.phase_untouched()
+            server = uvicorn.Server(
+                uvicorn.Config(mock_openai.app, log_level="warning")
+            )
+            thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 15
+                while (
+                    not server.started
+                    and thread.is_alive()
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.01)
+                assert server.started, "Fixture TEST server failed to start"
+                with gateway_lane(monkeypatch):
+                    yield DesignGateway(
+                        dbname,
+                        source,
+                        thread_id,
+                        design,
+                        tmp_path / "response.json",
+                    )
             finally:
-                client.delete_thread(thread_id)
+                server.should_exit = True
+                thread.join(timeout=30)
+                assert not thread.is_alive(), "Fixture TEST server did not stop"
 
 
 @pytest.mark.requires_postgres

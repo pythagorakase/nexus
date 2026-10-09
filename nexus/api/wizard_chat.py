@@ -35,11 +35,10 @@ from nexus.api.narrative_schemas import (
 )
 from nexus.api.new_story_cache import (
     WizardCache,
-    claim_wizard_introduction,
     clear_suggested_traits,
-    complete_wizard_introduction,
     guarded_wizard_write,
     read_cache,
+    record_wizard_reply,
     write_weird_level,
     write_wizard_choices,
 )
@@ -64,7 +63,6 @@ from nexus.api.pydantic_ai_utils import (
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_confirmation import WizardStateConflict
-from nexus.api.wizard_transcript import introduction_delivered
 from nexus.api.wizard_agent import (
     WizardContext,
     wizard_debug_agent,
@@ -144,51 +142,18 @@ def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]
 _ALREADY_INTRODUCED = "This phase was already introduced. Resume before continuing."
 
 
-def _reconcile_introduction(
-    cache: Optional[WizardCache],
-    message_origin: str,
-    *,
-    slot: int,
-    request_model: Optional[str],
-    slot_model: Optional[str],
-) -> Optional[str]:
-    """Refuse a delivered introduction; return an undelivered claim to replace.
-
-    Until a character concept or seed draft exists, the only wizard control
-    message is the introduction that artifact acceptance requests. A completed
-    reply records its choices, so that introduction already arrived. An
-    unfinished claim is settled against the transcript: a reply after its
-    control message was delivered, so the claim is completed and this request
-    refused; otherwise its writer failed or is still running, and this request
-    may replace exactly that claim.
-    """
+def _refuse_delivered_introduction(
+    cache: Optional[WizardCache], message_origin: str
+) -> None:
+    """Refuse an introduction once its reply and choices have committed."""
     if (
         cache is None
         or message_origin != "wizard_control"
         or not cache.phase_untouched()
     ):
-        return None
+        return
     if cache.choices_recorded:
         raise HTTPException(status_code=409, detail=_ALREADY_INTRODUCED)
-    claim = cache.introduction_claim
-    if claim is None:
-        return None
-    thread_id = cache.thread_id
-    if thread_id is None:
-        raise WizardStateConflict("The saved wizard is missing its conversation.")
-    # The same store the introduction's control and reply were written to.
-    client = ConversationsClient(model=resolve_wizard_model(request_model, slot_model))
-    try:
-        transcript = client.list_messages(thread_id, limit=0)
-    finally:
-        if client.client is not None:
-            client.client.close()
-    if introduction_delivered(list(reversed(transcript))):
-        complete_wizard_introduction(
-            claim.id, claim.choices, slot_dbname(slot), expected_thread_id=thread_id
-        )
-        raise HTTPException(status_code=409, detail=_ALREADY_INTRODUCED)
-    return claim.id
 
 
 def _is_introduction(cache: Optional[WizardCache], message_origin: str) -> bool:
@@ -197,38 +162,6 @@ def _is_introduction(cache: Optional[WizardCache], message_origin: str) -> bool:
         cache is not None
         and message_origin == "wizard_control"
         and cache.awaiting_introduction()
-    )
-
-
-def _record_text_reply(
-    client: ConversationsClient,
-    *,
-    slot: int,
-    thread_id: str,
-    message: str,
-    choices: List[str],
-    introduction: bool,
-    replaces_claim: Optional[str],
-) -> None:
-    """Persist a text reply's transcript message and presented choices.
-
-    The conversation store cannot share a transaction with the recorded choices
-    that prove an introduction arrived. An introduction therefore claims its
-    reply first, so concurrent introductions keep one reply, then writes the
-    transcript and completes the claim. A failure or crash between those steps
-    leaves an unfinished claim that the next request reconciles.
-    """
-    dbname = slot_dbname(slot)
-    if not introduction:
-        client.add_message(thread_id, "assistant", message)
-        write_wizard_choices(choices, dbname, expected_thread_id=thread_id)
-        return
-    claim_id = claim_wizard_introduction(
-        choices, dbname, expected_thread_id=thread_id, replaces_claim=replaces_claim
-    )
-    client.add_message(thread_id, "assistant", message)
-    complete_wizard_introduction(
-        claim_id, choices, dbname, expected_thread_id=thread_id
     )
 
 
@@ -424,13 +357,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 status_code=409,
                 detail="Confirm or revise the completed character before continuing.",
             )
-        replaces_claim = _reconcile_introduction(
-            persisted_cache,
-            request.message_origin,
-            slot=request.slot,
-            request_model=request.model,
-            slot_model=state.model,
-        )
+        _refuse_delivered_introduction(persisted_cache, request.message_origin)
         introduction = _is_introduction(persisted_cache, request.message_origin)
         state_subphase = _wizard_subphase_for_state(
             state_phase,
@@ -555,7 +482,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
         selected_model = resolve_wizard_model(request.model, slot_model)
 
         if wizard_model_lock_candidate(request.model, slot_model):
-            history_client = ConversationsClient(model=slot_model)
+            history_client = ConversationsClient(slot_dbname(request.slot))
             history = history_client.list_messages(
                 request.thread_id, limit=history_limit
             )
@@ -576,8 +503,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 )
 
         if request.model:
-            # Moves the thread when the new provider uses another store, and
-            # saves the model and thread ID together before any read below.
+            # Repoint the model while retaining this slot's conversation.
             request.thread_id = switch_wizard_model(
                 request.slot,
                 thread_id=request.thread_id,
@@ -586,7 +512,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             )
             logger.info("Persisted model %s to slot %s", request.model, request.slot)
 
-        client = ConversationsClient(model=selected_model)
+        client = ConversationsClient(slot_dbname(request.slot))
 
         doc = frontmatter.loads(load(PromptId.STORYTELLER_NEW))
         welcome_message = doc.get("welcome_message", "")
@@ -645,9 +571,12 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 run_id=request.thread_id,
             )
             content = result.output
-            client.add_message(request.thread_id, "assistant", content)
-            write_wizard_choices(
-                [], slot_dbname(request.slot), expected_thread_id=request.thread_id
+            record_wizard_reply(
+                slot_dbname(request.slot),
+                expected_thread_id=request.thread_id,
+                message=content,
+                choices=[],
+                introduction=False,
             )
             return {
                 "message": content,
@@ -823,14 +752,12 @@ async def new_story_chat_endpoint(request: ChatRequest):
             len(wizard_response.message or ""),
             ui_choices,
         )
-        _record_text_reply(
-            client,
-            slot=request.slot,
-            thread_id=request.thread_id,
+        record_wizard_reply(
+            slot_dbname(request.slot),
+            expected_thread_id=request.thread_id,
             message=wizard_response.message,
             choices=ui_choices,
             introduction=introduction,
-            replaces_claim=replaces_claim,
         )
 
         return {

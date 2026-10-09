@@ -4,7 +4,7 @@ Headless helpers to manage new-story setup per slot.
 
 from __future__ import annotations
 
-from nexus.database import AmbiguousCommit, connection_kwargs
+from nexus.database import connection_kwargs
 
 import json
 import logging
@@ -18,7 +18,7 @@ from nexus.agents.orrery.retrograde_orchestrator import (
     start_genesis_run,
     record_genesis_failure,
 )
-from nexus.api.conversations import ConversationsClient, conversation_store_mode
+from nexus.api.conversations import new_conversation_id
 from nexus.api.narrative_schemas import WeirdLevel
 from nexus.api.new_story_cache import (
     WizardCache,
@@ -155,8 +155,7 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     )
 
     clear_cache(dbname)
-    client = ConversationsClient(model=model_to_use)
-    thread_id = client.create_thread()
+    thread_id = new_conversation_id()
     init_cache(dbname, thread_id=thread_id, target_slot=slot_number)
     clear_active(dbname)
     # Persist model to save_slots so bootstrap/narrative can use it
@@ -170,51 +169,6 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     return thread_id
 
 
-class WizardConversationMoveError(RuntimeError):
-    """A wizard thread could not be moved into the requested model's store."""
-
-
-def _remove_partial_copy(
-    target: ConversationsClient, thread_id: str, message_ids: list[str]
-) -> None:
-    """Delete a failed move's copied messages, then its thread.
-
-    Hosted conversations retain their items after the conversation is deleted,
-    so each copied item goes first. A thread whose items could not all be
-    deleted is kept, and logged, so its remaining items stay reachable.
-    """
-    remaining: list[str] = []
-    for message_id in reversed(message_ids):
-        try:
-            target.delete_message(thread_id, message_id)
-        except Exception:
-            remaining.append(message_id)
-            logger.exception(
-                "Removing copied message %s from partial wizard thread %s failed",
-                message_id,
-                thread_id,
-            )
-    if remaining:
-        logger.error(
-            "Partial wizard thread %s remains in %s storage with messages %s",
-            thread_id,
-            target.store_mode,
-            remaining,
-        )
-        return
-    try:
-        removed = target.delete_thread(thread_id)
-    except Exception:
-        removed = False
-        logger.exception("Removing partial wizard thread %s failed", thread_id)
-    if not removed:
-        logger.error(
-            "Partial wizard thread %s remains in %s storage",
-            thread_id,
-            target.store_mode,
-        )
-
-
 def switch_wizard_model(
     slot_number: int,
     *,
@@ -222,32 +176,7 @@ def switch_wizard_model(
     slot_model: Optional[str],
     model: str,
 ) -> str:
-    """Persist a requested wizard model and keep its conversation readable.
-
-    A model whose provider uses another conversation store (hosted OpenAI,
-    local files, or TEST memory) cannot read the current thread. Its messages
-    are copied, in order, into a new thread of the requested store, and the
-    new thread ID and model are saved in one transaction. Any failure before
-    that save leaves the slot model and cached thread ID unchanged and removes
-    the partial copy. An ambiguous commit keeps the copy, because the save may
-    have landed and the slot may already name the new thread.
-
-    Args:
-        slot_number: Target save slot (1-5).
-        thread_id: The wizard's current thread ID.
-        slot_model: The slot's stamped model, whose store holds the thread.
-        model: The explicitly requested wizard model.
-
-    Returns:
-        The thread ID the wizard continues in.
-
-    Raises:
-        RuntimeError: If the wizard has no thread, or no stamped slot model to
-            locate it.
-        WizardConversationMoveError: If the current store cannot be read.
-        WizardStateConflict: If the thread or slot model changed meanwhile.
-        AmbiguousCommit: If the save's outcome is unknown; the copy is kept.
-    """
+    """Repoint the slot model; its slot-database conversation does not move."""
     if thread_id is None:
         raise RuntimeError(
             f"Slot {slot_number} has no wizard conversation thread to switch "
@@ -257,82 +186,16 @@ def switch_wizard_model(
         return thread_id
     if not slot_model:
         raise RuntimeError(
-            f"Slot {slot_number} has no stamped wizard model, so the store "
-            f"holding thread {thread_id!r} is unknown; start a new setup"
+            f"Slot {slot_number} has no stamped wizard model; start a new setup"
         )
-    from nexus.config import load_settings
-
-    dbname = slot_dbname(slot_number)
-    settings = load_settings()
-    source_mode = conversation_store_mode(
-        settings.provider_for_model(slot_model), settings
+    repoint_wizard_conversation(
+        slot_dbname(slot_number),
+        expected_thread_id=thread_id,
+        thread_id=thread_id,
+        expected_model=slot_model,
+        model=model,
     )
-    target = ConversationsClient(model=model)
-    if source_mode == target.store_mode:
-        repoint_wizard_conversation(
-            dbname,
-            expected_thread_id=thread_id,
-            thread_id=thread_id,
-            expected_model=slot_model,
-            model=model,
-        )
-        return thread_id
-
-    try:
-        messages = ConversationsClient(model=slot_model).list_messages(
-            thread_id, limit=0
-        )
-    except Exception as exc:
-        raise WizardConversationMoveError(
-            f"Cannot move wizard thread {thread_id!r} of slot {slot_number} from "
-            f"{source_mode} storage ({slot_model!r}) to {target.store_mode} "
-            f"storage ({model!r}): reading the {source_mode} store failed: {exc}"
-        ) from exc
-
-    new_thread_id = target.create_thread()
-    copied: list[str] = []
-    try:
-        # list_messages is newest first; replay oldest first with provenance.
-        for message in reversed(messages):
-            copied.append(
-                target.add_message(
-                    new_thread_id,
-                    message["role"],
-                    message["content"],
-                    origin=message.get("origin"),
-                )
-            )
-        repoint_wizard_conversation(
-            dbname,
-            expected_thread_id=thread_id,
-            thread_id=new_thread_id,
-            expected_model=slot_model,
-            model=model,
-        )
-    except AmbiguousCommit:
-        # The save may have committed, so deleting the copy could leave the slot
-        # pointing at a missing thread. Keep it; the next read settles the state.
-        logger.error(
-            "Wizard thread move for slot %s ended in an ambiguous commit; "
-            "keeping %s in %s storage until the slot's thread ID is read back",
-            slot_number,
-            new_thread_id,
-            target.store_mode,
-        )
-        raise
-    except BaseException:
-        # The original failure propagates; only the partial copy is removed.
-        _remove_partial_copy(target, new_thread_id, copied)
-        raise
-    logger.info(
-        "Moved wizard thread %s (%s storage) to %s (%s storage) for slot %s",
-        thread_id,
-        source_mode,
-        new_thread_id,
-        target.store_mode,
-        slot_number,
-    )
-    return new_thread_id
+    return thread_id
 
 
 def resume_setup(slot_number: int) -> Optional[WizardCache]:
