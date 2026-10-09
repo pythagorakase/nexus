@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="24.468" timestamp="2026-10-08T20:51:55.564039-05:00" hostname="ECHO.local"><testcase classname="tests.test_api.test_backstage_endpoints_pg" name="test_backstage_header_elapsed_world_time" time="2.648"><failure message="KeyError: 'elapsed_seconds'">client = &lt;starlette.testclient.TestClient object at 0x10e16d310&gt;
+backstage_case = {'chunks': [2, 3, 4, 5], 'latest': 5, 'prior_relationship_chunk': 4, 'prologue': 1, ...}
+disposable_db = 'qa640_778s6a_backstage_d0752dc0210c'
+
+    def test_backstage_header_elapsed_world_time(
+        client: TestClient,
+        backstage_case: dict[str, Any],
+        disposable_db: str,
+    ) -&gt; None:
+        """Fails if elapsed time is absent or counts the non-playable prologue."""
+        chunks = backstage_case["chunks"]
+        assert chunks == [2, 3, 4, 5]
+        elapsed = []
+        for index, chunk_id in enumerate(chunks):
+            response = client.get(
+                "/api/dev/backstage/4/turn", params={"chunk_id": chunk_id}
+            )
+            assert response.status_code == 200, response.text
+&gt;           seconds = response.json()["header"]["elapsed_seconds"]
+E           KeyError: 'elapsed_seconds'
+
+tests/test_api/test_backstage_endpoints_pg.py:881: KeyError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+WARNING  nexus.api.presence_audit:presence_audit.py:86 presence audit: chunk 4 prose names 'Celia' (character id=2) with no junction row — candidate missed entry
+WARNING  nexus.api.presence_audit:presence_audit.py:86 presence audit: chunk 4 prose names 'Victor' (character id=3) with no junction row — candidate missed entry
+WARNING  nexus.api.presence_audit:presence_audit.py:86 presence audit: chunk 5 prose names 'Celia' (character id=2) with no junction row — candidate missed entry
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_api.test_backstage_endpoints_pg" name="test_backstage_header_missing_world_time_is_500" time="0.057"><failure message="Failed: DID NOT RAISE &lt;class 'nexus.agents.orrery.backstage.BackstagePayloadError'&gt;">client = &lt;starlette.testclient.TestClient object at 0x10defd490&gt;
+backstage_case = {'chunks': [2, 3, 4, 5], 'latest': 5, 'prior_relationship_chunk': 4, 'prologue': 1, ...}
+disposable_db = 'qa640_778s6a_backstage_d0752dc0210c'
+
+    def test_backstage_header_missing_world_time_is_500(
+        client: TestClient,
+        backstage_case: dict[str, Any],
+        disposable_db: str,
+    ) -&gt; None:
+        """Fails if a missing prior clock silently becomes null or a zero delta."""
+        previous, selected = backstage_case["chunks"][-2:]
+        assert (previous, selected) == (4, 5)
+        engine = create_slot_engine(database_url(disposable_db))
+        try:
+            with Session(engine) as session:
+                try:
+                    session.execute(text("SET LOCAL session_replication_role = replica"))
+                    session.execute(
+                        text(
+                            "UPDATE chunk_metadata SET world_time = NULL "
+                            "WHERE chunk_id = :chunk_id"
+                        ),
+                        {"chunk_id": previous},
+                    )
+&gt;                   with pytest.raises(BackstagePayloadError) as error:
+E                   Failed: DID NOT RAISE &lt;class 'nexus.agents.orrery.backstage.BackstagePayloadError'&gt;
+
+tests/test_api/test_backstage_endpoints_pg.py:916: Failed</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_api.test_backstage_endpoints_pg" name="test_economics_legacy_and_unbound_pending_are_unavailable" time="0.058"><failure message="KeyError: 'economics'">client = &lt;starlette.testclient.TestClient object at 0x10e0920d0&gt;
+backstage_case = {'chunks': [2, 3, 4, 5], 'latest': 5, 'prior_relationship_chunk': 4, 'prologue': 1, ...}
+
+    def test_economics_legacy_and_unbound_pending_are_unavailable(
+        client: TestClient, backstage_case: dict[str, Any]
+    ) -&gt; None:
+        """Fails if legacy reads escape, the pending parent is ignored, or data vanishes."""
+        response = client.get("/api/dev/backstage/4/turn")
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        latest = backstage_case["latest"]
+        provisional = backstage_case["provisional_session"]
+&gt;       assert payload["economics"]["accepted"] == {
+            "status": "unavailable",
+            "generation_session": None,
+            "detail": (
+                f"chunk {latest}: no generation session "
+                "(accepted before session binding)"
+            ),
+            "observation": None,
+        }
+E       KeyError: 'economics'
+
+tests/test_api/test_backstage_endpoints_pg.py:941: KeyError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_api.test_backstage_endpoints_pg" name="test_economics_matches_inspect_turn_for_a_test_turn" time="21.229"><failure message="KeyError: 'economics'">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x10ded2390&gt;
+tmp_path = PosixPath('/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/pytest-temp/test_economics_matches_inspect0')
+request = &lt;FixtureRequest for &lt;Function test_economics_matches_inspect_turn_for_a_test_turn&gt;&gt;
+
+    def test_economics_matches_inspect_turn_for_a_test_turn(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request: pytest.FixtureRequest
+    ) -&gt; None:
+        """Fails on another session, changed observation data or post-acceptance pending."""
+        # The provider fixture must first see private runtime state and TEST-only use.
+        config = configure_test(tmp_path, "http://127.0.0.1:1", monkeypatch)
+        provider = request.getfixturevalue("mock_openai_server")
+        configure_test(tmp_path, provider, monkeypatch)
+        doc = tomlkit.parse(config.read_text())
+        doc["storyteller"]["correspondence"]["floor_turns"] = 1
+        config.write_text(tomlkit.dumps(doc))
+        monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
+        with disposable_slot_database("qa640_uib_turn") as dbname:
+            route_slot(monkeypatch, dbname)
+            _route_backstage_to(monkeypatch, dbname)
+            seed_played_story(
+                dbname,
+                turns=3,
+                cast=FIXTURE_CAST,
+                time_delta=FIXTURE_TURN_GAP,
+                correspondence=True,
+                slot=4,
+            )
+            prior_session = _stage_pending_turn(dbname)
+            app = FastAPI()
+            app.include_router(backstage_endpoints.router)
+            with TestClient(app) as backstage:
+                with gateway_lane(monkeypatch):
+                    output = run_cli(
+                        monkeypatch, "continue", "--slot", "4", "--choice", "1", "--json"
+                    )
+                    assert json.loads(output)["success"], output
+                    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT session_id::text, parent_chunk_id FROM incubator"
+                        )
+                        pending_session, parent_chunk = cur.fetchone()
+                    response = backstage.get("/api/dev/backstage/4/turn")
+                    assert response.status_code == 200, response.text
+                    payload = response.json()
+&gt;                   pending = payload["economics"]["pending"]
+E                   KeyError: 'economics'
+
+tests/test_api/test_backstage_endpoints_pg.py:1015: KeyError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+WARNING  nexus.api.static_ui:static_ui.py:97 UI build not found at /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/dist/public - the gateway will serve APIs only. Run `npm --prefix ui run build` (or use the Vite dev server).
+INFO     nexus.lore:lore.py:194 Initializing LORE components...
+INFO     nexus.lore:lore.py:199 LORE turn cycle uses deterministic retrieval planning and direct MEMNON search.
+DEBUG    nexus.memnon:memnon.py:208 Debug logging enabled
+INFO     nexus.memnon:memnon.py:213 Using the configured database target
+INFO     nexus.memnon.db_access:db_access.py:190 pgvector extension found (version 0.8.6)
+INFO     nexus.memnon.db_schema:db_schema.py:134 Vector extension available
+INFO     nexus.memnon.db_schema:db_schema.py:136 Successfully connected to the configured database
+INFO     nexus.memnon.db_schema:db_schema.py:110 DatabaseManager initialized
+INFO     nexus.memnon:memnon.py:218 Initializing embedding models through EmbeddingManager
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:207 Initializing active model Octen-Embedding-4B...
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:159 Loaded Octen-Embedding-4B from local path: /Users/pythagor/nexus/models/Octen-Embedding-4B
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:216 EmbeddingManager initialized with 1 active models: Octen-Embedding-4B
+INFO     nexus.memnon.cross_encoder:cross_encoder.py:151 Using device: mps
+INFO     nexus.memnon.cross_encoder:cross_encoder.py:162 Cross-encoder model loaded from /Users/pythagor/nexus/models/naver-trecdl22-crossencoder-debertav3
+INFO     nexus.memnon:memnon.py:239 Initializing IDF dictionary for term weighting...
+INFO     nexus.memnon:memnon.py:242 IDF dictionary initialized with 27 terms
+INFO     nexus.memnon:memnon.py:272 Initializing SearchManager...
+INFO     nexus.memnon.query_analysis:query_analysis.py:99 QueryAnalyzer initialized
+INFO     nexus.memnon.search:search.py:71 SearchManager initialized
+INFO     nexus.memnon:memnon.py:287 Initializing ContentProcessor...
+INFO     nexus.memnon.content_processor:content_processor.py:49 ContentProcessor initialized
+DEBUG    nexus.memnon:memnon.py:298 Retrieval settings: {
+  "default_top_k": 50,
+  "max_query_results": 50,
+  "relevance_threshold": 0.7,
+  "entity_boost_factor": 1.2,
+  "recency_boost_factor": 1.1,
+  "db_vector_balance": 0.6,
+  "model_weights": {
+    "Octen-Embedding-4B": 1.0
+  },
+  "highlight_matches": true
+}
+INFO     nexus.memnon:memnon.py:302 MEMNON agent initialized (Headless Mode - No LLM)
+INFO     nexus.lore:lore.py:263 MEMNON utility initialized with the configured database
+INFO     nexus.lore:lore.py:208 LOGON lazy initialization enabled; provider will be created on first use
+INFO     nexus.memnon.alias_search:alias_search.py:66 Loaded aliases for 3 characters from database
+INFO     nexus.memnon.alias_search:alias_search.py:75 Mapped second-person pronouns to user character 'Fixture Player'
+INFO     nexus.lore:lore.py:222 Component initialization complete
+INFO     nexus.lore:lore.py:158 LORE agent initialized successfully
+INFO     nexus.lore:lore.py:354 Starting turn cycle with input: Press on toward the lit doorway....
+DEBUG    nexus.lore.turn_cycle:turn_cycle.py:291 Processing user input...
+INFO     nexus.lore:lore.py:284 LOGON utility initialized on first use
+DEBUG    nexus.lore.token_budget:token_budget.py:99 Token budget calculated: {'total_available': 71000, 'user_input': 7, 'warm_slice': 3550, 'structured': 49700, 'augmentation': 3550, 'reasoning_reserve': 0, 'response_reserve': 4000, 'effective_input_ceiling': 71000, 'apex_window': 75000, 'system_prompt': 5000}
+INFO     nexus.memnon:memnon.py:1465 Querying memory: Press on toward the lit doorway.
+INFO     nexus.memnon:memnon.py:1487 Query type: general
+DEBUG    nexus.memnon:memnon.py:1518 Using hybrid search strategy
+DEBUG    nexus.memnon.search:search.py:110 Query classified as type: general
+DEBUG    nexus.memnon.search:search.py:146 Using weights: vector=0.6, text=0.4
+INFO     nexus.memnon.search:search.py:173 Using 1 active models with weights: {'Octen-Embedding-4B': 1.0}
+DEBUG    nexus.memnon.search:search.py:203 Using query-type-specific temporal boost factor for 'general': 0.4
+DEBUG    nexus.memnon.search:search.py:237 Using standard multi-model hybrid search for non-temporal query
+DEBUG    nexus.memnon.db_access:db_access.py:489 Multi-model hybrid search weights: vector=0.6, text=0.4
+DEBUG    nexus.memnon.db_access:db_access.py:492 Model weights: {'Octen-Embedding-4B': 1.0}
+INFO     nexus.memnon.db_access:db_access.py:585 Text search using weighted to_tsquery: ''doorway' | 'lit' | 'press' | 'toward''
+INFO     nexus.memnon.db_access:db_access.py:722 Normalizing text scores with max value: 0.06079271
+INFO     nexus.memnon.db_access:db_access.py:736 Text search found 4 results with non-zero scores
+INFO     nexus.memnon.db_access:db_access.py:827 Running vector search for model Octen-Embedding-4B
+WARNING  nexus.memnon.db_access:db_access.py:923 Embedding table chunk_embeddings_2560d does not exist; skipping model Octen-Embedding-4B
+DEBUG    nexus.memnon.db_access:db_access.py:1047 Calculating weighted average vector scores with weights: {'Octen-Embedding-4B': 1.0}
+INFO     nexus.memnon.search:search.py:256 Multi-model hybrid search returned 4 results
+INFO     nexus.memnon:memnon.py:1593 Applying cross-encoder reranking
+INFO     nexus.memnon.cross_encoder:cross_encoder.py:779 Reranked 4 results to 4 using cross-encoder
+INFO     nexus.memnon:memnon.py:1634 Cross-encoder reranking completed in 0.233 seconds
+DEBUG    nexus.lore.turn_cycle:turn_cycle.py:358 Preparing warm context...
+INFO     nexus.lore.turn_cycle:turn_cycle.py:373 Anchored warm slice to requested chunk 4
+INFO     nexus.lore.turn_cycle:turn_cycle.py:407 Retrieved 4 warm-slice chunks (including anchors)
+DEBUG    nexus.lore.turn_cycle:turn_cycle.py:454 Querying entity states with hierarchical structure...
+DEBUG    nexus.lore.entity_queries:entity_queries.py:118 Canonical user character ID: 1
+DEBUG    nexus.lore.entity_queries:entity_queries.py:147 Added user character (ID 1) to featured list
+INFO     nexus.lore.turn_cycle:turn_cycle.py:518 Characters: 3 baseline, 3 featured
+INFO     nexus.lore.turn_cycle:turn_cycle.py:568 Places: 2 baseline, 2 featured
+INFO     nexus.lore.turn_cycle:turn_cycle.py:585 Factions: 0 baseline, 0 featured
+INFO     nexus.lore.turn_cycle:turn_cycle.py:602 Found 0 relationships between featured characters
+INFO     nexus.lore.turn_cycle:turn_cycle.py:628 Entity query complete (hierarchical): chars 3+3, places 2+2, factions 0+0, 0 rels
+DEBUG    nexus.lore.turn_cycle:turn_cycle.py:647 Executing deep queries...
+DEBUG    nexus.lore.turn_cycle:turn_cycle.py:281 Query 'The pending fixture turn waits for the player's ch...' classified as 'general'
+INFO     nexus.memnon:memnon.py:1465 Querying memory: The pending fixture turn waits for the player's choice.
+
+Press on toward the lit doorway.
+
+CURRENT TURN INPUT:
+Press on toward the lit doorway.
+INFO     nexus.memnon:memnon.py:1487 Query type: general
+DEBUG    nexus.memnon:memnon.py:1518 Using hybrid search strategy
+DEBUG    nexus.memnon.search:search.py:110 Query classified as type: general
+DEBUG    nexus.memnon.search:search.py:146 Using weights: vector=0.6, text=0.4
+INFO     nexus.memnon.search:search.py:173 Using 1 active models with weights: {'Octen-Embedding-4B': 1.0}
+DEBUG    nexus.memnon.search:search.py:203 Using query-type-specific temporal boost factor for 'general': 0.4
+INFO     nexus.memnon.search:search.py:216 Using multi-model time-aware search for temporal query (intent: 0.82, boost factor: 0.4)
+INFO     nexus.memnon.continuous_temporal_search:continuous_temporal_search.py:498 Query temporal intent: 0.82 (0=early, 0.5=neutral, 1=recent)
+INFO     nexus.memnon.continuous_temporal_search:continuous_temporal_search.py:528 Performing multi-model time-aware search with intent score: 0.82
+DEBUG    nexus.memnon.continuous_temporal_search:continuous_temporal_search.py:540 Total chunks for temporal normalization: 4
+DEBUG    nexus.memnon.db_access:db_access.py:489 Multi-model hybrid search weights: vector=0.6, text=0.4
+DEBUG    nexus.memnon.db_access:db_access.py:492 Model weights: {'Octen-Embedding-4B': 1.0}
+INFO     nexus.memnon.db_access:db_access.py:585 Text search using weighted to_tsquery: ''current' | 'input' | 'choic' | 'pend' | 'wait' | 'doorway' | 'fixtur' | 'lit' | 'player' | 'press' | 'toward' | 'turn''
+INFO     nexus.memnon.db_access:db_access.py:722 Normalizing text scores with max value: 0.05066059
+INFO     nexus.memnon.db_access:db_access.py:736 Text search found 4 results with non-zero scores
+INFO     nexus.memnon.db_access:db_access.py:827 Running vector search for model Octen-Embedding-4B
+WARNING  nexus.memnon.db_access:db_access.py:923 Embedding table chunk_embeddings_2560d does not exist; skipping model Octen-Embedding-4B
+DEBUG    nexus.memnon.db_access:db_access.py:1047 Calculating weighted average vector scores with weights: {'Octen-Embedding-4B': 1.0}
+INFO     nexus.memnon.search:search.py:256 Multi-model hybrid search returned 4 results
+INFO     nexus.memnon:memnon.py:1593 Applying cross-encoder reranking
+INFO     nexus.memnon.cross_encoder:cross_encoder.py:779 Reranked 4 results to 4 using cross-encoder
+INFO     nexus.memnon:memnon.py:1634 Cross-encoder reranking completed in 0.176 seconds
+INFO     nexus.lore.turn_cycle:turn_cycle.py:742 Deep queries complete: 1 queries executed ({'general': 1}), 4 unique results retrieved
+INFO     nexus.lore.turn_cycle:turn_cycle.py:819 Orrery dry-run resolved 2 actors into 2 draft resolutions and 1 scene pressures and 0 ambient seeds
+DEBUG    nexus.lore.turn_cycle:turn_cycle.py:947 Assembling context payload...
+INFO     nexus.lore.logon:logon_utility.py:701 Model TEST: routing to base_url http://127.0.0.1:54787/v1
+WARNING  nexus.lore.logon:logon_utility.py:536 No setting data found in global_variables, using core prompt only
+INFO     nexus.lore.logon:logon_utility.py:788 LOGON initialized with test provider using model TEST
+INFO     nexus.lore.logon:logon_utility.py:791 System prompt loaded: 15064 chars
+INFO     nexus.lore.turn_cycle:turn_cycle.py:1085 Context payload assembled: 4446 rendered tokens
+DEBUG    nexus.lore.turn_cycle:turn_cycle.py:1547 Calling Apex AI...
+DEBUG    nexus.lore.logon:logon_utility.py:1053 Received structured response with narrative length: 182
+DEBUG    nexus.lore.turn_cycle:turn_cycle.py:1647 Integrating response...
+INFO     nexus.lore.turn_cycle:turn_cycle.py:1721 Would store new narrative chunk to database
+INFO     nexus.lore:lore.py:418 Turn cycle completed in 4.18 seconds
+INFO     nexus.memnon.db_schema:db_schema.py:164 DatabaseManager engine disposed
+INFO     nexus.lore:lore.py:327 LORE turn stack closed
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:92 Reusing process-cached SentenceTransformer: /Users/pythagor/nexus/models/Octen-Embedding-4B
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:159 Loaded Octen-Embedding-4B from local path: /Users/pythagor/nexus/models/Octen-Embedding-4B
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:92 Reusing process-cached SentenceTransformer: /Users/pythagor/nexus/models/Octen-Embedding-4B
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:159 Loaded Octen-Embedding-4B from local path: /Users/pythagor/nexus/models/Octen-Embedding-4B
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase></testsuite></testsuites>

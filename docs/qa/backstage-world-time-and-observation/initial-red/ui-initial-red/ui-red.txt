@@ -1,0 +1,2724 @@
+
+> nexus-ui@1.0.0 test
+> vitest run NexusLayout BackstageDrawer --reporter=default --reporter=json --outputFile=/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/ui-red.json
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/nexus/NexusLayout.test.tsx (5 tests | 1 failed) 111ms
+   × NexusLayout Backstage > opens, renders, and closes through the sigil and guarded keyboard 23ms
+     → Unable to find an element with the text: slot 04 · t.17 · +7 min. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"nexus-shell animate-fade-in "[39m
+      [33mdata-testid[39m=[32m"nexus-layout"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mdata-testid[39m=[32m"mock-topbar"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-main "[39m
+      [36m>[39m
+        [36m<nav[39m
+          [33maria-label[39m=[32m"Primary navigation"[39m
+          [33mclass[39m=[32m"rail-left"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Home"[39m
+            [33mclass[39m=[32m"rail-btn"[39m
+            [33mdata-testid[39m=[32m"rail-home"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-house"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"18"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"18"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"rail-tip"[39m
+            [36m>[39m
+              [0mHOME[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"rail-divider"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Narrative"[39m
+            [33maria-pressed[39m=[32m"true"[39m
+            [33mclass[39m=[32m"rail-btn on"[39m
+            [33mdata-testid[39m=[32m"rail-narrative"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-book"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"18"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"18"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"rail-tip"[39m
+            [36m>[39m
+              [0mNARRATIVE[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Map"[39m
+            [33maria-pressed[39m=[32m"false"[39m
+            [33mclass[39m=[32m"rail-btn "[39m
+            [33mdata-testid[39m=[32m"rail-map"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-map"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"18"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"18"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M15 5.764v15"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M9 3.236v15"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"rail-tip"[39m
+            [36m>[39m
+              [0mMAP[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Characters"[39m
+            [33maria-pressed[39m=[32m"false"[39m
+            [33mclass[39m=[32m"rail-btn "[39m
+            [33mdata-testid[39m=[32m"rail-characters"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-users"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"18"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"18"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"[39m
+              [36m/>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"9"[39m
+                [33mcy[39m=[32m"7"[39m
+                [33mr[39m=[32m"4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M22 21v-2a4 4 0 0 0-3-3.87"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M16 3.13a4 4 0 0 1 0 7.75"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"rail-tip"[39m
+            [36m>[39m
+              [0mCHARACTERS[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"rail-spacer"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Backstage"[39m
+            [33maria-pressed[39m=[32m"true"[39m
+    ...
+ ✓ src/components/nexus/NexusLayout.announcer.test.tsx (3 tests) 258ms
+ ❯ src/components/nexus/BackstageDrawer.test.tsx (12 tests | 11 failed) 2092ms
+   × Backstage elapsed time and observation > keeps the first header exact and explains an unavailable accepted turn 66ms
+     → Unable to find an accessible element with the role "button" and name `/ECONOMICS/`
+
+Here are the accessible roles:
+
+  complementary:
+
+  Name "Backstage":
+  [36m<aside[39m
+    [33maria-label[39m=[32m"Backstage"[39m
+    [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+    [33mdata-testid[39m=[32m"backstage-drawer"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  banner:
+
+  Name "":
+  [36m<header[39m
+    [33mclass[39m=[32m"nexus-backstage-head"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Close Backstage":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Close Backstage"[39m
+    [33mclass[39m=[32m"nexus-backstage-close"[39m
+  [36m/>[39m
+
+  Name "⌄ CORRESPONDENCE 0 exchanges · 0 held threads":
+  [36m<button[39m
+    [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+  [36m/>[39m
+
+  Name "⌄ STATE WRITES 0 writes":
+  [36m<button[39m
+    [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+  [36m/>[39m
+
+  Name "⌄ ORRERY chunk S01E07_203 · 2 fired · 0 pressures · 2 events":
+  [36m<button[39m
+    [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "audit dashboard ↗":
+  [36m<a[39m
+    [33mhref[39m=[32m"/dev/orrery"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  contentinfo:
+
+  Name "":
+  [36m<footer[39m
+    [33mclass[39m=[32m"nexus-backstage-footer"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.1[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   × Backstage elapsed time and observation > renders both observations with provenance and does not repeat the accepted summary 1004ms
+     → Unable to find an element with the text: slot 04 · t.17 · +7 min. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.17[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.17[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   × Backstage elapsed time and observation > keeps the other sections usable when a pending draft has no bound session 1007ms
+     → Unable to find an element by: [data-testid="backstage-economics-pending"]
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.17[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.17[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   × Backstage elapsed time and observation > formats 0 elapsed seconds as +0 min 1ms
+     → formatElapsed is not a function
+   × Backstage elapsed time and observation > formats 59 elapsed seconds as +0 min 0ms
+     → formatElapsed is not a function
+   × Backstage elapsed time and observation > formats 420 elapsed seconds as +7 min 0ms
+     → formatElapsed is not a function
+   × Backstage elapsed time and observation > formats 3600 elapsed seconds as +1 h 0ms
+     → formatElapsed is not a function
+   × Backstage elapsed time and observation > formats 3660 elapsed seconds as +1 h 1 min 0ms
+     → formatElapsed is not a function
+   × Backstage elapsed time and observation > formats 86400 elapsed seconds as +1 d 0ms
+     → formatElapsed is not a function
+   × Backstage elapsed time and observation > formats 90000 elapsed seconds as +1 d 1 h 0ms
+     → formatElapsed is not a function
+   × Backstage elapsed time and observation > formats -120 elapsed seconds as −2 min 0ms
+     → formatElapsed is not a function
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > keeps the first header exact and explains an unavailable accepted turn
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name `/ECONOMICS/`
+
+Here are the accessible roles:
+
+  complementary:
+
+  Name "Backstage":
+  [36m<aside[39m
+    [33maria-label[39m=[32m"Backstage"[39m
+    [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+    [33mdata-testid[39m=[32m"backstage-drawer"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  banner:
+
+  Name "":
+  [36m<header[39m
+    [33mclass[39m=[32m"nexus-backstage-head"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Close Backstage":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Close Backstage"[39m
+    [33mclass[39m=[32m"nexus-backstage-close"[39m
+  [36m/>[39m
+
+  Name "⌄ CORRESPONDENCE 0 exchanges · 0 held threads":
+  [36m<button[39m
+    [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+  [36m/>[39m
+
+  Name "⌄ STATE WRITES 0 writes":
+  [36m<button[39m
+    [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+  [36m/>[39m
+
+  Name "⌄ ORRERY chunk S01E07_203 · 2 fired · 0 pressures · 2 events":
+  [36m<button[39m
+    [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "audit dashboard ↗":
+  [36m<a[39m
+    [33mhref[39m=[32m"/dev/orrery"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  contentinfo:
+
+  Name "":
+  [36m<footer[39m
+    [33mclass[39m=[32m"nexus-backstage-footer"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.1[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError ../node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/components/nexus/BackstageDrawer.test.tsx:135:19
+    133|     renderDrawer({ ...PAYLOAD, header: { ...PAYLOAD.header, turn_label…
+    134|     expect(await screen.findByText("slot 04 · t.1")).toHaveTextContent…
+    135|     expect(screen.getByRole("button", { name: /ECONOMICS/ })).toHaveTe…
+       |                   ^
+    136|     expect(screen.getByText(LEGACY_DETAIL)).toBeInTheDocument();
+    137|     expect(screen.queryByTestId("backstage-economics-pending")).not.to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > renders both observations with provenance and does not repeat the accepted summary
+TestingLibraryElementError: Unable to find an element with the text: slot 04 · t.17 · +7 min. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.17[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.17[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ waitForWrapper ../node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ src/components/nexus/BackstageDrawer.test.tsx:143:25
+    141|   it("renders both observations with provenance and does not repeat th…
+    142|     renderDrawer(observedPayload());
+    143|     expect(await screen.findByText("slot 04 · t.17 · +7 min")).toBeInT…
+       |                         ^
+    144|     const pending = screen.getByTestId("backstage-economics-pending");
+    145|     expect(within(pending).getByText(PENDING_SUMMARY)).toBeInTheDocume…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > keeps the other sections usable when a pending draft has no bound session
+TestingLibraryElementError: Unable to find an element by: [data-testid="backstage-economics-pending"]
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.17[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<aside[39m
+      [33maria-label[39m=[32m"Backstage"[39m
+      [33mclass[39m=[32m"nexus-backstage-drawer"[39m
+      [33mdata-testid[39m=[32m"backstage-drawer"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mclass[39m=[32m"nexus-backstage-head"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-title"[39m
+        [36m>[39m
+          [0m⌬ BACKSTAGE[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-turn"[39m
+        [36m>[39m
+          [0mslot [0m
+          [0m04[0m
+          [0m · [0m
+          [0mt.17[0m
+        [36m</span>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+        [36m/>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"nexus-backstage-dismiss"[39m
+        [36m>[39m
+          [0m` to dismiss[0m
+        [36m</span>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Close Backstage"[39m
+          [33mclass[39m=[32m"nexus-backstage-close"[39m
+        [36m>[39m
+          [0m✕[0m
+        [36m</button>[39m
+      [36m</header>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-backstage-scroll"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mCORRESPONDENCE[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 exchanges · 0 held threads[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-correspondence"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mSTATE WRITES[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0m0 writes[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-writes"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-history"[39m
+          [36m/>[39m
+        [36m</section>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"nexus-backstage-section-head"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-chevron"[39m
+          [36m>[39m
+            [0m⌄[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-label"[39m
+          [36m>[39m
+            [0mORRERY[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"nexus-backstage-section-summary"[39m
+          [36m>[39m
+            [0mchunk S01E07_203 · 2 fired · 0 pressures · 2 events[0m
+          [36m</span>[39m
+        [36m</button>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"nexus-backstage-section nexus-backstage-orrery"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"background"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-3));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mCelia[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mPace the near ground[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-3)); color: hsl(var(--chart-3));"[39m
+            [36m>[39m
+              [0mstroll_taken[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 10%; background: hsl(var(--chart-3));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-row"[39m
+            [33mdata-attention[39m=[32m"meaningful"[39m
+            [33mtitle[39m=[32m""[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-band"[39m
+              [33mstyle[39m=[32m"background: hsl(var(--chart-1));"[39m
+            [36m/>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-actor"[39m
+            [36m>[39m
+              [0mVictor[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-template"[39m
+              [33mstyle[39m=[32m"color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mevade_pursuers[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-branch"[39m
+            [36m>[39m
+              [0mTake cover[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-event"[39m
+              [33mstyle[39m=[32m"border-color: hsl(var(--chart-1)); color: hsl(var(--chart-1));"[39m
+            [36m>[39m
+              [0mthreat_issued[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33maria-label[39m=[32m"magnitude"[39m
+              [33mclass[39m=[32m"nexus-backstage-mag"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mstyle[39m=[32m"width: 75%; background: hsl(var(--chart-1));"[39m
+              [36m/>[39m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"nexus-backstage-orrery-foot"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"nexus-backstage-head-spacer"[39m
+            [36m/>[39m
+            [36m<a[39m
+              [33mhref[39m=[32m"/dev/orrery"[39m
+            [36m>[39m
+              [0maudit dashboard ↗[0m
+            [36m</a>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+      [36m<footer[39m
+        [33mclass[39m=[32m"nexus-backstage-footer"[39m
+      [36m>[39m
+        [0mread-only · entries fade as turns commit · #617 exclusions untouched[0m
+      [36m</footer>[39m
+    [36m</aside>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ waitForWrapper ../node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ src/components/nexus/BackstageDrawer.test.tsx:162:34
+    160|   it("keeps the other sections usable when a pending draft has no boun…
+    161|     renderDrawer({ ...PAYLOAD, economics: { ...PAYLOAD.economics, pend…
+    162|     const pending = await screen.findByTestId("backstage-economics-pen…
+       |                                  ^
+    163|     expect(pending).toHaveTextContent(PENDING_DETAIL);
+    164|     expect(screen.getByText("stroll")).toBeInTheDocument();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > formats 0 elapsed seconds as +0 min
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > formats 59 elapsed seconds as +0 min
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > formats 420 elapsed seconds as +7 min
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > formats 3600 elapsed seconds as +1 h
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > formats 3660 elapsed seconds as +1 h 1 min
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > formats 86400 elapsed seconds as +1 d
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > formats 90000 elapsed seconds as +1 d 1 h
+ FAIL  src/components/nexus/BackstageDrawer.test.tsx > Backstage elapsed time and observation > formats -120 elapsed seconds as −2 min
+TypeError: formatElapsed is not a function
+ ❯ src/components/nexus/BackstageDrawer.test.tsx:179:12
+    177|     [3660, "+1 h 1 min"], [86400, "+1 d"], [90000, "+1 d 1 h"], [-120,…
+    178|   ])("formats %s elapsed seconds as %s", (seconds, expected) => {
+    179|     expect(formatElapsed(Number(seconds))).toBe(expected);
+       |            ^
+    180|   });
+    181| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  src/components/nexus/NexusLayout.test.tsx > NexusLayout Backstage > opens, renders, and closes through the sigil and guarded keyboard
+TestingLibraryElementError: Unable to find an element with the text: slot 04 · t.17 · +7 min. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"nexus-shell animate-fade-in "[39m
+      [33mdata-testid[39m=[32m"nexus-layout"[39m
+    [36m>[39m
+      [36m<header[39m
+        [33mdata-testid[39m=[32m"mock-topbar"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"nexus-main "[39m
+      [36m>[39m
+        [36m<nav[39m
+          [33maria-label[39m=[32m"Primary navigation"[39m
+          [33mclass[39m=[32m"rail-left"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Home"[39m
+            [33mclass[39m=[32m"rail-btn"[39m
+            [33mdata-testid[39m=[32m"rail-home"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-house"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"18"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"18"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"rail-tip"[39m
+            [36m>[39m
+              [0mHOME[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"rail-divider"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Narrative"[39m
+            [33maria-pressed[39m=[32m"true"[39m
+            [33mclass[39m=[32m"rail-btn on"[39m
+            [33mdata-testid[39m=[32m"rail-narrative"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-book"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"18"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"18"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"rail-tip"[39m
+            [36m>[39m
+              [0mNARRATIVE[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Map"[39m
+            [33maria-pressed[39m=[32m"false"[39m
+            [33mclass[39m=[32m"rail-btn "[39m
+            [33mdata-testid[39m=[32m"rail-map"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-map"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"18"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"18"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M15 5.764v15"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M9 3.236v15"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"rail-tip"[39m
+            [36m>[39m
+              [0mMAP[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Characters"[39m
+            [33maria-pressed[39m=[32m"false"[39m
+            [33mclass[39m=[32m"rail-btn "[39m
+            [33mdata-testid[39m=[32m"rail-characters"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-users"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"18"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"18"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"[39m
+              [36m/>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"9"[39m
+                [33mcy[39m=[32m"7"[39m
+                [33mr[39m=[32m"4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M22 21v-2a4 4 0 0 0-3-3.87"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M16 3.13a4 4 0 0 1 0 7.75"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [36m<span[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"rail-tip"[39m
+            [36m>[39m
+              [0mCHARACTERS[0m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"rail-spacer"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Backstage"[39m
+            [33maria-pressed[39m=[32m"true"[39m
+    ...
+ ❯ Object.getElementError ../node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/components/nexus/NexusLayout.test.tsx:288:19
+    286|       "Victor is cultivating Celia as an informant.",
+    287|     );
+    288|     expect(screen.getByText("slot 04 · t.17 · +7 min")).toBeInTheDocum…
+       |                   ^
+    289|     expect(screen.getByText("critical 2,000/1,600 · background unknown…
+    290|     const gaiaAttempt = screen.getByText("gaia").closest(".nexus-backs…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  12 failed | 8 passed (20)
+   Start at  20:53:05
+   Duration  2.57s (transform 492ms, setup 91ms, collect 791ms, tests 2.46s, environment 568ms, prepare 171ms)
+
+JSON report written to /Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/ui-red.json

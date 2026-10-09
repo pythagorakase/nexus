@@ -1,0 +1,1 @@
+{"module": "/Users/pythagor/.codex/worktrees/resume-backstage-observation/nexus/nexus/__init__.py", "executable": "/Users/pythagor/nexus/.venv/bin/python"}

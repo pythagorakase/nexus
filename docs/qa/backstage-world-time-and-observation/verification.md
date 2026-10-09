@@ -1,10 +1,11 @@
-# Backstage World Time and Observation: Tests-Only Checkpoint
+# Backstage World Time and Observation: Initial Red Evidence
 
-Date: 2026-10-08. **Initial red proof and all product changes are pending.**
+Date: 2026-10-08. **The coordinator accepted the initial reds; product changes and green proof are pending.**
 The frozen UI-B order explicitly requires each new test before implementation.
-This checkpoint authors those regressions against unchanged UI-B product code;
-no pytest, collection, npm installation, type check, build, PostgreSQL operation,
-provider call, gateway startup, screenshot or state-surface regeneration ran.
+The tests-only checkpoint authored those regressions against unchanged UI-B product
+code. Its source preparation ran no tests. The later coordinator execution below
+records actual initial failures before any UI-B product change; no green, type
+check, build, screenshot or state-surface regeneration is claimed.
 
 The product baseline is merge `28e7070bfaa48e77866f0a11ebce23ca9ec7970f`:
 784-S2 `bf053542a1007b7fea768c13a06b768136df4aa8` plus frozen 777 source
@@ -75,7 +76,7 @@ contract must be merged normally and its `UI_CONFIG_KEY` seed preserved before
 final proof. No UI-B product, CSS, telemetry, CLI, shared fixture or migration
 file is edited in this tests-only checkpoint.
 
-## Initial Red Admission Plan — Not Run
+## Historical Initial Red Admission Plan
 
 The coordinator owns the single heavy slot. Before any product edit, request
 admission for these four nodes on the committed tests-only head:
@@ -110,6 +111,41 @@ do not infer outcomes from the authored assertions. Product remains unchanged
 until the coordinator accepts both red results. A schema-3 parity comparison
 crossing UTC midnight may be rerun once only with evidence of that boundary;
 job, usage, provenance or other fields are never dropped to force equality.
+
+## Actual Initial Reds and Harness Failures
+
+The coordinator ran all initial proof at unchanged tests-only HEAD
+`7557f00c7278d74e203c585d0092436db4f15934`, tree
+`98e20d9f013579c9f6a6d6189e80a61c2912c618`, with `origin/main` pinned to
+`f073b3711a3bd0273943c9defad85913452fd00b`.
+
+- [Python log](initial-red/python-initial-red/python-red.txt): **4 failed**,
+  9 warnings, 24.47 seconds. The exact reasons are missing `elapsed_seconds`,
+  no `BackstagePayloadError` for the missing prior clock, and missing `economics`
+  in both economics tests. All three final guards passed and both read-only
+  clone checks returned `[]`. No skip or setup error was accepted.
+- [First UI attempt](initial-red/ui-npm-failed-attempt/npm-ci.txt): npm stopped
+  before tests because the runner reused `/dev/null` as both user and global
+  config. This remains a failed harness attempt. The coordinator corrected only
+  the private runner to create two distinct empty npmrc files.
+- [UI follow-up log](initial-red/ui-initial-red/ui-red.txt): npm ci passed;
+  Vitest recorded **12 failed, 8 passed** in 2.57 seconds. The failures are the
+  absent formatter, elapsed suffix, ECONOMICS section and pending observation.
+  All existing attention/layout/announcer cases passed. The frozen `NexusLayout`
+  filter also selects three `NexusLayout.announcer.test.tsx` cases, omitted from
+  the runner's two-suite whitelist, so its raw result deliberately remains
+  `failed-review-required` despite the intended test outcomes.
+
+The [coordinator adjudication](initial-red/ui-initial-red/coordinator-adjudication.json)
+records all actual outcomes, hashes, the whitelist omission and clean source.
+It authorizes product implementation after inspecting the complete existing
+reports; no test rerun or assertion change was used to hide the harness errors.
+The [source manifest](initial-red/source-manifest.json) hashes the copied raw
+logs, JUnit/JSON reports and original runner snapshots. Temporary fixture logs
+remain in the named private coordinator evidence directory; caches, temporary
+configs and installed node modules are intentionally not repository artifacts.
+The owner-connection audit retains the documented subprocess/driver limits;
+its three guard summaries are not a universal OS or child-process audit.
 
 ## Remaining Implementation and Proof
 
