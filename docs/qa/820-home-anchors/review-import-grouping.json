@@ -1,0 +1,7 @@
+{
+  "change": "Move unchanged TYPE_CHECKING-only ChecksumProgress import after all ordinary imports.",
+  "runtime_ast_excluding_type_only_blocks": "identical",
+  "future_annotations": "present",
+  "compile": "passed",
+  "tests": "Existing7056 integration and325focused results; no new behavioral test for import grouping."
+}

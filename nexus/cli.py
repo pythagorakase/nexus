@@ -63,9 +63,6 @@ from typing import (
 )
 import uuid
 
-if TYPE_CHECKING:
-    from nexus.runtime.home_plan import ChecksumProgress
-
 import requests  # type: ignore[import-untyped]
 from urllib3.exceptions import ReadTimeoutError
 
@@ -97,6 +94,9 @@ from nexus.runtime.remote_auth import (
     build_runtime_request_auth,
 )
 from nexus.util.secret_manager import MissingSecretError, SecretStoreAccessError
+
+if TYPE_CHECKING:
+    from nexus.runtime.home_plan import ChecksumProgress
 
 logger = logging.getLogger("nexus.cli")
 
