@@ -1,0 +1,1 @@
+{"module": "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/nexus/__init__.py", "executable": "/Users/pythagor/nexus/.venv/bin/python"}

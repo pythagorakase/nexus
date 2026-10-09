@@ -220,3 +220,7 @@ Merged current main `81163beb0f02041f2e83c50a96dfa60286cbb28a` by an ordinary co
 Artifact implementation, readiness, provider guard, CLI contract and associated tests match the assembled gate input; narrative.py differs only by the pending777UI-router registration. The merged CLI differs only by820s type-only import grouping; generated CLI reference matches the tested integration bytes. Final freshness/reference checks follow.
 
 Codex — GPT-6
+
+Final landing check at `89f02620067aadff9ab196a65bef4036c7e1961e`: **76 passed in 5.15s**, covering canonical freshness and generated CLI reference, with all three isolation guard summaries. Exact commands, import path, unchanged tree and logs are in `landing/`. The following commit adds evidence only.
+
+Codex — GPT-6
