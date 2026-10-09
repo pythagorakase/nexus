@@ -35,6 +35,16 @@ LOCAL_STORE_PROVIDERS = [
 ]
 
 
+def test_file_store_writes_under_the_state_dir(offline_registry: Path) -> None:
+    """The real client stores a local thread under the configured state directory."""
+    client = ConversationsClient(registry_model("local"))
+    assert client.store_mode == "file"
+    thread_id = client.create_thread()
+    assert (offline_registry / f"{thread_id}.json").is_file()
+    checkout = Path(__file__).resolve().parents[2]
+    assert not (checkout / "temp" / "wizard_threads" / f"{thread_id}.json").exists()
+
+
 def test_openai_conversation_protocol() -> None:
     """Create, write, page newest-first history, and delete via supported routes."""
     requests: list[httpx.Request] = []

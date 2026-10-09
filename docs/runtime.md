@@ -447,15 +447,23 @@ selects a configuration.
   inherit `NEXUS_HOME` and receive the resolved config in
   `NEXUS_RUNTIME_CONFIG`, so they resolve the same home.
 - A path passed to `load_settings(path)` or `settings_path_scope` is a
-  per-call override and is not checked against the locators.
+  per-call override: it is not checked against the locators, but its relative
+  model paths anchor at the locator root, so a relative `NEXUS_HOME` or a
+  `NEXUS_HOME` that disagrees with `NEXUS_RUNTIME_CONFIG` still raises.
 - Absolute configured directories are used as configured; `~` is expanded.
+- Model paths (`[local_models].models_dir`, the `[memnon.models]` `local_path`,
+  the production reranker `model_path`, and each `[ir_eval]` embedding and
+  reranker candidate `local_path`) are anchored once, when the configuration
+  loads: a relative path resolves under the same root as the other relative
+  directories, never under the working directory. An empty path stays empty.
+  `nexus home plan` rewrites keys from the strings as configured.
 - Tests that point `NEXUS_RUNTIME_CONFIG` at temporary configs would be
   refused under an exported `NEXUS_HOME`, so `tests/conftest.py` clears it
   for the session and the QA lane's generated `runtime_env.sh` unsets it.
 
 | Layout entry | Location | Holds |
 |---|---|---|
-| `state_dir` | `[runtime].state_dir` | pidfiles, `logging.json`, `preferences.toml`, local-model state |
+| `state_dir` | `[runtime].state_dir` | pidfiles, `logging.json`, `preferences.toml`, local-model state, file-backed wizard threads (`wizard_threads/`) |
 | `logs_dir` | the same directory | captured `<service>.log` files and rotated segments |
 | `usage_dir` | `[usage].usage_dir` | usage and prompt-window ledgers |
 | `uploads_dir` | `ui/client/public` | `character_portraits/` and `place_images/` |
@@ -467,8 +475,7 @@ selects a configuration.
 `uploads_dir`, `models_dir`, `cache_dir` and `backups_dir` have no
 configuration key yet: each gains one in the slice that gives it a runtime
 owner. Until then the upload endpoints and static mounts serve the
-checkout's `ui/client/public` even when `NEXUS_HOME` is set, and model
-paths stay exactly as configured.
+checkout's `ui/client/public` even when `NEXUS_HOME` is set.
 
 `receipts_dir` never gets a configuration key: a receipt of a configuration
 failure is written before any configuration is known.
@@ -508,8 +515,11 @@ checksumming anything:
   whose destination overlaps a model that stays in place.
 
 It creates nothing. It reads every inventoried file in full to checksum it,
-model weights included, and prints nothing until it finishes, so on a large
-model store it runs for minutes. Moving files, re-anchoring uploads and
+model weights included, so on a large model store it runs for minutes. When
+stderr is a terminal and `--json` is not given, it shows checksum progress
+(entries and gigabytes) on one stderr line; otherwise it prints nothing until
+it finishes. Its output is the same either way, and it has no option to skip
+checksums. Moving files, re-anchoring uploads and
 static mounts, slot-namespacing assets (which rewrites asset path rows and
 needs PostgreSQL validation), and teaching the Tauri shell the home are the
 next slices.

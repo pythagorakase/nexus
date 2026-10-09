@@ -1,0 +1,99 @@
+{
+  "artifacts": [
+    {
+      "destination": "results.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate-resumed-1/results.json",
+      "sha256": "688b4233ae20d8817ec4256c4314a51d2c5ed9547516ca7692bd7554afafadd4",
+      "bytes": 2099
+    },
+    {
+      "destination": "core.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate-resumed-1/core.log",
+      "sha256": "62c770ad919a56aeb6d8e79cf0413cd121990ec5eea3e5ea691b350372a42ffd",
+      "bytes": 13449
+    },
+    {
+      "destination": "api.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate-resumed-1/api.log",
+      "sha256": "4778ff184e897ba3239cde48470b50743ccd764d8b892e238e9f1eb3cb5403c9",
+      "bytes": 4619
+    },
+    {
+      "destination": "orrery.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate-resumed-1/orrery.log",
+      "sha256": "8d2f31c170fcc084465097b9a87d59165fe517472bfc67cc03f88b9d2534dd55",
+      "bytes": 6943
+    },
+    {
+      "destination": "run_next_combined_gate_resumed.py.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/run_next_combined_gate_resumed.py",
+      "sha256": "d4a87f22fb999003394f1f530e4fc8342fbee8281f6574ae18eb1ec45f4e9798",
+      "bytes": 4060
+    },
+    {
+      "destination": "historical-failed-attempt/results.json",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate/results.json",
+      "sha256": "fb54d471718365663267c456380d619c04f6d5d11223868003d8a681b047d441",
+      "bytes": 916
+    },
+    {
+      "destination": "historical-failed-attempt/core.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate/core.log",
+      "sha256": "589b655340686a919959a79183c3f234ae76782437369123a8d8425bbd2114b5",
+      "bytes": 14750
+    },
+    {
+      "destination": "historical-failed-attempt/run_next_combined_gate.py.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/run_next_combined_gate.py",
+      "sha256": "0d8a4d378788d5895efd389a7e8756a948c0e345a253cdd169d4e59a814b599b",
+      "bytes": 4050
+    },
+    {
+      "destination": "historical-failed-attempt/repair.diff",
+      "source": "git show 16706c35e6cbe988c02c4fab7b24a0062c0a57dd -- nexus/api/ui_config_endpoints.py",
+      "sha256": "31c4ac7f5d80e1a0a698f84b255eac94e08370ce3eb539c5741ad052a290787a",
+      "bytes": 533
+    },
+    {
+      "destination": "verification-template.md.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/resumed-gate-verification-template.md",
+      "sha256": "63fec5370c652c860a9729bcba27bf328e20a4e6802ced44172842b9caca288a",
+      "bytes": 4930
+    },
+    {
+      "destination": "assemble_resumed_gate_evidence.py.txt",
+      "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/assemble_resumed_gate_evidence.py",
+      "sha256": "6f556d7356f6049c033d27000cf3c9bdf3da43dbcda39d35a4c52e32e973ae94",
+      "bytes": 20046
+    },
+    {
+      "destination": "verification.md",
+      "source": "generated from validated assembly metadata",
+      "sha256": "cc7daebdf6cc0970144efc867ce10c69dc1412dff88b7f2106418ebeedda20bc",
+      "bytes": 6977
+    },
+    {
+      "destination": "assembly-metadata.json",
+      "source": "generated from validated assembly metadata",
+      "sha256": "d748d27c043c10a3055412a3de877f45d85190e5baa39a180bc12ec8f811c74d",
+      "bytes": 3691
+    },
+    {
+      "destination": "820-addendum-proposal.md",
+      "source": "generated from validated assembly metadata",
+      "sha256": "5fd5fabb98d1b6d3153ec98cd5a6d30f750e47c99ba82d07d14377eae76dcf01",
+      "bytes": 545
+    },
+    {
+      "destination": "final-head-state.json",
+      "source": "generated from validated assembly metadata",
+      "sha256": "5683cb84ea330e7d28b0b8b4e197f174942b05d2febb01b290d51871795f9aff",
+      "bytes": 2160
+    }
+  ],
+  "template": {
+    "path": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/resumed-gate-verification-template.md",
+    "sha256": "63fec5370c652c860a9729bcba27bf328e20a4e6802ced44172842b9caca288a"
+  },
+  "signature": "Codex — GPT-6"
+}

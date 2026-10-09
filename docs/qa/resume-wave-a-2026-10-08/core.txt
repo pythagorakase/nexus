@@ -1,0 +1,105 @@
+........................................................................ [  1%]
+........................................................................ [  3%]
+................................................ssss.................... [  5%]
+........................................................................ [  7%]
+........................................................................ [  9%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+.................................s...................................... [ 21%]
+........................................................................ [ 23%]
+........................................................................ [ 25%]
+........................................................................ [ 26%]
+.................................ssssssss............................... [ 28%]
+..........................................s........s.................... [ 30%]
+........................................................................ [ 32%]
+............s........................................................... [ 34%]
+........................................................................ [ 36%]
+...s.................................................................... [ 38%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+ss........................................s............................. [ 44%]
+........................................s............................... [ 46%]
+........................................................................ [ 48%]
+......................sss............................................... [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 53%]
+.....................ss................................ssss............. [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 59%]
+........................................................................ [ 61%]
+...........................................................sss.......... [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 69%]
+........................................................................ [ 71%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 79%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+.......................................................ss............... [ 90%]
+........................................................................ [ 92%]
+.......s................................................................ [ 94%]
+........................................................................ [ 96%]
+........................................................................ [ 98%]
+................................ssssssssssssss..................         [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../../nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_cli_inspect_pg.py: 1 warning
+tests/test_memnon_embedding_cache.py: 2 warnings
+tests/test_memnon_model_failures_pg.py: 10 warnings
+  /Users/pythagor/.codex/worktrees/resume-claude-integration/nexus/nexus/agents/memnon/utils/cross_encoder.py:151: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+    elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
+
+tests/test_cli_inspect_pg.py::test_continue_waits_then_inspect_reads_the_played_clone
+tests/test_memnon_embedding_cache.py::test_memnon_close_disposes_engine
+tests/test_memnon_embedding_cache.py::test_per_turn_lore_stacks_share_embedder_and_close
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/convert_slow_tokenizer.py:559: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+    warnings.warn(
+
+tests/test_memnon_cross_encoder_artifact.py::test_qwen3_loads_its_local_folder_and_scores
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/tokenization_utils_base.py:2718: UserWarning: `max_length` is ignored when `padding`=`True` and there is no truncation strategy. To pad to max length, use `padding='max_length'`.
+    warnings.warn(
+
+tests/test_qa_shift.py::test_clock_contract_reports_all_violation_counts[primary_regressions]
+tests/test_qa_shift.py::test_clock_contract_reports_all_violation_counts[missing_base]
+tests/test_qa_shift.py::test_clock_contract_reports_all_violation_counts[nonprimary_contributions]
+tests/test_qa_shift.py::test_clock_contract_reports_all_violation_counts[bootstrap_nonzero]
+tests/test_qa_shift.py::test_clock_contract_reports_all_violation_counts[disagreements]
+tests/test_qa_shift.py::test_clock_contract_empty_and_null_deltas
+  <frozen runpy>:128: RuntimeWarning: 'scripts.qa_shift.clock_contract' found in sys.modules after import of package 'scripts.qa_shift', but prior to execution of 'scripts.qa_shift.clock_contract'; this may result in unpredictable behaviour
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 448 targets: nexus_m10_fresh_test_67722, nexus_m10_template_test_67722, nexus_test_813_*, nexus_test_i685_* x3, nexus_test_interactions_* x14, nexus_test_pass2_* x7, postgres, qa640_1013_absent_*, qa640_1013_idf_* x7, qa640_1013_readiness_* x2, qa640_742_seat_test_*, qa640_756s1_distinct_*, qa640_756s1_generation_* x2, qa640_759_measure_*, qa640_766_schema_*, qa640_778s4a_tests_* x6, qa640_778s6a_family_* x9, qa640_783_probe_*, qa640_785_reach_* x3, qa640_788_scale_* x2, qa640_807_lifecycle_drop_*, qa640_807_lifecycle_template_*, qa640_807_lifecycle_trigger_*, qa640_810_adopt_drift_*, qa640_810_adopt_noop_*, qa640_810_adopt_recreate_*, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_no_create_all_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_810s2_contract_* x52, qa640_810s2_source_* x5, qa640_810s2_summary384_*, qa640_810s3_ann_* x2, qa640_810s3_ann_high_* x2, qa640_810s3_ann_precheck_* x12, qa640_810s3_assets_*, qa640_810s3_importer_*, qa640_810s3_provider_*, qa640_810s3_regen_*, qa640_810s3_scene_* x2, qa640_810s3_season_*, qa640_811_entity_manifest_*, qa640_811_prompt_vocab_*, qa640_811_tags_audit_* x5, qa640_811_tags_audit_nocol_*, qa640_812s4a_* x6, qa640_815_inspect_*, qa640_816_empty_* x4, qa640_816_experience_seed_* x2, qa640_816_factory_*, qa640_816_free_text_*, qa640_816_legacy_trait_*, qa640_816_lifecycle_test_provider, qa640_816_pending_*, qa640_816_preconditions_*, qa640_816_singleton_* x2, qa640_816_staging_failure_*, qa640_816_test_provider_* x5, qa640_818_estimate_*, qa640_818_pin_* x2, qa640_819_labels_*, qa640_822_backfill_a_*, qa640_822_backfill_b_*, qa640_822_backfill_t_*, qa640_822_clone_*, qa640_822_clone_bare_*, qa640_822_clone_invalid_*, qa640_822_clone_pre146_*, qa640_822_clone_src_*, qa640_822_constraints_*, qa640_822_detach_*, qa640_822_detach_bare_*, qa640_822_detach_src_*, qa640_822_doctor_s_*, qa640_822_doctor_t_*, qa640_822_init_*, qa640_822_migration_*, qa640_822_preflight_a_* x9, qa640_822_preflight_b_* x9, qa640_822_preflight_parent_* x9, qa640_822_reset_*, qa640_822_reset_src_*, qa640_822_transition_*, qa640_823_locked_clone_*, qa640_823_locked_init_*, qa640_823_unlocked_clone_*, qa640_823_unlocked_init_*, qa640_836_parity_* x2, qa640_836s2_int8_*, qa640_836s2_rerun_*, qa640_836s2_summary_drift_*, qa640_836s2_unknown_dependent_*, qa640_836s2_widen_*, qa640_836s3_* x3, qa640_840_cost_*, qa640_885_remembered_*, qa640_885_remembered_opening_*, qa640_908_aliases_*, qa640_908_cast_*, qa640_908_fingerprint_*, qa640_910_dossier_* x7, qa640_clock_* x12, qa640_compaction_retry_*, qa640_connection_contract, qa640_docs_refresh_*, qa640_historical_coverage_* x3, qa640_lane_close_*, qa640_memnon_config_*, qa640_presence_audit_*, qa640_prose_metrics_*, qa640_raw_url_contract, qa640_regen_truncate_* x2, qa640_roster798_* x33, qa640_scene_clock_*, qa640_scene_null_clock_*, qa640_scene_parent_*, qa640_schema_docs_* x3, qa640_settings_stamp_*, qa640_test_golden_path_staging_*, qa640_test_issue_600_staging_c_*, qa640_test_issue_601_staging_p_*, qa640_test_live_cycle_seed_rou_*, qa640_test_maturation_enqueue__*, qa640_test_retrograde_wizard_s_*, qa640_window_coverage_*, qa649_*, qa653_* x2, qa655_*, qa655_wizard_01f6cb0fd0, qa655_wizard_61c9b41d77, qa655_wizard_702d73486e, qa655_wizard_8cf79c062d, qa655_wizard_e0151a9557, qa655_wizard_f8f17f5172, qa683_presence_* x2, qa735_gis_scripts_* x3, qa735_slot_model_*, qa762_corpus_copy_*, qa762_fresh_*, qa762_idf_* x19, qa762_other_*, qa804_fixture_target, qa838_genesis_weird_*, qa838_weird_level_*, qa885_anchor_pair_seeds_*, qa885_character_manifest_*, qa885_character_pair_* x2, qa885_entrypoints_*, qa885_faction_audit_*, qa885_intertitle_*, qa885_ledger_seed_* x3, qa885_legacy_tag_* x4, qa885_place_manifest_*, qa885_presence_baseline_*, qa885_retrieval_coverage_*, qa885_supervisor_*, qa885_trait_compiler_*, qa885_transaction_writer_*, qa947_episode_*, qa_identity_surface_0eeaa63ff9, qa_identity_surface_600fd45683, qa_identity_surface_69be4b719c, qa_identity_surface_7d0f3f30a0, qa_identity_surface_b05df1d501, qa_identity_surface_bda507a5cf, qa_identity_surface_d1cf07c3d6, qa_lazy_logon_*, qa_lore_infra_*, qa_model_cache_* x2, qa_model_failures_* x15, qa_player_identity_a1cbbd05fe, qa_runtime_config_* x5, qa_wt664_*, qa_wt715_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:49852 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:49853 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[0] at local:50164 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[1] at local:50165 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[0] at local:50172 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard; two_clusters[1] at local:50173 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard
+dbname audit: owner names admitted on registered clusters: save_04@local:49852 (psycopg2), save_04@local:49853 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+3686 passed, 52 skipped, 30 warnings in 1877.30s (0:31:17)

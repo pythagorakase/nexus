@@ -1,0 +1,99 @@
+"""Run one clean, assembled PostgreSQL gate without overwriting earlier proof."""
+
+import datetime
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+
+ROOT = Path('/Users/pythagor/.codex/worktrees/resume-claude-integration/nexus')
+OUT = Path('/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/next-full-gate')
+PYTHON = '/Users/pythagor/nexus/.venv/bin/python'
+PIECES = [
+    ('core', ['tests', '--ignore=tests/test_api', '--ignore=tests/test_orrery']),
+    ('api', ['tests/test_api']),
+    ('orrery', ['tests/test_orrery']),
+]
+CLEAR_ENV = (
+    'NEXUS_GATEWAY_PORT', 'NEXUS_API_URL', 'NEXUS_SLOT',
+    'NEXUS_RUN_LIVE_LLM', 'NEXUS_RUN_CORPUS', 'NEXUS_RUN_SECRET_STORE',
+    'NEXUS_HOME', 'NEXUS_RUNTIME_CONFIG', 'NEXUS_TEST_RECEIPTS_DIR',
+    'NEXUS_TEST_PROVIDER_DATABASE', 'NEXUS_TEST_TEMPLATE_DB',
+    'PGDATABASE', 'PGSERVICE', 'PGSERVICEFILE', 'PGOPTIONS',
+    'PGHOST', 'PGHOSTADDR', 'PGPORT', 'PGUSER',
+    'PYTEST_ADDOPTS', 'PYTEST_PLUGINS', 'PYTEST_DISABLE_PLUGIN_AUTOLOAD',
+)
+
+
+def git(*args):
+    return subprocess.check_output(['git', *args], cwd=ROOT, text=True).strip()
+
+
+def check_tree(head):
+    if git('rev-parse', 'HEAD') != head or git('status', '--porcelain'):
+        raise RuntimeError('Integration checkout changed during gate')
+
+
+def main():
+    if git('status', '--porcelain'):
+        raise RuntimeError('Gate requires a clean integration checkout')
+    head = git('rev-parse', 'HEAD')
+    OUT.mkdir(parents=True, exist_ok=False)
+    env = dict(os.environ)
+    for name in CLEAR_ENV:
+        env.pop(name, None)
+    env.update(PYTHONPATH=str(ROOT), NEXUS_RUN_POSTGRES='1')
+    imported = subprocess.check_output(
+        [PYTHON, '-c', 'import nexus; print(nexus.__file__)'],
+        cwd=ROOT, env=env, text=True,
+    ).strip()
+    if not Path(imported).is_relative_to(ROOT):
+        raise RuntimeError(f'Wrong import root: {imported}')
+    results = {
+        'head': head, 'tree': git('rev-parse', 'HEAD^{tree}'),
+        'import_path': imported,
+        'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'pieces': [], 'state': 'running',
+    }
+    record = OUT / 'results.json'
+    for name, selectors in PIECES:
+        check_tree(head)
+        if os.getloadavg()[0] > 24:
+            raise RuntimeError('Host load above the owner limit; stopped before next piece')
+        command = ['nice', '-n', '15', PYTHON, '-m', 'pytest', '-q', '-p',
+                   'tests.dbname_audit', '-p', 'no:cacheprovider', *selectors]
+        log = OUT / f'{name}.log'
+        item = {'name': name, 'command': command, 'log': str(log), 'state': 'running'}
+        results['pieces'].append(item)
+        record.write_text(json.dumps(results, indent=2) + '\n')
+        print(f'Starting {name} at {head}', flush=True)
+        with log.open('w') as stream:
+            completed = subprocess.run(command, cwd=ROOT, env=env, stdout=stream,
+                                       stderr=subprocess.STDOUT, check=False)
+        output = log.read_text()
+        check_tree(head)
+        item.update(
+            exit_code=completed.returncode,
+            secret_guard='secret-store guard: active; nexus-api: denied' in output,
+            owner_audit='dbname audit: owner targets: none' in output,
+            receipt_isolation='receipt isolation: checkout and user receipts untouched' in output,
+            state='complete',
+        )
+        okay = (completed.returncode == 0 and item['secret_guard']
+                and item['owner_audit'] and item['receipt_isolation'])
+        print(f'Completed {name}: exit={completed.returncode}, guards={okay}', flush=True)
+        if not okay:
+            results['state'] = 'failed'
+            record.write_text(json.dumps(results, indent=2) + '\n')
+            return 1
+    check_tree(head)
+    results['state'] = 'passed'
+    results['completed_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    record.write_text(json.dumps(results, indent=2) + '\n')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,0 +1,45 @@
+13:38  up 1 day, 18 mins, 5 users, load averages: 4.29 4.11 4.10
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________ test_home_plan_rewrites_from_the_configured_strings ______________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-431/test_home_plan_rewrites_from_t0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x16ca5b390>
+
+    def test_home_plan_rewrites_from_the_configured_strings(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A fake checkout's relative model paths remain relative in the move plan."""
+        checkout, config, _ = _fake_checkout(tmp_path)
+        _write_config(config, edit=_point_models(Path("models")))
+        monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+        target = tmp_path / "target"
+        plan = plan_home_move(target, checkout=checkout)
+        model_files = [
+            entry
+            for entry in plan.entries
+            if entry.category == "models" and entry.kind == "file"
+        ]
+>       assert model_files
+E       assert []
+
+tests/test_runtime_home.py:649: AssertionError
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 failed, 2 warnings in 2.59s
