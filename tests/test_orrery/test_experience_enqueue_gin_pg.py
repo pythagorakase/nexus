@@ -16,7 +16,7 @@ from nexus.agents.orrery.experiences import (
     _ENQUEUE_CANDIDATES_SQL,
     enqueue_scene_experience_job_sync,
 )
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from scripts import new_story_setup
 from tests.pg_fixtures import connect
 
@@ -233,7 +233,7 @@ def _enqueue_and_read_ids(
         scene_end_chunk_id=scene_end_chunk_id,
         world_layer="primary",
         slot=720,
-        settings=load_settings_as_dict(),
+        settings=load_settings(),
     )
     assert inserted == 1
     with conn.cursor(cursor_factory=RealDictCursor) as cur:

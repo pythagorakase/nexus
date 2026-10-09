@@ -33,8 +33,13 @@ from nexus.agents.orrery.retrograde_maturation import (
     namespace_expansion_event_refs,
 )
 from nexus.api.lore_adapter import extract_new_entities
-from nexus.config import load_settings, load_settings_as_dict
-from nexus.config.settings_models import OrreryRetrogradeMaturationSettings, Settings
+from nexus.config import load_settings
+from nexus.config.settings_models import (
+    OrreryEpistemicsSettings,
+    OrreryRetrogradeMaturationSettings,
+    Settings,
+)
+from tests.settings_helpers import settings_with, table
 
 from tests.pg_fixtures import (
     connect,
@@ -231,12 +236,25 @@ class _RecordingConnection:
         return self._cursor
 
 
-_ENABLED_SETTINGS: Mapping[str, Any] = {
-    "orrery": {"retrograde": {"maturation": {"enabled": True}}}
-}
-_DISABLED_SETTINGS: Mapping[str, Any] = {
-    "orrery": {"retrograde": {"maturation": {"enabled": False}}}
-}
+def _enqueue_settings(*, enabled: bool) -> Settings:
+    """Preserve partial-table defaults and the formerly merged seat identity."""
+    maturation = load_settings().require_orrery("enqueue proof").retrograde.maturation
+    return settings_with(
+        {
+            "orrery.retrograde.maturation": table(
+                OrreryRetrogradeMaturationSettings,
+                {
+                    "enabled": enabled,
+                    "model_ref": maturation.model_ref,
+                },
+            )
+        }
+    )
+
+
+_ENABLED_SETTINGS = _enqueue_settings(enabled=True)
+_DISABLED_SETTINGS = _enqueue_settings(enabled=False)
+
 
 _DECLARATION = {
     "kind": "character",
@@ -420,15 +438,7 @@ def _genesis_record(
 def _typed_settings_with_default_level(level: str) -> Settings:
     """Typed settings from nexus.toml with one ``default_level`` override."""
 
-    raw = load_settings_as_dict()
-    raw["orrery"]["retrograde"]["weird"]["default_level"] = level
-    return Settings.model_validate(
-        {
-            key: value
-            for key, value in raw.items()
-            if key not in {"Agent Settings", "API Settings"}
-        }
-    )
+    return settings_with({"orrery.retrograde.weird.default_level": level})
 
 
 def _expected_manifest_weird(
@@ -705,20 +715,14 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
         "claim_event_types": ["threat_issued"],
         "aware_roles": ["actor", "target"],
     }
-    settings = retrograde_maturation.load_settings_as_dict()
-    settings["orrery"]["epistemics"] = injected_policy
-    typed_settings = Settings.model_validate(
-        {
-            key: value
-            for key, value in settings.items()
-            if key not in {"Agent Settings", "API Settings"}
-        }
+    typed_settings = settings_with(
+        {"orrery.epistemics": table(OrreryEpistemicsSettings, injected_policy)}
     )
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(
         retrograde_maturation,
-        "load_settings_as_dict",
+        "load_settings",
         lambda: (_ for _ in ()).throw(AssertionError("unexpected settings reload")),
     )
     route_slot_to_disposable(monkeypatch.setattr, slot=2, dbname=FAKE_SLOT_DBNAME)
@@ -807,7 +811,6 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
             "slot": "2",
         },
         cfg=cfg,
-        settings_dict=settings,
         settings=typed_settings,
         slot=2,
     )
@@ -860,14 +863,7 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
         def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
             return self.cursor_obj
 
-    settings = retrograde_maturation.load_settings_as_dict()
-    typed_settings = Settings.model_validate(
-        {
-            key: value
-            for key, value in settings.items()
-            if key not in {"Agent Settings", "API Settings"}
-        }
-    )
+    typed_settings = retrograde_maturation.load_settings()
     expansion_calls: list[dict[str, Any]] = []
     applied_coordinates: list[Mapping[str, Any]] = []
 
@@ -950,7 +946,6 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
             "slot": "2",
         },
         cfg=cfg,
-        settings_dict=settings,
         settings=typed_settings,
         slot=2,
     )
@@ -1004,14 +999,7 @@ def test_seedless_skip_manifest_records_weird(monkeypatch: Any) -> None:
 
     from nexus.agents.orrery.retrograde_packet import resolve_weird_profile
 
-    settings = retrograde_maturation.load_settings_as_dict()
-    typed_settings = Settings.model_validate(
-        {
-            key: value
-            for key, value in settings.items()
-            if key not in {"Agent Settings", "API Settings"}
-        }
-    )
+    typed_settings = retrograde_maturation.load_settings()
     record = {
         **resolve_weird_profile(
             settings=typed_settings,
@@ -1084,7 +1072,6 @@ def test_seedless_skip_manifest_records_weird(monkeypatch: Any) -> None:
             "slot": "2",
         },
         cfg=cfg,
-        settings_dict=settings,
         settings=typed_settings,
         slot=2,
     )

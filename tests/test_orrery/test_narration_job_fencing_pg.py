@@ -14,6 +14,13 @@ from uuid import uuid4
 
 import psycopg2
 import pytest
+
+from nexus.config.settings_models import (
+    OrreryNarrationSettings,
+    OrreryPromoteSettings,
+    Settings,
+)
+from tests.settings_helpers import settings_with, table
 from psycopg2 import sql
 from psycopg2.errors import UniqueViolation
 from sqlalchemy import create_engine
@@ -117,24 +124,29 @@ def _disposable_narration_db() -> Iterator[str]:
             admin.close()
 
 
-def _settings(*, lease_duration_seconds: int = 60) -> dict[str, Any]:
+def _settings(*, lease_duration_seconds: int = 60) -> Settings:
     """Return deterministic narration worker settings for database tests."""
-
-    return {
-        "orrery": {
-            "narration": {
-                "max_attempts": 3,
-                "retry_delay_seconds": 0,
-                "lease_duration_seconds": lease_duration_seconds,
-                "max_jobs_per_drain": 5,
-            },
-            "promote": {
-                "priority_threshold": 30.0,
-                "magnitude_threshold": 0.35,
-                "perceptual_summary_max_chars": 240,
-            },
+    return settings_with(
+        {
+            "orrery.narration": table(
+                OrreryNarrationSettings,
+                {
+                    "max_attempts": 3,
+                    "retry_delay_seconds": 0,
+                    "lease_duration_seconds": lease_duration_seconds,
+                    "max_jobs_per_drain": 5,
+                },
+            ),
+            "orrery.promote": table(
+                OrreryPromoteSettings,
+                {
+                    "priority_threshold": 30.0,
+                    "magnitude_threshold": 0.35,
+                    "perceptual_summary_max_chars": 240,
+                },
+            ),
         }
-    }
+    )
 
 
 def _insert_chunk(cur: Any, label: str, *, world_layer: str = "primary") -> int:

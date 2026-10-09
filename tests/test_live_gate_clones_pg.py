@@ -30,7 +30,6 @@ from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.retrograde_maturation import (
     _load_job_context,
     _load_story_weird_inputs,
-    _maturation_settings,
     build_runtime_maturation_packet,
     enqueue_declared_entity_maturations,
 )
@@ -176,7 +175,7 @@ def test_maturation_enqueue_is_idempotent_on_the_routed_clone(
         conn.rollback()
         assert jobs == [("queued", str(MATURATION_SLOT), story.chunk_id, name)]
 
-        cfg = _maturation_settings(load_settings_as_dict())
+        cfg = load_settings().require_orrery("live gate clones").retrograde.maturation
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """

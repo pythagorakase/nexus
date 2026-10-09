@@ -1,0 +1,871 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+FFFFFFFFFFF.                                                             [100%]
+=================================== FAILURES ===================================
+_________________ test_no_product_module_reads_the_dict_facade _________________
+
+    def test_no_product_module_reads_the_dict_facade() -> None:
+        """Only the compatibility loader and its public export retain the facade."""
+        root = Path(__file__).resolve().parents[2]
+        allowed = {"nexus/config/__init__.py", "nexus/config/loader.py"}
+        violations: set[str] = set()
+    
+        for path in sorted((root / "nexus").rglob("*.py")):
+            relative = path.relative_to(root).as_posix()
+            if relative in allowed:
+                continue
+            for node in ast.walk(ast.parse(path.read_text(), filename=relative)):
+                if isinstance(node, ast.ImportFrom):
+                    if any(alias.name == "load_settings_as_dict" for alias in node.names):
+                        violations.add(f"{relative}:{node.lineno}")
+                elif isinstance(node, ast.Name) and node.id == "load_settings_as_dict":
+                    violations.add(f"{relative}:{node.lineno}")
+                elif isinstance(node, ast.Attribute) and node.attr == "load_settings_as_dict":
+                    violations.add(f"{relative}:{node.lineno}")
+    
+>       assert not violations, "Product dict facade readers:\n" + "\n".join(
+            sorted(violations)
+        )
+E       AssertionError: Product dict facade readers:
+E         nexus/agents/orrery/retrograde_maturation.py:165
+E         nexus/agents/orrery/retrograde_maturation.py:588
+E         nexus/agents/orrery/retrograde_maturation.py:62
+E         nexus/agents/orrery/worker.py:166
+E         nexus/agents/orrery/worker.py:187
+E         nexus/agents/orrery/worker.py:248
+E         nexus/agents/orrery/worker.py:27
+E         nexus/api/commit_handler_sync.py:1205
+E         nexus/api/commit_handler_sync.py:1207
+E         nexus/api/config_utils.py:42
+E         nexus/api/config_utils.py:6
+E         nexus/api/orrery_dev_endpoints.py:254
+E         nexus/api/orrery_dev_endpoints.py:256
+E         nexus/jobs/scheduler.py:18
+E         nexus/jobs/scheduler.py:75
+E       assert not {'nexus/agents/orrery/retrograde_maturation.py:165', 'nexus/agents/orrery/retrograde_maturation.py:588', 'nexus/agents...2', 'nexus/agents/orrery/worker.py:166', 'nexus/agents/orrery/worker.py:187', 'nexus/agents/orrery/worker.py:248', ...}
+
+tests/config/test_typed_readers.py:60: AssertionError
+_____________ test_api_constraints_are_required[constraints-table] _____________
+
+missing_path = ('api', 'constraints')
+
+    @pytest.mark.parametrize(
+        "missing_path",
+        [
+            pytest.param(("api", "constraints"), id="constraints-table"),
+            pytest.param(
+                ("api", "constraints", "max_choice_text_length"), id="choice-text-limit"
+            ),
+        ],
+    )
+    def test_api_constraints_are_required(missing_path: tuple[str, ...]) -> None:
+        """An API table must specify its constraints and choice-text limit."""
+        raw = _nexus_toml_dict()
+        parent = raw
+        for key in missing_path[:-1]:
+            parent = parent[key]
+        del parent[missing_path[-1]]
+    
+>       with pytest.raises(ValidationError) as exc:
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+
+tests/config/test_typed_readers.py:82: Failed
+_____________ test_api_constraints_are_required[choice-text-limit] _____________
+
+missing_path = ('api', 'constraints', 'max_choice_text_length')
+
+    @pytest.mark.parametrize(
+        "missing_path",
+        [
+            pytest.param(("api", "constraints"), id="constraints-table"),
+            pytest.param(
+                ("api", "constraints", "max_choice_text_length"), id="choice-text-limit"
+            ),
+        ],
+    )
+    def test_api_constraints_are_required(missing_path: tuple[str, ...]) -> None:
+        """An API table must specify its constraints and choice-text limit."""
+        raw = _nexus_toml_dict()
+        parent = raw
+        for key in missing_path[:-1]:
+            parent = parent[key]
+        del parent[missing_path[-1]]
+    
+>       with pytest.raises(ValidationError) as exc:
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+
+tests/config/test_typed_readers.py:82: Failed
+_________________________ test_require_section_helpers _________________________
+
+    def test_require_section_helpers() -> None:
+        """Section admission preserves identity and names the caller on refusal."""
+        settings = load_settings()
+>       assert settings.require_orrery("x") is settings.orrery
+
+tests/config/test_typed_readers.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(tokenizer_probe_timeout_seconds=120.0, default_model_policy='fixed',...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+item = 'require_orrery'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra:
+                try:
+                    return pydantic_extra[item]
+                except KeyError as exc:
+                    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'Settings' object has no attribute 'require_orrery'
+
+../../../../nexus/.venv/lib/python3.11/site-packages/pydantic/main.py:991: AttributeError
+_________________ test_readers_raise_without_orrery[promotion] _________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d07ca50>
+reader = <function <lambda> at 0x10d2e2b60>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+        with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+>           reader(settings)
+
+tests/config/test_typed_readers.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/config/test_typed_readers.py:116: in <lambda>
+    lambda settings: promote_pending_resolutions_sync(settings=settings),
+nexus/agents/orrery/worker.py:186: in promote_pending_resolutions_sync
+    conn = conn or _connect_for_slot(slot)
+nexus/agents/orrery/worker.py:910: in _connect_for_slot
+    dbname = require_slot_dbname(slot=slot)
+nexus/api/slot_utils.py:128: in require_slot_dbname
+    return get_active_slot_dbname()
+nexus/api/slot_utils.py:89: in get_active_slot_dbname
+    return slot_dbname(get_active_slot())
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def get_active_slot() -> int:
+        """
+        Get the currently active slot from the NEXUS_SLOT environment variable.
+    
+        Returns:
+            The active slot number (1-5)
+    
+        Raises:
+            RuntimeError: If NEXUS_SLOT is not set
+            ValueError: If NEXUS_SLOT is not a valid slot number (1-5)
+        """
+        slot_str = os.environ.get("NEXUS_SLOT")
+        if slot_str is None:
+>           raise RuntimeError(
+                "No active slot configured. Set NEXUS_SLOT environment variable (1-5) "
+                "or explicitly pass slot_number/dbname to database functions."
+            )
+E           RuntimeError: No active slot configured. Set NEXUS_SLOT environment variable (1-5) or explicitly pass slot_number/dbname to database functions.
+
+nexus/api/slot_utils.py:64: RuntimeError
+
+During handling of the above exception, another exception occurred:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d07ca50>
+reader = <function <lambda> at 0x10d2e2b60>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+>       with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+E       AssertionError: Regex pattern did not match.
+E        Regex: '\\[orrery\\]'
+E        Input: 'No active slot configured. Set NEXUS_SLOT environment variable (1-5) or explicitly pass slot_number/dbname to database functions.'
+
+tests/config/test_typed_readers.py:155: AssertionError
+_________________ test_readers_raise_without_orrery[narration] _________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d2b1250>
+reader = <function <lambda> at 0x10d2e2c00>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+        with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+>           reader(settings)
+
+tests/config/test_typed_readers.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/config/test_typed_readers.py:120: in <lambda>
+    lambda settings: drain_narration_outbox_sync(settings=settings),
+nexus/agents/orrery/worker.py:260: in drain_narration_outbox_sync
+    conn = conn or _connect_for_slot(slot)
+nexus/agents/orrery/worker.py:910: in _connect_for_slot
+    dbname = require_slot_dbname(slot=slot)
+nexus/api/slot_utils.py:128: in require_slot_dbname
+    return get_active_slot_dbname()
+nexus/api/slot_utils.py:89: in get_active_slot_dbname
+    return slot_dbname(get_active_slot())
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def get_active_slot() -> int:
+        """
+        Get the currently active slot from the NEXUS_SLOT environment variable.
+    
+        Returns:
+            The active slot number (1-5)
+    
+        Raises:
+            RuntimeError: If NEXUS_SLOT is not set
+            ValueError: If NEXUS_SLOT is not a valid slot number (1-5)
+        """
+        slot_str = os.environ.get("NEXUS_SLOT")
+        if slot_str is None:
+>           raise RuntimeError(
+                "No active slot configured. Set NEXUS_SLOT environment variable (1-5) "
+                "or explicitly pass slot_number/dbname to database functions."
+            )
+E           RuntimeError: No active slot configured. Set NEXUS_SLOT environment variable (1-5) or explicitly pass slot_number/dbname to database functions.
+
+nexus/api/slot_utils.py:64: RuntimeError
+
+During handling of the above exception, another exception occurred:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d2b1250>
+reader = <function <lambda> at 0x10d2e2c00>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+>       with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+E       AssertionError: Regex pattern did not match.
+E        Regex: '\\[orrery\\]'
+E        Input: 'No active slot configured. Set NEXUS_SLOT environment variable (1-5) or explicitly pass slot_number/dbname to database functions.'
+
+tests/config/test_typed_readers.py:155: AssertionError
+_____________ test_readers_raise_without_orrery[maturation-drain] ______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d126750>
+reader = <function <lambda> at 0x10d2e2ca0>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+        with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+>           reader(settings)
+
+tests/config/test_typed_readers.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/config/test_typed_readers.py:124: in <lambda>
+    lambda settings: drain_maturation_jobs_sync(settings=settings),
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+slot = None
+
+    def drain_maturation_jobs_sync(
+        slot: Optional[int] = None,
+        *,
+        limit: Optional[int] = None,
+        settings: Optional[Mapping[str, Any]] = None,
+        conn: Optional[Any] = None,
+    ) -> tuple[int, int]:
+        """Lease and run queued maturation jobs; returns (matured, failed)."""
+    
+        settings_dict = dict(settings or load_settings_as_dict())
+        cfg = _maturation_settings(settings_dict)
+        if not cfg.enabled:
+            return (0, 0)
+>       typed_settings = Settings.model_validate(
+            {
+                key: value
+                for key, value in settings_dict.items()
+                if key not in {"Agent Settings", "API Settings"}
+            }
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+E         Value error, nexus.toml is missing required [storyteller.correspondence] section [type=value_error, input_value={'global_': GlobalSetting...e={'openai': 10000000})}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/value_error
+
+nexus/agents/orrery/retrograde_maturation.py:592: ValidationError
+____________ test_readers_raise_without_orrery[maturation-enqueue] _____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d135c90>
+reader = <function <lambda> at 0x10d2e2d40>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+        with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+>           reader(settings)
+
+tests/config/test_typed_readers.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/config/test_typed_readers.py:128: in <lambda>
+    lambda settings: enqueue_declared_entity_maturations(
+nexus/agents/orrery/retrograde_maturation.py:176: in enqueue_declared_entity_maturations
+    slot_label = _slot_label(slot)
+nexus/agents/orrery/retrograde_maturation.py:1820: in _slot_label
+    return str(get_active_slot())
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def get_active_slot() -> int:
+        """
+        Get the currently active slot from the NEXUS_SLOT environment variable.
+    
+        Returns:
+            The active slot number (1-5)
+    
+        Raises:
+            RuntimeError: If NEXUS_SLOT is not set
+            ValueError: If NEXUS_SLOT is not a valid slot number (1-5)
+        """
+        slot_str = os.environ.get("NEXUS_SLOT")
+        if slot_str is None:
+>           raise RuntimeError(
+                "No active slot configured. Set NEXUS_SLOT environment variable (1-5) "
+                "or explicitly pass slot_number/dbname to database functions."
+            )
+E           RuntimeError: No active slot configured. Set NEXUS_SLOT environment variable (1-5) or explicitly pass slot_number/dbname to database functions.
+
+nexus/api/slot_utils.py:64: RuntimeError
+
+During handling of the above exception, another exception occurred:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d135c90>
+reader = <function <lambda> at 0x10d2e2d40>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+>       with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+E       AssertionError: Regex pattern did not match.
+E        Regex: '\\[orrery\\]'
+E        Input: 'No active slot configured. Set NEXUS_SLOT environment variable (1-5) or explicitly pass slot_number/dbname to database functions.'
+
+tests/config/test_typed_readers.py:155: AssertionError
+________________ test_readers_raise_without_orrery[experiences] ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d2dc090>
+reader = <function experience_settings at 0x10c7d58a0>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+        with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+>           reader(settings)
+
+tests/config/test_typed_readers.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/agents/orrery/experiences.py:329: in experience_settings
+    raw = (orrery or {}).get("experiences") or {}
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(tokenizer_probe_timeout_seconds=120.0, default_model_policy='fixed',...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+item = 'get'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra:
+                try:
+                    return pydantic_extra[item]
+                except KeyError as exc:
+                    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'Settings' object has no attribute 'get'
+
+../../../../nexus/.venv/lib/python3.11/site-packages/pydantic/main.py:991: AttributeError
+_________________ test_readers_raise_without_orrery[scheduler] _________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d2b3390>
+reader = <function <lambda> at 0x10d2e2de0>
+
+    @pytest.mark.parametrize(
+        "reader",
+        [
+            pytest.param(
+                lambda settings: promote_pending_resolutions_sync(settings=settings),
+                id="promotion",
+            ),
+            pytest.param(
+                lambda settings: drain_narration_outbox_sync(settings=settings),
+                id="narration",
+            ),
+            pytest.param(
+                lambda settings: drain_maturation_jobs_sync(settings=settings),
+                id="maturation-drain",
+            ),
+            pytest.param(
+                lambda settings: enqueue_declared_entity_maturations(
+                    None,
+                    declarations=[
+                        {"kind": "character", "name": "Ash", "summary": "A runner."}
+                    ],
+                    chunk_id=1,
+                    raw_text="Ash",
+                    settings=settings,
+                ),
+                id="maturation-enqueue",
+            ),
+            pytest.param(experience_settings, id="experiences"),
+            pytest.param(
+                lambda settings: SlotScheduler(
+                    4, dbname="qa640_809_unused", settings=settings
+                ),
+                id="scheduler",
+            ),
+        ],
+    )
+    def test_readers_raise_without_orrery(
+        monkeypatch: pytest.MonkeyPatch, reader: Callable[[Settings], object]
+    ) -> None:
+        """Missing Orrery fails before connections, defaults, or queue operations."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"orrery": None})
+    
+        with pytest.raises(RuntimeError, match=r"\[orrery\]"):
+>           reader(settings)
+
+tests/config/test_typed_readers.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/config/test_typed_readers.py:141: in <lambda>
+    lambda settings: SlotScheduler(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.jobs.scheduler.SlotScheduler object at 0x10b901a90>, slot = 4
+
+    def __init__(
+        self,
+        slot: int,
+        *,
+        dbname: str | None = None,
+        settings: dict[str, Any] | None = None,
+    ) -> None:
+        from nexus.api.slot_utils import require_slot_dbname
+    
+        self.slot = slot
+        self.dbname = dbname or require_slot_dbname(slot=slot)
+        self.settings = settings or load_settings_as_dict()
+        self.cfg = DeferredWorkSettings.model_validate(
+>           self.settings["runtime"]["scheduler"]
+        )
+E       TypeError: 'Settings' object is not subscriptable
+
+nexus/jobs/scheduler.py:77: TypeError
+_______________________ test_scheduler_requires_runtime ________________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d28afd0>
+
+    def test_scheduler_requires_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+        """The scheduler refuses absent runtime settings before starting work."""
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        settings = load_settings().model_copy(update={"runtime": None})
+    
+        with pytest.raises(RuntimeError, match=r"\[runtime\]"):
+>           SlotScheduler(4, dbname="qa640_809_unused", settings=settings)
+
+tests/config/test_typed_readers.py:165: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.jobs.scheduler.SlotScheduler object at 0x10d1360d0>, slot = 4
+
+    def __init__(
+        self,
+        slot: int,
+        *,
+        dbname: str | None = None,
+        settings: dict[str, Any] | None = None,
+    ) -> None:
+        from nexus.api.slot_utils import require_slot_dbname
+    
+        self.slot = slot
+        self.dbname = dbname or require_slot_dbname(slot=slot)
+        self.settings = settings or load_settings_as_dict()
+        self.cfg = DeferredWorkSettings.model_validate(
+>           self.settings["runtime"]["scheduler"]
+        )
+E       TypeError: 'Settings' object is not subscriptable
+
+nexus/jobs/scheduler.py:77: TypeError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/config/test_typed_readers.py::test_no_product_module_reads_the_dict_facade
+FAILED tests/config/test_typed_readers.py::test_api_constraints_are_required[constraints-table]
+FAILED tests/config/test_typed_readers.py::test_api_constraints_are_required[choice-text-limit]
+FAILED tests/config/test_typed_readers.py::test_require_section_helpers - Att...
+FAILED tests/config/test_typed_readers.py::test_readers_raise_without_orrery[promotion]
+FAILED tests/config/test_typed_readers.py::test_readers_raise_without_orrery[narration]
+FAILED tests/config/test_typed_readers.py::test_readers_raise_without_orrery[maturation-drain]
+FAILED tests/config/test_typed_readers.py::test_readers_raise_without_orrery[maturation-enqueue]
+FAILED tests/config/test_typed_readers.py::test_readers_raise_without_orrery[experiences]
+FAILED tests/config/test_typed_readers.py::test_readers_raise_without_orrery[scheduler]
+FAILED tests/config/test_typed_readers.py::test_scheduler_requires_runtime - ...
+11 failed, 1 passed in 1.11s

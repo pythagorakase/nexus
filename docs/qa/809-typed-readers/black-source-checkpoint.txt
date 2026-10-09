@@ -1,0 +1,13 @@
+reformatted tests/config/test_typed_readers.py
+reformatted tests/test_api/test_seat_policy_jobs_pg.py
+reformatted tests/test_api/test_narrative_summary_paid_pg.py
+reformatted nexus/jobs/scheduler.py
+reformatted nexus/agents/orrery/worker.py
+reformatted tests/test_orrery/test_worker.py
+reformatted tests/test_orrery/test_stage2a_status_live.py
+reformatted tests/test_orrery/test_narration_job_fencing_pg.py
+reformatted tests/test_orrery/test_retrograde_maturation.py
+reformatted tests/test_orrery/test_character_experiences_pg.py
+
+All done! ✨ 🍰 ✨
+10 files reformatted, 22 files left unchanged.

@@ -661,7 +661,7 @@ def test_experience_metadata_retains_all_historical_settings(
         _render_prompt,
         seed_character_experiences_sync,
     )
-    from nexus.config import load_settings_as_dict
+    from nexus.config import load_settings
 
     dbname, ids, chunk_id, hall, garden = historical_settings
     with connect(dbname) as conn:
@@ -687,7 +687,7 @@ def test_experience_metadata_retains_all_historical_settings(
             )
         assert (
             seed_character_experiences_sync(
-                conn, anchor_chunk_id=chunk_id, settings=load_settings_as_dict()
+                conn, anchor_chunk_id=chunk_id, settings=load_settings()
             )
             == 1
         )
