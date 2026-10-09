@@ -12,6 +12,7 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { geoEquirectangular } from "d3-geo";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -303,5 +304,90 @@ describe("MapPane", () => {
     expect(box.x + box.width / 2).toBeCloseTo(truePoint.x, 6);
     expect(box.y + box.height / 2).toBeCloseTo(truePoint.y, 6);
     expect(screen.getByRole("dialog")).toHaveTextContent("60.397500, 5.324200");
+  });
+});
+
+/**
+ * Focus return from the place dialog (#777, QA 2026-10-09): the dialog is
+ * controlled and has no Radix trigger, so closing it used to drop focus on
+ * document.body. It now returns to the control that opened it, or to the
+ * map pane root when that control has left the document.
+ */
+describe("MapPane place dialog focus return", () => {
+  async function openFromRow(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByTestId("map-zone-1"));
+    const row = screen.getByTestId("map-place-row-101");
+    row.focus();
+    await user.keyboard("{Enter}");
+    const close = await screen.findByRole("button", { name: "Close" });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+    return { row, close };
+  }
+
+  it("returns focus to the place button after Escape", async () => {
+    const user = userEvent.setup();
+    renderPane();
+    resizeCanvas(1000, 600);
+    const { row } = await openFromRow(user);
+    expect(screen.getByRole("dialog")).toHaveTextContent("Bryggen Wharf");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(row);
+    expect(row).toHaveClass("on");
+  });
+
+  it("returns focus to the place button after the Close button", async () => {
+    const user = userEvent.setup();
+    renderPane();
+    resizeCanvas(1000, 600);
+    const { row, close } = await openFromRow(user);
+
+    await user.click(close);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(row);
+
+    // A second pass through the keyboard reaches the same place.
+    await user.keyboard("{Enter}");
+    const again = await screen.findByRole("button", { name: "Close" });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(row);
+  });
+
+  it("focuses the map pane root when the opener left the document", async () => {
+    const user = userEvent.setup();
+    const { client } = renderPane();
+    resizeCanvas(1000, 600);
+    const { row } = await openFromRow(user);
+
+    // A turn moves the open place into a zone the reader has not expanded:
+    // its row leaves the list while the dialog stays open on the place.
+    act(() => {
+      client.setQueryData<Zone[]>(["/api/zones", SLOT], [
+        ...ZONES,
+        { id: 2, name: "Askoy", summary: null, boundary: null },
+      ]);
+      client.setQueryData<Place[]>(
+        ["/api/places", SLOT],
+        PLACES.map((place) => (place.id === 101 ? { ...place, zone: 2 } : place)),
+      );
+    });
+    await waitFor(() => expect(row.isConnected).toBe(false));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Bryggen Wharf");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(screen.getByTestId("map-pane"));
+    expect(document.activeElement).not.toBe(document.body);
   });
 });

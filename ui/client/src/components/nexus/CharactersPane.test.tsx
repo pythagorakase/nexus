@@ -10,7 +10,8 @@
  * real row shapes (no fetch interception): data drawn from save_01.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { CharactersPane, portraitSrc } from "./CharactersPane";
@@ -41,6 +42,7 @@ function makeCharacter(
 function renderPane(
   characters: CharacterListEntry[],
   imagesByCharacter: Record<number, CharacterImage[]> = {},
+  { precededBy }: { precededBy?: string } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -56,6 +58,7 @@ function renderPane(
   return render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
+        {precededBy && <button type="button">{precededBy}</button>}
         <CharactersPane slot={slot} />
       </ThemeProvider>
     </QueryClientProvider>,
@@ -228,5 +231,153 @@ describe("CharactersPane", () => {
     expect(
       screen.getByRole("button", { name: "Upload portrait" }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * Keyboard access (#777, QA 2026-10-09): the roster is a single-select
+ * listbox with one roving tab stop. Arrows move focus only; Enter or Space
+ * selects. Names are the real save_01 cast used above.
+ */
+describe("CharactersPane roster keyboard access", () => {
+  const CAST = [
+    makeCharacter({ id: 1, name: "Alex", summary: "Alex runs the crew." }),
+    makeCharacter({ id: 2, name: "Emilia", summary: "Emilia keeps the books." }),
+    makeCharacter({ id: 3, name: "Pete", summary: "Pete fixes the rig." }),
+  ];
+
+  function rosterRows() {
+    return screen.getAllByRole("option");
+  }
+
+  function dossierName() {
+    return screen.getByTestId("text-dossier-name");
+  }
+
+  it("gives the roster one tab stop, on the selected row, and Shift+Tab leaves it", async () => {
+    const user = userEvent.setup();
+    renderPane(CAST, {}, { precededBy: "Characters" });
+    const opener = screen.getByRole("button", { name: "Characters" });
+    await user.click(screen.getByTestId("cast-member-2"));
+    expect(dossierName()).toHaveTextContent("Emilia");
+
+    opener.focus();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByTestId("cast-member-2"));
+    expect(
+      rosterRows().filter((row) => row.getAttribute("tabindex") === "0"),
+    ).toEqual([screen.getByTestId("cast-member-2")]);
+
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("starts the tab stop on the first row when nothing has been picked", async () => {
+    const user = userEvent.setup();
+    renderPane(CAST, {}, { precededBy: "Characters" });
+    screen.getByRole("button", { name: "Characters" }).focus();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByTestId("cast-member-1"));
+  });
+
+  it("moves focus with the arrows, Home and End without changing the selection", async () => {
+    const user = userEvent.setup();
+    renderPane(CAST, {}, { precededBy: "Characters" });
+    screen.getByRole("button", { name: "Characters" }).focus();
+    await user.tab();
+
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByTestId("cast-member-2"));
+    expect(dossierName()).toHaveTextContent("Alex");
+    expect(screen.getByTestId("cast-member-1")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("cast-member-2")).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+
+    await user.keyboard("{End}");
+    expect(document.activeElement).toBe(screen.getByTestId("cast-member-3"));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByTestId("cast-member-3"));
+    await user.keyboard("{Home}");
+    expect(document.activeElement).toBe(screen.getByTestId("cast-member-1"));
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(screen.getByTestId("cast-member-1"));
+    expect(dossierName()).toHaveTextContent("Alex");
+  });
+
+  it("selects the focused row with Enter and with Space", async () => {
+    const user = userEvent.setup();
+    renderPane(CAST, {}, { precededBy: "Characters" });
+    screen.getByRole("button", { name: "Characters" }).focus();
+    await user.tab();
+
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(dossierName()).toHaveTextContent("Emilia");
+    expect(screen.getByText("Emilia keeps the books.")).toBeInTheDocument();
+    expect(screen.getByTestId("cast-member-2")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("cast-member-1")).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+
+    await user.keyboard("{ArrowDown}");
+    const space = new KeyboardEvent("keydown", {
+      key: " ",
+      bubbles: true,
+      cancelable: true,
+    });
+    // Dispatched by hand so the test can read defaultPrevented: Space must
+    // not scroll the pane.
+    act(() => {
+      document.activeElement!.dispatchEvent(space);
+    });
+    expect(space.defaultPrevented).toBe(true);
+    expect(await screen.findByText("Pete fixes the rig.")).toBeInTheDocument();
+    expect(dossierName()).toHaveTextContent("Pete");
+    expect(screen.getByTestId("cast-member-3")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("exposes each row as an option named for its character in a named listbox", () => {
+    renderPane(CAST);
+    const listbox = screen.getByRole("listbox", { name: "Characters" });
+    const rows = within(listbox).getAllByRole("option");
+    expect(rows.map((row) => row.getAttribute("data-testid"))).toEqual([
+      "cast-member-1",
+      "cast-member-2",
+      "cast-member-3",
+    ]);
+    for (const character of CAST) {
+      expect(
+        within(listbox).getByRole("option", { name: character.name }),
+      ).toBe(screen.getByTestId(`cast-member-${character.id}`));
+    }
+    expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
+    expect(rows.every((row) => row.id.length > 0)).toBe(true);
+  });
+
+  it("still selects on a mouse click and moves the tab stop to the clicked row", async () => {
+    const user = userEvent.setup();
+    renderPane(CAST);
+    await user.click(screen.getByTestId("cast-member-3"));
+    expect(dossierName()).toHaveTextContent("Pete");
+    expect(screen.getByTestId("cast-member-3")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("cast-member-3")).toHaveAttribute("tabindex", "0");
+    expect(screen.getByTestId("cast-member-1")).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
   });
 });
