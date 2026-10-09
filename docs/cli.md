@@ -81,7 +81,7 @@ sent. Every HTTP
 command reports these, and an API that refuses or drops the connection or
 does not answer in time (exit 4), the same way.
 
-The play and slot commands (`load`, `continue`, `retry`, `undo`,
+The play and slot commands (`load`, `continue`, `retry`, `accept`, `undo`,
 `regenerate`, `clear`, `lock`, `unlock`, `model --set`/`--clear`) and every
 `inspect` verb classify the API's answers the same way:
 
@@ -131,9 +131,9 @@ failure. A traceback means a programming fault.
 `[runtime.cli].request_timeout_seconds` bounds each short request of `load`,
 `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, and
 `model --set`/`--clear`. `[runtime.cli].turn_request_timeout_seconds` bounds
-each model-turn request: wizard chat, trait toggles, phase introductions, and
-the POSTs that schedule `continue`, `retry`, `regenerate`, and the seed's
-opening turn. The wizard's transition to narrative takes
+each model-turn request: wizard chat, trait toggles, phase introductions, the
+POSTs that schedule `continue`, `retry`, `regenerate`, and the seed's opening
+turn, and the commit POST of `accept`. The wizard's transition to narrative takes
 `[orrery.retrograde.wizard].transition_timeout_seconds`. Waiting on a
 generation session is described in Waiting on a Generation below.
 
@@ -473,6 +473,17 @@ Clears wizard state and returns the slot to empty.
 
 ```bash
 poetry run nexus clear --slot 5
+```
+
+### `accept` — Commit the Pending Draft
+
+Commits the pending draft as the next chunk, without recording a choice on it;
+the next `continue` answers its choices. To discard a draft instead, use `undo`,
+which also clears the choice recorded on the draft's parent. A committed chunk
+cannot be undone. With no draft pending, `accept` fails with `api_error`.
+
+```bash
+poetry run nexus accept --slot 5
 ```
 
 ### `undo` — Revert Last Action

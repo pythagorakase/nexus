@@ -1309,7 +1309,7 @@ def _request_timeout_seconds() -> float:
 
 
 def _turn_request_timeout_seconds() -> float:
-    """The per-request budget of a model-turn request (chat, scheduling POSTs)."""
+    """The per-request budget of a model-turn request (chat, scheduling, accept)."""
     return _runtime_cli_settings().turn_request_timeout_seconds
 
 
@@ -2999,6 +2999,38 @@ def run_retry(args: argparse.Namespace) -> Dict[str, Any]:
             "invalid_response", f"{retry_url} returned no session ID"
         )
     return _wait_for_narrative_result(args.slot, session_id)
+
+
+def run_accept(args: argparse.Namespace) -> Dict[str, Any]:
+    """Commit the pending draft through POST /api/narrative/approve.
+
+    The draft becomes the next chunk without a recorded choice, so the next
+    ``continue`` answers it. Discarding a draft is ``undo``.
+    """
+    url = f"{get_api_url()}/api/narrative/approve"
+    response = _api_post(
+        url,
+        json={"slot": args.slot, "commit": True},
+        timeout=_turn_request_timeout_seconds(),
+    )
+    data = _api_object(response)
+    chunk_id = data.get("chunk_id")
+    if (
+        data.get("status") != "committed"
+        or not isinstance(chunk_id, int)
+        or isinstance(chunk_id, bool)
+    ):
+        raise ApiAnswerFailure(
+            "invalid_response", f"{url} returned no committed chunk ID"
+        )
+    result = {
+        "success": True,
+        "message": f"Slot {args.slot}: committed chunk {chunk_id}",
+        "chunk_id": chunk_id,
+    }
+    if data.get("warnings"):
+        result["warnings"] = data["warnings"]
+    return result
 
 
 def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
@@ -5109,6 +5141,7 @@ Examples:
   nexus continue --slot 5 --user-text "I approach carefully"
   nexus continue --slot 5 --accept-fate   Auto-advance
   nexus undo --slot 5           Revert last action
+  nexus accept --slot 5         Commit the pending draft
   nexus model --slot 5          Show current model
   nexus model --slot 5 --set TEST   Change to TEST model
   nexus model --list            List available models
@@ -5441,6 +5474,12 @@ Examples:
         "retry", help="Retry the failed continuation of the recorded action"
     )
     retry_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+
+    # accept command
+    accept_parser = subparsers.add_parser("accept", help="Commit the pending draft")
+    accept_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
 
@@ -5957,6 +5996,7 @@ _SLOT_COMMANDS = frozenset(
         "load",
         "continue",
         "retry",
+        "accept",
         "undo",
         "regenerate",
         "clear",
@@ -6130,6 +6170,8 @@ def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
         result = run_continue(args)
     elif args.command == "retry":
         result = run_retry(args)
+    elif args.command == "accept":
+        result = run_accept(args)
     elif args.command == "undo":
         result = run_undo(args)
     elif args.command == "regenerate":
