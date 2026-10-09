@@ -17,6 +17,8 @@ if (window.matchMedia === undefined) {
     value: (media: string) => ({
       matches: false,
       media,
+      addListener() {},
+      removeListener() {},
       addEventListener() {},
       removeEventListener() {},
     }),
