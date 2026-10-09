@@ -1,6 +1,6 @@
-# Backstage World Time and Observation: Initial Red Evidence
+# Backstage World Time and Observation: Source Checkpoint
 
-Date: 2026-10-08. **The coordinator accepted the initial reds; product changes and green proof are pending.**
+Date: 2026-10-08. **The coordinator accepted the initial reds; implementation is authored, and green proof remains pending.**
 The frozen UI-B order explicitly requires each new test before implementation.
 The tests-only checkpoint authored those regressions against unchanged UI-B product
 code. Its source preparation ran no tests. The later coordinator execution below
@@ -147,15 +147,49 @@ configs and installed node modules are intentionally not repository artifacts.
 The owner-connection audit retains the documented subprocess/driver limits;
 its three guard summaries are not a universal OS or child-process audit.
 
-## Remaining Implementation and Proof
+## Authored Implementation — Green Proof Pending
 
-After accepted reds, implement the frozen ordered elapsed calculation, required
-nullable header, unchanged four-field builder renamed `BackstageTurn`, explicit
-five-field endpoint response, narrow `NoGenerationSessionError` catch and exact
-schema-3 dictionary. Pending lookup remains parent-filtered and distinguishes a
-missing session row explicitly; other failures must propagate. Add only the
-inline delta and existing-pattern ECONOMICS section, preserving attention
-metadata/dimming and all earlier sections and polling.
+The accepted raw reds were committed first in `1c8b92fb`. The subsequent source
+change touches five product files. `backstage.py` calculates the elapsed seconds
+from the previous playable committed clock, gives the first turn null, and
+refuses either missing clock when a previous turn exists. Its existing builder
+returns the four-stream `BackstageTurn`; the endpoint separately returns the
+explicit five-field model with economics. The same resolved slot URL feeds the
+existing SQLAlchemy builder and the closed psycopg2 observation connection.
+
+Only the ruled legacy accepted-chunk `NoGenerationSessionError` becomes an
+unavailable read. Pending lookup filters on the selected parent and checks the
+staged session row explicitly. The authorized unbound-pending explanation names
+the staged UUID. Other exceptions propagate; the full schema-3 observation is
+returned verbatim. Observation reads retain `inspect_turn`'s read-only snapshot
+behavior. No telemetry, CLI, shared fixture or relationship-reader code changed.
+
+The drawer adds only the signed elapsed suffix and fourth ECONOMICS section.
+It reuses SectionHeader, row and history styles, retains provenance/unknown/zero
+values, and marks a pending observation by the ordered dashed inset/opacity.
+Existing three sections, polling, attention metadata/dimming, 777 shell behavior
+and the test assertions remain unchanged. There is no new migration, setting,
+provider call, owner write or service action in this source work.
+
+Black left both changed Python files unchanged (see `source-black.txt`). This
+is formatting evidence, not runtime/import, lint, type or green test proof.
+`canonical-source-closure.json` records the source-only canonical review:
+0054's rail ruling is unchanged; current merge base and its stamp are both
+`4ae8b8d2`. Final predecessor/main merging still requires renewed closure and
+freshness verification. `pending-focused-selectors.json` lists the required
+focused scopes, including the announcer suite selected by the frozen UI filter.
+
+Root and an independent peer reviewed the five-file product diff against
+`1c8b92fb` and found no source blocker. The peer recorded diff SHA-256
+`e6606bda67e0a056f4f6f5b58a02fe228ea61dc7d928d34296e627fbc108a448`.
+Their review covered required fields, exact clock refusal, the builder/route
+split, the narrow exception, transaction boundaries, session/parent correlation,
+verbatim observations and preserved 784/777 behavior. This is source review;
+neither review imported the application or ran tests. The 0054 review read its
+unchanged bottom-rail ruling at this branch's actual `4ae8b8d2` merge base and
+does not claim review against a future final main.
+
+## Remaining Proof
 
 Then perform the frozen focused PostgreSQL selection (Backstage endpoints,
 attempt manifests, turn observation, slot-routed entrypoints, card identity and

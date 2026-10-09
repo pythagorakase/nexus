@@ -1,0 +1,33 @@
+{
+  "status": "pending; no green execution",
+  "python": [
+    "tests/test_api/test_backstage_endpoints_pg.py",
+    "tests/test_api/test_attempt_manifest_pg.py",
+    "tests/test_turn_observation.py",
+    "tests/test_slot_routed_entrypoints.py",
+    "tests/test_orrery/test_card_identity.py",
+    "tests/test_connection_lifecycle.py",
+    "tests/test_reachability.py",
+    "tests/test_doc_front_matter.py"
+  ],
+  "ui_filter": [
+    "NexusLayout",
+    "BackstageDrawer"
+  ],
+  "ui_filter_includes_existing": [
+    "NexusLayout.announcer.test.tsx"
+  ],
+  "statics": [
+    "nexus/agents/orrery/backstage.py",
+    "nexus/api/backstage_endpoints.py",
+    "tests/test_api/test_backstage_endpoints_pg.py"
+  ],
+  "separate_pending": [
+    "module import-cycle proof",
+    "static baseline comparison and exception dispositions",
+    "UI type/design-preview checks and production build",
+    "three synthetic rendered drawer cases",
+    "final source integration/state surfaces/full UI",
+    "coordinator whole-tree PostgreSQL gate"
+  ]
+}

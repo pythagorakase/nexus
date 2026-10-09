@@ -16,6 +16,8 @@ from nexus.agents.orrery.history import adjudication_history
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.memory.correspondence import read_accepted_correspondence
+from nexus.telemetry.attempt_manifest import NoGenerationSessionError, inspect_turn
+from nexus.telemetry.turn_observation import observe_turn
 
 
 class BackstagePayloadError(ValueError):
@@ -149,7 +151,11 @@ class BackstageOrrery(BaseModel):
 
 
 class BackstageHeader(BaseModel):
-    """Identity and live-generation state for the drawer header."""
+    """Identity and live-generation state for the drawer header.
+
+    Elapsed story-clock seconds start at the previous playable turn's world_time;
+    the first playable turn has no elapsed value.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -158,10 +164,11 @@ class BackstageHeader(BaseModel):
     chunk_label: str
     turn_label: str
     world_time: Optional[datetime] = None
+    elapsed_seconds: Optional[int]
     skald_status: Literal["writing", "idle"]
 
 
-class BackstageTurnResponse(BaseModel):
+class BackstageTurn(BaseModel):
     """Complete read-only Backstage snapshot for one committed turn."""
 
     model_config = ConfigDict(extra="forbid")
@@ -170,6 +177,96 @@ class BackstageTurnResponse(BaseModel):
     correspondence: BackstageCorrespondence
     state_writes: BackstageStateWrites
     orrery: BackstageOrrery
+
+
+class BackstageObservationRead(BaseModel):
+    """One generation session's turn observation, or why none can be read."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["observed", "unavailable"]
+    generation_session: Optional[str]
+    detail: Optional[str]
+    observation: Optional[dict[str, Any]]
+
+
+class BackstageEconomics(BaseModel):
+    """Accepted and parent-matched pending observations for the selected turn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    accepted: BackstageObservationRead
+    pending: Optional[BackstageObservationRead]
+
+
+class BackstageTurnResponse(BaseModel):
+    """Complete Backstage response including verbatim turn observations."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    header: BackstageHeader
+    correspondence: BackstageCorrespondence
+    state_writes: BackstageStateWrites
+    orrery: BackstageOrrery
+    economics: BackstageEconomics
+
+
+def _observe(
+    conn: Any,
+    *,
+    slot: int,
+    chunk: Optional[int] = None,
+    session: Optional[str] = None,
+) -> BackstageObservationRead:
+    try:
+        inspection = inspect_turn(conn, session=session, chunk=chunk)
+    # Decision 802-Q1: a chunk accepted before session binding reads as unavailable.
+    except (
+        NoGenerationSessionError
+    ) as exc:  # nexus-exception-disposition: degrade-read-only; reason=Q1; safety=shown
+        return BackstageObservationRead(
+            status="unavailable",
+            generation_session=None,
+            detail=str(exc),
+            observation=None,
+        )
+    return BackstageObservationRead(
+        status="observed",
+        generation_session=str(inspection["session"]["session_id"]),
+        detail=None,
+        observation=observe_turn(inspection, slot=slot),
+    )
+
+
+def read_backstage_economics(
+    conn: Any, *, slot: int, chunk_id: int
+) -> BackstageEconomics:
+    """Read accepted and matching pending observations without reshaping their data."""
+    accepted = _observe(conn, slot=slot, chunk=chunk_id)
+    with conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT i.session_id::text, EXISTS (SELECT 1 FROM "
+            "narrative_generation_sessions s WHERE s.session_id = i.session_id) "
+            "FROM incubator i WHERE i.parent_chunk_id = %s",
+            (chunk_id,),
+        )
+        pending_row = cur.fetchone()
+    pending = None
+    if pending_row is not None:
+        session_id, session_exists = pending_row
+        if session_exists:
+            pending = _observe(conn, slot=slot, session=session_id)
+        else:
+            pending = BackstageObservationRead(
+                status="unavailable",
+                generation_session=session_id,
+                detail=(
+                    f"session {session_id}: no generation session "
+                    "(staged before session binding)"
+                ),
+                observation=None,
+            )
+    return BackstageEconomics(accepted=accepted, pending=pending)
 
 
 class BackstageHealthResponse(BaseModel):
@@ -663,12 +760,27 @@ def build_backstage_turn(
     *,
     slot: int,
     chunk_id: Optional[int] = None,
-) -> BackstageTurnResponse:
+) -> BackstageTurn:
     """Assemble the latest or requested committed Backstage turn snapshot."""
 
     chunks = _committed_chunks(session, chunk_id)
     selected = chunks[0]
     selected_id = int(selected["id"])
+    previous = chunks[1] if len(chunks) > 1 else None
+    if previous is None:
+        elapsed_seconds = None
+    elif selected["world_time"] is None or previous["world_time"] is None:
+        raise BackstagePayloadError(
+            status_code=500,
+            detail=(
+                f"Committed chunk {selected_id} or its previous turn "
+                f"{int(previous['id'])} has no world_time"
+            ),
+        )
+    else:
+        elapsed_seconds = int(
+            (selected["world_time"] - previous["world_time"]).total_seconds()
+        )
     writing = bool(
         session.execute(
             text(
@@ -695,13 +807,14 @@ def build_backstage_turn(
         )
         for chunk in chunks[1:]
     ]
-    return BackstageTurnResponse(
+    return BackstageTurn(
         header=BackstageHeader(
             slot=slot,
             chunk_id=selected_id,
             chunk_label=selected["slug"] or f"chunk {selected_id}",
             turn_label=f"t.{int(selected['turn_number'])}",
             world_time=selected["world_time"],
+            elapsed_seconds=elapsed_seconds,
             skald_status="writing" if writing else "idle",
         ),
         correspondence=_correspondence(session, chunk_id=selected_id),
