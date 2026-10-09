@@ -203,4 +203,10 @@ fenced example, not its actual sources front matter; it is unchanged.
 The generated CLI reference is regenerated from the parser/transport table.
 Historical `docs/vector_embeddings.md` and the artifact lock are unchanged.
 
+## Shared Integration Validation
+
+The assembled integration `2cc9a5fcff76e0c643ca41490eb2508b870b4850`, including this lane input `1b87677113eb0b30003d3b1713e9dd1a89ab4454`, passed the full PostgreSQL-enabled Python gate: **7,056 passed, 72 skipped, 41 warnings**. [Exact commands, immutable tree/input ancestry, complete logs and audit limits](https://github.com/pythagorakase/nexus/blob/bf229051e3d046b76ab8d18b34e9ee054a03bbf6/docs/qa/resume-wave-a-2026-10-08/verification.md). All three pieces reported active secret-store protection, untouched receipts and owner targets none. This is assembled-tree coverage; no separate standalone branch full gate or whole-suite offline run is claimed. Later changes here are evidence only; any landing merge/freshness changes require their own delta record.
+
+The separate tokenizer policy follow-up was deduplicated and published as [#1126](https://github.com/pythagorakase/nexus/issues/1126). No tokenizer policy or fetch behavior was changed here.
+
 Codex — GPT-6
