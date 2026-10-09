@@ -10,7 +10,7 @@ import { CSSProperties, ReactNode, useState } from 'react';
 import decoFrameR1C1 from '@/assets/ArtDecoFrames-549888080/r1c1.png';
 import { DECO_FRAME_META } from '@/assets/ArtDecoFrames-549888080/frames-meta';
 import { DecoFrameSliced, DecoRays } from './GildedDeco';
-import { useSplashNavigation, SplashThemeMenu } from './shared';
+import { useSplashNavigation } from './shared';
 
 const gilded = {
   bg: 'hsl(0 0% 4%)',
@@ -178,8 +178,6 @@ export function GildedSplash() {
         overflow: 'hidden',
       }}
     >
-      <SplashThemeMenu />
-
       <div
         className={isExiting ? 'animate-fade-out-fast' : ''}
         style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}

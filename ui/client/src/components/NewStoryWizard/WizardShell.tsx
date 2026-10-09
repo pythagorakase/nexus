@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CornerSunburst } from "@/components/deco";
 import { ThemeMenu } from "@/components/ThemeMenu";
+import { useOpenOnThemeSaveError } from "@/components/ThemeSaveRejected";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -73,6 +74,8 @@ export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
     const [resumeError, setResumeError] = useState(false);
     const [_, setLocation] = useLocation();
     const { isGilded, isVector, glowClass } = useTheme();
+    const [menuOpen, setMenuOpen] = useState(false);
+    useOpenOnThemeSaveError(setMenuOpen);
     const { toast } = useToast();
 
     // State for data collected across phases
@@ -215,7 +218,7 @@ export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
                     </>
                 )}
 
-                <DropdownMenu>
+                <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                     <DropdownMenuTrigger asChild>
                         <Button
                             size="icon"
@@ -243,7 +246,7 @@ export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
                                 </div>
                             </Link>
                         </DropdownMenuItem>
-                        <ThemeMenu />
+                        <ThemeMenu saveErrorTestId="wizard-theme-save-error" />
                     </DropdownMenuContent>
                 </DropdownMenu>
 

@@ -2,9 +2,9 @@
  * Shared utilities for splash page variants.
  * Contains navigation hooks, animation constants, and common types.
  */
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { AlertTriangle, Menu, Sparkles, Monitor, Wand2 } from 'lucide-react';
+import { Menu, Sparkles, Monitor, Wand2 } from 'lucide-react';
 import { useTheme, Theme } from '@/contexts/ThemeContext';
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { ThemeSaveRejected, useOpenOnThemeSaveError } from '@/components/ThemeSaveRejected';
 
 // Animation timing constants (in milliseconds)
 export const ANIMATION = {
@@ -71,31 +72,15 @@ export const useSplashNavigation = () => {
 };
 
 /**
- * The Settings card's danger alert reads --danger, which nexus-layout.css
- * defines only inside the Settings pane; the menu portal sits outside it,
- * so map the same token here.
- */
-const SPLASH_ALERT_STYLE = { '--danger': 'hsl(var(--destructive))' } as CSSProperties;
-
-/**
- * Theme switcher menu for splash screens.
+ * Theme switcher menu for splash screens, rendered once by SplashPage so a
+ * theme change does not remount it.
  * Positioned in top-left corner with theme-aware styling.
- * A rejected save reopens the menu and shows the reason below the themes.
+ * A rejected save opens the menu and shows the reason below the themes.
  */
 export const SplashThemeMenu = () => {
-  const { theme, setTheme, glowClass, saveError, clearSaveError } = useTheme();
+  const { theme, setTheme, glowClass } = useTheme();
   const [open, setOpen] = useState(false);
-  const lastError = useRef(saveError);
-
-  // Show a rejection where the pick happened: open the menu when a save
-  // fails, not when the menu mounts with an earlier failure.
-  useEffect(() => {
-    if (saveError !== null && lastError.current === null) setOpen(true);
-    lastError.current = saveError;
-  }, [saveError]);
-
-  // Settings must not inherit a failure caused on Home.
-  useEffect(() => clearSaveError, [clearSaveError]);
+  useOpenOnThemeSaveError(setOpen);
 
   const themeOptions: { value: Theme; label: string; icon: typeof Sparkles }[] = [
     { value: 'gilded', label: 'Gilded', icon: Sparkles },
@@ -127,20 +112,7 @@ export const SplashThemeMenu = () => {
               </div>
             </DropdownMenuItem>
           ))}
-          {saveError !== null && (
-            <div
-              className="alert danger mt-1 max-w-[280px] break-words"
-              role="alert"
-              data-testid="splash-theme-save-error"
-              style={SPLASH_ALERT_STYLE}
-            >
-              <AlertTriangle size={14} />
-              <div className="min-w-0">
-                <div className="alert-title">WRITE REJECTED</div>
-                <div className="alert-body">{saveError}</div>
-              </div>
-            </div>
-          )}
+          <ThemeSaveRejected testId="splash-theme-save-error" />
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

@@ -5,12 +5,14 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeSaveRejected } from "@/components/ThemeSaveRejected";
 
 /**
- * Shared theme menu items for dropdown menus.
- * Used by both StatusBar and WizardShell to provide consistent theme switching.
+ * Shared theme menu items for dropdown menus, used by WizardShell. A rejected
+ * save shows its reason below the themes; the owning menu opens itself with
+ * useOpenOnThemeSaveError.
  */
-export function ThemeMenu() {
+export function ThemeMenu({ saveErrorTestId }: { saveErrorTestId: string }) {
   const { theme, setTheme } = useTheme();
 
   return (
@@ -37,6 +39,7 @@ export function ThemeMenu() {
           <span>Veil{theme === "veil" ? " ✓" : ""}</span>
         </div>
       </DropdownMenuItem>
+      <ThemeSaveRejected testId={saveErrorTestId} />
     </>
   );
 }
