@@ -1,0 +1,17 @@
+node:internal/modules/run_main:105
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+null !== 'rest'
+
+    at file:///private/tmp/nexus-777-shell-ui-4ae8b8d2/map-palette-proposal.mjs:78:18 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: null,
+  expected: 'rest',
+  operator: 'strictEqual'
+}
+
+Node.js v24.3.0

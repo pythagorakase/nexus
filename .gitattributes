@@ -6,3 +6,4 @@
 *.ico filter=lfs diff=lfs merge=lfs -text
 ui/client/src/state-surfaces.resolved.json filter=lfs diff=lfs merge=lfs -text
 docs/qa/777-shell-ui-bundle/capture-at-149704d1/receipt.json filter=lfs diff=lfs merge=lfs -text
+docs/qa/777-shell-ui-bundle/capture-at-b6a704ca/receipt.json filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,8 @@
+
+> nexus-ui@1.0.0 resolve-state-surfaces
+> node scripts/resolve-state-surfaces.mjs --assemble
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+Resolved painted state surfaces: renders=126078; wall=3460.525s (sum of bounded capture shards); Chromium 153.0.8010.12; Playwright 1.63.0
+Emulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 33 media conditions; file://; network aborted; requests=0; errors=0
+Wrote /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/state-surfaces.resolved.json; module graph=2098 inputs; SHA-256 4b8a9bbd8b880dc12ff8a534e7ef819eaa72fe376f0e28a8a295f9754d976fe7

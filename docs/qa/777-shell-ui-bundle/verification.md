@@ -269,7 +269,7 @@ See [restored focused output](restored-ui-green.txt). The original full focused
 137-test pass remains above; this rerun covers both the repaired test and the
 restored control subject.
 
-## Scope and Pending Proof
+## Historical Pause Checkpoint
 
 The coordinator's assembled core gate at `849eeef4` stopped with 3,685 passes,
 52 skips, 30 warnings and one failure in 1840.34 seconds. All three guard
@@ -289,7 +289,7 @@ env -u NEXUS_RUN_LIVE_LLM -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL \
 
 The [output](prompt-lint-endpoint-fix.txt) confirms active secret isolation,
 untouched receipt roots, zero database targets and no owner targets. The
-combined gate is still incomplete. At the user's packing-up request, no new
+combined gate was incomplete at this checkpoint. At the user's packing-up request, no new
 capture, build or full suite was started; the prepared capture plan remains
 pending.
 
@@ -298,7 +298,7 @@ required, strict, and bounded to 1000–60000. The player route returns only its
 explicitly allowlisted announcer object. The reachability baseline adds exactly
 one sorted path, `nexus/api/ui_config_endpoints.py`.
 
-Remaining: the complete bounded state-surface regeneration and full UI suite.
+At that checkpoint, the complete bounded state-surface regeneration and full UI suite remained.
 The coordinator owns the
 combined full gate and PR publication; no push or PR is claimed here.
 
@@ -324,8 +324,38 @@ fixtures were hydrated from their already-present local LFS objects.
 The approved harness correction moves the pointer to verified empty key-row
 background and fails on absent geometry or an incorrect hover readback.
 No product source, strict assertion, threshold, palette or media evaluator
-changes. Because tooling belongs to the input closure, a new complete capture,
-comparison, focused acceptance and full UI run remain pending. The coordinator
-temporarily owns the heavy slot for the next lane's initial red proof.
+changes. At that checkpoint, the tooling change required a new complete capture,
+comparison, focused acceptance and full UI run, and the coordinator temporarily
+owned the heavy slot for the next lane's initial red proof.
+
+## V2 Capture and Current Acceptance Stop
+
+The complete second pass at `b6a704caab86c304590785832b665fa98a12ef1c`
+assembled 126,078 captures across all 33 conditions at fingerprint
+`4b8a9bbd8b880dc12ff8a534e7ef819eaa72fe376f0e28a8a295f9754d976fe7`.
+Every calibration passed, with zero network requests or browser errors.
+All 101,520 legacy samples were compared: 71,952 identical stable records,
+13,776 metadata-only changes and 15,792 painted changes, all at narrow widths.
+Wide painted metrics are exact; hover/dismissal metadata and some delete
+origins differ. The [complete retained checkpoint](capture-at-b6a704ca/README.md)
+names every changed sample and preserves the receipt, calibration images,
+logs, table refresh, diagnostics and before/after proposal images.
+
+Full UI acceptance failed: **606 passed, five failed, two uncaught errors**.
+Four wizard failures expose missing legacy listeners in the new jsdom
+`matchMedia` fallback. The other failure is a genuine strict-optimality
+conflict: Gilded's unchanged actual map minimum remains 7.4977986569476665,
+while the changed narrow layout makes 7.709657692104731 attainable in the
+existing candidate domain. A later chosen-versus-shipped check also requires
+a different Vector hovered token. The preliminary inference that all scalar
+bounds passed mistakenly relied on selected-assignment metadata; that claim
+is withdrawn and the actual measured audit is retained.
+
+Exactly two existing color-token changes are proposed through scratch-only
+browser previews. Owner authorization is pending; product palette, evaluator,
+thresholds and input closure rules remain unchanged. The failed active
+receipt/tables were restored after exact evidence preservation. Final capture,
+full UI acceptance, main merge, freshness and final Python-source provenance
+remain pending. This branch is not publication-ready.
 
 Codex — GPT-6
