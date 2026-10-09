@@ -41,6 +41,7 @@ from nexus.api.wizard_chat import (
 )
 from fastapi import HTTPException
 from tests.pg_fixtures import connect, routed_slot_environment
+from tests.settings_helpers import settings_with
 from tests.test_orrery.test_retrograde_wizard_live import stage_fixture_world
 
 pytestmark = pytest.mark.requires_postgres
@@ -101,6 +102,15 @@ def test_stage_rows_and_outputs_persist(staged: tuple[str, Any]) -> None:
     }
     assert rows["expansion"]["output"] == {"canned": "expansion"}
     assert all(rows[stage]["finished_at"] is not None for stage in rows)
+    status = asyncio.run(retrograde_status_endpoint(4))
+    assert [item["stage"] for item in status["stages"]] == [
+        "derivation",
+        "packet",
+        "seed_candidates",
+        "expansion",
+        "persistence",
+        "failed",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -150,16 +160,60 @@ def test_failure_is_recorded_at_each_stage(
     status = asyncio.run(retrograde_status_endpoint(4))
     assert status["run_status"] == "failed"
     assert status["error"] == run["error"]
-    if stage in (None, "derivation"):
+    if stage is None:
         assert status["stage"] == "idle"
         assert status["stages"] == []
     else:
         assert status["stage"] == "failed"
         assert status["detail"] == {"stage": stage}
         assert status["stages"][-1]["stage"] == "failed"
+        if stage == "derivation":
+            assert [item["stage"] for item in status["stages"]] == [
+                "derivation",
+                "failed",
+            ]
     if stage is None:
         assert _rows(dbname, "genesis_run_stages") == []
     json.dumps(status)
+
+
+def test_running_derivation_reports_its_stage(
+    staged: tuple[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The status route exposes committed derivation while its call is held."""
+    _dbname, data = staged
+    entered, release = threading.Event(), threading.Event()
+    errors: list[Exception] = []
+
+    def derive(*args: Any, **kwargs: Any) -> None:
+        entered.set()
+        if not release.wait(20):
+            raise RuntimeError("derivation release timed out")
+        raise ValueError("derivation released")
+
+    def transition() -> None:
+        try:
+            perform_transition_with_retrograde(4, data)
+        except Exception as exc:
+            errors.append(exc)
+
+    monkeypatch.setattr(
+        "nexus.api.trait_input_derivation.ensure_trait_compile_inputs", derive
+    )
+    thread = threading.Thread(target=transition)
+    thread.start()
+    try:
+        assert entered.wait(20)
+        status = asyncio.run(retrograde_status_endpoint(4))
+        assert status["stage"] == "derivation"
+        assert status["run_status"] == "running"
+        assert status["stages"][0]["stage"] == "derivation"
+    finally:
+        release.set()
+        thread.join(20)
+    assert not thread.is_alive()
+    assert len(errors) == 1 and str(errors[0]) == "derivation released"
 
 
 def test_another_process_reads_the_running_stage(
@@ -236,6 +290,29 @@ def test_skipped_run_commits_with_the_world(staged: tuple[str, Any]) -> None:
     assert int(fingerprint, 16) >= 0
     assert run["opening_session_id"] is None
     assert asyncio.run(retrograde_status_endpoint(4))["stage"] == "idle"
+
+
+def test_skipped_retrograde_keeps_its_derivation_record(
+    staged: tuple[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disabling Retrograde preserves the derivation that preceded the skip."""
+    import nexus.config
+
+    dbname, data = staged
+    settings = settings_with({"orrery.retrograde.wizard.enabled": False})
+    monkeypatch.setattr(nexus.config, "load_settings", lambda *args, **kwargs: settings)
+    result = perform_transition_with_retrograde(4, data)
+    assert result["character_id"]
+    [run] = _rows(dbname, "genesis_runs")
+    assert (run["status"], run["skip_reason"]) == (
+        "done",
+        "retrograde_wizard_disabled",
+    )
+    status = asyncio.run(retrograde_status_endpoint(4))
+    assert status["stage"] == "idle"
+    assert status["run_status"] == "done"
+    assert [item["stage"] for item in status["stages"]] == ["derivation"]
 
 
 def test_persistence_record_shares_the_transaction(offline_gate_db: str) -> None:

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
+import { GENESIS_STAGES, InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
 
 const STATUS_URL = "/api/story/new/retrograde/status?slot=5";
 // Run identities: the gateway starts each transition run's record under a
@@ -93,8 +93,33 @@ function stubGateway() {
     return gateway;
 }
 
-function stage(name: string, detail: Record<string, unknown> = {}, run: string = THIS_RUN) {
-    return { slot: 5, run, run_status: name === "failed" ? "failed" : name === "done" ? "done" : "running", error: name === "failed" ? "Stage failed" : null, stage: name, detail, updated_at: "2026-09-26T12:00:00+00:00", stages: [] };
+const PIPELINE_STAGES = ["derivation", "packet", "seed_candidates", "expansion", "persistence", "embedding"];
+const STAGE_TIME = "2026-09-26T12:00:00+00:00";
+
+function stage(name: string, detail: Record<string, unknown> = {}, run: string = THIS_RUN, derived = true) {
+    const position = name === "done"
+        ? PIPELINE_STAGES.length
+        : PIPELINE_STAGES.indexOf(name === "failed" ? String(detail.stage) : name) + 1;
+    const names = PIPELINE_STAGES.slice(0, position).filter((stage) => derived || stage !== "derivation");
+    if (name === "done" || name === "failed") names.push(name);
+    return {
+        slot: 5,
+        run,
+        run_status: name === "failed" ? "failed" : name === "done" ? "done" : "running",
+        error: name === "failed" ? "Stage failed" : null,
+        stage: name,
+        detail,
+        updated_at: STAGE_TIME,
+        stages: names.map((stage) => ({ stage, at: STAGE_TIME, detail: stage === name ? detail : {} })),
+    };
+}
+
+function skipped(derived: boolean) {
+    return {
+        ...stage("idle"),
+        run_status: "done",
+        stages: derived ? stage("derivation").stages : [],
+    };
 }
 
 // No run has started for the slot.
@@ -133,7 +158,7 @@ async function confirmIntroduction() {
 
 const pipStates = () => screen.getAllByTestId("wait-stage").map((pip) => pip.getAttribute("data-state"));
 const track = (active: number, last = "active") =>
-    Array.from({ length: 6 }, (_, index) => (index < active ? "done" : index === active ? last : "pending"));
+    Array.from({ length: 7 }, (_, index) => (index < active ? "done" : index === active ? last : "pending"));
 
 /** Poll reads settle quickly (10 ms interval); prove none follow. */
 async function expectNoFurtherStatusReads(gateway: ReturnType<typeof stubGateway>) {
@@ -149,6 +174,12 @@ afterEach(() => {
 });
 
 describe("genesis stage waiter", () => {
+    it("displays the six pipeline stages followed by bootstrap", () => {
+        expect(GENESIS_STAGES).toEqual([
+            "derivation", "packet", "seed_candidates", "expansion", "persistence", "embedding", "bootstrap",
+        ]);
+    });
+
     it("tracks each stage while the transition is in flight, then glows bootstrap until the session returns", async () => {
         const gateway = stubGateway();
         const { onComplete } = renderReadyWizard();
@@ -159,24 +190,24 @@ describe("genesis stage waiter", () => {
         // poll interval; nothing is read from the operator plane.
         expect(gateway.requests.slice(0, 3)).toEqual([`GET ${STATUS_URL}`, `GET ${STATUS_URL}`, "POST /api/story/new/transition"]);
         await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(1));
-        expect(pipStates()).toEqual(Array(6).fill("pending"));
+        expect(pipStates()).toEqual(Array(7).fill("pending"));
 
         gateway.status = stage("packet");
-        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(pipStates()).toEqual(track(1)));
         gateway.status = stage("expansion", { candidates: 6, selected: 3 });
-        await waitFor(() => expect(pipStates()).toEqual(track(2)));
+        await waitFor(() => expect(pipStates()).toEqual(track(3)));
         gateway.status = stage("embedding", { pending_summaries: 4 });
-        await waitFor(() => expect(pipStates()).toEqual(track(4)));
+        await waitFor(() => expect(pipStates()).toEqual(track(5)));
         expect(document.body.textContent).not.toMatch(/%/);
 
         // "done" is terminal: reads stop although the response has not arrived.
         gateway.status = stage("done", { embedded_summaries: 4 });
         await waitFor(() => expect(gateway.served.at(-1)).toBe("done"));
         await expectNoFurtherStatusReads(gateway);
-        expect(pipStates()).toEqual(track(4));
+        expect(pipStates()).toEqual(track(5));
 
         await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
-        await waitFor(() => expect(pipStates()).toEqual(track(5)));
+        await waitFor(() => expect(pipStates()).toEqual(track(6)));
         expect(screen.getByText("Starting narrative generation...")).toBeInTheDocument();
         expect(gateway.requests.at(-1)).toBe("POST /api/narrative/continue");
         expect(onComplete).not.toHaveBeenCalled();
@@ -197,10 +228,11 @@ describe("genesis stage waiter", () => {
         renderReadyWizard();
         await confirmIntroduction();
         gateway.status = stage("seed_candidates", { weird: "medium" });
-        await waitFor(() => expect(pipStates()).toEqual(track(1)));
+        await waitFor(() => expect(pipStates()).toEqual(track(2)));
 
+        gateway.status = stage("done");
         await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
-        await waitFor(() => expect(pipStates()).toEqual(track(5)));
+        await waitFor(() => expect(pipStates()).toEqual(track(6)));
         await expectNoFurtherStatusReads(gateway);
     });
 
@@ -209,7 +241,7 @@ describe("genesis stage waiter", () => {
         renderReadyWizard();
         await confirmIntroduction();
         gateway.status = stage("expansion", { candidates: 6, selected: 3 });
-        await waitFor(() => expect(pipStates()).toEqual(track(2)));
+        await waitFor(() => expect(pipStates()).toEqual(track(3)));
 
         // The world writes failed before persistence began: only the
         // gateway's failure record names the stage.
@@ -221,7 +253,7 @@ describe("genesis stage waiter", () => {
         );
 
         expect(await screen.findByText("Retrograde persistence blocked: 2 unresolved refs")).toBeInTheDocument();
-        expect(pipStates()).toEqual(track(3, "failed"));
+        expect(pipStates()).toEqual(track(4, "failed"));
         expect(screen.getByText("Generation Failed")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
         expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
@@ -232,16 +264,16 @@ describe("genesis stage waiter", () => {
         // post finds the failure, now the previous run's record, and its
         // reads skip that record until the retry's run replaces it.
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-        await waitFor(() => expect(pipStates()).toEqual(Array(6).fill("pending")));
+        await waitFor(() => expect(pipStates()).toEqual(Array(7).fill("pending")));
         expect(screen.queryByText("Generation Failed")).toBeNull();
         await waitFor(() =>
             expect(gateway.requests.filter((request) => request === "POST /api/story/new/transition")).toHaveLength(2),
         );
         const readsBeforeRetryRun = gateway.statusReads;
         await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(readsBeforeRetryRun + 2));
-        expect(pipStates()).toEqual(Array(6).fill("pending"));
+        expect(pipStates()).toEqual(Array(7).fill("pending"));
         gateway.status = stage("packet", {}, RETRY_RUN);
-        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(pipStates()).toEqual(track(1)));
     });
 
     it("stops reading when the run reports failed while the response is still in flight", async () => {
@@ -251,7 +283,7 @@ describe("genesis stage waiter", () => {
         await waitFor(() => expect(gateway.transition).not.toBeNull());
         // This run's first record the reads see is already terminal.
         gateway.status = stage("failed", { stage: "embedding" });
-        await waitFor(() => expect(pipStates()).toEqual(track(4)));
+        await waitFor(() => expect(pipStates()).toEqual(track(5)));
         await expectNoFurtherStatusReads(gateway);
     });
 
@@ -265,12 +297,12 @@ describe("genesis stage waiter", () => {
         renderReadyWizard();
         await confirmIntroduction();
         await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(3));
-        expect(pipStates()).toEqual(Array(6).fill("pending"));
+        expect(pipStates()).toEqual(Array(7).fill("pending"));
 
         gateway.status = stage("idle");
         await waitFor(() => expect(gateway.served.at(-1)).toBe("idle"));
         gateway.status = stage("packet");
-        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(pipStates()).toEqual(track(1)));
     });
 
     it.each([
@@ -296,7 +328,7 @@ describe("genesis stage waiter", () => {
                 ),
             );
             expect(await screen.findByText("Retrograde persistence blocked: 2 unresolved refs")).toBeInTheDocument();
-            expect(pipStates()).toEqual(track(3, "failed"));
+            expect(pipStates()).toEqual(track(4, "failed"));
             expect(gateway.served).toEqual([before.stage, before.stage, "failed"]);
         },
     );
@@ -318,7 +350,7 @@ describe("genesis stage waiter", () => {
             ),
         );
         expect(await screen.findByText("Transition failed: embedding provider timeout")).toBeInTheDocument();
-        expect(pipStates()).toEqual(track(4, "failed"));
+        expect(pipStates()).toEqual(track(5, "failed"));
         expect(gateway.served).toEqual(["idle", "idle", "502", "failed"]);
     });
 
@@ -337,20 +369,79 @@ describe("genesis stage waiter", () => {
         );
         expect(await screen.findByText("Confirm the setting and character before starting the story.")).toBeInTheDocument();
         expect(gateway.statusReads).toBeGreaterThan(readsBeforeRefusal);
-        expect(pipStates()).toEqual(Array(6).fill("pending"));
+        expect(pipStates()).toEqual(Array(7).fill("pending"));
     });
 
-    it("leaves a skipped Retrograde run's pips dim while bootstrap glows", async () => {
+    it.each([false, true])("uses recorded derivation when Retrograde is skipped after the answer (derived: %s)", async (derived) => {
         const gateway = stubGateway();
         renderReadyWizard();
         await confirmIntroduction();
-        await waitFor(() => expect(gateway.served).toContain("idle"));
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        gateway.status = skipped(derived);
         await act(async () =>
             gateway.transition!.resolve(
-                Response.json({ status: "transitioned", retrograde: { enabled: false, skip_reason: "mock_wizard_model" } }),
+                Response.json({
+                    status: "transitioned",
+                    retrograde: { enabled: false, skip_reason: derived ? "retrograde_wizard_disabled" : "mock_wizard_model" },
+                }),
             ),
         );
-        await waitFor(() => expect(pipStates()).toEqual([...Array(5).fill("skipped"), "active"]));
+        await waitFor(() => expect(pipStates()).toEqual([
+            derived ? "done" : "skipped", ...Array(5).fill("skipped"), "active",
+        ]));
+        expect(gateway.requests.at(-1)).toBe("POST /api/narrative/continue");
+    });
+
+    it("marks the derivation pip failed when deriving trait inputs fails", async () => {
+        const gateway = stubGateway();
+        renderReadyWizard();
+        await confirmIntroduction();
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        gateway.status = stage("derivation");
+        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+
+        gateway.status = stage("failed", { stage: "derivation" });
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        await act(async () =>
+            gateway.transition!.resolve(Response.json({ detail: "Trait input derivation failed" }, { status: 500 })),
+        );
+        expect(await screen.findByText("Trait input derivation failed")).toBeInTheDocument();
+        expect(pipStates()).toEqual(track(0, "failed"));
+        expect(gateway.bootstrap).toBeNull();
+    });
+
+    it("leaves derivation skipped when the first recorded stage is packet", async () => {
+        const gateway = stubGateway();
+        renderReadyWizard();
+        await confirmIntroduction();
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        gateway.status = stage("packet", {}, THIS_RUN, false);
+        await waitFor(() => expect(pipStates()).toEqual(["skipped", "active", ...Array(5).fill("pending")]));
+        expect(gateway.bootstrap).toBeNull();
+    });
+
+    it.each([
+        { name: "the run is still running", settled: stage("embedding"), enabled: true },
+        { name: "the run skipped Retrograde", settled: skipped(true), enabled: true },
+        { name: "the run recorded Retrograde", settled: stage("done"), enabled: false },
+    ])("refuses bootstrap when the successful answer disagrees with the ledger: $name", async ({ settled, enabled }) => {
+        const gateway = stubGateway();
+        renderReadyWizard();
+        await confirmIntroduction();
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        gateway.status = settled;
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        await act(async () =>
+            gateway.transition!.resolve(Response.json({ status: "transitioned", retrograde: { enabled } })),
+        );
+        expect(await screen.findByText(
+            `Transition answered, but the gateway's genesis record disagrees: ${JSON.stringify({
+                ...settled, status_poll_interval_seconds: gateway.pollSeconds,
+            })}`,
+        )).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+        expect(gateway.bootstrap).toBeNull();
+        expect(gateway.requests).not.toContain("POST /api/narrative/continue");
     });
 
     it("reports a transition response that names no Retrograde outcome", async () => {
@@ -376,7 +467,7 @@ describe("genesis stage waiter", () => {
             gateway.transition!.resolve(Response.json({ detail: "Incomplete setup data. Missing: zone" }, { status: 422 })),
         );
         expect(await screen.findByText("Incomplete setup data. Missing: zone")).toBeInTheDocument();
-        expect(pipStates()).toEqual(Array(6).fill("pending"));
+        expect(pipStates()).toEqual(Array(7).fill("pending"));
     });
 
     it("keeps the transition error and adds the stage-read error when the failure record is unreadable", async () => {
@@ -384,7 +475,7 @@ describe("genesis stage waiter", () => {
         renderReadyWizard();
         await confirmIntroduction();
         gateway.status = stage("seed_candidates", { weird: "medium" });
-        await waitFor(() => expect(pipStates()).toEqual(track(1)));
+        await waitFor(() => expect(pipStates()).toEqual(track(2)));
         vi.spyOn(console, "error").mockImplementation(() => {});
         gateway.statusFailing = true;
         await act(async () =>
@@ -393,7 +484,7 @@ describe("genesis stage waiter", () => {
         const alert = await screen.findByText(/Transition failed: provider timeout/);
         expect(alert).toHaveTextContent("502: Gateway worker restarted");
         expect(screen.getByText("Generation Failed")).toBeInTheDocument();
-        expect(pipStates()).toEqual(track(1, "failed"));
+        expect(pipStates()).toEqual(track(2, "failed"));
     });
 
     it("fails the bootstrap stage when the opening narrative cannot be scheduled", async () => {
@@ -401,6 +492,7 @@ describe("genesis stage waiter", () => {
         renderReadyWizard();
         await confirmIntroduction();
         await waitFor(() => expect(gateway.transition).not.toBeNull());
+        gateway.status = stage("done");
         await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
         await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
         vi.spyOn(console, "error").mockImplementation(() => {});
@@ -408,7 +500,7 @@ describe("genesis stage waiter", () => {
             gateway.bootstrap!.resolve(Response.json({ detail: "Opening generation unavailable" }, { status: 503 })),
         );
         expect(await screen.findByText("Opening generation unavailable")).toBeInTheDocument();
-        expect(pipStates()).toEqual(track(5, "failed"));
+        expect(pipStates()).toEqual(track(6, "failed"));
     });
 
     it("stops reading when the player cancels", async () => {
@@ -416,7 +508,7 @@ describe("genesis stage waiter", () => {
         renderReadyWizard();
         await confirmIntroduction();
         gateway.status = stage("packet");
-        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(pipStates()).toEqual(track(1)));
 
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         await waitFor(() => expect(screen.queryAllByTestId("wait-stage")).toHaveLength(0));
@@ -428,7 +520,7 @@ describe("genesis stage waiter", () => {
         const { unmount } = renderReadyWizard();
         await confirmIntroduction();
         gateway.status = stage("packet");
-        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(pipStates()).toEqual(track(1)));
 
         unmount();
         await expectNoFurtherStatusReads(gateway);
@@ -446,6 +538,7 @@ describe("genesis stage waiter", () => {
         expect(screen.getByText("Transmission Error")).toBeInTheDocument();
         await expectNoFurtherStatusReads(gateway);
 
+        gateway.status = stage("done");
         await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
         await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
         await act(async () => gateway.bootstrap!.resolve(Response.json({ session_id: "opening-session" })));
@@ -506,7 +599,7 @@ describe("genesis reattach", () => {
         const gateway = stubGateway();
         gateway.status = stage("packet");
         const { unmount } = renderReadyWizard();
-        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(pipStates()).toEqual(track(1)));
         await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(1));
         unmount();
         await expectNoFurtherStatusReads(gateway);
@@ -518,11 +611,11 @@ describe("genesis reattach", () => {
         const gateway = stubGateway();
         gateway.status = stage("expansion");
         const { onComplete } = renderReadyWizard();
-        await waitFor(() => expect(pipStates()).toEqual(track(2)));
+        await waitFor(() => expect(pipStates()).toEqual(track(3)));
         expect(gateway.transitionBodies).toEqual([]);
         gateway.status = stage("done", { embedded_summaries: 2 });
         await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
-        expect(pipStates()).toEqual(track(5));
+        expect(pipStates()).toEqual(track(6));
         await act(async () => gateway.bootstrap!.resolve(Response.json({ session_id: "reattached-opening" })));
         expect(onComplete).toHaveBeenCalledTimes(1);
         expect(JSON.parse(localStorage.getItem("pendingBootstrapSession")!)).toMatchObject({
@@ -535,10 +628,10 @@ describe("genesis reattach", () => {
         const gateway = stubGateway();
         gateway.status = stage("packet");
         renderReadyWizard();
-        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(pipStates()).toEqual(track(1)));
         gateway.status = { ...stage("failed", { stage: "packet" }), error: "Packet refused" };
         expect(await screen.findByText("Packet refused")).toBeInTheDocument();
-        expect(pipStates()).toEqual(track(0, "failed"));
+        expect(pipStates()).toEqual(track(1, "failed"));
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         await waitFor(() => expect(gateway.transitionBodies).toEqual([{ slot: 5 }]));
     });
@@ -557,14 +650,14 @@ describe("genesis reattach", () => {
         await expectNoFurtherStatusReads(gateway);
     });
 
-    it("waits through derivation with no pip lit", async () => {
+    it("glows the derivation pip while trait inputs are derived", async () => {
         const gateway = stubGateway();
-        gateway.status = stage("idle");
+        gateway.status = stage("derivation");
         renderReadyWizard();
-        await waitFor(() => expect(pipStates()).toEqual(Array(6).fill("pending")));
+        await waitFor(() => expect(pipStates()).toEqual(track(0)));
         await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(2));
         gateway.status = stage("packet");
-        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+        await waitFor(() => expect(pipStates()).toEqual(track(1)));
         expect(gateway.transitionBodies).toEqual([]);
     });
 
@@ -580,26 +673,27 @@ describe("genesis reattach", () => {
         await expectNoFurtherStatusReads(gateway);
     });
 
-    it("keeps skipped pips dim when a reattached run finishes without Retrograde", async () => {
+    it.each([false, true])("uses recorded derivation when a reattached run skips Retrograde (derived: %s)", async (derived) => {
         const gateway = stubGateway();
-        gateway.status = stage("idle");
+        gateway.status = stage(derived ? "derivation" : "idle");
         renderReadyWizard();
-        await waitFor(() => expect(pipStates()).toEqual(Array(6).fill("pending")));
-        gateway.status = { ...stage("idle"), run_status: "done" };
+        await waitFor(() => expect(pipStates()).toEqual(derived ? track(0) : Array(7).fill("pending")));
+        gateway.status = skipped(derived);
         await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
-        expect(pipStates()).toEqual([...Array(5).fill("skipped"), "active"]);
+        expect(pipStates()).toEqual([derived ? "done" : "skipped", ...Array(5).fill("skipped"), "active"]);
+        expect(gateway.transitionBodies).toEqual([]);
     });
 
     it("shows a reattached bootstrap failure and releases Confirm after Cancel", async () => {
         const gateway = stubGateway();
         gateway.status = stage("embedding");
         renderReadyWizard();
-        await waitFor(() => expect(pipStates()).toEqual(track(4)));
+        await waitFor(() => expect(pipStates()).toEqual(track(5)));
         gateway.status = stage("done");
         await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
         await act(async () => gateway.bootstrap!.resolve(Response.json({ detail: "Opening unavailable" }, { status: 503 })));
         expect(await screen.findByText("Opening unavailable")).toBeInTheDocument();
-        expect(pipStates()).toEqual(track(5, "failed"));
+        expect(pipStates()).toEqual(track(6, "failed"));
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         await confirmIntroductionAvailable();
     });
@@ -608,7 +702,7 @@ describe("genesis reattach", () => {
         const gateway = stubGateway();
         gateway.status = stage("embedding");
         const { unmount, onComplete } = renderReadyWizard();
-        await waitFor(() => expect(pipStates()).toEqual(track(4)));
+        await waitFor(() => expect(pipStates()).toEqual(track(5)));
         gateway.status = stage("done");
         await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
         unmount();

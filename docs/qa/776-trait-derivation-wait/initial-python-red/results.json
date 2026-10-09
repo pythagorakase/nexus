@@ -1,0 +1,137 @@
+{
+  "phase": "776-s6-initial-red",
+  "head": "6111594741bf2006c9c706afe09b4861b29dc1d7",
+  "origin_main": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "tree": "c8407feaf389e69b61742ca0edb1a28c68e32b54",
+  "worktree": "/Users/pythagor/.codex/worktrees/resume-derivation-wait/nexus",
+  "started_at": "20261009T005726Z",
+  "state": "expected-python-red-confirmed",
+  "interpreter": "/Users/pythagor/nexus/.venv/bin/python",
+  "cleared_environment_names": [
+    "NEXUS_API_URL",
+    "NEXUS_AUTH",
+    "NEXUS_DBNAME_AUDIT",
+    "NEXUS_GATEWAY_PORT",
+    "NEXUS_HOME",
+    "NEXUS_ROUTED_SLOT",
+    "NEXUS_ROUTED_SLOT_DATABASE",
+    "NEXUS_RUNTIME_CONFIG",
+    "NEXUS_RUN_CORPUS",
+    "NEXUS_RUN_LIVE_LLM",
+    "NEXUS_RUN_POSTGRES",
+    "NEXUS_RUN_SECRET_STORE",
+    "NEXUS_SLOT",
+    "NEXUS_TEST_PROVIDER_DATABASE",
+    "NEXUS_TEST_RECEIPTS_DIR",
+    "NEXUS_TEST_TEMPLATE_DB",
+    "PGDATABASE",
+    "PGHOST",
+    "PGHOSTADDR",
+    "PGOPTIONS",
+    "PGPASSFILE",
+    "PGPASSWORD",
+    "PGPORT",
+    "PGSERVICE",
+    "PGSERVICEFILE",
+    "PGUSER",
+    "PYTEST_ADDOPTS",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_PLUGINS",
+    "PYTHONHOME",
+    "PYTHONPATH"
+  ],
+  "commands": [
+    {
+      "name": "import-path",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-c",
+        "import json,nexus,sys; print(json.dumps({\"module\":nexus.__file__,\"executable\":sys.executable}))"
+      ],
+      "load": 2.78466796875,
+      "deadline_seconds": 539.9128175829974,
+      "postgres": false,
+      "log": "import-path.txt",
+      "cwd": "/Users/pythagor/.codex/worktrees/resume-derivation-wait/nexus",
+      "pythonpath": "/Users/pythagor/.codex/worktrees/resume-derivation-wait/nexus",
+      "exit_code": 0,
+      "sha256": "bd53b32e5daebe20cd388f87094251b9d1437439d145b6f1c9124b2bb223da22"
+    },
+    {
+      "name": "initial-red",
+      "command": [
+        "nice",
+        "-n",
+        "15",
+        "/Users/pythagor/nexus/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-s",
+        "-ra",
+        "-p",
+        "tests.dbname_audit",
+        "-p",
+        "no:cacheprovider",
+        "--junitxml",
+        "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/776-s6-initial-red-20261009T005726Z-19c822be/initial-red.xml",
+        "-o",
+        "junit_logging=all",
+        "tests/test_api/test_genesis_ledger_pg.py::test_stage_rows_and_outputs_persist",
+        "tests/test_api/test_genesis_ledger_pg.py::test_failure_is_recorded_at_each_stage[derivation]",
+        "tests/test_api/test_genesis_ledger_pg.py::test_running_derivation_reports_its_stage",
+        "tests/test_api/test_genesis_ledger_pg.py::test_skipped_retrograde_keeps_its_derivation_record",
+        "tests/test_api/test_genesis_ledger_pg.py::test_failure_is_recorded_at_each_stage[None]",
+        "tests/test_cli.py::test_retrograde_status_stage_names_derivation"
+      ],
+      "load": 2.78466796875,
+      "deadline_seconds": 539.8231513749924,
+      "postgres": true,
+      "log": "initial-red.txt",
+      "cwd": "/Users/pythagor/.codex/worktrees/resume-derivation-wait/nexus",
+      "pythonpath": "/Users/pythagor/.codex/worktrees/resume-derivation-wait/nexus",
+      "exit_code": 1,
+      "sha256": "770c433570104468a2519552c9dd007e5bf825bb6f334d83b2bfcddc9e138832"
+    }
+  ],
+  "harness_sha256": "e7ff4a62399132d041e54039edc0ec5b926f34c719e292e9871dd90c81cfd27d",
+  "evidence_scope": "focused only; no whole-suite or offline-partition claim",
+  "import_proof": {
+    "module": "/Users/pythagor/.codex/worktrees/resume-derivation-wait/nexus/nexus/__init__.py",
+    "executable": "/Users/pythagor/nexus/.venv/bin/python"
+  },
+  "cases": [
+    {
+      "name": "test_stage_rows_and_outputs_persist",
+      "failure": "AssertionError: assert ['packet', 's...ce', 'failed'] == ['derivation'...ce', 'failed']\n  \n  At index 0 diff: 'packet' != 'derivation'\n  Right contains one more item: 'failed'\n  Use -v to get more diff"
+    },
+    {
+      "name": "test_failure_is_recorded_at_each_stage[derivation]",
+      "failure": "AssertionError: assert 'idle' == 'failed'\n  \n  - failed\n  + idle"
+    },
+    {
+      "name": "test_running_derivation_reports_its_stage",
+      "failure": "AssertionError: assert 'idle' == 'derivation'\n  \n  - derivation\n  + idle"
+    },
+    {
+      "name": "test_skipped_retrograde_keeps_its_derivation_record",
+      "failure": "AssertionError: assert [] == ['derivation']\n  \n  Right contains one more item: 'derivation'\n  Use -v to get more diff"
+    },
+    {
+      "name": "test_failure_is_recorded_at_each_stage[None]",
+      "failure": null
+    },
+    {
+      "name": "test_retrograde_status_stage_names_derivation[running]",
+      "failure": "ValueError: Unrecognized Retrograde status: {'slot': 4, 'run': '11111111111111111111111111111111', 'run_status': 'running', 'stage': 'derivation', 'detail': {}, 'error': None, 'stages': [{'stage': 'derivation', 'detail': {}}]}"
+    },
+    {
+      "name": "test_retrograde_status_stage_names_derivation[failed]",
+      "failure": "ValueError: Retrograde failure names no known stage: {'slot': 4, 'run': '11111111111111111111111111111111', 'run_status': 'failed', 'stage': 'failed', 'detail': {'stage': 'derivation'}, 'error': 'ValueError: derivation refused', 'stages': [{'stage': 'derivation', 'detail': {}}]}"
+    }
+  ],
+  "review": "All six failures are the missing derivation projection or vocabulary; the stage-less refusal parity case passed. No setup, collection or dependency failure."
+}

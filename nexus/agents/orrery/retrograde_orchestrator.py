@@ -51,6 +51,7 @@ from nexus.config.settings_models import (
 logger = logging.getLogger("nexus.agents.orrery.retrograde_orchestrator")
 
 RETROGRADE_WIZARD_STAGES: tuple[str, ...] = (
+    "derivation",
     "packet",
     "seed_candidates",
     "expansion",
@@ -61,15 +62,8 @@ RETROGRADE_WIZARD_STAGES: tuple[str, ...] = (
 
 ProgressCallback = Callable[[str, dict[str, Any]], None]
 
-GENESIS_RUN_STAGES = (
-    "derivation",
-    "packet",
-    "seed_candidates",
-    "expansion",
-    "persistence",
-    "embedding",
-    "done",
-)
+# Migration 141 lists the same names in its stage CHECK constraints.
+GENESIS_RUN_STAGES = RETROGRADE_WIZARD_STAGES
 
 
 class RetrogradePersistenceBlockedError(ValueError):
@@ -344,13 +338,12 @@ def get_retrograde_progress(slot: int) -> Optional[dict[str, Any]]:
             "detail": item["detail"],
         }
         for item in stage_rows
-        if item["stage"] != "derivation"
     ]
     stage, detail = row["stage"], {}
     if row["status"] == "done" and row["skip_reason"] is None:
         stage = "done"
         detail = next(item["detail"] for item in stage_rows if item["stage"] == "done")
-    elif row["skip_reason"] is not None or stage in (None, "derivation"):
+    elif row["skip_reason"] is not None or stage is None:
         stage = "idle"
     elif row["status"] == "failed":
         detail = {"stage": stage}

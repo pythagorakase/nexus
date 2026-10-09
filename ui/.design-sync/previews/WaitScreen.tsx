@@ -9,7 +9,7 @@ const Frame = ({ children }: { children: React.ReactNode }) => (
 );
 
 // The generating state shown while the story is being built: status line, a
-// large MM:SS timer counting up, the stage track (two stages done, the third
+// large MM:SS timer counting up, the stage track (three stages done, the fourth
 // glowing), and Cancel / Retry.
 export const Generating = () => (
   <Frame>

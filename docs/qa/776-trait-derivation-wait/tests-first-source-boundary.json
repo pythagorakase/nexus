@@ -1,0 +1,56 @@
+{
+  "base": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "scope": "Source equality only; no test execution or application import.",
+  "files": [
+    {
+      "path": "nexus/agents/orrery/retrograde_orchestrator.py",
+      "sha256": "6017272ab86a17b4551daca6e5ce7b19a3e61dc5345e6b915945832b1e4f7500",
+      "equals_base": true
+    },
+    {
+      "path": "nexus/api/new_story_flow.py",
+      "sha256": "4b50b74e939da883550623c53615f7464728edf2bb9dd9ac9e3b1886d6a9375d",
+      "equals_base": true
+    },
+    {
+      "path": "nexus/api/wizard_chat.py",
+      "sha256": "bd4952e86876db1ef2fc7a20367b256728daa6d4dbc2d1eec7e29cf47fa7073c",
+      "equals_base": true
+    },
+    {
+      "path": "nexus/cli.py",
+      "sha256": "1a2304dd8c54cc71f97f88bcc5fd1c9291675e0ecc21640ae8bc948512a9884d",
+      "equals_base": true
+    },
+    {
+      "path": "nexus.toml",
+      "sha256": "14c98fcb29bcaade7a53282d79cecf1d5fbe374b3293d75018651ad39df59113",
+      "equals_base": true
+    },
+    {
+      "path": "ui/client/src/lib/narrative-api.ts",
+      "sha256": "b864f2bfe59021d0583218225a11573dea87dff9d8534dd0e08335cfce4b7645",
+      "equals_base": true
+    },
+    {
+      "path": "ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx",
+      "sha256": "38d1f6d2396f2ff6b795c35bb24ccc5a04d300d376f16cccfd3cb18977dd412e",
+      "equals_base": true
+    },
+    {
+      "path": "ui/client/src/components/NewStoryWizard/WaitScreen.tsx",
+      "sha256": "2cc32735f6817b3d07b652163933058a88874e78b9e6e9c95707f8426fa1231a",
+      "equals_base": true
+    },
+    {
+      "path": "ui/client/src/components/NewStoryWizard/WaitScreen.test.tsx",
+      "sha256": "92a44d4e2c1345d5148185c1239553f277ba194194531c0f1173261c45612c69",
+      "equals_base": true
+    },
+    {
+      "path": "ui/.design-sync/previews/WaitScreen.tsx",
+      "sha256": "ed1ad1fabdd70059907a3c1b4fcf8fcf48b9bd173cf27ba07236b06354d9d259",
+      "equals_base": true
+    }
+  ]
+}
