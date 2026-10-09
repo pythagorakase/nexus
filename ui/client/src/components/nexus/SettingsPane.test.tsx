@@ -77,7 +77,7 @@ function renderPane(
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
     theme: settings.ui?.theme ?? "veil", fonts: settings.ui?.fonts ?? KEEPERS,
-    wizard_model: settings.wizard?.default_model ?? "TEST",
+    wizard_model: "TEST",
   });
   queryClient.setQueryData(["/api/slot/4/settings"], {
     skald_model: settings.apex?.model ?? null, gaia_model: settings.apex?.gaia_model ?? null,
@@ -484,10 +484,8 @@ describe("SettingsPane model IDs", () => {
     ...SETTINGS,
     apex: {
       model: "frontier-2.1",
-      provider: "openai",
       gaia_model: "vendor/model-next",
     },
-    wizard: { default_model: "frontier-2.1" },
     settings_meta: {
       ...SETTINGS.settings_meta!,
       models: [

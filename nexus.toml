@@ -11,7 +11,7 @@ default_model_policy = "fixed"
 # Model IDs live only in the provider roster below. To upgrade a model, edit
 # its `id` once; `uses` supplies that ID to the listed configuration fields.
 # Move a use to another entry to select a different model. The settings picker
-# does this automatically. TEST supplies the default for new/reset save slots.
+# does this automatically. A new or reset save slot stores no model pin.
 
 # Per-model `unsupported_params` lists request parameters the provider rejects
 # outright for that model (e.g. temperature on reasoning-class models).
@@ -45,7 +45,7 @@ models = [
 ui_visible = false  # Backend/CLI-only mock server; hidden from UI model pickers
 base_url = "http://127.0.0.1:5102/v1"
 models = [
-    { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)", uses = ["global.model.default_slot_model"], tokenizer_encoding = "o200k_base", context_window = 1000000, max_input_tokens = 872000, max_output_tokens = 128000, reasoning_accounting = "none" }, # https://github.com/pythagorakase/nexus/blob/main/nexus/api/mock_openai.py (retrieved 2026-09-23). No provider limits; explicit synthetic test contract, not a hardware claim.
+    { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)", tokenizer_encoding = "o200k_base", context_window = 1000000, max_input_tokens = 872000, max_output_tokens = 128000, reasoning_accounting = "none" }, # https://github.com/pythagorakase/nexus/blob/main/nexus/api/mock_openai.py (retrieved 2026-09-23). No provider limits; explicit synthetic test contract, not a hardware claim.
 ]
 
 # Headless `llama-server` (llama.cpp) serves this local model over a GGUF quant.

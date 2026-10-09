@@ -22,7 +22,6 @@ from nexus.api import new_story_flow, setup_endpoints
 from nexus.api.config_utils import get_new_story_model
 from nexus.api.new_story_cache import read_cache_raw
 from nexus.api.narrative_schemas import ChatRequest, StartSetupRequest
-from nexus.api.new_story_flow import resolve_setup_model
 from nexus.api.wizard_chat import resolve_wizard_model, wizard_model_lock_candidate
 from nexus.config.preferences import save_preferences
 from nexus.config.story_model import read_story_settings
@@ -53,46 +52,6 @@ def test_chat_request_accepts_explicit_test_model() -> None:
 def test_start_setup_request_model_defaults_to_none() -> None:
     request = StartSetupRequest(slot=5)
     assert request.model is None
-
-
-def test_setup_model_preserves_operator_slot_model() -> None:
-    assert (
-        resolve_setup_model(
-            "operator-model",
-            setup_started=False,
-            default_slot_model="fresh-placeholder",
-            wizard_default_model="wizard-default",
-        )
-        == "operator-model"
-    )
-
-
-def test_setup_model_preserves_default_named_model_after_setup_started() -> None:
-    """A prior wizard row disambiguates an intentional TEST model stamp."""
-    assert (
-        resolve_setup_model(
-            "TEST",
-            setup_started=True,
-            default_slot_model="TEST",
-            wizard_default_model="wizard-default",
-        )
-        == "TEST"
-    )
-
-
-@pytest.mark.parametrize("slot_model", [None, "", "fresh-placeholder"])
-def test_setup_model_uses_wizard_default_only_for_fresh_slot(
-    slot_model: str | None,
-) -> None:
-    assert (
-        resolve_setup_model(
-            slot_model,
-            setup_started=False,
-            default_slot_model="fresh-placeholder",
-            wizard_default_model="wizard-default",
-        )
-        == "wizard-default"
-    )
 
 
 @pytest.mark.requires_postgres

@@ -27,7 +27,6 @@ from nexus.api.new_story_cache import (
     clear_cache,
     init_cache,
     read_cache,
-    read_cache_raw,
     repoint_wizard_conversation,
     write_cache,
 )
@@ -94,24 +93,6 @@ def build_transition_data_from_cache(cache: Any) -> "TransitionData":
     )
 
 
-def resolve_setup_model(
-    slot_model: Optional[str],
-    *,
-    setup_started: bool,
-    default_slot_model: str,
-    wizard_default_model: str,
-) -> str:
-    """Resolve an omitted model when a new-story setup starts.
-
-    Preserve a slot model when it differs from the fresh-slot placeholder or
-    when an existing wizard-cache row proves setup already locked that model.
-    Only a genuinely fresh slot falls back to the wizard roster default.
-    """
-    if slot_model and (setup_started or slot_model != default_slot_model):
-        return slot_model
-    return wizard_default_model
-
-
 def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     """
     Start a new setup conversation for a slot.
@@ -122,9 +103,9 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 
     Args:
         slot_number: Target save slot (1-5)
-        model: Optional explicit model override. When omitted, an existing
-            operator-set slot model is preserved; only an unset/fresh slot
-            uses the configured wizard default.
+        model: Optional explicit model override. When omitted, a slot model
+            pin is preserved; a slot with no pin (NULL) resolves the wizard
+            seat (the player preference, then the configured wizard default).
 
     Returns:
         Thread ID for the new conversation
@@ -146,11 +127,6 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 
     settings = load_settings()
     slot_model = get_slot_model(slot_number, dbname=dbname)
-    if (
-        slot_model == settings.global_.model.default_slot_model
-        and read_cache_raw(dbname) is None
-    ):
-        slot_model = None
     model_to_use = resolve_story_model(
         "wizard",
         settings=settings,

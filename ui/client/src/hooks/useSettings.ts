@@ -33,10 +33,6 @@ export function applySettingsPatch(payload: SettingsPayload, patch: SettingsPatc
       ...(patch.theme === undefined ? {} : { theme: patch.theme }),
       ...(patch.fonts === undefined ? {} : { fonts: fonts as Preferences["fonts"] }),
     },
-    wizard: {
-      ...payload.wizard,
-      ...(patch.wizard_model === undefined ? {} : { default_model: patch.wizard_model }),
-    },
   };
 }
 
@@ -49,22 +45,15 @@ export function useSettingsMutation() {
       const previous = client.getQueryData<Preferences>(PREFERENCES_QUERY_KEY);
       if (previous) {
         const projected = applySettingsPatch({ ui: previous }, patch);
-        client.setQueryData(PREFERENCES_QUERY_KEY, {
-          ...previous, ...projected.ui,
-          wizard_model: patch.wizard_model ?? previous.wizard_model,
-        });
+        client.setQueryData(PREFERENCES_QUERY_KEY, { ...previous, ...projected.ui });
       }
       return { previous };
     },
     onError: (_error, _patch, context) => {
       if (context?.previous) client.setQueryData(PREFERENCES_QUERY_KEY, context.previous);
     },
-    onSuccess: (preferences, patch) => {
+    onSuccess: (preferences) => {
       client.setQueryData(PREFERENCES_QUERY_KEY, preferences);
-      // The wizard seat can move which keys are required.
-      if (patch.wizard_model !== undefined) {
-        void client.invalidateQueries({ queryKey: [...SECRETS_QUERY_KEY] });
-      }
     },
   });
 }

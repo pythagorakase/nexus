@@ -257,8 +257,8 @@ def stage_reset_slot(dbname: str) -> None:
             phase=phase,
             artifact_token=draft.artifact_token(phase),
         )
-    # Fresh slots default to the mock TEST model; a real wizard run persists
-    # the real model in start_setup. Mirror that so the transition engages
+    # A fresh slot stores no model pin (NULL); a real wizard run persists the
+    # resolved model in start_setup. Mirror that so the transition engages
     # Retrograde + trait derivation with real frontier calls.
     from nexus.api.config_utils import get_new_story_model
 
