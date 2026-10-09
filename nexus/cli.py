@@ -26,6 +26,8 @@ Commands:
     nexus inspect slot --slot N  Read one slot's state as a JSON envelope
     nexus inspect chunks|chunk|incubator|characters|places|factions --slot N
                                  Read player-plane story records as JSON envelopes
+    nexus inspect settings|secrets
+                                 Read this machine's operator state as JSON envelopes
     nexus tags audit --slot N|--all  Report active tags in deprecated categories
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
@@ -1460,7 +1462,7 @@ def _inspect_body(response: requests.Response) -> Any:
 
 
 def _inspect_read(path: str, *, params: Optional[Mapping[str, Any]] = None) -> Any:
-    """GET one player-plane route and return its JSON body unchanged."""
+    """GET one route and return its JSON body unchanged."""
     return _inspect_body(_inspect_response(path, params=params))
 
 
@@ -1618,6 +1620,65 @@ def _entity_family(route: str, label: str) -> Callable[[argparse.Namespace], Any
     return read
 
 
+def _inspect_settings(args: argparse.Namespace) -> Any:
+    """Read active settings without permitting a secrets section in the result."""
+    body = _inspect_read("/api/settings")
+    if not isinstance(body, dict):
+        raise InspectFailure(
+            "invalid_response", "GET /api/settings did not answer a JSON object"
+        )
+    if "secrets" in body:
+        raise InspectFailure(
+            "invalid_response", "GET /api/settings served a secrets section"
+        )
+    return body
+
+
+_SECRET_STATUS_KEYS = frozenset(
+    {"provider", "account", "present", "last4", "required", "required_by"}
+)
+
+
+def _inspect_secrets(args: argparse.Namespace) -> Any:
+    """Read masked status, rejecting unexpected fields without echoing values."""
+    params = {} if args.slot is None else {"slot": args.slot}
+    body = _inspect_read("/api/secrets/status", params=params)
+    if not isinstance(body, list):
+        raise InspectFailure(
+            "invalid_response", "GET /api/secrets/status did not answer a JSON list"
+        )
+    for i, record in enumerate(body):
+        if not isinstance(record, dict) or set(record) != _SECRET_STATUS_KEYS:
+            raise InspectFailure(
+                "invalid_response",
+                f"GET /api/secrets/status record {i} does not have exactly the fields "
+                f"{sorted(_SECRET_STATUS_KEYS)}",
+            )
+        if not isinstance(record["present"], bool):
+            raise InspectFailure(
+                "invalid_response",
+                f"GET /api/secrets/status record {i} has a non-boolean present",
+            )
+        last4 = record["last4"]
+        if last4 is not None and not (isinstance(last4, str) and len(last4) <= 4):
+            raise InspectFailure(
+                "invalid_response",
+                f"GET /api/secrets/status record {i} carries more than the last four "
+                "characters of a key",
+            )
+        required_by = record["required_by"]
+        if not isinstance(required_by, list) or any(
+            not isinstance(item, dict) or set(item) != {"seat", "model"}
+            for item in required_by
+        ):
+            raise InspectFailure(
+                "invalid_response",
+                f"GET /api/secrets/status record {i} has a required_by entry without "
+                "exactly the fields ['model', 'seat']",
+            )
+    return body
+
+
 _INSPECT_READERS: Mapping[str, Callable[[argparse.Namespace], Any]] = {
     "slot": _inspect_slot,
     "chunks": _inspect_chunks,
@@ -1626,6 +1687,8 @@ _INSPECT_READERS: Mapping[str, Callable[[argparse.Namespace], Any]] = {
     "characters": _entity_family("/api/characters", "character"),
     "places": _entity_family("/api/places", "place"),
     "factions": _entity_family("/api/factions", "faction"),
+    "settings": _inspect_settings,
+    "secrets": _inspect_secrets,
 }
 
 # What human output prints for an explicitly empty read.
@@ -1635,14 +1698,16 @@ _INSPECT_EMPTY: Mapping[str, str] = {
     "characters": "No characters.",
     "places": "No places.",
     "factions": "No factions.",
+    "secrets": "No keyed providers.",
 }
 
 
 def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
-    """Run one read-only ``nexus inspect`` command over the player-plane API.
+    """Run one read-only ``nexus inspect`` command over the API.
 
-    Each verb reads GET routes nexus/api/route_capabilities.py declares on the
-    player plane and puts what they answer under ``data``: each record is the
+    Story verbs read player-plane GET routes; ``settings`` and ``secrets`` read
+    operator-plane GET routes, which nexus.cli_contract refuses under a remote
+    runtime. Each verb puts what they answer under ``data``: each record is the
     route's own payload, unchanged. ``inspect chunks`` lists those payloads
     oldest first, and ``inspect incubator`` reports the route's empty answer
     as ``None`` (JSON ``null``). Nothing is written. A request that cannot
@@ -1654,10 +1719,12 @@ def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
         raise ValueError(f"Unknown inspect command: {args.inspect_command!r}")
     try:
         data = reader(args)
-    except InspectFailure as failure:
+    except (
+        InspectFailure
+    ) as failure:  # nexus-exception-disposition: fail; reason=read; safety=exit 1
         result: Dict[str, Any] = {
             "success": False,
-            "slot": args.slot,
+            "slot": getattr(args, "slot", None),
             "code": failure.code,
             "error": failure.message,
         }
@@ -5201,6 +5268,7 @@ Examples:
   nexus inspect incubator --slot 5  The pending draft, or null
   nexus inspect characters --slot 5  Characters (also places, factions)
   nexus inspect characters 3 --slot 5  One character by id
+  nexus inspect secrets --json   Masked API key status (this machine only)
   nexus tags audit --all --json   Active tags in deprecated categories
   nexus continue --slot 5       Advance the story
   nexus continue --slot 5 --choice 1   Select choice #1
@@ -5474,6 +5542,27 @@ Examples:
         entity_parser.add_argument(
             "entity_id", type=int, nargs="?", help=f"One {family[:-1]}'s id"
         )
+
+    inspect_settings_parser = inspect_verbs.add_parser(
+        "settings",
+        help="Read the active settings through GET /api/settings (this machine only)",
+        allow_abbrev=False,
+    )
+    _add_global_output_args(inspect_settings_parser)
+    inspect_secrets_parser = inspect_verbs.add_parser(
+        "secrets",
+        help=(
+            "Read masked API key status through GET /api/secrets/status "
+            "(this machine only)"
+        ),
+        allow_abbrev=False,
+    )
+    _add_global_output_args(inspect_secrets_parser)
+    inspect_secrets_parser.add_argument(
+        "--slot",
+        type=int,
+        help="Resolve required keys against this slot's story pins (1-5)",
+    )
 
     # tags family (issue #811): read-only audits of the tag vocabulary.
     tags_family = subparsers.add_parser(
@@ -6100,6 +6189,7 @@ _SLOT_COMMANDS = frozenset(
         "inspect characters",
         "inspect places",
         "inspect factions",
+        "inspect secrets",
         "tags audit",
         "model",
         "retrograde-seed-candidates",

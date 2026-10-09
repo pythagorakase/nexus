@@ -17,6 +17,7 @@ Every command that `nexus.cli.build_parser()` registers, with its arguments and 
 | Transport | Opens | Commands |
 | --- | --- | --- |
 | `http` | The NEXUS API only | `inspect slot`, `inspect chunks`, `inspect chunk`, `inspect incubator`, `inspect characters`, `inspect places`, `inspect factions`, `load`, `continue`, `retry`, `accept`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `model --set`, `model --clear` |
+| `operator_api` | The NEXUS API's operator routes on this machine | `inspect settings`, `inspect secrets` |
 | `database` | A slot database directly | `jobs`, `inspect-turn`, `prune-manifests`, `tags audit`, `model`, `trait-audit`, `retrograde-packet`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, `faction-manifest`, `faction-apply`, `character-manifest`, `character-apply`, `place-manifest`, `place-apply`, `retrograde-seed-candidates --slot` |
 | `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `init`, `usage`, `receipts`, `window-replay`, `models lock`, `models verify`, `models plan`, `models fetch`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
 
@@ -189,7 +190,7 @@ Transport: `database`.
 
 Read-only JSON-first inspection over the NEXUS API.
 
-Verbs: `nexus inspect slot`, `nexus inspect chunks`, `nexus inspect chunk`, `nexus inspect incubator`, `nexus inspect characters`, `nexus inspect places`, `nexus inspect factions`.
+Verbs: `nexus inspect slot`, `nexus inspect chunks`, `nexus inspect chunk`, `nexus inspect incubator`, `nexus inspect characters`, `nexus inspect places`, `nexus inspect factions`, `nexus inspect settings`, `nexus inspect secrets`.
 
 ### `nexus inspect slot`
 
@@ -267,6 +268,24 @@ Transport: `http`.
 | --- | --- | --- | --- |
 | `--slot` (required) | `SLOT` | — | Slot number (1-5) |
 | `entity_id` | `entity_id` (optional) | — | One faction's id |
+
+### `nexus inspect settings`
+
+Read the active settings through GET /api/settings (this machine only).
+
+Transport: `operator_api`.
+
+No arguments.
+
+### `nexus inspect secrets`
+
+Read masked API key status through GET /api/secrets/status (this machine only).
+
+Transport: `operator_api`.
+
+| Argument | Takes | Default | Description |
+| --- | --- | --- | --- |
+| `--slot` | `SLOT` | — | Resolve required keys against this slot's story pins (1-5) |
 
 ### `nexus tags`
 
