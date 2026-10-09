@@ -82,9 +82,12 @@ The frozen order's statement that no declared source changes is stale because
 that decision now declares `scripts/new_story_setup.py`.
 
 Black and normal commit-hook results will be recorded in the checkpoint handoff.
-The prescribed long exception-disposition and upload comments retain exact text
-with targeted E501 exclusions. No standalone flake8/mypy or pytest result is
-claimed here.
+A source follow-up extracts the story, pin and Pass-2 checks plus the lock
+attempt into shallow helpers so the disposition headers fit 88 columns. Full
+policy prose remains adjacent; marker metadata has no trailing lint suffix.
+Aggregate refusal order, the single transaction and propagated database errors
+remain unchanged. The uploads comment is split across two lines. No standalone
+flake8/mypy or pytest result is claimed here.
 
 ## Pending focused proof and controls
 

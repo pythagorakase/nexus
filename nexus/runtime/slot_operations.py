@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import fcntl
 import os
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 import psycopg2
@@ -18,6 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from nexus.api.db_pool import MaintenanceTarget, get_maintenance_connection
 from nexus.api.slot_utils import slot_dbname
 from nexus.database import connection_kwargs
+
+if TYPE_CHECKING:
+    from nexus.config.settings_models import Settings
+    from nexus.config.story_model import StorySettings
 
 Phase = Literal[
     "created", "building", "built", "validated", "refused", "failed", "swept"
@@ -270,6 +274,95 @@ def require_authorized(target: MaintenanceTarget) -> SlotOperation:
     return record
 
 
+def _staging_story(
+    row: tuple[Any, ...] | None,
+    slot: int,
+    dbname: str,
+    refusals: list[str],
+) -> StorySettings | None:
+    from nexus.config.story_model import StorySettings
+
+    if row is None:
+        refusals.append("story: global_variables row is missing")
+        return None
+    if row[3] != slot:
+        refusals.append(f"slot: slot_number is {row[3]!r}, expected {slot}")
+    try:
+        return StorySettings(
+            skald_model=row[0],
+            gaia_model=row[1],
+            apex_context_window=row[2],
+            slot=slot,
+            dbname=dbname,
+        )
+    except (
+        ValidationError
+    ) as exc:  # nexus-exception-disposition: fail; reason=invalid; safety=refused
+        # A validation failure becomes a staging refusal; the refusal blocks
+        # the operation and the staging database is kept.
+        refusals.append(f"story: {exc}")
+        return None
+
+
+def _validate_pins(
+    story: StorySettings, settings: Settings, refusals: list[str]
+) -> None:
+    from nexus.config.story_model import AUXILIARY_SEATS, resolve_seat
+
+    for seat in ("skald", "gaia", *AUXILIARY_SEATS):
+        try:
+            resolve_seat(seat, settings=settings, story=story)
+        except (
+            ValueError
+        ) as exc:  # nexus-exception-disposition: fail; reason=invalid; safety=refused
+            # A validation failure becomes a staging refusal; the refusal
+            # blocks the operation and the staging database is kept.
+            refusals.append(f"pins: {seat}: {exc}")
+
+
+def _validate_pass2(
+    cur: Any, story: StorySettings, settings: Settings, refusals: list[str]
+) -> None:
+    from nexus.config.story_model import story_context_settings
+    from nexus.memory.context_state import parse_pass2_baseline
+    from nexus.memory.manager import incompatible_pass2_baseline_reason
+
+    cur.execute("SELECT max(id) FROM narrative_chunks")
+    chunk_id = cur.fetchone()[0]
+    if chunk_id is None:
+        return
+    cur.execute(
+        "SELECT schema_version, payload FROM lore_pass_baselines "
+        "WHERE chunk_id = %s",
+        (chunk_id,),
+    )
+    baseline_row = cur.fetchone()
+    if baseline_row is None:
+        refusals.append(f"pass2: chunk {chunk_id} has no baseline")
+        return
+    try:
+        baseline = parse_pass2_baseline(baseline_row[1])
+    except (
+        ValidationError
+    ) as exc:  # nexus-exception-disposition: fail; reason=invalid; safety=refused
+        # A validation failure becomes a staging refusal; the refusal blocks
+        # the operation and the staging database is kept.
+        refusals.append(f"pass2: chunk {chunk_id}: {exc}")
+        return
+    if baseline_row[0] != baseline.schema_version:
+        refusals.append(f"pass2: chunk {chunk_id} schema columns disagree")
+    if baseline.parent_chunk_id != chunk_id:
+        refusals.append(
+            f"pass2: chunk {chunk_id} parent identity "
+            f"mismatch ({baseline.parent_chunk_id})"
+        )
+    reason = incompatible_pass2_baseline_reason(
+        baseline, story_context_settings(settings, story)
+    )
+    if reason is not None:
+        refusals.append(f"pass2: chunk {chunk_id}: {reason}")
+
+
 def validate_staging(
     target: MaintenanceTarget,
     *,
@@ -283,19 +376,12 @@ def validate_staging(
         verify_chunk_clocks_sync,
     )
     from nexus.config import load_settings
-    from nexus.config.story_model import (
-        AUXILIARY_SEATS,
-        StorySettings,
-        resolve_seat,
-        story_context_settings,
-    )
-    from nexus.memory.context_state import parse_pass2_baseline
-    from nexus.memory.manager import incompatible_pass2_baseline_reason
     from nexus.runtime.home import UPLOADS_DIR, repo_root
     from scripts.migrate import SCRIPT_ONLY_MIGRATIONS, discover_migrations
     from scripts.replay_state import _verify_correspondence_provenance
 
-    # #820 moves uploads into the runtime home; until then the endpoints serve the checkout.  # noqa: E501
+    # #820 moves uploads into the runtime home; until then the endpoints
+    # serve the checkout.
     uploads = (
         repo_root() / UPLOADS_DIR if uploads_dir is None else uploads_dir
     ).resolve()
@@ -322,65 +408,10 @@ def validate_staging(
                 "FROM global_variables WHERE id = TRUE"
             )
             row = cur.fetchone()
-            story = None
-            if row is None:
-                refusals.append("story: global_variables row is missing")
-            else:
-                if row[3] != slot:
-                    refusals.append(f"slot: slot_number is {row[3]!r}, expected {slot}")
-                try:
-                    story = StorySettings(
-                        skald_model=row[0],
-                        gaia_model=row[1],
-                        apex_context_window=row[2],
-                        slot=slot,
-                        dbname=target.dbname,
-                    )
-                except (
-                    ValidationError
-                ) as exc:  # nexus-exception-disposition: fail; reason=a validation failure becomes a staging refusal; safety=the refusal blocks the operation and the staging database is kept  # noqa: E501
-                    refusals.append(f"story: {exc}")
+            story = _staging_story(row, slot, target.dbname, refusals)
             if story is not None:
-                for seat in ("skald", "gaia", *AUXILIARY_SEATS):
-                    try:
-                        resolve_seat(seat, settings=settings, story=story)
-                    except (
-                        ValueError
-                    ) as exc:  # nexus-exception-disposition: fail; reason=a validation failure becomes a staging refusal; safety=the refusal blocks the operation and the staging database is kept  # noqa: E501
-                        refusals.append(f"pins: {seat}: {exc}")
-                cur.execute("SELECT max(id) FROM narrative_chunks")
-                chunk_id = cur.fetchone()[0]
-                if chunk_id is not None:
-                    cur.execute(
-                        "SELECT schema_version, payload FROM lore_pass_baselines "
-                        "WHERE chunk_id = %s",
-                        (chunk_id,),
-                    )
-                    baseline_row = cur.fetchone()
-                    if baseline_row is None:
-                        refusals.append(f"pass2: chunk {chunk_id} has no baseline")
-                    else:
-                        try:
-                            baseline = parse_pass2_baseline(baseline_row[1])
-                        except (
-                            ValidationError
-                        ) as exc:  # nexus-exception-disposition: fail; reason=a validation failure becomes a staging refusal; safety=the refusal blocks the operation and the staging database is kept  # noqa: E501
-                            refusals.append(f"pass2: chunk {chunk_id}: {exc}")
-                        else:
-                            if baseline_row[0] != baseline.schema_version:
-                                refusals.append(
-                                    f"pass2: chunk {chunk_id} schema columns disagree"
-                                )
-                            if baseline.parent_chunk_id != chunk_id:
-                                refusals.append(
-                                    f"pass2: chunk {chunk_id} parent identity "
-                                    f"mismatch ({baseline.parent_chunk_id})"
-                                )
-                            reason = incompatible_pass2_baseline_reason(
-                                baseline, story_context_settings(settings, story)
-                            )
-                            if reason is not None:
-                                refusals.append(f"pass2: chunk {chunk_id}: {reason}")
+                _validate_pins(story, settings, refusals)
+                _validate_pass2(cur, story, settings, refusals)
             cur.execute(
                 "SELECT 'pg_catalog.english/v1/' || "
                 "current_setting('server_version_num')"
@@ -437,6 +468,18 @@ class SweepReport:
     unowned: list[str] = field(default_factory=list)
 
 
+def _try_sweep_lock(lock_fd: int) -> bool:
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (
+        BlockingIOError
+    ):  # nexus-exception-disposition: safe-continuation; reason=locked; safety=kept
+        # A live process holds the operation lock; its staging database and
+        # record are left untouched.
+        return False
+    return True
+
+
 def sweep_staging(journal_dir: Path | None = None) -> SweepReport:
     """Drop only unlocked journal-derived staging names; report all other names."""
     directory = default_journal_dir() if journal_dir is None else journal_dir
@@ -449,11 +492,7 @@ def sweep_staging(journal_dir: Path | None = None) -> SweepReport:
             continue
         lock_fd = os.open(path.with_suffix(".lock"), os.O_CREAT | os.O_RDWR, 0o600)
         try:
-            try:
-                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except (
-                BlockingIOError
-            ):  # nexus-exception-disposition: safe-continuation; reason=a live process holds the operation lock; safety=its staging database and record are left untouched  # noqa: E501
+            if not _try_sweep_lock(lock_fd):
                 report.in_use.append(record.staging_db)
                 continue
             record = read_operation(path)

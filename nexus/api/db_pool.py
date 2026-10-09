@@ -242,7 +242,9 @@ def get_maintenance_connection(
                 conn.rollback()
             except (
                 Exception
-            ):  # nexus-exception-disposition: fail; reason=rollback failure must not mask the original transaction failure; safety=the original exception propagates and the connection is closed  # noqa: E501
+            ):  # nexus-exception-disposition: fail; reason=rollback; safety=raise
+                # Rollback failure must not mask the original transaction
+                # failure; it propagates and the connection is closed.
                 logger.exception(
                     "Rollback failed for maintenance database %s", target.dbname
                 )
