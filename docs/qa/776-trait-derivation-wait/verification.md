@@ -1,10 +1,7 @@
 # Trait Derivation Wait Tests: Source Checkpoint
 
 This checkpoint contains tests and evidence only. Its product baseline is
-`4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8`. No initial red, green, PostgreSQL,
-Vitest, type check, build, browser capture or fleet survey has run for this
-order. Implementation must wait until the coordinator records the initial red
-against this unchanged product. No push or PR is authorized at this stage.
+`4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8`. Actual initial Python and UI red results on this unchanged product are now recorded below. No green, type check, build, browser capture or fleet survey has run for this order. The original tests-first source checkpoint remains immutable. No push or PR is authorized at this stage.
 
 The frozen order is `temp/orders_2026_10_07/776-S6.md` in the primary checkout.
 The coordinator scheduled this tests-first preparation before the preceding
@@ -113,5 +110,13 @@ service, credential, model or paid provider was used by this preparation.
 At eventual landing: no migration or fleet application, unchanged
 `nexus.toml`, owner UI rebuild due, and new Python must be used at the next
 authorized gateway startup. Services stay stopped until separately authorized.
+
+Codex — GPT-6
+
+## Actual initial red admission
+
+At clean tests-only `6111594741bf2006c9c706afe09b4861b29dc1d7`, the exact worktree import was admitted and Python reported **6 failed, 1 passed, 5 warnings in 11.47s**, with all three isolation guards present. All failures are the intended hidden derivation stage or rejected CLI vocabulary; the stage-less refusal parity passed. The ordinary template reads by clone tooling and unaudited C connection class remain the stated audit limits.
+
+Local `npm --prefix ui ci` succeeded without changing the lock (SHA-256 in `initial-ui-red/results.json`). The two requested Vitest files reported **39 failed, 43 passed in 25.51s**. Failures expose the absent skip helper, rejected derivation failure, six-pip track and missing settled-record disagreement guard, rather than dependency or collection errors. Product, generic WaitScreen and preview code stayed at the tests-first base throughout both runs. Source implementation is now admitted; no passing feature claim is made.
 
 Codex — GPT-6

@@ -1,0 +1,41 @@
+{
+  "head": "6111594741bf2006c9c706afe09b4861b29dc1d7",
+  "lock_before": "0f88785f3d0504d8a6ea5bdc9e82297b49aaf5932cbe4914b5ec3da368c1c4a2",
+  "state": "expected-ui-red-confirmed",
+  "commands": [
+    {
+      "name": "npm-ci",
+      "argv": [
+        "nice",
+        "-n",
+        "15",
+        "npm",
+        "--prefix",
+        "ui",
+        "ci"
+      ],
+      "exit_code": 0,
+      "load": 3.80126953125,
+      "elapsed_seconds": 3.0530140409973683
+    },
+    {
+      "name": "ui-initial-red",
+      "argv": [
+        "nice",
+        "-n",
+        "15",
+        "npm",
+        "--prefix",
+        "ui",
+        "test",
+        "--",
+        "client/src/lib/narrative-api.retrograde.test.ts",
+        "client/src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx"
+      ],
+      "exit_code": 1,
+      "load": 3.80126953125,
+      "elapsed_seconds": 26.02181625000958
+    }
+  ],
+  "review": "39 failed, 43 passed: absent skippedRetrogradeStages, rejected derivation vocabulary, old six-pip track, and missing settled-record disagreement guard. No collection or dependency failure; npm ci succeeded and lock hash/tree remained unchanged."
+}

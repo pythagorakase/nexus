@@ -1,0 +1,457 @@
+"""Prepared serial focused proof only; invoke after the coordinator releases the slot.
+
+This file is private coordination tooling. Authoring it does not record any
+proof result. It never fetches, commits, starts an external gateway, mutates
+owner databases, or runs a whole test partition. Pytest fixtures own their
+disposable databases and listeners. Each phase has a nine-minute command budget.
+"""
+
+from __future__ import annotations
+
+import argparse
+from collections import Counter
+from datetime import datetime, timezone
+import fcntl
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import tarfile
+import time
+from uuid import uuid4
+import xml.etree.ElementTree as ET
+
+COORD = Path(__file__).resolve().parent
+PYTHON = Path('/Users/pythagor/nexus/.venv/bin/python')
+ROOTS = {
+    '803': Path('/Users/pythagor/.codex/worktrees/resume-init-plan/nexus'),
+    '815': Path('/Users/pythagor/.codex/worktrees/resume-review-verbs/nexus'),
+}
+RED_HEAD = '90c331ffc7e66c622e18ff55172e43deffe43acd'
+RED_BASE = '4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8'
+CLEAR = (
+    'NEXUS_GATEWAY_PORT', 'NEXUS_API_URL', 'NEXUS_SLOT', 'NEXUS_HOME',
+    'NEXUS_RUNTIME_CONFIG', 'NEXUS_TEST_RECEIPTS_DIR', 'NEXUS_AUTH',
+    'NEXUS_TEST_PROVIDER_DATABASE', 'NEXUS_TEST_TEMPLATE_DB',
+    'NEXUS_ROUTED_SLOT', 'NEXUS_ROUTED_SLOT_DATABASE',
+    'NEXUS_RUN_LIVE_LLM', 'NEXUS_RUN_CORPUS', 'NEXUS_RUN_SECRET_STORE',
+    'NEXUS_RUN_POSTGRES', 'NEXUS_DBNAME_AUDIT',
+    'PGDATABASE', 'PGSERVICE', 'PGSERVICEFILE', 'PGOPTIONS', 'PGHOST',
+    'PGHOSTADDR', 'PGPORT', 'PGUSER', 'PGPASSWORD', 'PGPASSFILE',
+    'PYTEST_ADDOPTS', 'PYTEST_PLUGINS', 'PYTEST_DISABLE_PLUGIN_AUTOLOAD',
+    'PYTHONHOME', 'PYTHONPATH',
+)
+GUARDS = (
+    'secret-store guard: active; nexus-api: denied',
+    'dbname audit: owner targets: none',
+    'receipt isolation: checkout and user receipts untouched',
+)
+FOCUSED_803 = [
+    'tests/test_runtime/test_init_plan_pg.py',
+    'tests/test_runtime/test_readiness_pg.py',
+    'tests/test_runtime/test_init_plan.py',
+    'tests/test_runtime/test_readiness.py',
+    'tests/test_runtime/test_receipts.py',
+    'tests/test_cli_contract.py', 'tests/test_cli_reference_doc.py',
+    'tests/test_doc_front_matter.py', 'tests/test_reachability.py',
+]
+RED_815 = [
+    'tests/test_cli_contract.py::test_http_command_unanswered_request_exits_four[accept]',
+    'tests/test_cli_contract.py::test_http_handler_error_answer_is_an_api_error[accept-502]',
+    'tests/test_cli_contract.py::test_http_handler_non_json_success_is_an_invalid_response[accept-html]',
+    'tests/test_cli_contract.py::test_accept_sends_slot_and_commit_and_reports_the_chunk',
+    'tests/test_cli_contract.py::test_accept_refuses_an_answer_without_a_chunk_id[not-committed]',
+    'tests/test_cli_contract.py::test_accept_refuses_an_answer_without_a_chunk_id[missing-id]',
+    'tests/test_cli_contract.py::test_accept_refuses_an_answer_without_a_chunk_id[bool-id]',
+    'tests/test_cli_review_pg.py::test_accept_commits_the_draft_and_keeps_the_parent_choice',
+    'tests/test_cli_review_pg.py::test_accept_without_a_draft_is_an_api_error',
+]
+CONTROL_803 = [
+    'tests/test_runtime/test_init_plan.py::test_plan_lists_failed_checks_in_report_order',
+    'tests/test_runtime/test_init_plan_pg.py::test_plan_names_pending_migrations_in_registry_order',
+]
+PG_815 = [
+    'tests/test_cli_review_pg.py', 'tests/test_api/test_acceptance_staging_pg.py',
+    'tests/test_cli_inspect_pg.py', 'tests/test_orrery/test_card_identity.py',
+    'tests/test_connection_lifecycle.py',
+]
+CLI_815 = [
+    'tests/test_cli_contract.py', 'tests/test_cli.py',
+    'tests/test_cli_reference_doc.py', 'tests/test_reachability.py',
+    'tests/test_doc_front_matter.py',
+]
+STATIC_FILES = {
+    '803': [
+        'nexus/cli.py', 'nexus/cli_contract.py', 'nexus/runtime/init_plan.py',
+        'tests/test_runtime/test_init_plan.py', 'tests/test_runtime/test_init_plan_pg.py',
+    ],
+    '815': [
+        'nexus/cli.py', 'nexus/cli_contract.py', 'nexus/config/settings_models.py',
+        'tests/test_cli.py', 'tests/test_cli_contract.py', 'tests/test_cli_review_pg.py',
+    ],
+}
+
+
+def sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+class Proof:
+    """One pinned worktree, fresh private output directory and bounded phase."""
+
+    def __init__(self, args: argparse.Namespace):
+        self.args = args
+        self.lane = args.phase[:3]
+        self.root = ROOTS[self.lane]
+        self.started = time.monotonic()
+        self.plant: bytes | None = None
+        self.plant_path = self.root / 'nexus/runtime/init_plan.py'
+        cleared = set(CLEAR) | {key for key in os.environ if key.startswith('PYTEST_')}
+        self.env = {k: v for k, v in os.environ.items() if k not in cleared}
+        self.env.update(
+            PYTHONPATH=str(self.root), NEXUS_KEYRING_DISABLE='1',
+            NEXUS_TEST_PROVIDER_ONLY='1', PYTHONDONTWRITEBYTECODE='1',
+            PGCONNECT_TIMEOUT='5',
+        )
+        self.check_tree()
+        stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        self.out = COORD / 'focused-proof' / f'{args.phase}-{stamp}-{uuid4().hex[:8]}'
+        self.out.mkdir(parents=True, exist_ok=False)
+        self.data = {
+            'phase': args.phase, 'head': args.expected_head,
+            'origin_main': args.expected_main, 'tree': self.git('rev-parse', 'HEAD^{tree}'),
+            'worktree': str(self.root), 'started_at': stamp, 'state': 'running',
+            'interpreter': str(PYTHON), 'cleared_environment_names': sorted(cleared),
+            'commands': [], 'harness_sha256': sha(Path(__file__).read_bytes()),
+            'evidence_scope': 'focused only; no whole-suite or offline-partition claim',
+        }
+        (self.out / 'runner.py.txt').write_bytes(Path(__file__).read_bytes())
+        self.save()
+
+    def git(self, *args: str) -> str:
+        return subprocess.check_output(
+            ['git', *args], cwd=self.root, text=True, timeout=15,
+        ).strip()
+
+    def check_tree(self) -> None:
+        if self.git('rev-parse', 'HEAD') != self.args.expected_head:
+            raise RuntimeError('Worktree HEAD differs from the approved proof head')
+        if self.git('rev-parse', 'origin/main') != self.args.expected_main:
+            raise RuntimeError('origin/main changed; re-evaluate freshness before proof')
+        status = self.git('status', '--porcelain', '--untracked-files=all')
+        # strip() removes the index-status leading space from this one known edit.
+        expected = 'M nexus/runtime/init_plan.py' if self.plant is not None else ''
+        if status != expected:
+            raise RuntimeError(f'Unexpected worktree changes: {status}')
+        if self.plant is not None and self.plant_path.read_bytes() != self.plant:
+            raise RuntimeError('The planted file changed during the control')
+
+    def save(self) -> None:
+        (self.out / 'results.json').write_text(json.dumps(self.data, indent=2) + '\n')
+
+    def command(self, name: str, argv: list[str], *, postgres=False, allowed=(0,), cwd=None) -> str:
+        self.check_tree()
+        load = os.getloadavg()[0]
+        if load > 24:
+            raise RuntimeError(f'One-minute load {load:.2f} exceeds 24; no command started')
+        remaining = 540 - (time.monotonic() - self.started)
+        if remaining < 5:
+            raise RuntimeError('Phase deadline reached; use retained evidence, do not extend it')
+        command = ['nice', '-n', '15', str(PYTHON), *argv]
+        env = dict(self.env)
+        if cwd is not None:
+            env['PYTHONPATH'] = str(cwd)
+        if postgres:
+            env['NEXUS_RUN_POSTGRES'] = '1'
+        log = self.out / f'{name}.txt'
+        item = {'name': name, 'command': command, 'load': load,
+                'deadline_seconds': remaining, 'postgres': postgres, 'log': log.name,
+                'cwd': str(cwd or self.root), 'pythonpath': env['PYTHONPATH']}
+        self.data['commands'].append(item)
+        self.save()
+        print(f'{name}: {self.args.expected_head} -> {log}', flush=True)
+        with log.open('x') as stream:
+            child = subprocess.Popen(
+                command, cwd=cwd or self.root, env=env, stdout=stream,
+                stderr=subprocess.STDOUT, start_new_session=True,
+            )
+            try:
+                code = child.wait(timeout=remaining)
+            except BaseException:
+                # Only the process group created above belongs to this runner.
+                for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+                    try:
+                        os.killpg(child.pid, signum)
+                    except ProcessLookupError:
+                        break
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        child.poll()  # Reap the leader; children can still hold its group.
+                        try:
+                            os.killpg(child.pid, 0)
+                        except ProcessLookupError:
+                            break
+                        time.sleep(0.1)
+                raise
+        output = log.read_text()
+        item.update(exit_code=code, sha256=sha(log.read_bytes()))
+        self.save()
+        self.check_tree()
+        if code not in allowed:
+            raise RuntimeError(f'{name} exited {code}; inspect {log}')
+        return output
+
+    def pytest(self, name: str, selectors: list[str], *, expected_failures=False) -> None:
+        junit = self.out / f'{name}.xml'
+        output = self.command(
+            name, ['-m', 'pytest', '-q', '-s', '-ra', '-p', 'tests.dbname_audit',
+                   '-p', 'no:cacheprovider', '--junitxml', str(junit),
+                   '-o', 'junit_logging=all', *selectors],
+            postgres=True, allowed=(1,) if expected_failures else (0,),
+        )
+        missing = [line for line in GUARDS if line not in output]
+        if missing:
+            raise RuntimeError(f'Missing pytest guard summaries: {missing}')
+        cases = list(ET.parse(junit).getroot().iter('testcase'))
+        if not cases or any(case.find('error') is not None for case in cases):
+            raise RuntimeError('No completed test cases, or a collection/setup error')
+        if expected_failures:
+            expected = Counter(selector.split('::')[-1] for selector in selectors)
+            actual = Counter(case.attrib['name'] for case in cases)
+            if actual != expected or any(case.find('failure') is None for case in cases):
+                raise RuntimeError('Red/control did not fail exactly the requested cases')
+            failures = [''.join(case.itertext()) for case in cases]
+            if name == 'initial-red':
+                if any('assert 2 ==' not in failure for failure in failures):
+                    raise RuntimeError('A requested red case failed for a reason other than exit 2')
+                if "invalid choice: 'accept'" not in output:
+                    raise RuntimeError('Initial red lacks the actual missing-verb diagnostic')
+            elif any(
+                'slots.migrations_current' not in failure
+                or 'template.migrations_current' not in failure
+                for failure in failures
+            ):
+                raise RuntimeError('Sorting control failed for something other than step order')
+        else:
+            if any(case.find('failure') is not None for case in cases):
+                raise RuntimeError('Unexpected test failure despite zero exit')
+            required = [
+                case for case in cases if case.attrib.get('classname', '').startswith(
+                    'tests.test_runtime.test_init_plan'
+                    if self.lane == '803' else 'tests.test_cli_review_pg'
+                )
+            ]
+            if name in ('focused', 'postgres') and (
+                not required or any(case.find('skipped') is not None for case in required)
+            ):
+                raise RuntimeError('Required new lane tests did not actually run')
+        self.data['commands'][-1]['pytest'] = {
+            'cases': len(cases),
+            'failed': sum(case.find('failure') is not None for case in cases),
+            'skipped': sum(case.find('skipped') is not None for case in cases),
+            'guards': list(GUARDS), 'junit': junit.name,
+        }
+        self.save()
+
+    def clone_check(self) -> None:
+        prefix = 'qa640_803s6' if self.lane == '803' else 'qa640_815_review'
+        # Explicit postgres metadata read only; never import a test fixture or drop a DB.
+        source = (
+            'import json; import psycopg2; from nexus.database import connection_kwargs; '
+            'conn=psycopg2.connect(**connection_kwargs("postgres", '
+            'options="-c default_transaction_read_only=on -c statement_timeout=10000")); '
+            'conn.set_session(readonly=True); cur=conn.cursor(); '
+            'cur.execute("SELECT datname FROM pg_database WHERE starts_with(datname, %s)", '
+            f'({prefix!r},)); rows=cur.fetchall(); print(json.dumps(rows)); '
+            'cur.close(); conn.close(); '
+            'assert not rows, "Disposable lane clones remain; do not claim cleanup"'
+        )
+        self.command('clone-cleanup-read-only', ['-c', source])
+
+    def admission(self) -> None:
+        output = self.command(
+            'import-path', ['-c', 'import json,nexus,sys; '
+             'print(json.dumps({"module":nexus.__file__,"executable":sys.executable}))'],
+        )
+        imported = json.loads(output)
+        if Path(imported['module']).resolve() != self.root / 'nexus/__init__.py':
+            raise RuntimeError(f'Wrong import root: {imported}')
+        if Path(imported['executable']) != PYTHON:
+            raise RuntimeError(f'Wrong interpreter: {imported}')
+        self.data['import_proof'] = imported
+        self.save()
+
+    def require_prior(self, path: Path | None, phase: str, state: str) -> None:
+        if path is None:
+            raise RuntimeError(f'{self.args.phase} needs --prior-results from {phase}')
+        prior = json.loads(path.read_text())
+        if prior['phase'] != phase or prior['state'] != state:
+            raise RuntimeError('Prior evidence did not complete the required phase')
+        required_head = RED_HEAD if self.lane == '815' else self.args.expected_head
+        if prior['head'] != required_head:
+            raise RuntimeError('Prior evidence names a different source head')
+        if self.lane == '803' and prior['origin_main'] != self.args.expected_main:
+            raise RuntimeError('803 green and control use different freshness bases')
+        self.data['prior_results'] = {'path': str(path), 'sha256': sha(path.read_bytes())}
+
+    def control(self) -> None:
+        self.require_prior(self.args.prior_results, '803-focused', 'passed')
+        original = self.plant_path.read_bytes()
+        old = b'for check in report.checks:'
+        new = b'for check in sorted(report.checks, key=lambda check: check.id):'
+        if original.count(old) != 1:
+            raise RuntimeError('Sorting control source no longer has one exact target')
+        planted = original.replace(old, new)
+        self.data['control_hashes'] = {'before': sha(original), 'planted': sha(planted)}
+        self.save()
+        try:
+            self.plant = planted
+            self.plant_path.write_bytes(planted)
+            self.pytest('sorting-control', CONTROL_803, expected_failures=True)
+        finally:
+            self.plant_path.write_bytes(original)
+            self.plant = None
+            restored = self.plant_path.read_bytes()
+            self.data['control_hashes']['restored'] = sha(restored)
+            self.save()
+            if restored != original:
+                raise RuntimeError('Control restoration did not reproduce the original bytes')
+            self.check_tree()
+        self.clone_check()
+
+    def statics(self) -> None:
+        files = STATIC_FILES[self.lane]
+        self.command('black', ['-m', 'black', '--check', *files])
+        self.command('cli-reference', ['-m', 'scripts.render_cli_reference', '--check'])
+        self.command('exceptions', ['-S', 'scripts/check_exception_dispositions.py',
+                                    '--baseline-base-ref', self.args.expected_main])
+        baseline = self.out / 'baseline'
+        tracked = self.git('ls-tree', '-r', '--name-only', self.args.expected_main).splitlines()
+        # Source-only baseline with its own package imports and tool configuration.
+        # No docs/media/model artifacts or worktree registration are copied.
+        paths = [p for p in tracked if (p.endswith('.py') and not p.startswith('docs/')) or p in (
+            'pyproject.toml', 'setup.cfg', '.flake8', 'mypy.ini', 'nexus.toml',
+        )]
+        archived = subprocess.check_output(
+            ['git', 'archive', '--format=tar', self.args.expected_main, '--', *paths],
+            cwd=self.root, timeout=30,
+        )
+        baseline.mkdir()
+        with tarfile.open(fileobj=io.BytesIO(archived)) as archive:
+            for member in archive:
+                if member.isdir():
+                    continue
+                if member.name not in paths or not member.isfile():
+                    raise RuntimeError(f'Unexpected baseline member: {member.name}')
+                target = baseline / member.name
+                if not target.resolve().is_relative_to(baseline.resolve()):
+                    raise RuntimeError('Baseline path escaped its fresh directory')
+                target.parent.mkdir(parents=True, exist_ok=True)
+                stream = archive.extractfile(member)
+                if stream is None:
+                    raise RuntimeError(f'No bytes for baseline member: {member.name}')
+                target.write_bytes(stream.read())
+        prior_files = [relative for relative in files if relative in paths]
+        comparison = {}
+        for tool, options in [('flake8', []), ('mypy', ['--explicit-package-bases'])]:
+            current = self.command(tool + '-current', ['-m', tool, *options, *files], allowed=(0, 1))
+            previous = self.command(tool + '-baseline', ['-m', tool, *options, *prior_files], allowed=(0, 1), cwd=baseline)
+
+            def diagnostics(output: str) -> Counter:
+                entries = []
+                for line in output.splitlines():
+                    line = line.replace(str(baseline) + '/', '').replace(str(self.root) + '/', '')
+                    match = re.match(r'(.+\.py):\d+(?::\d+)?:\s*(.*)', line)
+                    if match:
+                        entries.append(f'{match.group(1)}: {match.group(2)}')
+                return Counter(entries)
+
+            now, before = diagnostics(current), diagnostics(previous)
+            comparison[tool] = {
+                'current': dict(now), 'baseline': dict(before),
+                'unmatched_current': dict(now - before),
+                'note': 'Review changed-line diagnostics and raw logs; this is not an automatic waiver.',
+            }
+        self.data['static_comparison'] = comparison
+        (self.out / 'static-comparison.json').write_text(json.dumps(comparison, indent=2) + '\n')
+
+    def run(self) -> None:
+        self.admission()
+        phase = self.args.phase
+        if phase == '803-focused':
+            self.pytest('focused', FOCUSED_803)
+            self.clone_check()
+        elif phase == '803-control':
+            self.control()
+        elif phase == '815-initial-red':
+            if self.args.expected_head != RED_HEAD:
+                raise RuntimeError('Initial red must use the exact tests-only checkpoint')
+            changed = self.git('diff', '--name-only', RED_BASE, RED_HEAD, '--', 'nexus', 'scripts', 'config', 'docs')
+            if changed:
+                raise RuntimeError(f'Tests-only checkpoint includes product changes: {changed}')
+            self.pytest('initial-red', RED_815, expected_failures=True)
+            self.clone_check()
+        elif phase in ('815-postgres', '815-cli'):
+            self.require_prior(self.args.prior_results, '815-initial-red', 'expected-red-confirmed')
+            if self.args.expected_head == RED_HEAD:
+                raise RuntimeError('Green proof requires a later reviewed implementation head')
+            self.git('merge-base', '--is-ancestor', RED_HEAD, 'HEAD')
+            self.pytest('postgres' if phase.endswith('postgres') else 'cli',
+                        PG_815 if phase.endswith('postgres') else CLI_815)
+            if phase.endswith('postgres'):
+                self.clone_check()
+        else:
+            self.statics()
+        self.check_tree()
+        self.data['state'] = (
+            'static-outputs-recorded-review-required' if phase.endswith('statics')
+            else 'expected-red-confirmed' if phase.endswith('initial-red')
+            else 'sorting-control-confirmed-restored' if phase.endswith('control')
+            else 'passed'
+        )
+        self.data['completed_at'] = datetime.now(timezone.utc).isoformat()
+        self.save()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--phase', required=True, choices=[
+        '803-focused', '803-control', '803-statics', '815-initial-red',
+        '815-postgres', '815-cli', '815-statics',
+    ])
+    parser.add_argument('--expected-head', required=True)
+    parser.add_argument('--expected-main', required=True)
+    parser.add_argument('--prior-results', type=Path)
+    args = parser.parse_args()
+    for value in (args.expected_head, args.expected_main):
+        if not re.fullmatch(r'[0-9a-f]{40}', value):
+            parser.error('Revision pins must be complete lowercase SHA-1 strings')
+    # Cooperative lock for these focused phases; coordinator release is still required.
+    with (COORD / '803-815-focused.lock').open('a') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        processes = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True, timeout=10)
+        if re.search(r'(?:^|\s)(?:\S*/)?pytest(?:\s|$)|\s-m\s+pytest(?:\s|$)', processes, re.M):
+            raise RuntimeError('Another pytest command is active; the heavy slot is not free')
+        proof = Proof(args)
+        try:
+            proof.run()
+        except BaseException as exc:
+            proof.data.update(state='failed', error=f'{type(exc).__name__}: {exc}')
+            proof.save()
+            raise
+        print(proof.out / 'results.json', flush=True)
+    return 0
+
+
+if __name__ == '__main__':
+    # Let the control's finally block restore source on coordinator termination.
+    def interrupt(signum, frame):
+        raise KeyboardInterrupt(f'Runner interrupted by signal {signum}')
+
+    signal.signal(signal.SIGTERM, interrupt)
+    sys.exit(main())
