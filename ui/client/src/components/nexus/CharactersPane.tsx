@@ -12,6 +12,7 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImagePlus, Loader2, User } from "lucide-react";
 import { DecoDivider } from "@/components/deco";
+import { usePlane } from "@/hooks/usePlane";
 import {
   getCharacterImages,
   getCharacters,
@@ -48,6 +49,8 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  // Portrait upload and set-main are operator routes (#824).
+  const operator = usePlane() === "operator";
 
   const { data: characters, isLoading, error } = useQuery<CharacterListEntry[]>({
     queryKey: ["/api/characters", slot],
@@ -164,33 +167,37 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
                 ) : (
                   <User className="char-portrait-empty" size={40} />
                 )}
-                <button
-                  type="button"
-                  className="char-portrait-upload"
-                  aria-label="Upload portrait"
-                  disabled={upload.isPending}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {upload.isPending ? (
-                    <Loader2 className="char-upload-spin" size={22} />
-                  ) : (
-                    <ImagePlus size={22} />
-                  )}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  hidden
-                  data-testid="input-portrait-file"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      upload.mutate({ characterId: selected.id, file });
-                    }
-                    event.target.value = "";
-                  }}
-                />
+                {operator && (
+                  <>
+                    <button
+                      type="button"
+                      className="char-portrait-upload"
+                      aria-label="Upload portrait"
+                      disabled={upload.isPending}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {upload.isPending ? (
+                        <Loader2 className="char-upload-spin" size={22} />
+                      ) : (
+                        <ImagePlus size={22} />
+                      )}
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      hidden
+                      data-testid="input-portrait-file"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          upload.mutate({ characterId: selected.id, file });
+                        }
+                        event.target.value = "";
+                      }}
+                    />
+                  </>
+                )}
               </div>
               <div>
                 <h2 className="char-title" data-testid="text-dossier-name">

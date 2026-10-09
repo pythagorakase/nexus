@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { HEALTH_QUERY_KEY, type HealthPayload } from "@/hooks/usePlane";
 import {
   continueNarrative,
   regenerateNarrative,
@@ -396,12 +397,17 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     invalidateNarrativeQueries, startClock, stopClock,
   ]);
 
-  // Backend connectivity probe - drives the OFFLINE status.
+  // Backend connectivity probe - drives the OFFLINE status and keeps the
+  // serving plane (#824). A failed probe leaves the cached plane unchanged.
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
       try {
-        const res = await fetch("/api/settings", { method: "HEAD" });
+        const res = await fetch("/health");
+        if (res.ok) {
+          const health: HealthPayload = await res.json();
+          if (!cancelled) queryClient.setQueryData(HEALTH_QUERY_KEY, health);
+        }
         if (!cancelled) setBackendReachable(res.ok);
       } catch {
         if (!cancelled) setBackendReachable(false);
@@ -413,7 +419,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [queryClient]);
 
   // Every generation request - continue, retry, regenerate - shares one
   // in-flight guard, the optimistic phase and clock, and the durable

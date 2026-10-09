@@ -120,6 +120,8 @@ export default defineConfig({
       return {
         '/api': { target: gateway, changeOrigin: true },
         '/ws': { target: gateway, ws: true, changeOrigin: true },
+        // The connectivity probe reads the serving plane from /health (#824).
+        '/health': { target: gateway, changeOrigin: true },
         // Runtime upload dirs: the gateway serves the same files Vite
         // mirrors from client/public; proxying keeps one source of truth.
         '/character_portraits': { target: gateway, changeOrigin: true },

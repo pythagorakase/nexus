@@ -6,6 +6,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
+import { HEALTH_QUERY_KEY } from "@/hooks/usePlane";
+import { getQueryFn } from "@/lib/queryClient";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type {
   GenerationSession,
@@ -54,6 +56,11 @@ function renderTopBar(
   });
   queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], status);
   queryClient.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
+  queryClient.setQueryData(HEALTH_QUERY_KEY, {
+    status: "healthy",
+    service: "narrative_api",
+    plane: "operator",
+  });
   // /api/settings intentionally unseeded: the meter must render from knob
   // defaults while settings are in flight.
 
@@ -208,6 +215,66 @@ describe("TopBar memory meter", () => {
     });
 
     expect(screen.getByTestId("mem-text")).toHaveTextContent("— / 48 gb");
+  });
+
+  it("player plane renders no memory meter", async () => {
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    try {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: {
+            queryFn: getQueryFn({ on401: "throw" }),
+            retry: false,
+            staleTime: Infinity,
+          },
+        },
+      });
+      queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], {
+        ...BASE,
+        active: {
+          gguf_path: `${MODELS_DIR}/Hermes-4.3-36B-GGUF/h36-q4.gguf`,
+          ready: true,
+          failed: false,
+        },
+      });
+      queryClient.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
+      queryClient.setQueryData(HEALTH_QUERY_KEY, {
+        status: "healthy",
+        service: "narrative_api",
+        plane: "player",
+      });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <TopBar
+            slot={1}
+            characterName={null}
+            skaldStatus="READY"
+            failedGeneration={null}
+            toastedFailureSessionId={null}
+            frontierClock={null}
+          />
+        </QueryClientProvider>,
+      );
+      // Let any query the bar mounts reach the stub before asserting.
+      await act(async () => {
+        await new Promise((done) => setTimeout(done, 0));
+      });
+
+      expect(screen.getByTestId("nexus-topbar")).toBeInTheDocument();
+      expect(screen.queryByTestId("mem-meter")).not.toBeInTheDocument();
+      const urls = fetchStub.mock.calls.map((call) => String((call as unknown[])[0]));
+      expect(urls).not.toContain("/api/settings");
+      expect(urls).not.toContain("/api/local-models/status");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

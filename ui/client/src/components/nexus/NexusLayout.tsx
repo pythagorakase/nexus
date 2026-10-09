@@ -18,6 +18,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useDeveloperMode } from "@/contexts/DeveloperModeContext";
 import { useNarrativeEngine } from "@/hooks/useNarrativeEngine";
 import { useNarrowShell } from "@/hooks/useNarrowShell";
+import { usePlane } from "@/hooks/usePlane";
 import { getUserCharacter } from "@/lib/narrative-api";
 import { getActiveSlot } from "@/lib/active-slot";
 import type { SettingsPayload } from "@/types/settings";
@@ -67,6 +68,7 @@ export function NexusLayout() {
 
   const { data: settings } = useQuery<SettingsPayload>({
     queryKey: ["/api/settings"],
+    enabled: usePlane() === "operator",
   });
   const backstagePollBusyMs =
     settings?.orrery?.dashboard?.backstage_poll_busy_ms ?? 2000;

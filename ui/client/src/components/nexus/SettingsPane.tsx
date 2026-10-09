@@ -13,6 +13,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useDeveloperMode } from "@/contexts/DeveloperModeContext";
 import { KEEPERS, useFonts } from "@/contexts/FontContext";
 import { useSettingsQuery, useStorySettings, useStorySettingsMutation } from "@/hooks/useSettings";
+import { usePlane } from "@/hooks/usePlane";
 import {
   useSecretsQuery,
   useSetSecret,
@@ -62,6 +63,9 @@ const SECTION_INDEX = [
 ] as const;
 
 type SectionId = (typeof SECTION_INDEX)[number]["id"];
+
+/** Sections whose routes the player plane serves (#824). */
+const PLAYER_SECTION_IDS: ReadonlySet<SectionId> = new Set<SectionId>(["theme", "type", "pwa"]);
 
 const THEME_IDS: ThemeId[] = ["veil", "gilded", "vector"];
 
@@ -770,9 +774,15 @@ function SectionRail({
 }
 
 export function SettingsPane({ slot = null }: { slot?: number | null }) {
+  const plane = usePlane();
   const { data: settings, error: settingsError } = useSettingsQuery();
-  const story = useStorySettings(slot);
+  const story = useStorySettings(plane === "operator" ? slot : null);
   const error = settingsError ?? story.error;
+
+  // The player plane serves only preferences: no defaults, pins or keys.
+  if (plane === "player") {
+    return <SettingsConsole settings={null} slot={slot} />;
+  }
 
   if (error) {
     return (
@@ -806,16 +816,24 @@ export function SettingsPane({ slot = null }: { slot?: number | null }) {
   return <SettingsConsole settings={displayed} slot={slot} />;
 }
 
-function SettingsConsole({ settings, slot }: { settings: SettingsPayload; slot: number | null }) {
+function SettingsConsole({
+  settings,
+  slot,
+}: {
+  settings: SettingsPayload | null;
+  slot: number | null;
+}) {
   const { theme, setTheme, saveError: themeSaveError } = useTheme();
   const { gateOpen } = useDeveloperMode();
   const mutation = useStorySettingsMutation(slot);
   const sections = useMemo(
     () =>
-      gateOpen
-        ? SECTION_INDEX
-        : SECTION_INDEX.filter((section) => section.id !== "advanced"),
-    [gateOpen],
+      SECTION_INDEX.filter(
+        ({ id }) =>
+          (gateOpen || id !== "advanced") &&
+          (settings !== null || PLAYER_SECTION_IDS.has(id)),
+      ),
+    [gateOpen, settings],
   );
 
   const [active, setActive] = useState<SectionId>("theme");
@@ -866,13 +884,13 @@ function SettingsConsole({ settings, slot }: { settings: SettingsPayload; slot: 
           saveError={themeSaveError}
         />
         <TypographySection />
-        {slot !== null && <ModelSection
+        {settings !== null && slot !== null && <ModelSection
           settings={settings}
           onPickSkald={(id) => mutation.mutate({ skald_model: id })}
           onPickGaia={(id) => mutation.mutate({ gaia_model: id })}
         />}
-        <KeysSection slot={slot} />
-        {slot !== null && <ContextLengthSection
+        {settings !== null && <KeysSection slot={slot} />}
+        {settings !== null && slot !== null && <ContextLengthSection
           settings={settings}
           onCommit={(value) => mutation.mutate({ apex_context_window: value })}
         />}

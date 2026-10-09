@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useSettingsMutation, useSettingsQuery } from '@/hooks/useSettings';
+import { usePreferencesQuery, useSettingsMutation } from '@/hooks/useSettings';
 import { applyThemeIcons } from '@/lib/themeIcons';
 
 export type Theme = 'gilded' | 'vector' | 'veil';
@@ -38,9 +38,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return THEMES.includes(stored as Theme) ? (stored as Theme) : DEFAULT_THEME;
   });
 
-  const { data: settings } = useSettingsQuery();
   const mutation = useSettingsMutation();
-  const serverTheme = settings?.ui?.theme;
+  const serverTheme = usePreferencesQuery().data?.theme;
 
   // Adopt the server-persisted theme when it arrives or changes. Because
   // setTheme() updates the query cache optimistically, this also reverts the

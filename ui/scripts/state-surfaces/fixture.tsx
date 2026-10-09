@@ -18,13 +18,14 @@ history.replaceState = (data, unused, url) => replace(data, unused,
   new URL(`?tab=${new URL(String(url), 'http://fixture').searchParams.get('tab') ?? 'narrative'}`, location.href));
 const knobs = { poll_idle_ms: 1e8, poll_busy_ms: 1e8, download_poll_ms: 1e8, delete_arm_ms: 60000 };
 let currentClient: QueryClient;
+const health = { status: 'healthy', service: 'narrative_api', plane: 'operator' };
 let keyRows: any[] = [];
 (window as any).fixtureTransport = [];
 // Only fixture records are served; no request leaves the browser and no key/store is consulted.
 window.fetch = async (input, init) => {
   const url = String(input), method = init?.method ?? 'GET';
   (window as any).fixtureTransport.push({ method, url });
-  if (method === 'HEAD' && url === '/api/settings') return new Response(null);
+  if (method === 'GET' && url === '/health') return Response.json(health);
   if (method === 'GET' && url === '/api/narrative/active?slot=4') return Response.json(null);
   if (method === 'GET' && url === '/api/secrets/status?slot=4') return Response.json(keyRows);
   if (method === 'POST' && /^\/api\/secrets\/verified\/verify$/.test(url))
@@ -40,13 +41,14 @@ function cache(theme: string, mode: string, terrain: string, over: boolean, need
   const settings = { ui: { theme, local_models: knobs, fonts: KEEPERS }, local_models: { model: 'fixture-local' }, apex: { model: 'fixture-other' },
     settings_meta: { models: [{ id: 'fixture-local', provider: LOCAL_PROVIDER, label: 'Fixture' }], apex_allowed_providers: [LOCAL_PROVIDER] } };
   c.setQueryData(['/api/settings'], settings);
+  c.setQueryData(['/health'], health);
   c.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
   c.setQueryData(['/api/slot/4/settings'], { skald_model: 'fixture-other', gaia_model: null, apex_context_window: 8192 });
   c.setQueryData(['/api/user-character', 4], null);
   const generation = { poll_interval_seconds: 1e8, request_timeout_seconds: 10 };
   c.setQueryData(['/api/slot/state', 4], { narrative_generation: generation, frontier_clock: null });
   c.setQueryData(['/api/preferences', 'narrative-recovery'], { narrative_generation: generation });
-  c.setQueryData(['/api/preferences'], { theme });
+  c.setQueryData(['/api/preferences'], { theme, fonts: KEEPERS, wizard_model: 'fixture-other' });
   c.setQueryData(['/api/dev/backstage/health'], false);
   c.setQueryData(['/api/local-models/status'], status(mode === 'memory', over));
   c.setQueryData(['/api/local-models/download'], { state: 'idle' });

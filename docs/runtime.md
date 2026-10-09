@@ -152,7 +152,7 @@ model.
 | Plane | Serves |
 |---|---|
 | Player | Liveness (`/health`, `/status`), reading routes, narrative turns (continue, retry, regenerate, approve, select-choice, undo, discarding the pending turn), the new-story wizard, preferences, `/ws/narrative`, the upload mounts, and the app shell |
-| Operator | The player plane plus secrets, `/api/settings`, local models, diagnostics (`/runtime/status`, `/api/dev/*`, the OpenAPI schema and docs), slot lock, unlock, and model pins, `setup/reset`, `slot/select`, and asset uploads, main-image changes, and deletes |
+| Operator | The player plane plus secrets, `/api/settings`, local models, diagnostics (`/runtime/status`, `/api/dev/*`, the OpenAPI schema and docs), slot lock, unlock, and model pins, `setup/reset`, and asset uploads, main-image changes, and deletes |
 
 The player plane can overwrite any unlocked slot through the wizard, occupied
 or not; the slot lock is the only guard. `setup/start` discards the slot's
@@ -180,10 +180,15 @@ also fails on entries no route uses.
 The gateway still serves the whole runtime on one listener. Binding the
 operator projection to loopback or a Unix socket, pointing the Cloudflare
 tunnel at the player projection, and routing the Tauri shell to the operator
-projection is the next slice, after the runtime home (#820). Before the
-tunnel moves, the player client's reads of `/api/settings` (including its
-`HEAD` connectivity probe) and `/api/local-models/status` need player-plane
-sources.
+projection is the next slice, after the runtime home (#820).
+`GET /health` reports the plane of the app that served it (`"plane": "player"`
+or `"operator"`); the unprojected gateway reports `operator`, because it serves
+every route. The client's connectivity probe reads `/health` and keeps the
+plane. On the player plane the client sends no operator request and renders no
+operator-backed control (API keys, model and context-length settings, the
+memory meter, developer mode, slot clearing, overwriting an occupied slot,
+portrait upload); theme and fonts come from `GET /api/preferences`. The
+client's plane only shapes the interface; the projections enforce the planes.
 
 ## Profiles
 
@@ -735,7 +740,7 @@ on a command line or in a file on the host.
 ## Development Workflows (unchanged)
 
 - `npm --prefix ui run dev` — Vite dev server with HMR on :5001, proxying
-  `/api`, `/ws`, and uploads to the gateway on :8002. Start the gateway
+  `/api`, `/ws`, `/health`, and uploads to the gateway on :8002. Start the gateway
   with `nexus up` (or point Vite at an `external`-profile stack).
 - `npm --prefix ui run build` — produces `ui/dist/public`, which the
   gateway serves statically. `nexus up` warns if the build is missing.

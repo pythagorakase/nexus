@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { getSlotVisuals, readBoundSlot } from "./slotVisualState";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { usePlane } from "@/hooks/usePlane";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -62,6 +63,8 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
     // Currently-bound story slot (localStorage 'activeSlot') — gets the beacon.
     const [boundSlot] = useState<number | null>(readBoundSlot);
     const queryClient = useQueryClient();
+    // Clearing and overwriting an occupied slot are operator powers (#824).
+    const operator = usePlane() === "operator";
 
     // Fetch status of all 5 slots
     const { data: slots = [], isLoading } = useQuery<SlotData[]>({
@@ -121,6 +124,8 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
             return;
         }
         if (slotData.is_active) {
+            // The player plane starts only empty slots.
+            if (!operator) return;
             // Initializing an occupied slot destroys its story; gate it
             // behind an explicit confirmation. Mouse and keyboard activation
             // both route through here, so both paths are gated.
@@ -248,16 +253,18 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                         </div>
                                     ) : slotData.is_active ? (
                                         <>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                aria-label={`Clear Memory Slot ${slotData.slot}`}
-                                                onClick={(e) => handleReset(e, slotData)}
-                                                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 font-mono text-xs"
-                                            >
-                                                <Trash2 className="h-3 w-3 mr-2" />
-                                                CLEAR
-                                            </Button>
+                                            {operator && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    aria-label={`Clear Memory Slot ${slotData.slot}`}
+                                                    onClick={(e) => handleReset(e, slotData)}
+                                                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 font-mono text-xs"
+                                                >
+                                                    <Trash2 className="h-3 w-3 mr-2" />
+                                                    CLEAR
+                                                </Button>
+                                            )}
                                             <Button
                                                 variant="default"
                                                 aria-label={`Resume story in Memory Slot ${slotData.slot}`}

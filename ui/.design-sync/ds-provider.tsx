@@ -1,9 +1,10 @@
 // DesignThemeRoot — the preview wrapper for design-sync cards (cfg.provider).
 // Mounts the app's real providers so components that call useTheme/useFonts/
 // useSettings render instead of throwing, and applies the Veil (.dark) theme +
-// fonts. The fetch stub below mocks /api/settings (theme echoes each preview's
-// localStorage), /api/secrets/status (API-key rows), and the character endpoints;
-// retries are off so the render settles immediately. Exported through the Vite lib
+// fonts. The fetch stub below mocks /health (the operator plane, so operator
+// controls render), /api/settings and /api/preferences (theme echoes each
+// preview's localStorage), /api/secrets/status (API-key rows), and the character
+// endpoints; retries are off so the render settles immediately. Exported through the Vite lib
 // entry → window.NexusIris.DesignThemeRoot.
 import React from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -13,9 +14,10 @@ import { FontProvider } from "@/contexts/FontContext";
 
 // Headless preview fetch stub: feed the data-bound panes realistic mock data so
 // they render populated instead of their empty state. GET-only — mutations fall
-// through to the real fetch. /api/settings is mocked too (it drives the Theme/Font
-// providers), but its theme echoes each preview's own localStorage, so deco/splash
-// cards keep their theme and Veil cards stay Veil; everything else passes through.
+// through to the real fetch. /health answers the operator plane. /api/settings and
+// /api/preferences are mocked too (preferences drive the Theme/Font providers), but
+// their theme echoes each preview's own localStorage, so deco/splash cards keep
+// their theme and Veil cards stay Veil; everything else passes through.
 if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
   (window as any).__dsFetchStubbed = true;
   const realFetch = window.fetch.bind(window);
@@ -130,6 +132,13 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
     const method = (init?.method ?? "GET").toUpperCase();
     const url = typeof input === "string" ? input : input?.url ?? "";
     if (method === "GET") {
+      if (url === "/health") {
+        return Promise.resolve(json({ status: "healthy", service: "narrative_api", plane: "operator" }));
+      }
+      if (url.includes("/api/preferences")) {
+        const theme = window.localStorage.getItem("nexus-theme") || "veil";
+        return Promise.resolve(json({ theme, fonts: SETTINGS(theme).ui.fonts, wizard_model: "writer-model" }));
+      }
       if (url.includes("/api/secrets/status")) return Promise.resolve(json(SECRETS));
       if (url.includes("/api/config/ui")) {
         return new Response(JSON.stringify({ announcer: { hold_ms: 5000 } }), {
