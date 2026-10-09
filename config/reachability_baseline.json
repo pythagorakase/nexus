@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#803 S6: nexus/runtime/init_plan.py is imported by nexus/cli.py (run_init), so it joins production_reachable",
+  "reason": "Combined #803 init planning and #823 journaled staging production closure; final assembled AST admission remains pending",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -133,6 +133,7 @@
     "nexus/agents/orrery/reciprocal.py",
     "nexus/agents/orrery/reconstruction.py",
     "nexus/agents/orrery/relationship_provenance.py",
+    "nexus/agents/orrery/replay.py",
     "nexus/agents/orrery/resolver.py",
     "nexus/agents/orrery/retrograde_embedding.py",
     "nexus/agents/orrery/retrograde_expansion.py",
@@ -264,6 +265,7 @@
     "nexus/runtime/readiness.py",
     "nexus/runtime/receipts.py",
     "nexus/runtime/remote_auth.py",
+    "nexus/runtime/slot_operations.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",
     "nexus/telemetry/attempt_manifest.py",
@@ -283,6 +285,8 @@
     "scripts/database_targets.py",
     "scripts/migrate.py",
     "scripts/new_story_setup.py",
+    "scripts/rebuild_memory_idf.py",
+    "scripts/replay_state.py",
     "scripts/summarize_narrative.py"
   ]
 }

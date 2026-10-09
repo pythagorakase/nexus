@@ -16,6 +16,8 @@ import logging
 import threading
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
 
 import psycopg2
@@ -209,6 +211,46 @@ def get_connection(
                 conn_pool.putconn(conn, close=discard)
                 if not discard and not conn.closed:
                     _idle_since[conn] = time.monotonic()
+
+
+@dataclass(frozen=True)
+class MaintenanceTarget:
+    """One journal-authorized staging name, separate from gameplay slot admission."""
+
+    dbname: str
+    operation_id: str
+    journal_path: Path
+
+
+@contextmanager
+def get_maintenance_connection(
+    target: MaintenanceTarget, dict_cursor: bool = False
+) -> Iterator[Any]:
+    """Revalidate durable staging authorization and own one unpooled transaction."""
+    from nexus.runtime.slot_operations import require_authorized
+
+    require_authorized(target)
+    conn = psycopg2.connect(**connection_kwargs(target.dbname))
+    try:
+        if dict_cursor:
+            conn.cursor_factory = RealDictCursor
+        try:
+            yield conn
+            commit_transaction(conn)
+        except BaseException:
+            try:
+                conn.rollback()
+            except (
+                Exception
+            ):  # nexus-exception-disposition: fail; reason=rollback; safety=raise
+                # Rollback failure must not mask the original transaction
+                # failure; it propagates and the connection is closed.
+                logger.exception(
+                    "Rollback failed for maintenance database %s", target.dbname
+                )
+            raise
+    finally:
+        conn.close()
 
 
 def close_all_pools() -> None:

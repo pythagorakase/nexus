@@ -413,8 +413,6 @@
     "scripts/migrate_chunk_character_references.py|resolve_unknown_character|9508b8aab8d58709d5f0a8b76f4f0fcda8294b507c6c1463d177870b43075483|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "scripts/new_story_setup.py|<module>|59e1a4ba7492a02efae120e4085d91ec13dd0b9602208de19b2ad7d95987142b|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "scripts/new_story_setup.py|_copy_template_data|bf33d5d59a3b5a5379a1c583da99df80bc6e68a07c0f0abdad1c379b5cd6d625|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
-    "scripts/new_story_setup.py|clone_slot_with_data|bf33d5d59a3b5a5379a1c583da99df80bc6e68a07c0f0abdad1c379b5cd6d625|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
-    "scripts/new_story_setup.py|initialize_slot_database|bf33d5d59a3b5a5379a1c583da99df80bc6e68a07c0f0abdad1c379b5cd6d625|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "scripts/process_characters.py|<module>|a7b9da76e3ada305c03d47b81a8ff50bb1817abbc544d8214ab19dd5eff62131|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "scripts/process_characters.py|add_aliases_to_character|335929d829463ccd58abd20aced0ff7fef766072037198da41626613cc6b88b5|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",
     "scripts/process_characters.py|add_aliases_to_character|ae4dc79623c5ab7cff43625fdb7ffa9d3d4b98c0d34454f83c091ad61bddafeb|1": "Legacy swallowing handler inventoried by 806-S4; unapproved fallback defaults to fail/delete.",

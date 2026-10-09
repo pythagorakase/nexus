@@ -73,11 +73,11 @@ ALLOWLIST: Dict[tuple[str, str, str], str] = {
     ("scripts/migrate.py", "ensure_tracking_table", "CREATE TABLE"): (
         "The migration runner owns its schema_migrations tracking table."
     ),
-    ("scripts/new_story_setup.py", "initialize_slot_database", "CREATE EXTENSION"): (
+    ("scripts/new_story_setup.py", "_build_from_template", "CREATE EXTENSION"): (
         "Slot initialization installs vector and postgis before the template "
         "schema restores (Decision 810-Q9)."
     ),
-    ("scripts/new_story_setup.py", "clone_slot_with_data", "CREATE EXTENSION"): (
+    ("scripts/new_story_setup.py", "_restore_clone", "CREATE EXTENSION"): (
         "Slot cloning installs vector and postgis before the source restores "
         "(Decision 810-Q9)."
     ),
@@ -314,7 +314,7 @@ def test_allowlist_is_scoped_to_its_function(tmp_path: Path) -> None:
         tmp_path,
         "scripts/new_story_setup.py",
         """
-        def initialize_slot_database():
+        def _build_from_template():
             run("CREATE EXTENSION IF NOT EXISTS vector;")
 
 
@@ -323,7 +323,7 @@ def test_allowlist_is_scoped_to_its_function(tmp_path: Path) -> None:
         """,
     )
     assert [(f.scope, f.statement) for f in findings] == [
-        ("initialize_slot_database", "CREATE EXTENSION"),
+        ("_build_from_template", "CREATE EXTENSION"),
         ("create_assets_tables", "CREATE TABLE"),
     ]
     assert [(f.scope, f.statement) for f in unowned(findings)] == [

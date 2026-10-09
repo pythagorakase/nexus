@@ -31,6 +31,7 @@ import psycopg2
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from nexus.api.db_pool import MaintenanceTarget  # noqa: E402
 from nexus.database import connection_kwargs, maintenance_connection  # noqa: E402
 from scripts.database_targets import evaluation_dbname  # noqa: E402
 
@@ -371,6 +372,8 @@ def migrate_database(
     skip_locked: bool = True,
     write_locked_slot: bool = False,
     migrations_dir: Optional[Path] = None,
+    *,
+    maintenance_target: MaintenanceTarget | None = None,
 ) -> Tuple[int, int]:
     """
     Apply pending migrations to a single database.
@@ -389,6 +392,8 @@ def migrate_database(
     unallowlisted migration fails without leaving a tracking table or bootstrap
     stamps behind.
     """
+    if maintenance_target is not None and maintenance_target.dbname != dbname:
+        raise ValueError("Maintenance target does not match migration database")
     all_migrations = discover_migrations(migrations_dir)
 
     if not db_exists(dbname):
@@ -401,6 +406,10 @@ def migrate_database(
 
     LOG.info("Migrating %s...", dbname)
 
+    if maintenance_target is not None:
+        from nexus.runtime.slot_operations import require_authorized
+
+        require_authorized(maintenance_target)
     conn = maintenance_connection(
         dbname, write_locked_slot=write_locked_slot, operation="migrate"
     )
@@ -453,6 +462,10 @@ def migrate_database(
     # Bootstrap owns its connection; every pending migration gets a new backend.
     applied_count = 0
     for version, name, path in pending:
+        if maintenance_target is not None:
+            from nexus.runtime.slot_operations import require_authorized
+
+            require_authorized(maintenance_target)
         conn = maintenance_connection(
             dbname, write_locked_slot=write_locked_slot, operation="migrate"
         )
