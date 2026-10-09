@@ -26,7 +26,6 @@ from nexus.agents.lore.lore import LORE
 from nexus.agents.memnon.utils.artifact_manifest import run_models_command
 from nexus.agents.memnon.utils.embedding_manager import load_local_model
 from nexus.api import asset_endpoints, local_inference, static_ui
-from nexus.api.conversations import wizard_threads_dir
 from nexus.api.route_capabilities import ROUTE_CAPABILITIES
 from nexus.api.settings_endpoints import _read_raw_settings
 from nexus.config import load_settings
@@ -549,20 +548,6 @@ def test_model_readers_use_the_anchored_path_from_any_cwd(
     with pytest.raises(RuntimeError) as raised:
         load_local_model(name, model.model_dump())
     assert f"local_path {home / 'models/embedder'} does not exist" in str(raised.value)
-
-
-@pytest.mark.parametrize("use_home", [False, True])
-def test_wizard_threads_resolve_under_the_state_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, use_home: bool
-) -> None:
-    """Wizard files use the base state directory independently of cwd and port."""
-    root = tmp_path / "home" if use_home else REPO_ROOT
-    if use_home:
-        _write_config(root / "nexus.toml")
-        monkeypatch.setenv(HOME_ENV, str(root))
-    monkeypatch.setenv(GATEWAY_PORT_ENV, "8931")
-    monkeypatch.chdir(tmp_path)
-    assert wizard_threads_dir(load_settings()) == root / ".nexus/runtime/wizard_threads"
 
 
 # ---------------------------------------------------------------------------

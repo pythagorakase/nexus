@@ -1,0 +1,46 @@
+{
+  "status": "Pending execution; source-expanded frozen order, not a measured result.",
+  "postgres": [
+    "tests/test_api/test_conversations.py",
+    "tests/test_api/test_wizard_chat_conflicts.py",
+    "tests/test_api/test_wizard_chat_validation.py",
+    "tests/test_api/test_wizard_confirmation.py",
+    "tests/test_api/test_wizard_confirmation_pg.py",
+    "tests/test_api/test_wizard_messages_migration_pg.py",
+    "tests/test_api/test_wizard_model_resolution.py",
+    "tests/test_api/test_wizard_model_switch.py",
+    "tests/test_api/test_wizard_resume.py",
+    "tests/test_api/test_wizard_weird_level.py",
+    "tests/test_api/test_set_designer_failure.py",
+    "tests/test_api/test_slot_settings.py",
+    "tests/test_api/test_slot_mutation_guard.py",
+    "tests/test_api/test_genesis_ledger_pg.py",
+    "tests/test_api/test_provider_guard_consumers.py",
+    "tests/test_config/test_provider_guard.py",
+    "tests/test_new_story_cache.py",
+    "tests/test_wizard_opening_presence_pg.py",
+    "tests/test_cli_wizard_confirmation.py",
+    "tests/test_new_story_setup.py",
+    "tests/test_schema_documentation_pg.py",
+    "tests/test_orrery/test_migrate.py",
+    "tests/test_pg_disposable_target.py",
+    "tests/test_owner_target_guard.py",
+    "tests/test_orrery/test_card_identity.py",
+    "tests/test_connection_lifecycle.py"
+  ],
+  "additional_consumers": [
+    "tests/test_runtime_home.py",
+    "tests/test_reachability.py",
+    "tests/test_doc_front_matter.py"
+  ],
+  "restoring_controls": [
+    {
+      "plant": "Split record_wizard_reply into two _cache_connection transactions",
+      "selector": "tests/test_api/test_wizard_confirmation_pg.py::test_reply_and_choices_commit_together"
+    },
+    {
+      "plant": "Remove migration 150 cache DELETE",
+      "selector": "tests/test_api/test_wizard_messages_migration_pg.py::test_migration_150_discards_only_hosted_thread_wizards"
+    }
+  ]
+}

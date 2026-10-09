@@ -1,17 +1,16 @@
 """Resume must restore the persisted conversation without starting a new one."""
 
-from contextlib import nullcontext
+from contextlib import closing
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from typing import Any
-from unittest.mock import Mock
+from typing import Any, Literal
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic_ai.tools import DeferredToolRequests
 
-from nexus.api import setup_endpoints, slot_state, wizard_agent, wizard_chat
+from nexus.api import new_story_cache, setup_endpoints, wizard_chat
 from nexus.api.conversations import ConversationsClient
 from nexus.api.narrative_schemas import ChatRequest
 from nexus.api.new_story_cache import (
@@ -23,89 +22,87 @@ from nexus.api.new_story_cache import (
     _row_to_cache,
 )
 from nexus.api.new_story_schemas import WizardResponse
-from nexus.api.slot_state import SlotState, WizardState
+from nexus.api.wizard_transcript import MessageOrigin
+from nexus.api.config_utils import get_wizard_history_limit
+from tests.pg_fixtures import connect
+
+
+pytestmark = pytest.mark.requires_postgres
 
 
 @pytest.fixture
-def resume_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """Mount the production resume route with isolated storage boundaries."""
-    monkeypatch.setattr(
-        setup_endpoints, "get_slot_model", lambda *a, **k: "saved-model"
-    )
+def resume_client() -> TestClient:
+    """Mount the production resume route on the routed disposable slot."""
     app = FastAPI()
     app.include_router(setup_endpoints.router)
     return TestClient(app)
 
 
-def test_resume_restores_all_messages_choices_and_drafts(
-    monkeypatch: pytest.MonkeyPatch, resume_client: TestClient
+def test_resume_returns_full_transcript(
+    offline_gate_db: str, seed_wizard_cache, resume_client: TestClient
 ) -> None:
-    """The resume contract adapts normalized cache data and keeps older turns."""
-    cache = _row_to_cache(
-        {
-            "thread_id": "conv_saved",
-            "target_slot": 4,
-            "setting_genre": "folklore",
-            "setting_confirmed": True,
-            "setting_world_name": "The Waking Wood",
-            "choice_object": {
-                "presented": ["A wanderer", "A keeper"],
-                "selected": None,
-            },
-        }
+    """The UI restores every turn and projects controls out without a limit."""
+    cache = seed_wizard_cache(
+        _row_to_cache(
+            {
+                "setting_genre": "fantasy",
+                "setting_confirmed": True,
+                "setting_world_name": "The Waking Wood",
+                "choice_object": {
+                    "presented": ["A wanderer", "A keeper"],
+                    "selected": None,
+                },
+            }
+        )
     )
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    messages = [
-        {"role": "assistant" if i % 2 == 0 else "user", "content": f"Turn {i}"}
-        for i in range(27)
-    ]
-    storage = SimpleNamespace(
-        list_messages=Mock(return_value=list(reversed(messages))),
-        client=SimpleNamespace(close=Mock()),
-    )
-    factory = Mock(return_value=storage)
-    monkeypatch.setattr(setup_endpoints, "ConversationsClient", factory)
-
+    storage = ConversationsClient(offline_gate_db)
+    expected = []
+    for i in range(get_wizard_history_limit() + 3):
+        role: Literal["user", "assistant"] = "assistant" if i % 2 == 0 else "user"
+        origin: MessageOrigin = "wizard_control" if i == 1 else "user"
+        message = {"role": role, "content": f"Turn {i}"}
+        storage.add_message(
+            cache.thread_id,
+            role,
+            message["content"],
+            origin=origin if role == "user" else None,
+        )
+        if i != 1:
+            expected.append(message)
     response = resume_client.get("/api/story/new/setup/resume?slot=4")
-
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     data = response.json()
-    assert data["messages"] == messages
+    assert data["messages"] == expected
     assert data["choices"] == ["A wanderer", "A keeper"]
-    assert data["thread_id"] == "conv_saved"
+    assert data["thread_id"] == cache.thread_id
     assert data["current_phase"] == "character"
     assert data["setting_draft"]["world_name"] == "The Waking Wood"
     assert data["character_draft"] is None
-    factory.assert_called_once_with(model="saved-model")
-    storage.list_messages.assert_called_once_with("conv_saved", limit=0)
-    storage.client.close.assert_called_once_with()
+    assert (
+        len(storage.list_messages(cache.thread_id, limit=0))
+        == get_wizard_history_limit() + 3
+    )
 
 
 def test_resume_does_not_hide_history_failure(
-    monkeypatch: pytest.MonkeyPatch, resume_client: TestClient
+    offline_gate_db: str, seed_wizard_cache, resume_client: TestClient
 ) -> None:
-    """An unavailable conversation must not appear as a successful empty resume."""
-    monkeypatch.setattr(
-        setup_endpoints,
-        "resume_setup",
-        lambda slot: WizardCache(thread_id="conv_saved"),
-    )
-    storage = SimpleNamespace(
-        list_messages=Mock(side_effect=RuntimeError("Conversation unavailable")),
-        client=SimpleNamespace(close=Mock()),
-    )
-    monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
-
+    """An unavailable real transcript table cannot become an empty success."""
+    seed_wizard_cache(WizardCache())
+    with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "ALTER TABLE assets.wizard_messages RENAME TO wizard_messages_unavailable"
+        )
     response = resume_client.get("/api/story/new/setup/resume?slot=4")
-
     assert response.status_code == 500
-    assert response.json()["detail"] == "Conversation unavailable"
-    storage.client.close.assert_called_once_with()
+    assert (
+        'relation "assets.wizard_messages" does not exist' in response.json()["detail"]
+    )
 
 
 @pytest.mark.parametrize("traits_confirmed", [False, True])
 def test_resume_restores_partial_character(
-    monkeypatch: pytest.MonkeyPatch,
+    seed_wizard_cache,
     resume_client: TestClient,
     traits_confirmed: bool,
 ) -> None:
@@ -113,20 +110,15 @@ def test_resume_restores_partial_character(
     cache = WizardCache(
         thread_id="conv_saved",
         setting_confirmed=True,
-        setting=SettingData(genre="folklore"),
+        setting=SettingData(genre="fantasy"),
         character=CharacterData(
             name="Rowan",
             archetype="Keeper",
             traits_confirmed=traits_confirmed,
-            suggested_traits=[SuggestedTrait("duty", "The gate must stay closed")],
+            suggested_traits=[SuggestedTrait("allies", "The gate must stay closed")],
         ),
     )
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(
-        setup_endpoints,
-        "ConversationsClient",
-        lambda model: SimpleNamespace(list_messages=lambda *a, **k: [], client=None),
-    )
+    cache = seed_wizard_cache(cache)
     response = resume_client.get("/api/story/new/setup/resume?slot=4")
     assert response.status_code == 200
     data = response.json()
@@ -134,13 +126,12 @@ def test_resume_restores_partial_character(
     assert data["character_draft"] is None
     state = data["character_state"]
     assert state["concept"]["name"] == "Rowan"
-    assert state["concept"]["suggested_traits"] == ["duty"]
+    assert state["concept"]["suggested_traits"] == ["allies"]
     assert ("trait_selection" in state) is traits_confirmed
     assert "wildcard" not in state
 
     # Older clients can send other draft data without character_state.
     # Hydration must preserve that context and add the saved character.
-    monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
     context = {"setting": {"world_name": "The Waking Wood"}}
     request = ChatRequest(
         slot=4, message="Continue", current_phase="character", context_data=context
@@ -153,16 +144,19 @@ def test_resume_restores_partial_character(
 
 
 def test_resume_restores_seed_awaiting_confirmation(
-    monkeypatch: pytest.MonkeyPatch, resume_client: TestClient
+    seed_wizard_cache, resume_client: TestClient
 ) -> None:
     """A ready wizard includes the seed and complete set design for confirmation."""
     cache = WizardCache(
         thread_id="conv_saved",
         character_confirmed=True,
         setting_confirmed=True,
-        setting=SettingData(genre="folklore"),
+        setting=SettingData(genre="fantasy"),
         character=CharacterData(
-            name="Rowan", traits_confirmed=True, wildcard_rationale="A hidden name"
+            name="Rowan",
+            traits_confirmed=True,
+            wildcard_name="The hidden name",
+            wildcard_rationale="A hidden name",
         ),
         seed=SeedData(
             seed_type="mystery",
@@ -173,12 +167,7 @@ def test_resume_restores_seed_awaiting_confirmation(
         ),
         base_timestamp=datetime(2026, 9, 23, tzinfo=timezone.utc),
     )
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(
-        setup_endpoints,
-        "ConversationsClient",
-        lambda model: SimpleNamespace(list_messages=lambda *a, **k: [], client=None),
-    )
+    cache = seed_wizard_cache(cache)
     response = resume_client.get("/api/story/new/setup/resume?slot=4")
     assert response.status_code == 200
     data = response.json()
@@ -190,31 +179,44 @@ def test_resume_restores_seed_awaiting_confirmation(
     assert data["character_draft"] == data["character_state"]
 
 
-@pytest.mark.parametrize(
-    ("cache", "status"), [(None, 404), (WizardCache(thread_id=None), 500)]
-)
+@pytest.mark.parametrize(("missing", "status"), [("cache", 404), ("thread", 500)])
 def test_resume_rejects_missing_session(
-    monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
+    seed_wizard_cache,
     resume_client: TestClient,
-    cache: WizardCache | None,
+    missing: str,
     status: int,
 ) -> None:
-    """An absent or damaged session must never silently start a replacement."""
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    factory = Mock()
-    monkeypatch.setattr(setup_endpoints, "ConversationsClient", factory)
+    """An absent or damaged real session must not start a replacement."""
+    seed_wizard_cache(WizardCache())
+    if missing == "cache":
+        new_story_cache.clear_cache(offline_gate_db)
+    else:
+        with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE assets.new_story_creator SET thread_id = NULL WHERE id = TRUE"
+            )
     assert resume_client.get("/api/story/new/setup/resume?slot=4").status_code == status
-    factory.assert_not_called()
+    with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM assets.wizard_messages")
+        assert cur.fetchone()[0] == 0
 
 
 @pytest.mark.parametrize("reply", ["choices", "debug", "artifact"])
 @pytest.mark.parametrize("message_origin", ["user", "wizard_control"])
 def test_resume_keeps_only_choices_from_the_latest_turn(
-    monkeypatch: pytest.MonkeyPatch, reply: str, message_origin: str
+    monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
+    seed_wizard_cache,
+    reply: str,
+    message_origin: str,
 ) -> None:
     """A chat turn must replace old choices, including with an empty set."""
-    storage = ConversationsClient("TEST")
-    thread_id = storage.create_thread()
+    cache = seed_wizard_cache(
+        WizardCache(choices=["Old option"], choices_recorded=True)
+    )
+    storage = ConversationsClient(offline_gate_db)
+    thread_id = cache.thread_id
     storage.add_message(thread_id, "assistant", "Welcome")
     # An old control and a new player message can have identical text. Only the
     # explicitly attributed player message should survive the resume projection.
@@ -222,24 +224,8 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
         "[SYSTEM] Phase setting complete. Proceeding to character. "
         "Please introduce the next phase."
     )
-    storage.add_message(thread_id, "user", message)
+    storage.add_message(thread_id, "user", message, origin="wizard_control")
     seen_history = []
-    cache = WizardCache(thread_id=thread_id, choices=["Old option"])
-    state = SlotState(
-        slot=4,
-        is_empty=False,
-        is_wizard_mode=True,
-        wizard_state=WizardState(
-            phase="setting",
-            thread_id=thread_id,
-            choices=cache.choices,
-            has_concept=False,
-            has_traits=False,
-            has_wildcard=False,
-        ),
-        narrative_state=None,
-        model="TEST",
-    )
     expected_choices = ["New option", "Another option"] if reply == "choices" else []
     output = (
         DeferredToolRequests()
@@ -265,14 +251,6 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
             self.set_artifact(kwargs["deps"])
             return SimpleNamespace(output=output)
 
-    monkeypatch.setattr(slot_state, "get_slot_state", lambda slot: state)
-    monkeypatch.setattr(wizard_agent, "read_cache", lambda dbname: cache)
-    monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
-    monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
-    monkeypatch.setattr(
-        wizard_chat, "guarded_wizard_write", lambda *args: nullcontext()
-    )
-    monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: storage)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
     monkeypatch.setattr(wizard_chat, "wizard_debug_agent", Agent())
     monkeypatch.setattr(
@@ -281,14 +259,6 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
         lambda model: (None, "test"),
     )
     monkeypatch.setattr(wizard_chat, "record_pydantic_ai_result", lambda *a, **k: None)
-    monkeypatch.setattr(
-        wizard_chat,
-        "write_wizard_choices",
-        lambda choices, dbname, **kwargs: setattr(cache, "choices", choices),
-    )
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
-    monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
     app = FastAPI()
     app.include_router(wizard_chat.router)
     app.include_router(setup_endpoints.router)
@@ -306,69 +276,6 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
         1 if message_origin == "user" else 0
     )
     # Controls retain the same user role and original text for inference; the
-    # storage envelope must not become another model prompt or raise authority.
+    # stored provenance must not become another model prompt or raise authority.
     assert seen_history[-1].parts[0].part_kind == "user-prompt"
     assert seen_history[-1].parts[0].content == message
-
-
-def test_resume_projects_legacy_controls_without_rewriting_history(
-    monkeypatch: pytest.MonkeyPatch, resume_client: TestClient
-) -> None:
-    """Only known historical controls disappear; user prose remains verbatim."""
-    messages = [
-        {"role": "assistant", "content": "[SYSTEM] This is a fictional notice."},
-        {"role": "user", "content": "The terminal displays [SYSTEM].\nKeep that."},
-        {
-            "role": "user",
-            "content": "[SYSTEM] Artifact submit_trait_selection confirmed. "
-            "Proceed to next step.",
-        },
-        {
-            "role": "user",
-            "content": "[SYSTEM] Artifact submit_wildcard_trait confirmed. "
-            "Proceed to next step.",
-        },
-        {
-            "role": "user",
-            "content": "[SYSTEM] Phase character subphase traits complete. "
-            "Proceeding to wildcard. Please introduce the next subphase.",
-        },
-        {
-            "role": "user",
-            "content": "[SYSTEM] Phase character complete. Proceeding to seed. "
-            "Please introduce the next phase.",
-        },
-        {
-            "role": "user",
-            "content": "[SYSTEM] Phase setting complete. Proceeding to character. "
-            "Please introduce the next phase.",
-        },
-        {
-            "role": "user",
-            "content": "[SYSTEM] Artifact submit_character_concept confirmed. "
-            "Proceed to next step.",
-        },
-        {
-            "role": "user",
-            "content": "[SYSTEM] Phase something else complete. Proceeding elsewhere.",
-        },
-        {
-            "role": "user",
-            "content": "Quoted: [SYSTEM] Artifact submit_trait_selection confirmed. "
-            "Proceed to next step.",
-        },
-    ]
-    storage = ConversationsClient("TEST")
-    thread_id = storage.create_thread()
-    for message in messages:
-        storage.add_message(thread_id, message["role"], message["content"])
-    cache = WizardCache(thread_id=thread_id, choices=["Keep this option"])
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
-    before = storage.list_messages(thread_id, limit=0)
-    for _ in range(2):
-        response = resume_client.get("/api/story/new/setup/resume?slot=4")
-        assert response.status_code == 200
-        assert response.json()["messages"] == messages[:2] + messages[-2:]
-        assert response.json()["choices"] == ["Keep this option"]
-    assert storage.list_messages(thread_id, limit=0) == before

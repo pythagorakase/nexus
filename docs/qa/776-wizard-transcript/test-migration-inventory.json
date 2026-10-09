@@ -1,0 +1,416 @@
+{
+  "source_base": "bf229051e3d046b76ab8d18b34e9ee054a03bbf6",
+  "method": "Source-only function/parameter inventory, including TOML provider keys. These are source case counts, not pytest collection or executed results. Parameter arrays describe values; generated pytest bracket IDs remain pending collection.",
+  "offline_execution_cases_leaving": 87,
+  "moved_to_postgres_cases": 33,
+  "deleted_offline_cases": 54,
+  "deleted_opt_in_live_cases": 1,
+  "moved_to_postgres": [
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_resume_restores_complete_character_card_without_inference",
+      "source_case_count": 1
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_chat_rejects_stale_or_unconfirmed_character_before_provider_setup",
+      "source_case_count": 3,
+      "parameter_values": [
+        "thread",
+        "phase",
+        "complete"
+      ]
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_accept_fate_prose_fallback_carries_committed_confirmation_metadata",
+      "source_case_count": 1
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_resume_restores_accepted_artifact_while_its_introduction_is_missing",
+      "source_case_count": 2,
+      "parameter_values": [
+        [
+          "setting",
+          "character"
+        ],
+        [
+          "character",
+          "seed"
+        ]
+      ]
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_interrupted_introduction_is_retried_once_then_refused",
+      "source_case_count": 2,
+      "parameter_values": [
+        [
+          "setting",
+          "character"
+        ],
+        [
+          "character",
+          "seed"
+        ]
+      ]
+    },
+    {
+      "id": "tests/test_api/test_wizard_resume.py::test_resume_does_not_hide_history_failure",
+      "source_case_count": 1
+    },
+    {
+      "id": "tests/test_api/test_wizard_resume.py::test_resume_restores_partial_character",
+      "source_case_count": 2,
+      "parameter_values": [
+        false,
+        true
+      ]
+    },
+    {
+      "id": "tests/test_api/test_wizard_resume.py::test_resume_restores_seed_awaiting_confirmation",
+      "source_case_count": 1
+    },
+    {
+      "id": "tests/test_api/test_wizard_resume.py::test_resume_rejects_missing_session",
+      "source_case_count": 2,
+      "parameter_values": [
+        [
+          "cache",
+          404
+        ],
+        [
+          "thread",
+          500
+        ]
+      ]
+    },
+    {
+      "id": "tests/test_api/test_wizard_resume.py::test_resume_keeps_only_choices_from_the_latest_turn",
+      "source_case_count": 6,
+      "parameter_values": [
+        [
+          "user",
+          "choices"
+        ],
+        [
+          "user",
+          "debug"
+        ],
+        [
+          "user",
+          "artifact"
+        ],
+        [
+          "wizard_control",
+          "choices"
+        ],
+        [
+          "wizard_control",
+          "debug"
+        ],
+        [
+          "wizard_control",
+          "artifact"
+        ]
+      ]
+    },
+    {
+      "id": "tests/test_api/test_wizard_chat_conflicts.py::test_generated_artifact_ends_with_conflict",
+      "source_case_count": 3,
+      "parameter_values": [
+        "session",
+        "artifact",
+        "write_lock"
+      ]
+    },
+    {
+      "id": "tests/test_api/test_wizard_weird_level.py::test_resume_restores_the_stored_selection",
+      "source_case_count": 4,
+      "parameter_values": [
+        "low",
+        "medium",
+        "high",
+        null
+      ]
+    },
+    {
+      "id": "tests/test_api/test_wizard_resume.py::test_resume_returns_full_transcript",
+      "source_case_count": 1,
+      "previous_id": "tests/test_api/test_wizard_resume.py::test_resume_restores_all_messages_choices_and_drafts"
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_concurrent_introduction_keeps_only_the_committed_reply",
+      "source_case_count": 2,
+      "parameter_values": [
+        [
+          "setting",
+          "character"
+        ],
+        [
+          "character",
+          "seed"
+        ]
+      ],
+      "previous_id": "tests/test_api/test_wizard_confirmation.py::test_introduction_that_loses_the_claim_never_reaches_the_transcript",
+      "previous_parameter_scope": "winner=completed only"
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_cli_uses_the_committed_introduction",
+      "source_case_count": 2,
+      "parameter_values": [
+        [
+          "setting",
+          "character"
+        ],
+        [
+          "character",
+          "seed"
+        ]
+      ],
+      "previous_id": "tests/test_api/test_wizard_confirmation.py::test_cli_uses_the_delivered_introduction_after_a_crash"
+    }
+  ],
+  "deleted_offline": [
+    {
+      "id": "tests/test_api/test_conversations.py::test_file_store_writes_under_the_state_dir",
+      "source_case_count": 1,
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_openai_conversation_protocol",
+      "source_case_count": 1,
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_local_conversation_origins_and_literal_envelope_round_trip",
+      "source_case_count": 2,
+      "parameter_values": [
+        "memory",
+        "file"
+      ],
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_openai_conversation_origins_survive_storage_and_new_client",
+      "source_case_count": 1,
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_conversation_store_mode_follows_registry_provider",
+      "source_case_count": 5,
+      "parameter_values": [
+        "anthropic",
+        "local",
+        "openai",
+        "openrouter",
+        "test"
+      ],
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_conversation_store_mode_rejects_unregistered_provider",
+      "source_case_count": 1,
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_wizard_conversations_follow_registry_provider",
+      "source_case_count": 5,
+      "parameter_values": [
+        "anthropic",
+        "local",
+        "openai",
+        "openrouter",
+        "test"
+      ],
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_local_conversations_reject_unknown_threads",
+      "source_case_count": 4,
+      "parameter_values": [
+        "anthropic",
+        "local",
+        "openrouter",
+        "test"
+      ],
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_local_conversations_delete_single_messages",
+      "source_case_count": 4,
+      "parameter_values": [
+        "anthropic",
+        "local",
+        "openrouter",
+        "test"
+      ],
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_conversations.py::test_hosted_conversations_client_rejects_other_providers",
+      "source_case_count": 4,
+      "parameter_values": [
+        "anthropic",
+        "local",
+        "openrouter",
+        "test"
+      ],
+      "reason": "Retired hosted/file/memory or provider-store selection; replaced by real slot-store tests."
+    },
+    {
+      "id": "tests/test_api/test_wizard_model_switch.py::test_cross_store_switch_moves_the_opening_to_the_new_store",
+      "source_case_count": 4,
+      "parameter_values": [
+        [
+          "local",
+          "openai"
+        ],
+        [
+          "openai",
+          "openrouter"
+        ],
+        [
+          "test",
+          "local"
+        ],
+        [
+          "anthropic",
+          "test"
+        ]
+      ],
+      "reason": "Cross-store move/copy mechanism removed; retained SQL repoint test is unchanged."
+    },
+    {
+      "id": "tests/test_api/test_wizard_model_switch.py::test_dev_turn_returns_the_moved_thread",
+      "source_case_count": 1,
+      "reason": "Cross-store move/copy mechanism removed; retained SQL repoint test is unchanged."
+    },
+    {
+      "id": "tests/test_api/test_wizard_model_switch.py::test_same_store_switch_keeps_the_thread",
+      "source_case_count": 1,
+      "reason": "Cross-store move/copy mechanism removed; retained SQL repoint test is unchanged."
+    },
+    {
+      "id": "tests/test_api/test_wizard_model_switch.py::test_failed_cross_store_switch_changes_nothing",
+      "source_case_count": 3,
+      "parameter_values": [
+        "source_unreadable",
+        "target_write_rejected",
+        "concurrent_change"
+      ],
+      "reason": "Cross-store move/copy mechanism removed; retained SQL repoint test is unchanged."
+    },
+    {
+      "id": "tests/test_api/test_wizard_model_switch.py::test_ambiguous_save_keeps_the_copied_thread",
+      "source_case_count": 1,
+      "reason": "Cross-store move/copy mechanism removed; retained SQL repoint test is unchanged."
+    },
+    {
+      "id": "tests/test_api/test_wizard_model_switch.py::test_switch_replays_player_provenance_in_order",
+      "source_case_count": 1,
+      "reason": "Cross-store move/copy mechanism removed; retained SQL repoint test is unchanged."
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_crash_between_claim_and_transcript_write_is_recoverable",
+      "source_case_count": 2,
+      "parameter_values": [
+        [
+          "setting",
+          "character"
+        ],
+        [
+          "character",
+          "seed"
+        ]
+      ],
+      "reason": "Introduction claim/reconciliation mechanism removed; transactional rollback and duplicate/concurrent introduction tests replace it."
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_crash_after_transcript_write_settles_the_delivered_claim",
+      "source_case_count": 2,
+      "parameter_values": [
+        [
+          "setting",
+          "character"
+        ],
+        [
+          "character",
+          "seed"
+        ]
+      ],
+      "reason": "Introduction claim/reconciliation mechanism removed; transactional rollback and duplicate/concurrent introduction tests replace it."
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_introduction_delivery_is_read_after_the_latest_control",
+      "source_case_count": 1,
+      "reason": "Introduction claim/reconciliation mechanism removed; transactional rollback and duplicate/concurrent introduction tests replace it."
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_concurrent_settlement_of_a_delivered_claim_is_stale_state",
+      "source_case_count": 1,
+      "reason": "Introduction claim/reconciliation mechanism removed; transactional rollback and duplicate/concurrent introduction tests replace it."
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_reconciliation_closes_its_transcript_client",
+      "source_case_count": 2,
+      "parameter_values": [
+        false,
+        true
+      ],
+      "reason": "Introduction claim/reconciliation mechanism removed; transactional rollback and duplicate/concurrent introduction tests replace it."
+    },
+    {
+      "id": "tests/test_api/test_wizard_confirmation.py::test_introduction_that_loses_the_claim_never_reaches_the_transcript",
+      "source_case_count": 2,
+      "parameter_values": [
+        [
+          "setting",
+          "character",
+          "claimed"
+        ],
+        [
+          "character",
+          "seed",
+          "claimed"
+        ]
+      ],
+      "reason": "Only the claimed-winner parameter cases retire; completed-winner cases move below."
+    },
+    {
+      "id": "tests/test_api/test_wizard_resume.py::test_resume_projects_legacy_controls_without_rewriting_history",
+      "source_case_count": 1,
+      "reason": "Legacy envelope/control inference is removed."
+    },
+    {
+      "id": "tests/test_api/test_provider_guard_consumers.py::test_conversations_test_request",
+      "source_case_count": 1,
+      "reason": "No Conversations provider client remains."
+    },
+    {
+      "id": "tests/test_config/test_provider_guard.py::test_consumer_client_construction_is_guarded",
+      "source_case_count": 1,
+      "parameter_values": [
+        "conversations"
+      ],
+      "reason": "Only the conversations parameter retires; other provider consumers remain."
+    },
+    {
+      "id": "tests/test_runtime_home.py::test_wizard_threads_resolve_under_the_state_dir",
+      "source_case_count": 2,
+      "parameter_values": [
+        false,
+        true
+      ],
+      "reason": "820-Q6 file-store helper is removed; other runtime-home tests remain."
+    }
+  ],
+  "deleted_opt_in_live": [
+    {
+      "id": "tests/test_api/test_conversations.py::test_live_openai_wizard_history_round_trip",
+      "source_case_count": 1,
+      "reason": "Hosted provider storage removed; was opt-in live, not offline execution."
+    }
+  ],
+  "unchanged_existing_pg": [
+    "tests/test_api/test_wizard_model_switch.py::test_repoint_commits_model_and_thread_together",
+    "tests/test_api/test_wizard_confirmation_pg.py::test_accepted_transition_awaits_introduction_until_its_reply_persists",
+    "tests/test_api/test_set_designer_failure.py (UUID-only fixture adaptation; retained existing 816 routing and process cleanup)"
+  ]
+}

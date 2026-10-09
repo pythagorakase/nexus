@@ -246,6 +246,9 @@ completion.
 
 A transition takes the slot's genesis claim, a session advisory lock held for the whole run, so a slot has one open run. A POST that finds the claim held joins the running run and answers with that run's outcome. A run still `running` while the claim is free belonged to a process that stopped; the next POST records it failed (`GenesisRunInterrupted`). A new run whose `input_fingerprint` equals that of the previous failed run reuses that run's saved derivation, packet, seed-candidate and expansion outputs, validated on load, and calls no provider for them; any changed input rebuilds every stage. A reused stage row names its source in `detail.reused_from`. When the previous run failed after its world committed, the next POST finishes the pending embedding from the saved persistence output, without the wizard cache.
 
+## Wizard Transcript
+
+assets.wizard_messages holds the new-story wizard transcript for every provider, keyed by the conversation UUID in assets.new_story_creator.thread_id. Each message records its role, origin and the wizard phase at the time it was written. A reply and its presented choices commit in one transaction under the wizard cache row lock. A model switch changes only the slot model. Rows are kept after the cache is cleared. Migration 150 discarded incomplete wizards on hosted OpenAI conversations and refuses any other legacy thread.
 
 ## Story Identity
 

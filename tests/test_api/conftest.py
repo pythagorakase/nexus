@@ -1,18 +1,28 @@
 """Shared API-test boundaries: disposable slot databases and offline registries."""
 
-from collections.abc import Iterator
-from pathlib import Path
+from collections.abc import Callable, Iterator
+from contextlib import closing
+from dataclasses import asdict
+import json
 import socket
-from typing import Any
 
 import pytest
-import tomlkit
 
-from nexus.api import conversations
+from nexus.api.new_story_cache import (
+    WizardCache,
+    read_cache,
+    write_cache,
+    write_suggested_traits,
+)
+from nexus.api.new_story_flow import start_setup
 from nexus.config import load_settings
-from nexus.runtime.contract import RUNTIME_CONFIG_ENV
 from nexus.util.secret_manager import get_secret
-from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
+from tests.model_registry_helpers import registry_model
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+)
 
 
 @pytest.fixture
@@ -30,21 +40,9 @@ def offline_gate_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         yield dbname
 
 
-@pytest.fixture(autouse=True)
-def empty_memory_conversation_store() -> Iterator[None]:
-    """Start and leave every test with no threads in the in-memory TEST store."""
-    conversations._MEMORY_STORE.threads.clear()
-    yield
-    conversations._MEMORY_STORE.threads.clear()
-
-
 @pytest.fixture
-def offline_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
-    """Remove credentials, refuse sockets, and configure a private state directory.
-
-    Yields:
-        The directory that receives file-backed wizard threads.
-    """
+def offline_registry(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Remove credentials and refuse sockets; every transcript uses the slot DB."""
     monkeypatch.setenv("NEXUS_TEST_PROVIDER_ONLY", "1")
     monkeypatch.setenv("NEXUS_KEYRING_DISABLE", "1")
     for provider, config in load_settings().global_.model.api_models.items():
@@ -61,13 +59,68 @@ def offline_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterato
     monkeypatch.setattr(socket.socket, "connect", refuse_network)
     monkeypatch.setattr(socket.socket, "connect_ex", refuse_network)
     monkeypatch.setattr(socket, "create_connection", refuse_network)
-    document: Any = tomlkit.parse(
-        (Path(__file__).resolve().parents[2] / "nexus.toml").read_text()
-    )
-    document["runtime"]["state_dir"] = str(tmp_path / "state")
-    runtime_config = tmp_path / "nexus.toml"
-    runtime_config.write_text(tomlkit.dumps(document))
-    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(runtime_config))
-    thread_dir = tmp_path / "state" / conversations.WIZARD_THREADS_DIRNAME
-    yield thread_dir
+    yield
     get_secret.cache_clear()
+
+
+@pytest.fixture
+def seed_wizard_cache(
+    offline_gate_db: str, offline_registry: None
+) -> Callable[[WizardCache], WizardCache]:
+    """Persist a checkpoint through real writers on the routed slot-4 clone.
+
+    The explicit confirmation fields represent the already accepted checkpoint;
+    neither cache reads nor transcript writes are replaced by this seed helper.
+    """
+
+    def seed(cache: WizardCache) -> WizardCache:
+        start_setup(4, registry_model("test"))
+        write_cache(
+            dbname=offline_gate_db,
+            setting_draft=asdict(cache.setting),
+            character_draft=cache.get_character_state_dict(),
+            selected_seed=asdict(cache.seed),
+            layer_draft=cache.get_layer_dict(),
+            zone_draft=cache.get_zone_dict(),
+            initial_location=cache.get_initial_location(),
+            base_timestamp=(
+                cache.base_timestamp.isoformat() if cache.base_timestamp else None
+            ),
+        )
+        if (
+            not cache.character.traits_confirmed
+            or len(cache.character.suggested_traits) != 3
+        ):
+            write_suggested_traits(
+                offline_gate_db,
+                [
+                    {"trait": item.trait, "rationale": item.rationale}
+                    for item in cache.character.suggested_traits
+                ],
+            )
+        choice_object = (
+            json.dumps({"presented": cache.choices, "selected": None})
+            if cache.choices_recorded
+            else None
+        )
+        with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE assets.new_story_creator SET setting_confirmed = %s, "
+                "character_confirmed = %s, character_revision_pending = %s, "
+                "traits_confirmed = %s, trait_compile_result = %s::jsonb, "
+                "choice_object = %s::jsonb, weird_level = %s WHERE id = TRUE",
+                (
+                    cache.setting_confirmed,
+                    cache.character_confirmed,
+                    cache.character_revision_pending,
+                    cache.character.traits_confirmed,
+                    json.dumps(cache.character.trait_compile_result),
+                    choice_object,
+                    cache.weird_level,
+                ),
+            )
+        saved = read_cache(offline_gate_db)
+        assert saved is not None and saved.thread_id is not None
+        return saved
+
+    return seed

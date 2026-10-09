@@ -14,12 +14,11 @@ import hashlib
 import json
 import logging
 import os
-import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Literal, Mapping, Optional
 
 from psycopg2.extras import RealDictCursor
 
@@ -27,7 +26,7 @@ from nexus.api.choice_handling import extract_presented_choices
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_schemas import WeirdLevel
 from nexus.api.trait_compiler_schemas import canonical_trait_name
-from nexus.api.wizard_transcript import introduction_delivered
+from nexus.api.wizard_transcript import MessageOrigin, WizardMessage
 
 logger = logging.getLogger("nexus.api.new_story_cache")
 
@@ -67,7 +66,6 @@ def _write_snapshot(cache: "WizardCache") -> Dict[str, Any]:
     snapshot.pop("updated_at")
     snapshot.pop("choices")
     snapshot.pop("choices_recorded")
-    snapshot.pop("introduction_claim")
     snapshot.pop("weird_level")
     return snapshot
 
@@ -312,19 +310,6 @@ class SeedData:
     initial_location: Optional[Dict[str, Any]] = None
 
 
-# choice_object key marking an introduction reply claimed but not yet completed.
-# Completed replies always store {"presented": [...], "selected": ...} instead.
-INTRODUCTION_CLAIM_KEY = "introduction_claim"
-
-
-@dataclass
-class IntroductionClaim:
-    """An introduction reply claimed before its transcript write completed."""
-
-    id: str
-    choices: List[str]
-
-
 @dataclass
 class WizardCache:
     """Complete wizard cache state."""
@@ -339,9 +324,8 @@ class WizardCache:
     choices: List[str] = field(default_factory=list)
     # Every completed wizard reply records its (possibly empty) choice set;
     # accepting an artifact clears it. False therefore means no completed reply
-    # since that acceptance, at most an unfinished introduction claim.
+    # since that acceptance.
     choices_recorded: bool = True
-    introduction_claim: Optional[IntroductionClaim] = None
     setting_confirmed: bool = False
     character_confirmed: bool = False
     character_revision_pending: bool = False
@@ -408,23 +392,6 @@ class WizardCache:
             return None
         # Only the character and seed phases can be untouched.
         return "character" if self.current_phase() == "character" else "seed"
-
-    def settle_introduction_claim(
-        self, transcript: Sequence[Mapping[str, object]]
-    ) -> "WizardCache":
-        """View an unfinished claim as the chronological transcript proves it.
-
-        The claimed reply was delivered once it follows the latest control
-        message; until then the phase still awaits its introduction.
-        """
-        if self.introduction_claim is None or not introduction_delivered(transcript):
-            return self
-        return replace(
-            self,
-            choices=list(self.introduction_claim.choices),
-            choices_recorded=True,
-            introduction_claim=None,
-        )
 
     def confirmation_metadata(self) -> Dict[str, Any]:
         """Capture acceptance metadata alongside the artifact that was persisted."""
@@ -706,7 +673,6 @@ def _row_to_cache(
     wildcard_row: Optional[Dict[str, Any]] = None,
 ) -> WizardCache:
     """Convert a database row to a WizardCache object."""
-    claim = _introduction_claim(row.get("choice_object"))
     return WizardCache(
         setting_confirmed=bool(row.get("setting_confirmed", False)),
         character_confirmed=bool(row.get("character_confirmed", False)),
@@ -715,8 +681,7 @@ def _row_to_cache(
         thread_id=row.get("thread_id"),
         target_slot=row.get("target_slot"),
         choices=extract_presented_choices(row.get("choice_object")),
-        choices_recorded=row.get("choice_object") is not None and claim is None,
-        introduction_claim=claim,
+        choices_recorded=row.get("choice_object") is not None,
         setting=SettingData(
             genre=row.get("setting_genre"),
             secondary_genres=_parse_pg_array(row.get("setting_secondary_genres")),
@@ -1805,84 +1770,114 @@ def write_wizard_choices(
     logger.debug("Stored %d wizard choices in %s", len(choices), dbname)
 
 
-def _introduction_claim(raw: Any) -> Optional["IntroductionClaim"]:
-    """Read an unfinished introduction claim; completed replies have no claim."""
-    if isinstance(raw, str):
-        raw = json.loads(raw)
-    if not isinstance(raw, dict) or INTRODUCTION_CLAIM_KEY not in raw:
-        return None
-    claim = raw[INTRODUCTION_CLAIM_KEY]
-    return IntroductionClaim(id=str(claim["id"]), choices=list(claim["presented"]))
+def _insert_wizard_message(
+    cur: Any,
+    *,
+    conversation_id: str,
+    role: Literal["user", "assistant"],
+    content: str,
+    phase: str,
+    origin: MessageOrigin | None = None,
+) -> int:
+    """Append under the caller's already-held wizard cache row lock."""
+    cur.execute(
+        "INSERT INTO assets.wizard_messages "
+        "(conversation_id, seq, role, origin, content, phase) "
+        "SELECT %s::uuid, COALESCE(MAX(seq), 0) + 1, %s, %s, %s, %s "
+        "FROM assets.wizard_messages WHERE conversation_id = %s::uuid "
+        "RETURNING seq",
+        (conversation_id, role, origin, content, phase, conversation_id),
+    )
+    return int(cur.fetchone()["seq"])
 
 
-def claim_wizard_introduction(
-    choices: List[str],
+def add_wizard_message(
     dbname: str,
     *,
     expected_thread_id: str,
-    replaces_claim: Optional[str],
-) -> str:
-    """Claim the one introduction reply before its transcript write.
-
-    The claim is not a completed reply, so a crash before completion leaves the
-    phase awaiting its introduction. It succeeds only over no reply at all, or
-    over the unfinished claim this request reconciled as undelivered.
-    """
+    role: Literal["user", "assistant"],
+    content: str,
+    origin: MessageOrigin | None = None,
+) -> int:
+    """Append a message and its phase while fencing the current conversation."""
     from nexus.api.wizard_confirmation import WizardStateConflict
 
-    claim_id = uuid.uuid4().hex
-    current = (
-        "choice_object IS NULL"
-        if replaces_claim is None
-        else f"choice_object -> '{INTRODUCTION_CLAIM_KEY}' ->> 'id' = %s"
-    )
-    with _cache_connection(dbname) as conn:
+    with _cache_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE assets.new_story_creator "
-                "SET choice_object = %s, updated_at = NOW() "
-                f"WHERE id = TRUE AND thread_id = %s AND {current}",
-                (
-                    json.dumps(
-                        {
-                            INTRODUCTION_CLAIM_KEY: {
-                                "id": claim_id,
-                                "presented": choices,
-                            }
-                        }
-                    ),
-                    expected_thread_id,
-                    *(() if replaces_claim is None else (replaces_claim,)),
-                ),
+            cache = read_cache_cursor(cur, lock=True)
+            if cache is None or cache.thread_id != expected_thread_id:
+                raise WizardStateConflict(
+                    "The wizard conversation changed before its message could be saved."
+                )
+            if (role == "user") != (origin is not None):
+                raise ValueError("Wizard origin must be set exactly for user messages")
+            return _insert_wizard_message(
+                cur,
+                conversation_id=expected_thread_id,
+                role=role,
+                content=content,
+                phase=cache.current_phase(),
+                origin=origin,
             )
-            if cur.rowcount != 1:
+
+
+def record_wizard_reply(
+    dbname: str,
+    *,
+    expected_thread_id: str,
+    message: str,
+    choices: List[str],
+    introduction: bool,
+) -> int:
+    """Commit the assistant transcript and its choices in the same transaction."""
+    from nexus.api.wizard_confirmation import WizardStateConflict
+
+    with _cache_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cache = read_cache_cursor(cur, lock=True)
+            if cache is None or cache.thread_id != expected_thread_id:
+                raise WizardStateConflict(
+                    "The wizard conversation changed before its message could be saved."
+                )
+            if introduction and cache.choices_recorded:
                 raise WizardStateConflict(
                     "This phase was already introduced. Resume before continuing."
                 )
-    return claim_id
-
-
-def complete_wizard_introduction(
-    claim_id: str, choices: List[str], dbname: str, *, expected_thread_id: str
-) -> None:
-    """Record a claimed introduction as delivered, with its presented choices."""
-    from nexus.api.wizard_confirmation import WizardStateConflict
-
-    with _cache_connection(dbname) as conn:
-        with conn.cursor() as cur:
+            seq = _insert_wizard_message(
+                cur,
+                conversation_id=expected_thread_id,
+                role="assistant",
+                content=message,
+                phase=cache.current_phase(),
+            )
             cur.execute(
                 "UPDATE assets.new_story_creator "
-                "SET choice_object = %s, updated_at = NOW() "
-                "WHERE id = TRUE AND thread_id = %s "
-                f"AND choice_object -> '{INTRODUCTION_CLAIM_KEY}' ->> 'id' = %s",
-                (
-                    json.dumps({"presented": choices, "selected": None}),
-                    expected_thread_id,
-                    claim_id,
-                ),
+                "SET choice_object = %s, updated_at = NOW() WHERE id = TRUE",
+                (json.dumps({"presented": choices, "selected": None}),),
             )
-            if cur.rowcount != 1:
-                raise WizardStateConflict(
-                    "The introduction changed while it was saved. "
-                    "Resume before continuing."
-                )
+            return seq
+
+
+def list_wizard_messages(
+    dbname: str, conversation_id: str, *, limit: int
+) -> List[WizardMessage]:
+    """Read retained, unsuperseded transcript rows without locking the cache."""
+    with _cache_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT role, content, phase, origin FROM assets.wizard_messages "
+                "WHERE conversation_id = %s::uuid AND superseded_at IS NULL "
+                "ORDER BY seq DESC" + (" LIMIT %s" if limit != 0 else ""),
+                (conversation_id, limit) if limit != 0 else (conversation_id,),
+            )
+            messages: List[WizardMessage] = []
+            for row in cur.fetchall():
+                message: WizardMessage = {
+                    "role": row["role"],
+                    "content": row["content"],
+                    "phase": row["phase"],
+                }
+                if row["origin"] is not None:
+                    message["origin"] = row["origin"]
+                messages.append(message)
+            return messages

@@ -24,7 +24,7 @@ from nexus.api.narrative_schemas import (
     SelectSlotRequest,
     StartSetupRequest,
 )
-from nexus.api.new_story_cache import write_wizard_choices
+from nexus.api.new_story_cache import record_wizard_reply, write_wizard_choices
 from nexus.api.new_story_schemas import CharacterCreationState
 from nexus.api.wizard_confirmation import (
     WizardStateConflict,
@@ -69,13 +69,16 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
         welcome_message = doc.get("welcome_message", "")
         welcome_choices: List[str] = doc.get("welcome_choices", [])
 
-        # Seed welcome message if exists (without choices - UI renders those)
+        # Welcome transcript and presented choices commit together.
         if welcome_message:
-            client = ConversationsClient(model=model_to_use)
-            client.add_message(thread_id, "assistant", welcome_message)
-
-        # Store welcome choices for CLI --choice resolution
-        if welcome_choices:
+            record_wizard_reply(
+                slot_dbname(request.slot),
+                expected_thread_id=thread_id,
+                message=welcome_message,
+                choices=welcome_choices,
+                introduction=False,
+            )
+        elif welcome_choices:
             write_wizard_choices(welcome_choices, slot_dbname(request.slot))
 
         return {
@@ -106,14 +109,9 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
         model = get_slot_model(slot, dbname=slot_dbname(slot))
         if not model:
             raise RuntimeError("The saved wizard is missing its model")
-        client = ConversationsClient(model=model)
-        try:
-            # The model's context window limit must not truncate the UI transcript.
-            messages = client.list_messages(thread_id, limit=0)
-        finally:
-            if client.client is not None:
-                client.client.close()
-        data = data.settle_introduction_claim(list(reversed(messages)))
+        client = ConversationsClient(slot_dbname(slot))
+        # The model's context window limit must not truncate the UI transcript.
+        messages = client.list_messages(thread_id, limit=0)
         awaiting_introduction = data.awaiting_introduction()
         # The character card is restored while it awaits acceptance and while
         # its accepted transition still lacks the introduction it requested.
