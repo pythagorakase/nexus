@@ -10,7 +10,7 @@
  * real row shapes (no fetch interception): data drawn from save_01.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -309,7 +309,7 @@ describe("CharactersPane roster keyboard access", () => {
     expect(dossierName()).toHaveTextContent("Alex");
   });
 
-  it("selects the focused row with Enter and with Space", async () => {
+  it("selects the focused row with Enter", async () => {
     const user = userEvent.setup();
     renderPane(CAST, {}, { precededBy: "Characters" });
     screen.getByRole("button", { name: "Characters" }).focus();
@@ -326,24 +326,39 @@ describe("CharactersPane roster keyboard access", () => {
       "aria-selected",
       "false",
     );
+  });
 
-    await user.keyboard("{ArrowDown}");
-    const space = new KeyboardEvent("keydown", {
-      key: " ",
-      bubbles: true,
-      cancelable: true,
-    });
-    // Dispatched by hand so the test can read defaultPrevented: Space must
-    // not scroll the pane.
-    act(() => {
-      document.activeElement!.dispatchEvent(space);
-    });
-    expect(space.defaultPrevented).toBe(true);
+  it("selects the focused row with Space and keeps the pane from scrolling", async () => {
+    const user = userEvent.setup();
+    renderPane(CAST, {}, { precededBy: "Characters" });
+    screen.getByRole("button", { name: "Characters" }).focus();
+    await user.tab();
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByTestId("cast-member-3"));
+
+    // React handles the key at its root, below document: this bubble
+    // listener sees the event after the row's handler has run.
+    const spaces: KeyboardEvent[] = [];
+    const record = (event: KeyboardEvent) => {
+      if (event.key === " ") spaces.push(event);
+    };
+    document.addEventListener("keydown", record);
+    try {
+      await user.keyboard(" ");
+    } finally {
+      document.removeEventListener("keydown", record);
+    }
+    expect(spaces).toHaveLength(1);
+    expect(spaces[0].defaultPrevented).toBe(true);
     expect(await screen.findByText("Pete fixes the rig.")).toBeInTheDocument();
     expect(dossierName()).toHaveTextContent("Pete");
     expect(screen.getByTestId("cast-member-3")).toHaveAttribute(
       "aria-selected",
       "true",
+    );
+    expect(screen.getByTestId("cast-member-1")).toHaveAttribute(
+      "aria-selected",
+      "false",
     );
   });
 

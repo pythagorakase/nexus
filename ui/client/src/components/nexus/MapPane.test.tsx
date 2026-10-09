@@ -390,4 +390,45 @@ describe("MapPane place dialog focus return", () => {
     expect(document.activeElement).toBe(screen.getByTestId("map-pane"));
     expect(document.activeElement).not.toBe(document.body);
   });
+
+  it("focuses the map pane root when a refetch drops the open place", async () => {
+    const user = userEvent.setup();
+    const { client } = renderPane();
+    resizeCanvas(1000, 600);
+    const { row } = await openFromRow(user);
+
+    // The place leaves the slot while its dialog is open: MapPlaceDialog
+    // renders nothing, so the dialog unmounts without Escape or Close.
+    act(() => {
+      client.setQueryData<Place[]>(
+        ["/api/places", SLOT],
+        PLACES.filter((place) => place.id !== 101),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(row.isConnected).toBe(false);
+    expect(document.activeElement).toBe(screen.getByTestId("map-pane"));
+  });
+
+  it("focuses the map pane root when a pin opened the dialog", async () => {
+    const user = userEvent.setup();
+    renderPane();
+    resizeCanvas(1000, 600);
+    // A press and release on the pin under the drag threshold: the pane
+    // selects on release (pins are SVG groups, so there is no opener).
+    await user.click(
+      screen.getByTestId("map-pin-103").querySelector('[data-map-part="fill"]')!,
+    );
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Floyen Station");
+    const close = screen.getByRole("button", { name: "Close" });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(screen.getByTestId("map-pane"));
+  });
 });
