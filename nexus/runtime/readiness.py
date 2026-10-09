@@ -344,10 +344,10 @@ def database_migration_state(
 ) -> MigrationState:
     """Read ``dbname``'s stamps in a read-only session and compare them.
 
-    ``discovered`` is ``scripts.migrate.discover_migrations()``, the runner's
+    ``discovered`` is ``nexus.maintenance.migrate.discover_migrations()``, the runner's
     own view of the migration tree.
     """
-    from scripts import migrate
+    from nexus.maintenance import migrate
 
     with closing(read_only_connection(dbname)) as conn:
         with conn.cursor() as cur:
@@ -437,7 +437,7 @@ def _check_template_present(ctx: ReadinessContext) -> Outcome:
     """The canonical fresh-slot image exists on the server."""
     import psycopg2
 
-    from scripts.migrate import TEMPLATE_DB
+    from nexus.maintenance.migrate import TEMPLATE_DB
 
     try:
         with closing(read_only_connection(MAINTENANCE_DATABASE)) as conn:
@@ -475,7 +475,7 @@ def _import_failure(check_id: str, exc: ImportError) -> Outcome:
 
 def _discovered_migrations() -> tuple[list[tuple[str, str, Path]], Optional[Outcome]]:
     """Return the migration tree, or the failure a malformed tree produces."""
-    from scripts import migrate
+    from nexus.maintenance import migrate
 
     try:
         return migrate.discover_migrations(), None
@@ -487,7 +487,7 @@ def _check_template_migrations(ctx: ReadinessContext) -> Outcome:
     """NEXUS_template is stamped through exactly this checkout's migrations."""
     import psycopg2
 
-    from scripts.migrate import TEMPLATE_DB
+    from nexus.maintenance.migrate import TEMPLATE_DB
 
     discovered, malformed = _discovered_migrations()
     if malformed is not None:
@@ -734,7 +734,7 @@ def idf_analyzer_outcome(
 def _check_template_idf_analyzer(ctx: ReadinessContext) -> Outcome:
     """NEXUS_template's IDF corpus keys match the live server's analyzer."""
     from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
-    from scripts.migrate import TEMPLATE_DB
+    from nexus.maintenance.migrate import TEMPLATE_DB
 
     return idf_analyzer_outcome(
         [
@@ -856,7 +856,7 @@ def template_story_identity_outcome(dbname: str) -> Outcome:
 
 def _check_template_story_identity(ctx: ReadinessContext) -> Outcome:
     """NEXUS_template carries the story_identity table and no row."""
-    from scripts.migrate import TEMPLATE_DB
+    from nexus.maintenance.migrate import TEMPLATE_DB
 
     return template_story_identity_outcome(TEMPLATE_DB)
 
@@ -934,7 +934,7 @@ def find_postgres_tool(
 
     The runtime ``PATH`` wins; ``[api.database].tool_search_paths`` supplements
     it for launches that do not inherit an interactive shell's ``PATH``
-    (``scripts/new_story_setup.py``). Returns the executable, or ``None``,
+    (``nexus/maintenance/new_story_setup.py``). Returns the executable, or ``None``,
     and where it was looked for.
     """
     found = shutil.which(name)

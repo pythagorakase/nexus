@@ -464,6 +464,7 @@ import logging
 import scripts.api_anthropic
 import scripts.api_openai
 import scripts.api_openrouter
+import nexus.jobs.summarize_narrative
 import scripts.summarize_narrative
 
 def handler_types(logger):

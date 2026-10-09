@@ -20,7 +20,7 @@ from psycopg2.errors import ForeignKeyViolation
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import verify_checkpoints_sync
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import (
     CharacterPairSeed,
     connect,

@@ -33,7 +33,7 @@ from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_flow import build_transition_data_from_cache
 from nexus.config import load_settings
 from nexus.config.loader import settings_path_scope
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import connect, route_slot_to_disposable
 
 

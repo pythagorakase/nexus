@@ -13,7 +13,7 @@ import pytest
 from nexus.config import load_settings
 from nexus.config.story_model import read_story_settings, story_context_settings
 from nexus.memory.manager import pass2_baseline_config_fingerprint
-from scripts.migrate import is_db_locked
+from nexus.maintenance.migrate import is_db_locked
 from tests.pg_fixtures import connect
 from tests.test_api.test_scheduler_locked_pg import set_locked
 

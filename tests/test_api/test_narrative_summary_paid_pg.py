@@ -19,7 +19,7 @@ from nexus.api.summary_triggers import SummaryTask, schedule_summary_generation
 from nexus.config import load_settings
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.telemetry import usage
-from scripts.summarize_narrative import SummaryGenerator
+from nexus.jobs.summarize_narrative import SummaryGenerator
 from tests.pg_fixtures import (
     FIXTURE_TURN_CHOICES,
     connect,

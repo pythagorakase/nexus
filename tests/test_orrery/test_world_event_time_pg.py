@@ -18,7 +18,7 @@ from nexus.agents.orrery.events import (
 )
 from nexus.config import load_settings
 from nexus.config.settings_models import OrrerySettings
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import (
     _resolve_turn_orrery_proposal,
     asyncpg_kwargs,

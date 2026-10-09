@@ -30,7 +30,9 @@ from nexus.runtime.slot_operations import (
     staging_dbname,
     sweep_staging,
 )
-from scripts import migrate, new_story_setup, rebuild_memory_idf
+from scripts import rebuild_memory_idf
+from nexus.maintenance import migrate
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import (
     connect,
     disposable_database,

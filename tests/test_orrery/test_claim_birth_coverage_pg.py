@@ -42,7 +42,7 @@ from nexus.agents.orrery.substrate import (
     Template,
 )
 from nexus.database import database_url
-from scripts.migrate import migrate_database
+from nexus.maintenance.migrate import migrate_database
 from tests.pg_fixtures import connect
 
 

@@ -22,7 +22,7 @@ import pytest
 from nexus.config import load_settings
 from nexus.config.story_model import StorySettings, read_story_settings, resolve_seat
 from nexus.database import subprocess_env
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import (
     connect,
     disposable_database,

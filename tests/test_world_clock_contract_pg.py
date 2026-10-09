@@ -23,7 +23,7 @@ from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
 from nexus.api.reader_endpoints import _CHUNK_SELECT, _chunk_payload
 from nexus.util.clock_face import clock_face
-from scripts import migrate
+from nexus.maintenance import migrate
 from scripts.qa_shift.world_clock import measure_connection
 from tests.pg_fixtures import (
     connect,

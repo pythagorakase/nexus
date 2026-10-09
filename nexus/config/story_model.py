@@ -31,8 +31,10 @@ class StorySettings(BaseModel):
 def read_story_settings(dbname: str) -> StorySettings:
     """Read slot or explicitly named evaluation settings; DB errors propagate."""
     if dbname.startswith(("qa640_", "ref_")):
-        from scripts.database_targets import evaluation_dbname
-        from scripts.migrate import get_connection as get_evaluation_connection
+        from nexus.maintenance.database_targets import evaluation_dbname
+        from nexus.maintenance.migrate import (
+            get_connection as get_evaluation_connection,
+        )
 
         connection = closing(get_evaluation_connection(evaluation_dbname(dbname)))
     else:

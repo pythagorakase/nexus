@@ -30,7 +30,8 @@ from nexus.runtime.readiness import (
     run_readiness,
     slot_idf_outcome,
 )
-from scripts import migrate, rebuild_memory_idf
+from scripts import rebuild_memory_idf
+from nexus.maintenance import migrate
 from tests import pg_fixtures
 
 pytestmark = pytest.mark.requires_postgres
@@ -54,7 +55,7 @@ def owner_host_stand_ins(monkeypatch: pytest.MonkeyPatch) -> Iterator[int]:
     """Stand disposable clones in for the template and every readiness slot.
 
     The owner-host checks read the template named by
-    ``scripts.migrate.TEMPLATE_DB`` and each ``[runtime.readiness].slots``
+    ``nexus.maintenance.migrate.TEMPLATE_DB`` and each ``[runtime.readiness].slots``
     database through the contract server. A template clone takes the
     template's name there, and ``route_slots_to_disposable`` gives every
     configured slot its own clone, so the checks run their real SQL on the
@@ -107,7 +108,7 @@ def test_owner_host_database_checks_run_against_the_contract_server(
     The locked, stale stand-in slot fails the slot IDF check with the
     ``--write-locked-slot`` remediation.
     """
-    from scripts.migrate import TEMPLATE_DB
+    from nexus.maintenance.migrate import TEMPLATE_DB
 
     registry = [spec for spec in REGISTRY if spec.id in DATABASE_CHECKS]
     report = run_readiness("owner-host", ReadinessContext(), registry=registry)

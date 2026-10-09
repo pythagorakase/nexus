@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Combined #803 init/desktop and #823 journal closure; #840 removes maturation geo_authoring from production while retaining operator backfill. Final assembled AST admission pending",
+  "reason": "Combined #803 init/desktop, #823 journal, #840 point policy and #811 maintenance-module closure; final assembled AST admission pending",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -236,6 +236,11 @@
     "nexus/jobs/narrative_jobs.py",
     "nexus/jobs/scheduler.py",
     "nexus/jobs/summaries.py",
+    "nexus/jobs/summarize_narrative.py",
+    "nexus/maintenance/__init__.py",
+    "nexus/maintenance/database_targets.py",
+    "nexus/maintenance/migrate.py",
+    "nexus/maintenance/new_story_setup.py",
     "nexus/memory/__init__.py",
     "nexus/memory/baseline_compat.py",
     "nexus/memory/context_state.py",
@@ -282,11 +287,7 @@
     "scripts/__init__.py",
     "scripts/api_anthropic.py",
     "scripts/api_openai.py",
-    "scripts/database_targets.py",
-    "scripts/migrate.py",
-    "scripts/new_story_setup.py",
     "scripts/rebuild_memory_idf.py",
-    "scripts/replay_state.py",
-    "scripts/summarize_narrative.py"
+    "scripts/replay_state.py"
   ]
 }

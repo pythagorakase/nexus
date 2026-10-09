@@ -62,8 +62,8 @@ from nexus.database import (  # noqa: E402
     maintenance_connection,
     transaction,
 )
-from scripts.database_targets import evaluation_dbname  # noqa: E402
-from scripts.migrate import (  # noqa: E402
+from nexus.maintenance.database_targets import evaluation_dbname  # noqa: E402
+from nexus.maintenance.migrate import (  # noqa: E402
     SLOT_DBS,
     TEMPLATE_DB,
     db_exists,

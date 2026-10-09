@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,

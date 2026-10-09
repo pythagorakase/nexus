@@ -17,7 +17,7 @@ import pytest
 
 from nexus import cli
 from nexus.api import db_pool
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import connect, route_slot_to_disposable
 
 

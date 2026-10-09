@@ -22,7 +22,8 @@ import pytest
 from psycopg2.extensions import connection
 
 from nexus.database import subprocess_env
-from scripts import migrate, new_story_setup
+from nexus.maintenance import migrate
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import connect, disposable_slot_database
 
 pytestmark = pytest.mark.requires_postgres

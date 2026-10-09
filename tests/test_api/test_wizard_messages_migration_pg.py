@@ -18,7 +18,7 @@ from nexus.api.new_story_cache import clear_cache, init_cache
 from nexus.api.new_story_flow import start_setup
 from nexus.api.slot_state import get_slot_state
 from nexus.config import load_settings
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,

@@ -19,7 +19,7 @@ def drain_summary(
     """Generate through the provider client and fence the reader-visible write."""
 
     def prepare(job: dict[str, Any]) -> dict[str, Any] | None:
-        from scripts.summarize_narrative import DatabaseManager, SummaryGenerator
+        from nexus.jobs.summarize_narrative import DatabaseManager, SummaryGenerator
 
         model = persisted_job_model(job, table="narrative_summary_jobs")
         db = DatabaseManager(db_url=database_url(dbname))

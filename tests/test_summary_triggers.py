@@ -64,7 +64,7 @@ def test_summary_incomplete_response_is_terminal_before_parsing(mode, reason):
     """TEST has no incomplete mode; classify an actual SDK response shape."""
     from nexus.api.summary_errors import SummaryOutputTruncated
     from nexus.config import load_settings
-    from scripts.summarize_narrative import SummaryGenerator
+    from nexus.jobs.summarize_narrative import SummaryGenerator
 
     generator = SummaryGenerator(model="TEST", db_manager=_FakeDB())
     provider = generator._provider_for_mode(mode)
@@ -109,7 +109,7 @@ class _FakeDB:
 def test_summary_generator_routes_test_model_to_registry_base_url():
     """The TEST provider's Responses client uses its registered endpoint."""
     from nexus.config import load_settings
-    from scripts.summarize_narrative import SummaryGenerator
+    from nexus.jobs.summarize_narrative import SummaryGenerator
 
     generator = SummaryGenerator(model="TEST", db_manager=_FakeDB({}, {}))
     expected = load_settings().global_.model.api_models["test"].base_url
@@ -120,7 +120,7 @@ def test_summary_generator_routes_test_model_to_registry_base_url():
 
 def test_summary_token_check_uses_registry_window():
     """The retired legacy TPM dictionary is not a prerequisite for summaries."""
-    from scripts.summarize_narrative import SummaryGenerator
+    from nexus.jobs.summarize_narrative import SummaryGenerator
 
     generator = SummaryGenerator(model="TEST", db_manager=_FakeDB({}, {}))
 
@@ -145,7 +145,7 @@ def test_summary_generator_uses_registry_native_provider_contract(
     from nexus.config import load_settings, resolve_model_ref
     from scripts.api_anthropic import AnthropicProvider
     from scripts.api_openai import OpenAIProvider
-    from scripts.summarize_narrative import SummaryGenerator
+    from nexus.jobs.summarize_narrative import SummaryGenerator
 
     monkeypatch.setattr(OpenAIProvider, "_get_api_key", lambda self: "test-openai")
     monkeypatch.setattr(
@@ -213,7 +213,7 @@ def truncated_chat_summary_response(content='{"summary": "unfinished'):
 def test_summary_chat_length_is_terminal_before_parsing(mode, content):
     """Even syntactically valid truncated JSON must never be accepted."""
     from nexus.api.summary_errors import SummaryOutputTruncated
-    from scripts.summarize_narrative import SummaryGenerator
+    from nexus.jobs.summarize_narrative import SummaryGenerator
 
     generator = SummaryGenerator(model="TEST", db_manager=_FakeDB())
     provider = generator._provider_for_mode(mode)

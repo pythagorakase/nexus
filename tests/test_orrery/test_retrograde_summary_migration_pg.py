@@ -16,7 +16,7 @@ import psycopg2
 from psycopg2 import sql
 import pytest
 
-import scripts.migrate as migrate
+import nexus.maintenance.migrate as migrate
 from tests.pg_fixtures import connect
 
 

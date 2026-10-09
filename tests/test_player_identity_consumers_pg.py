@@ -41,7 +41,7 @@ from nexus.api.narrative_generation import generate_bootstrap_narrative
 from nexus.config import load_settings
 from nexus.config.settings_models import OrreryWeatherSettings
 from nexus.memory.manager import ContextMemoryManager
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import connect, route_slot_to_disposable, sqlalchemy_url
 
 

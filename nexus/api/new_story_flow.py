@@ -34,7 +34,7 @@ from nexus.api.new_story_cache import (
 from nexus.api.new_story_schemas import StorySeed
 from nexus.api.save_slots import clear_active, get_slot_model, upsert_slot
 from nexus.api.slot_utils import slot_dbname, all_slots
-from scripts.new_story_setup import create_slot_schema_only
+from nexus.maintenance.new_story_setup import create_slot_schema_only
 
 if TYPE_CHECKING:
     from nexus.api.new_story_schemas import TransitionData
