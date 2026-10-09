@@ -2912,6 +2912,44 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     # Narrative mode - call continue directly
     # (Also reached after wizard transition above)
     if not state.get("is_wizard_mode"):
+        if retrograde_info is None:
+            status_response = _api_get(
+                f"{get_api_url()}/api/story/new/retrograde/status",
+                params={"slot": args.slot},
+                timeout=_request_timeout_seconds(),
+            )
+            status = _api_object(status_response)
+            _retrograde_status_stage(status)
+            if "run_status" not in status or status["run_status"] not in (
+                None,
+                "running",
+                "failed",
+                "done",
+            ):
+                raise ValueError(f"Unrecognized genesis run_status: {status!r}")
+            if status["run_status"] in {"running", "failed"}:
+                transition_url = f"{get_api_url()}/api/story/new/transition"
+                with _echo_retrograde_stages(args.slot, enabled=not args.json):
+                    transition_response = _api_post(
+                        transition_url,
+                        json={"slot": args.slot},
+                        timeout=_transition_timeout_seconds(),
+                    )
+                if not 200 <= transition_response.status_code < 300:
+                    return {
+                        "success": False,
+                        "code": _answer_failure_code(transition_response),
+                        "error": f"Transition failed: {transition_response.text}",
+                    }
+                retrograde_info = _api_object(transition_response).get("retrograde")
+                state_response = _api_get(state_url, timeout=_request_timeout_seconds())
+                state = _api_object(state_response)
+                if state.get("is_wizard_mode"):
+                    return {
+                        "success": False,
+                        "error": "Transition completed but still in wizard mode",
+                    }
+
         # Narrative mode - call continue directly
         # The API already resolves the persisted slot model. Sending a
         # model is an explicit override and must remain opt-in.

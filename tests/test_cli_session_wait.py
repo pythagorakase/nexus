@@ -120,6 +120,18 @@ def _gateway(session: Session) -> Iterator[str]:
                     self._stall_body(state)
                     return
                 self._respond(state)
+            elif url.path == "/api/story/new/retrograde/status":
+                assert parse_qs(url.query) == {"slot": ["5"]}, url.query
+                self._respond(
+                    {
+                        "slot": 5,
+                        "run": None,
+                        "run_status": None,
+                        "error": None,
+                        "stage": "idle",
+                        "stages": [],
+                    }
+                )
             elif url.path == f"/api/narrative/status/{SESSION}":
                 assert parse_qs(url.query) == {"slot": ["5"]}, url.query
                 session.status_reads += 1

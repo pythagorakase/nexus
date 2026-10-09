@@ -1,0 +1,33 @@
+{
+  "base_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "records": [
+    {
+      "path": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "changed_sources": [
+        "nexus/cli.py"
+      ],
+      "quoted_ruling_changed": false
+    },
+    {
+      "path": "docs/decisions/0016-speculative-maturation.md",
+      "changed_sources": [
+        "docs/orrery_retrograde_spec.md"
+      ],
+      "quoted_ruling_changed": false
+    },
+    {
+      "path": "docs/decisions/0017-sparse-entity-enrichment.md",
+      "changed_sources": [
+        "docs/orrery_retrograde_spec.md"
+      ],
+      "quoted_ruling_changed": false
+    },
+    {
+      "path": "docs/decisions/0024-killed-c102.md",
+      "changed_sources": [
+        "docs/orrery_retrograde_spec.md"
+      ],
+      "quoted_ruling_changed": false
+    }
+  ]
+}

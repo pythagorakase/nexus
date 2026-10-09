@@ -462,6 +462,18 @@ def test_continue_posts_choice_to_backend_without_preapproving(
             )
         if "/api/narrative/status/" in url:
             return DummyResponse({"status": "completed", "chunk_id": 2})
+        if url.endswith("/api/story/new/retrograde/status"):
+            assert kwargs["params"] == {"slot": 5}
+            return DummyResponse(
+                {
+                    "slot": 5,
+                    "run": None,
+                    "run_status": None,
+                    "error": None,
+                    "stage": "idle",
+                    "stages": [],
+                }
+            )
         raise AssertionError(f"Unexpected GET {url}")
 
     def fake_post(url: str, json: dict[str, Any], **kwargs: Any) -> DummyResponse:

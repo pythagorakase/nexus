@@ -28,17 +28,20 @@ genesis_run_stages tables.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from datetime import datetime
 import json
 import logging
 import time
 import uuid
-from typing import Any, Callable, Mapping, Optional, Sequence
+from typing import Any, Callable, Iterator, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.api.db_pool import get_connection
 from nexus.api.slot_utils import slot_dbname
+from nexus.database import commit_transaction
 from nexus.config.settings_models import (
     OrreryRetrogradeRetrievalSettings,
     OrreryRetrogradeWizardSettings,
@@ -99,6 +102,118 @@ class RetrogradeGenerationBundle(BaseModel):
     seed_candidate_response: dict[str, Any]
     expansion_plan: dict[str, Any]
     timings: list[RetrogradeStageTiming]
+
+
+GENESIS_RUN_INTERRUPTED = (
+    "GenesisRunInterrupted: the process that ran this genesis run stopped "
+    "before it finished"
+)
+
+
+class GenesisStageRecord(BaseModel):
+    """One saved stage result and its durable progress metadata."""
+
+    model_config = ConfigDict(extra="forbid")
+    detail: dict[str, Any]
+    output: Any
+    finished_at: datetime | None
+
+
+class GenesisRunRecord(BaseModel):
+    """One durable run, including every saved stage output."""
+
+    model_config = ConfigDict(extra="forbid")
+    run: str
+    status: str
+    stage: str | None
+    skip_reason: str | None
+    error: str | None
+    input_fingerprint: str | None
+    stages: dict[str, GenesisStageRecord]
+
+
+def load_genesis_run(
+    slot: int, run: str | None = None, *, excluding: str | None = None
+) -> GenesisRunRecord | None:
+    """Read a named run or the latest eligible run with all of its stage rows."""
+    with get_connection(slot_dbname(slot), dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT run_id, status, stage, skip_reason, error, input_fingerprint "
+                "FROM genesis_runs WHERE (%s::uuid IS NULL OR run_id = %s::uuid) "
+                "AND (%s::uuid IS NULL OR run_id <> %s::uuid) "
+                "ORDER BY started_at DESC LIMIT 1",
+                (run, run, excluding, excluding),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+            cur.execute(
+                "SELECT stage, detail, output, finished_at FROM genesis_run_stages "
+                "WHERE run_id = %s ORDER BY started_at",
+                (row["run_id"],),
+            )
+            stages = {
+                item["stage"]: GenesisStageRecord(
+                    detail=item["detail"],
+                    output=item["output"],
+                    finished_at=item["finished_at"],
+                )
+                for item in cur.fetchall()
+            }
+            return GenesisRunRecord(
+                run=uuid.UUID(str(row["run_id"])).hex,
+                status=row["status"],
+                stage=row["stage"],
+                skip_reason=row["skip_reason"],
+                error=row["error"],
+                input_fingerprint=row["input_fingerprint"],
+                stages=stages,
+            )
+
+
+def record_genesis_input_fingerprint(slot: int, run: str, fingerprint: str) -> None:
+    """Set a running run's fingerprint once, refusing an already assigned run."""
+    with get_connection(slot_dbname(slot)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE genesis_runs SET input_fingerprint = %s "
+            "WHERE run_id = %s AND status = 'running' "
+            "AND input_fingerprint IS NULL",
+            (fingerprint, run),
+        )
+        _checked(cur, run)
+
+
+@contextmanager
+def genesis_slot_claim(slot: int) -> Iterator[bool]:
+    """Hold a session advisory claim outside a transaction until the caller exits."""
+    with get_connection(slot_dbname(slot)) as conn:
+        won = False
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_try_advisory_lock("
+                    "hashtext(current_database()), hashtext('genesis-run'))"
+                )
+                won = bool(cur.fetchone()[0])
+            commit_transaction(conn)
+            yield won
+        finally:
+            if won:
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT pg_advisory_unlock("
+                            "hashtext(current_database()), hashtext('genesis-run'))"
+                        )
+                        if not cur.fetchone()[0]:
+                            raise RuntimeError(
+                                "Genesis session claim was not held at release"
+                            )
+                except BaseException:
+                    # Never return a session whose lock release is uncertain.
+                    conn.close()
+                    raise
 
 
 def _checked(cur: Any, run: str) -> None:
@@ -270,6 +385,8 @@ def generate_retrograde_history(
     progress: Optional[ProgressCallback] = None,
     trait_compile_inputs: Optional[Mapping[str, Any]] = None,
     on_stage_output: Optional[Callable[[str, dict[str, Any]], None]] = None,
+    saved_outputs: Optional[Mapping[str, Any]] = None,
+    on_stage_reused: Optional[Callable[[str], None]] = None,
 ) -> RetrogradeGenerationBundle:
     """Run the non-mutating Retrograde stages from a wizard cache snapshot.
 
@@ -286,69 +403,90 @@ def generate_retrograde_history(
     )
 
     timings: list[RetrogradeStageTiming] = []
+    saved = saved_outputs or {}
 
-    _emit(progress, "packet", {})
-    started = time.monotonic()
-    packet = build_retrograde_dry_run_packet(
-        slot=slot,
-        dbname=dbname,
-        cache=cache,
-        vocabulary=enumerate_seed_eligible_vocabulary(dbname=dbname),
-        settings=settings,
-        weird_level=weird_level,
-        weird_raw=weird_raw,
-        trait_compile_inputs=trait_compile_inputs,
-    )
-    timings.append(
-        RetrogradeStageTiming(stage="packet", seconds=time.monotonic() - started)
-    )
-
-    if on_stage_output is not None:
-        on_stage_output("packet", packet)
-
-    _emit(progress, "seed_candidates", {"weird": packet["weird"]["level"]})
-    started = time.monotonic()
-    seed_generation = run_seed_stage(
-        packet=packet,
-        model_name=model_name,
-        max_tokens=max_tokens,
-    )
-    timings.append(
-        RetrogradeStageTiming(
-            stage="seed_candidates", seconds=time.monotonic() - started
+    if "packet" in saved:
+        packet = saved["packet"]
+        if on_stage_reused is not None:
+            on_stage_reused("packet")
+    else:
+        _emit(progress, "packet", {})
+        started = time.monotonic()
+        packet = build_retrograde_dry_run_packet(
+            slot=slot,
+            dbname=dbname,
+            cache=cache,
+            vocabulary=enumerate_seed_eligible_vocabulary(dbname=dbname),
+            settings=settings,
+            weird_level=weird_level,
+            weird_raw=weird_raw,
+            trait_compile_inputs=trait_compile_inputs,
         )
-    )
-    seed_response = seed_generation["seed_candidate_response"]
-    if on_stage_output is not None:
-        on_stage_output("seed_candidates", dict(seed_response))
+        timings.append(
+            RetrogradeStageTiming(stage="packet", seconds=time.monotonic() - started)
+        )
 
-    _emit(
-        progress,
-        "expansion",
-        {
-            "candidates": len(seed_response["candidates"]),
-            "selected": len(seed_response["selected_seed_ids"]),
-        },
-    )
-    started = time.monotonic()
-    expansion_generation = generate_expansion_with_skald(
-        packet=packet,
-        seed_candidate_response=seed_response,
-        model_name=model_name,
-        max_tokens=max_tokens,
-    )
-    timings.append(
-        RetrogradeStageTiming(stage="expansion", seconds=time.monotonic() - started)
-    )
+        if on_stage_output is not None:
+            on_stage_output("packet", packet)
 
-    expansion_plan = dict(expansion_generation["retrograde_expansion_plan"])
-    if on_stage_output is not None:
-        on_stage_output("expansion", dict(expansion_plan))
+    if "seed_candidates" in saved:
+        seed_response = saved["seed_candidates"]
+        if on_stage_reused is not None:
+            on_stage_reused("seed_candidates")
+        if model_name is None:
+            raise ValueError("Reused seed output requires a resolved model")
+        bundle_model = model_name
+    else:
+        _emit(progress, "seed_candidates", {"weird": packet["weird"]["level"]})
+        started = time.monotonic()
+        seed_generation = run_seed_stage(
+            packet=packet,
+            model_name=model_name,
+            max_tokens=max_tokens,
+        )
+        timings.append(
+            RetrogradeStageTiming(
+                stage="seed_candidates", seconds=time.monotonic() - started
+            )
+        )
+        seed_response = seed_generation["seed_candidate_response"]
+        if on_stage_output is not None:
+            on_stage_output("seed_candidates", dict(seed_response))
+
+        bundle_model = str(seed_generation["model"])
+
+    if "expansion" in saved:
+        expansion_plan = saved["expansion"]
+        if on_stage_reused is not None:
+            on_stage_reused("expansion")
+    else:
+        _emit(
+            progress,
+            "expansion",
+            {
+                "candidates": len(seed_response["candidates"]),
+                "selected": len(seed_response["selected_seed_ids"]),
+            },
+        )
+        started = time.monotonic()
+        expansion_generation = generate_expansion_with_skald(
+            packet=packet,
+            seed_candidate_response=seed_response,
+            model_name=model_name,
+            max_tokens=max_tokens,
+        )
+        timings.append(
+            RetrogradeStageTiming(stage="expansion", seconds=time.monotonic() - started)
+        )
+
+        expansion_plan = dict(expansion_generation["retrograde_expansion_plan"])
+        if on_stage_output is not None:
+            on_stage_output("expansion", dict(expansion_plan))
 
     return RetrogradeGenerationBundle(
         slot=slot,
         dbname=dbname,
-        model=str(seed_generation["model"]),
+        model=bundle_model,
         weird=dict(packet["weird"]),
         packet=packet,
         seed_candidate_response=dict(seed_response),

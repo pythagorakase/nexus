@@ -235,6 +235,7 @@ def test_renamed_test_provider_model_skips_derivation_and_retrograde(
         assert result["retrograde"] == {
             "enabled": False,
             "skip_reason": "mock_wizard_model",
+            "reused_stages": [],
         }
         assert result["trait_inputs"] == {"derived": False}
         with closing(_connect(clone)) as conn, conn.cursor() as cur:

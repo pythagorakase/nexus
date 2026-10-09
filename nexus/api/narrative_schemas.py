@@ -506,6 +506,13 @@ class WeirdLevelRequest(BaseModel):
 class TransitionResponse(BaseModel):
     """Response from successful transition."""
 
+    run: str = Field(
+        ...,
+        description=(
+            "Genesis run (32-character hex) this answer reports, "
+            "the run GET /api/story/new/retrograde/status reads."
+        ),
+    )
     status: str
     character_id: int
     place_id: int
