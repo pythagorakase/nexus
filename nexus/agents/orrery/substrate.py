@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace as dataclass_replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from hashlib import sha256
 import json
@@ -335,6 +335,7 @@ class EventRecord:
     changed_fields: Tuple[str, ...] = ()
     world_layer: str = "primary"
     payload: Mapping[str, Any] = field(default_factory=dict)
+    world_time: Optional[datetime] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -398,6 +399,8 @@ class WorldState:
     localized_weather_enabled: bool = False
     mood_enabled: bool = False
     current_tick: int = 0
+    horizon_events: Tuple[EventRecord, ...] = ()
+    event_horizon_hours: Optional[float] = None
     _recent_events_by_type: Mapping[str, Tuple[EventRecord, ...]] = field(
         init=False, repr=False, compare=False
     )
@@ -405,6 +408,15 @@ class WorldState:
         init=False, repr=False, compare=False
     )
     _recent_events_by_target: Mapping[int, Tuple[EventRecord, ...]] = field(
+        init=False, repr=False, compare=False
+    )
+    _horizon_events_by_type: Mapping[str, Tuple[EventRecord, ...]] = field(
+        init=False, repr=False, compare=False
+    )
+    _horizon_events_by_actor: Mapping[int, Tuple[EventRecord, ...]] = field(
+        init=False, repr=False, compare=False
+    )
+    _horizon_events_by_target: Mapping[int, Tuple[EventRecord, ...]] = field(
         init=False, repr=False, compare=False
     )
     _outbound_pair_tags_by_entity: Mapping[int, frozenset[str]] = field(
@@ -442,6 +454,24 @@ class WorldState:
             if event.target_entity_id is not None:
                 events_by_target.setdefault(event.target_entity_id, []).append(event)
 
+        horizon_events_by_type: dict[str, list[EventRecord]] = {}
+        horizon_events_by_actor: dict[int, list[EventRecord]] = {}
+        horizon_events_by_target: dict[int, list[EventRecord]] = {}
+        for event in self.horizon_events:
+            if event.world_time is None or event.world_time.utcoffset() is None:
+                raise ValueError(
+                    f"Horizon event {event.event_id!r} requires an aware world_time"
+                )
+            horizon_events_by_type.setdefault(event.event_type, []).append(event)
+            if event.actor_entity_id is not None:
+                horizon_events_by_actor.setdefault(event.actor_entity_id, []).append(
+                    event
+                )
+            if event.target_entity_id is not None:
+                horizon_events_by_target.setdefault(event.target_entity_id, []).append(
+                    event
+                )
+
         outbound_pair_tags: dict[int, set[str]] = {}
         inbound_pair_tags: dict[int, set[str]] = {}
         for (subject_id, object_id), tags in self.pair_tags.items():
@@ -467,6 +497,27 @@ class WorldState:
             "_recent_events_by_target",
             MappingProxyType(
                 {key: tuple(events) for key, events in events_by_target.items()}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "_horizon_events_by_type",
+            MappingProxyType(
+                {key: tuple(events) for key, events in horizon_events_by_type.items()}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "_horizon_events_by_actor",
+            MappingProxyType(
+                {key: tuple(events) for key, events in horizon_events_by_actor.items()}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "_horizon_events_by_target",
+            MappingProxyType(
+                {key: tuple(events) for key, events in horizon_events_by_target.items()}
             ),
         )
         object.__setattr__(
@@ -534,6 +585,31 @@ def _recent_event_candidates(
             candidates = acted
     if target_id is not None:
         targeted = state._recent_events_by_target.get(target_id, ())
+        if len(targeted) < len(candidates):
+            candidates = targeted
+    return candidates
+
+
+def _horizon_event_candidates(
+    state: WorldState,
+    *,
+    event_type: Optional[str] = None,
+    actor_id: Optional[int] = None,
+    target_id: Optional[int] = None,
+) -> Tuple[EventRecord, ...]:
+    """Return the smallest applicable event bucket, preserving source order."""
+
+    candidates = state.horizon_events
+    if event_type is not None:
+        typed = state._horizon_events_by_type.get(event_type, ())
+        if len(typed) < len(candidates):
+            candidates = typed
+    if actor_id is not None:
+        acted = state._horizon_events_by_actor.get(actor_id, ())
+        if len(acted) < len(candidates):
+            candidates = acted
+    if target_id is not None:
+        targeted = state._horizon_events_by_target.get(target_id, ())
         if len(targeted) < len(candidates):
             candidates = targeted
     return candidates
@@ -2277,6 +2353,32 @@ def weather_is(*weather_values: str) -> Condition:
     return _named(_condition, f"weather_is({','.join(weather_values)})")
 
 
+def _hours_text(hours: float, kind: str) -> str:
+    """Encode a positive finite hour value exactly in a predicate name."""
+
+    if isinstance(hours, bool) or not isinstance(hours, (int, float)):
+        raise TypeError(f"{kind} hours must be a number, got {hours!r}")
+    if not math.isfinite(hours) or hours <= 0:
+        raise ValueError(f"{kind} hours must be finite and positive, got {hours!r}")
+    text = format(float(hours), "g")
+    if "e" in text or float(text) != float(hours):
+        raise ValueError(f"{kind} hours cannot be named exactly: {hours!r}")
+    return text
+
+
+def _hour_window_floor(state: WorldState, hours: float, kind: str) -> datetime:
+    """Require an aware clock and hydration covering the whole hour interval."""
+
+    if state.world_time is None or state.world_time.utcoffset() is None:
+        raise ValueError(f"{kind} requires an aware world_time")
+    if state.event_horizon_hours is None or hours > state.event_horizon_hours:
+        raise ValueError(
+            f"{kind} requires [orrery.binding] recent_event_horizon_hours "
+            f"to cover {hours} hours (hydrated {state.event_horizon_hours!r})"
+        )
+    return state.world_time - timedelta(hours=hours)
+
+
 def recent_event(
     event_type: Optional[str] = None,
     *,
@@ -2499,6 +2601,229 @@ def count_recent_events_at_least(
     return _named(
         _condition,
         f"count_recent_events_at_least({event_type},>={min_count},<={within_ticks}"
+        f"@{actor_slot.value}{suffix})",
+    )
+
+
+def recent_event_within_hours(
+    event_type: Optional[str] = None,
+    *,
+    within_hours: float,
+    actor_slot: Optional[Slot] = None,
+    target_slot: Optional[Slot] = None,
+    changed_fields_any_of: Iterable[str] = (),
+) -> Condition:
+    """Return whether matching occurrences satisfy the world-hour window."""
+
+    h = _hours_text(within_hours, "recent_event_within_hours")
+
+    changed_fields = frozenset(changed_fields_any_of)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        floor = _hour_window_floor(state, within_hours, "recent_event_within_hours")
+        actor_id = _slot_entity(bindings, actor_slot) if actor_slot else None
+        target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if actor_slot is not None and actor_id is None:
+            return False
+        if target_slot is not None and target_id is None:
+            return False
+        for event in _horizon_event_candidates(
+            state,
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+        ):
+            assert event.world_time is not None  # Validated by WorldState.
+            if event.world_time < floor:
+                continue
+            if event_type is not None and event.event_type != event_type:
+                continue
+            if actor_id is not None and event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            if changed_fields and not changed_fields.intersection(event.changed_fields):
+                continue
+            return True
+        return False
+
+    parts = [event_type or "*", f"<={h}h"]
+    if actor_slot:
+        parts.append(f"actor={actor_slot.value}")
+    if target_slot:
+        parts.append(f"target={target_slot.value}")
+    if changed_fields:
+        parts.append("fields")
+    return _named(_condition, f"recent_event_within_hours({','.join(parts)})")
+
+
+def knows_recent_event_within_hours(
+    event_type: Optional[str] = None,
+    *,
+    within_hours: float,
+    actor_slot: Optional[Slot] = None,
+    target_slot: Optional[Slot] = None,
+    changed_fields_any_of: Iterable[str] = (),
+) -> Condition:
+    """Require a matching occurrence visible under the actor epistemics rules."""
+
+    h = _hours_text(within_hours, "knows_recent_event_within_hours")
+
+    changed_fields = frozenset(changed_fields_any_of)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        floor = _hour_window_floor(
+            state, within_hours, "knows_recent_event_within_hours"
+        )
+        knower_id = _slot_entity(bindings, Slot.ACTOR)
+        if state.epistemics_enabled and knower_id is None:
+            return False
+        actor_id = _slot_entity(bindings, actor_slot) if actor_slot else None
+        target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if actor_slot is not None and actor_id is None:
+            return False
+        if target_slot is not None and target_id is None:
+            return False
+        known_events: frozenset[int] = frozenset()
+        if knower_id is not None:
+            known_events = state.awareness_by_entity.get(knower_id, frozenset())
+        for event in _horizon_event_candidates(
+            state,
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+        ):
+            assert event.world_time is not None  # Validated by WorldState.
+            if event.world_time < floor:
+                continue
+            if event_type is not None and event.event_type != event_type:
+                continue
+            if actor_id is not None and event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            if changed_fields and not changed_fields.intersection(event.changed_fields):
+                continue
+            if not state.epistemics_enabled:
+                return True
+            scope = (
+                state.claimed_event_scopes.get(event.event_id)
+                if event.event_id is not None
+                else None
+            )
+            if scope is None or scope == "common":
+                return True
+            if event.event_id in known_events:
+                return True
+        return False
+
+    parts = [event_type or "*", f"<={h}h", "knower=actor"]
+    if actor_slot:
+        parts.append(f"actor={actor_slot.value}")
+    if target_slot:
+        parts.append(f"target={target_slot.value}")
+    if changed_fields:
+        parts.append("fields")
+    return _named(_condition, f"knows_recent_event_within_hours({','.join(parts)})")
+
+
+def since_last_event_hours_at_least(
+    event_type: str,
+    minimum_hours: float,
+    *,
+    actor_slot: Slot = Slot.ACTOR,
+    target_slot: Optional[Slot] = None,
+) -> Condition:
+    """Require enough world hours since the latest matching occurrence."""
+
+    h = _hours_text(minimum_hours, "since_last_event_hours_at_least")
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        floor = _hour_window_floor(
+            state, minimum_hours, "since_last_event_hours_at_least"
+        )
+        actor_id = _slot_entity(bindings, actor_slot)
+        if actor_id is None:
+            return False
+        target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if target_slot is not None and target_id is None:
+            return False
+        latest: Optional[datetime] = None
+        for event in _horizon_event_candidates(
+            state,
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+        ):
+            if event.event_type != event_type:
+                continue
+            if event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            assert event.world_time is not None  # Validated by WorldState.
+            latest = (
+                event.world_time if latest is None else max(latest, event.world_time)
+            )
+        if latest is None:
+            return True
+        return latest <= floor
+
+    suffix = f",target={target_slot.value}" if target_slot else ""
+    return _named(
+        _condition,
+        f"since_last_event_hours_at_least({event_type},{h}h"
+        f"@{actor_slot.value}{suffix})",
+    )
+
+
+def count_recent_events_within_hours_at_least(
+    event_type: str,
+    *,
+    within_hours: float,
+    min_count: int,
+    actor_slot: Slot = Slot.ACTOR,
+    target_slot: Optional[Slot] = None,
+) -> Condition:
+    """Return whether matching occurrences satisfy the world-hour window."""
+
+    h = _hours_text(within_hours, "count_recent_events_within_hours_at_least")
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        floor = _hour_window_floor(
+            state, within_hours, "count_recent_events_within_hours_at_least"
+        )
+        actor_id = _slot_entity(bindings, actor_slot)
+        if actor_id is None:
+            return False
+        target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if target_slot is not None and target_id is None:
+            return False
+        count = 0
+        for event in _horizon_event_candidates(
+            state,
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+        ):
+            assert event.world_time is not None  # Validated by WorldState.
+            if event.world_time < floor:
+                continue
+            if event.event_type != event_type:
+                continue
+            if event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            count += 1
+            if count >= min_count:
+                return True
+        return False
+
+    suffix = f",target={target_slot.value}" if target_slot else ""
+    return _named(
+        _condition,
+        f"count_recent_events_within_hours_at_least({event_type},>={min_count},<={h}h"
         f"@{actor_slot.value}{suffix})",
     )
 

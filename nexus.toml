@@ -344,6 +344,8 @@ enabled = true
 
 [orrery.binding]
 window_chunks = 30
+# World hours of event history hydrated for world-hour predicates, by occurrence time.
+recent_event_horizon_hours = 24.0
 
 [orrery.composition]
 # Shared binding sources remain model-default-off for legacy configurations.

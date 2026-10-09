@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Iterable as IterableABC
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
+import math
 from typing import Any, Iterable, Mapping, Optional, Protocol, Sequence, Tuple, TypeVar
 
 from sqlalchemy import text
@@ -516,11 +517,29 @@ def coerce_resolver_settings(raw: Any) -> OrreryResolverSettings:
     )
 
 
+def coerce_event_horizon_hours(raw: Any) -> float:
+    """Read or validate the occurrence-time hydration horizon in world hours."""
+
+    if raw is None:
+        from nexus.config import load_settings
+
+        orrery = load_settings().orrery
+        if orrery is None:
+            raise ValueError("settings.orrery is required to hydrate world state")
+        raw = orrery.binding.recent_event_horizon_hours
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise TypeError("recent_event_horizon_hours must be a number")
+    if not math.isfinite(raw) or raw <= 0:
+        raise ValueError("recent_event_horizon_hours must be finite and positive")
+    return float(raw)
+
+
 def hydrate_world_state(
     session: Any,
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    event_horizon_hours: Optional[float] = None,
     need_tuning: Optional[NeedTuning] = None,
     world_time_override: Optional[datetime] = None,
     win_history_window: int = 0,
@@ -557,6 +576,12 @@ def hydrate_world_state(
             "Cannot hydrate Orrery world state without world_time "
             f"(anchor_chunk_id={anchor_chunk_id!r})"
         )
+    if world_time.utcoffset() is None:
+        raise ValueError(
+            "Cannot hydrate Orrery world state with naive world_time "
+            f"(anchor_chunk_id={anchor_chunk_id!r})"
+        )
+    horizon = coerce_event_horizon_hours(event_horizon_hours)
     mood_enabled = bool(_weather_setting(mood_settings, "enabled", False))
 
     is_active = {
@@ -752,10 +777,11 @@ def hydrate_world_state(
             row["faction_entity_id"]
         )
 
-    recent_events = _load_recent_events(
+    recent_events, horizon_events = _load_event_history(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
+        horizon_floor=world_time - timedelta(hours=horizon),
     )
     epistemics = None
     if epistemics_policy.enabled:
@@ -763,7 +789,9 @@ def hydrate_world_state(
             session,
             entity_ids=_load_active_entity_ids(session),
             recent_event_ids=(
-                event.event_id for event in recent_events if event.event_id is not None
+                event.event_id
+                for event in (*recent_events, *horizon_events)
+                if event.event_id is not None
             ),
             anchor_chunk_id=anchor_chunk_id,
         )
@@ -836,6 +864,8 @@ def hydrate_world_state(
         project_policy=project_policy,
         routine_anchors=routine_anchors,
         recent_events=recent_events,
+        horizon_events=horizon_events,
+        event_horizon_hours=horizon,
         claimed_event_scopes=(
             epistemics.claimed_event_scopes if epistemics is not None else {}
         ),
@@ -2469,6 +2499,7 @@ def resolve_dry_run(
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    event_horizon_hours: Optional[float] = None,
     sunhelm_settings: Optional[Any] = None,
     world_time_override: Optional[datetime] = None,
     selection_settings: Optional[Any] = None,
@@ -2504,6 +2535,7 @@ def resolve_dry_run(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
+        event_horizon_hours=event_horizon_hours,
         need_tuning=need_tuning,
         world_time_override=world_time_override,
         win_history_window=habituation.window_ticks if habituation.enabled else 0,
@@ -2918,11 +2950,31 @@ def _load_recent_events(
     anchor_chunk_id: Optional[int],
     window_chunks: int,
 ) -> Tuple[EventRecord, ...]:
+    """Keep the tick-window compatibility read separate from hour history."""
+
+    return _load_event_history(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=window_chunks,
+        horizon_floor=None,
+    )[0]
+
+
+def _load_event_history(
+    session: Any,
+    *,
+    anchor_chunk_id: Optional[int],
+    window_chunks: int,
+    horizon_floor: Optional[datetime],
+) -> tuple[Tuple[EventRecord, ...], Tuple[EventRecord, ...]]:
+    """Read anchor-bounded tick and occurrence-time history in one query."""
+
     if anchor_chunk_id is None:
-        return ()
+        return (), ()
 
     lower_bound = max(0, anchor_chunk_id - window_chunks + 1)
-    events = []
+    recent = []
+    horizon = []
     for row in session.execute(
         text(
             """
@@ -2930,6 +2982,7 @@ def _load_recent_events(
             SELECT id,
                    event_type,
                    tick_chunk_id,
+                   world_time,
                    actor_entity_id,
                    target_entity_id,
                    location_id,
@@ -2937,29 +2990,42 @@ def _load_recent_events(
                    COALESCE(world_layer::text, 'primary') AS world_layer,
                    payload
             FROM world_events
-            WHERE tick_chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
+            WHERE tick_chunk_id <= :anchor_chunk_id
+              AND (tick_chunk_id >= :lower_bound
+                   OR world_time >= CAST(:horizon_floor AS timestamptz))
               AND event_type <> 'claim_propagated'
               AND (world_layer IS NULL OR world_layer = 'primary')
               AND superseded_by_event_id IS NULL
             ORDER BY tick_chunk_id DESC, id DESC
             """
         ),
-        {"lower_bound": lower_bound, "anchor_chunk_id": anchor_chunk_id},
+        {
+            "lower_bound": lower_bound,
+            "anchor_chunk_id": anchor_chunk_id,
+            "horizon_floor": horizon_floor,
+        },
     ).mappings():
-        events.append(
-            EventRecord(
-                event_id=row.get("id"),
-                event_type=row["event_type"],
-                tick=row["tick_chunk_id"],
-                actor_entity_id=row["actor_entity_id"],
-                target_entity_id=row["target_entity_id"],
-                location_id=row["location_id"],
-                changed_fields=tuple(row["changed_fields"] or ()),
-                world_layer=row["world_layer"],
-                payload=row["payload"] or {},
-            )
+        event = EventRecord(
+            event_id=row.get("id"),
+            event_type=row["event_type"],
+            tick=row["tick_chunk_id"],
+            actor_entity_id=row["actor_entity_id"],
+            target_entity_id=row["target_entity_id"],
+            location_id=row["location_id"],
+            changed_fields=tuple(row["changed_fields"] or ()),
+            world_layer=row["world_layer"],
+            payload=row["payload"] or {},
+            world_time=row.get("world_time"),
         )
-    return tuple(events)
+        if event.tick >= lower_bound:
+            recent.append(event)
+        if (
+            horizon_floor is not None
+            and event.world_time is not None
+            and event.world_time >= horizon_floor
+        ):
+            horizon.append(event)
+    return tuple(recent), tuple(horizon)
 
 
 def _load_time_of_day(world_time: Optional[datetime]) -> str:

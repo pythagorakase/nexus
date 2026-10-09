@@ -1,0 +1,64 @@
+{
+  "status": "source_review_only",
+  "base": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "declarations": [
+    {
+      "document": "AGENTS.md",
+      "changed_sources": [
+        "nexus.toml",
+        "nexus/agents/lore/utils/turn_cycle.py"
+      ],
+      "verified_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/turn_flow_sequence.md",
+      "changed_sources": [
+        "nexus.toml",
+        "nexus/agents/lore/utils/turn_cycle.py"
+      ],
+      "verified_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0034-conspiracy-channel.md",
+      "changed_sources": [
+        "nexus.toml"
+      ],
+      "verified_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0024-killed-c102.md",
+      "changed_sources": [
+        "nexus.toml"
+      ],
+      "verified_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0010-the-gaia-seat.md",
+      "changed_sources": [
+        "nexus.toml"
+      ],
+      "verified_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "changed_sources": [
+        "nexus.toml"
+      ],
+      "verified_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0042-durable-intentions.md",
+      "changed_sources": [
+        "nexus/agents/orrery/substrate.py"
+      ],
+      "verified_commit": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    }
+  ]
+}

@@ -538,6 +538,7 @@ def explain_dry_run(
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    event_horizon_hours: Optional[float] = None,
     sunhelm_settings: Optional[Any] = None,
     world_time_override: Optional[datetime] = None,
     overrides: Optional[WorldStateOverrides] = None,
@@ -580,6 +581,7 @@ def explain_dry_run(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
+        event_horizon_hours=event_horizon_hours,
         need_tuning=need_tuning,
         world_time_override=world_time_override,
         win_history_window=habituation.window_ticks if habituation.enabled else 0,
@@ -1000,6 +1002,9 @@ _TAG_FAMILY_TAG_SETS: Mapping[str, frozenset[str]] = {
 # Include every event predicate, including actor-relative knowledge and counted
 # events. Wildcard predicates consume no specific event type.
 _EVENT_CONSUMER_PATTERNS: Tuple[re.Pattern[str], ...] = (
+    re.compile(r"^(?:knows_)?recent_event_within_hours\(([^,*()]+),"),
+    re.compile(r"^since_last_event_hours_at_least\(([^,()]+),"),
+    re.compile(r"^count_recent_events_within_hours_at_least\(([^,()]+),"),
     re.compile(r"^(?:knows_)?recent_event\(([^,*()]+),"),
     re.compile(r"^since_last_event_at_least\(([^,()]+),"),
     re.compile(r"^count_recent_events_at_least\(([^,()]+),"),

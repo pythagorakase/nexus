@@ -31,6 +31,10 @@ from nexus.agents.orrery.substrate import (
     PUBLIC_PLACE_CLASSES,
     Condition,
     count_recent_events_at_least,
+    count_recent_events_within_hours_at_least,
+    recent_event_within_hours,
+    knows_recent_event_within_hours,
+    since_last_event_hours_at_least,
     knows_recent_event,
     recent_event,
 )
@@ -142,13 +146,18 @@ def test_catalog_covers_counted_event_consumers() -> None:
 @pytest.mark.parametrize(
     "condition",
     (
+        recent_event_within_hours("unproduced_gate_event", within_hours=2),
+        knows_recent_event_within_hours("unproduced_gate_event", within_hours=2),
+        count_recent_events_within_hours_at_least(
+            "unproduced_gate_event", within_hours=2, min_count=2
+        ),
         recent_event("unproduced_gate_event"),
         knows_recent_event("unproduced_gate_event"),
         count_recent_events_at_least(
             "unproduced_gate_event", within_ticks=5, min_count=2
         ),
     ),
-    ids=("recent", "known", "counted"),
+    ids=("recent_hours", "known_hours", "counted_hours", "recent", "known", "counted"),
 )
 @pytest.mark.parametrize("consumer", ("gate", "branch"))
 def test_catalog_rejects_unregistered_event_consumers(
@@ -241,3 +250,12 @@ def test_not_applicable_reason_is_stable() -> None:
     """The UI keys ghost-row styling off this marker; treat it as contract."""
 
     assert NOT_APPLICABLE_REASON == "no_target_bound"
+
+
+def test_since_last_hours_consumes_its_event_type() -> None:
+    """Hour cooldowns participate in the same producer coverage audit."""
+    from nexus.agents.orrery.audit import _consumed_event_types
+
+    assert _consumed_event_types(
+        since_last_event_hours_at_least("intel_acted_on", 1.5)
+    ) == {"intel_acted_on"}

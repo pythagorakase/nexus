@@ -186,6 +186,23 @@ def test_render_predicate_name_handles_known_predicates() -> None:
     """Spot-check the prose renderer for a few representative predicate forms."""
 
     cases = [
+        (
+            "recent_event_within_hours(stroll_taken,<=1.5h)",
+            "recent `stroll_taken` event in last 1.5 world hours",
+        ),
+        (
+            "knows_recent_event_within_hours(stroll_taken,<=24h,knower=actor)",
+            "actor knows recent `stroll_taken` event in last 24 world hours",
+        ),
+        (
+            "since_last_event_hours_at_least(stroll_taken,1.5h@actor,target=target)",
+            "≥ 1.5 world hours since last `stroll_taken` event for "
+            "(actor, target) pair",
+        ),
+        (
+            "count_recent_events_within_hours_at_least(stroll_taken,>=2,<=1.5h@actor)",
+            "≥ 2 `stroll_taken` events within 1.5 world hours for actor",
+        ),
         ("ALWAYS", "*(always)*"),
         ("has_tag(vendetta_holder@actor)", "actor has `vendetta_holder` tag"),
         (
