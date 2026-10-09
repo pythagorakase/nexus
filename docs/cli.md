@@ -149,7 +149,8 @@ loopback address. A remote runtime refuses `database` and `local_operator`
 commands with exit 3 before any connection is opened. Two exceptions follow
 the remote profile itself: `up` and `status` probe the hosted runtime's
 `/runtime/status` over HTTP. The runtime commands that accept `--config`
-(`up`, `down`, `restart`, `status`, `logs`, `models lock`, `models verify`)
+(`up`, `down`, `restart`, `status`, `logs`, `models lock`, `models verify`,
+`models plan`, `models fetch`)
 check the profile of that file. `doctor` is exempt from the refusal and from
 the configuration check below: it diagnoses this machine's configuration and
 role itself, so it runs under any profile, and an invalid `nexus.toml` is its
@@ -505,18 +506,35 @@ Available models:
 - `TEST` — Mock responses for development
 - `claude` — Anthropic Claude
 
-### `models` — Lock or Verify Model Artifacts
+### `models` — Lock, Verify, Plan, or Fetch Model Artifacts
 
-Pins the local production embedder and reranker files (not the LLM that
-`model` selects). Neither verb downloads anything.
+Manages the configured production embedder and reranker files (not the LLM
+that `model` selects). All four verbs use the `local_operator` transport and
+accept `--config`; they operate on this runtime host.
 
 ```bash
 # Hash the local artifacts and write [memnon.artifacts].lock_file
 poetry run nexus models lock
 
-# Read-only check; exits 1 naming each problem and its restore command
+# Read-only full hash check; exits 1 naming each problem and its remedy
 poetry run nexus models verify
+
+# Read-only file, size and revision check; show missing download and free bytes
+poetry run nexus models plan
+
+# Download absent artifacts at their locked revisions, then verify their hashes
+poetry run nexus models fetch
 ```
+
+`plan` reports each artifact as present, absent, drifted, or unpinned. It does
+not hash or download. `fetch` verifies every existing folder before starting
+any download and refuses if one differs from the lock, the configuration
+differs from the lock, or a missing artifact has no pinned repository and
+revision. It never replaces an existing folder: move a drifted folder aside,
+then run `nexus models fetch` again. A failed download may leave a partial
+folder; nothing is removed, and that folder must also be moved aside before
+retrying. Fetch never rewrites the lock. Only `lock` records an intentional
+artifact upgrade.
 
 See `docs/vector_embeddings.md` for what the lock records.
 

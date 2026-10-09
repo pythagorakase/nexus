@@ -5528,15 +5528,16 @@ Examples:
         "--list", action="store_true", help="List available models"
     )
 
-    # models command (issue #812): lock or verify the local production
-    # embedder and reranker artifacts; nothing is downloaded.
+    # models command (issue #812): inspect and fetch pinned production artifacts.
     models_parser = subparsers.add_parser(
-        "models", help="Lock or verify the production model artifacts"
+        "models", help="Lock, verify, plan or fetch the production model artifacts"
     )
     models_verbs = models_parser.add_subparsers(dest="models_command", required=True)
     for verb, verb_help in (
         ("lock", "Record repositories, revisions, file hashes and dimensions"),
         ("verify", "Check local artifacts against the lock (read-only)"),
+        ("plan", "Show what fetch would download (read-only)"),
+        ("fetch", "Download missing artifacts at the locked revision, then verify"),
     ):
         verb_parser = models_verbs.add_parser(verb, help=verb_help)
         verb_parser.allow_abbrev = False

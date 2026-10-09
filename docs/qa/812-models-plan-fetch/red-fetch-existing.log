@@ -1,0 +1,35 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________ test_fetch_refuses_a_drifted_folder_and_downloads_nothing ___________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-444/test_fetch_refuses_a_drifted_f0')
+
+    def test_fetch_refuses_a_drifted_folder_and_downloads_nothing(tmp_path: Path) -> None:
+        """Fetch refuses existing drift before any Hub attempt, even when offline."""
+        workspace, _ = _checkout_workspace(tmp_path)
+        _lock(workspace)
+        lock_bytes = workspace.lock.read_bytes()
+        _flip_byte(workspace.embedder_dir / "model.safetensors")
+        drifted_bytes = (workspace.embedder_dir / "model.safetensors").read_bytes()
+        shutil.rmtree(workspace.reranker_dir)
+        hf_home = tmp_path / "hf"
+        result = _cli_offline_models("fetch", workspace, hf_home)
+        assert result.returncode == 1, result.stdout + result.stderr
+>       assert "sha256 differs from the lock" in result.stderr
+E       assert 'sha256 differs from the lock' in 'Error: Model artifact fetch refused for /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/p...s/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-444/test_fetch_refuses_a_drifted_f0/models/reranker.\n'
+E        +  where 'Error: Model artifact fetch refused for /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/p...s/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-444/test_fetch_refuses_a_drifted_f0/models/reranker.\n' = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'models', 'fetch', '--config', '/p.../r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-444/test_fetch_refuses_a_drifted_f0/models/reranker.\n").stderr
+
+tests/test_embedding_artifacts.py:1034: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_embedding_artifacts.py::test_fetch_refuses_a_drifted_folder_and_downloads_nothing
+1 failed in 2.84s

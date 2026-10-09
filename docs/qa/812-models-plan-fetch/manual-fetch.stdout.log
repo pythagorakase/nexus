@@ -1,0 +1,3 @@
+embedder 'Octen-Embedding-4B': already matching /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/config/model_artifacts.lock.json
+reranker 'deberta-v3-trecdl22': downloaded naver/trecdl22-crossencoder-debertav3 @ 24f6a61d11707432d5780a1d5cf4e3af25cfaddb into /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/scratchpad/812-S3/fetch/reranker
+

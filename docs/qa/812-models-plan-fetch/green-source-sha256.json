@@ -1,0 +1,14 @@
+{
+  "nexus/agents/memnon/utils/artifact_manifest.py": "2799a0bbcc11fa908a7cea5a41430581883c4c72f96732faaffd410d46c22dc0",
+  "nexus/agents/memnon/utils/cross_encoder.py": "603e46cb21d36d57f05202fd3e24302b540777ca07e619cd487b544822b04f4f",
+  "nexus/agents/memnon/utils/embedding_manager.py": "7d677e54da2a1b8203aea421d709d727a0a8cf820d9e72a14086e164468bc0a4",
+  "nexus/api/narrative.py": "9ebb428779e77c82dd37c424b01479aafc944cce2a0840a0c736fc9b547e5491",
+  "nexus/cli.py": "75ed45987b2d26c552cc23015361f1f00a3af26efe7e2937bedceb11b9c6964e",
+  "nexus/cli_contract.py": "75ecb66ee8ed4fcf34d4d803ca52e20f239541775c26f9db079e194762e0941f",
+  "nexus/config/provider_guard.py": "72507ffff2c247dc920972dd1d67d5df0d0dbc9dd2a1e890e5abf0f7d664560e",
+  "nexus/runtime/readiness.py": "5d83593830ec8ff47523b5e22fbe0c3bed69729ec84d4fb6aefd4a3bc1d0a36c",
+  "tests/test_cli_contract.py": "fbdefb70dbd129dbda982df20f1970e66600ba38642ea26463dddae4d6f05ccd",
+  "tests/test_embedding_artifacts.py": "9751a4ea2fc89e24c1c31ffc7253979eeafd257bd8a401f416636f6a1f457217",
+  "tests/test_lore/test_runtime_config.py": "8ef30e91d9d204a52d325263d24d4ae800108beb79d5101669d477b883f586cc",
+  "tests/test_runtime/test_readiness.py": "52c38d39d124167e71a1bb3f57a7be9a6ac231742fe10e6534d8deb064484374"
+}

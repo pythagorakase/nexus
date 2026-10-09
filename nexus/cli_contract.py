@@ -108,6 +108,8 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "window-replay": "local_operator",
         "models lock": "local_operator",
         "models verify": "local_operator",
+        "models plan": "local_operator",
+        "models fetch": "local_operator",
         # Play and slot administration over the NEXUS API.
         "load": "http",
         "continue": "http",
@@ -167,7 +169,17 @@ REMOTE_PROFILE_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
 )
 
 RUNTIME_CONFIG_COMMANDS: FrozenSet[str] = frozenset(
-    {"up", "down", "restart", "status", "logs", "models lock", "models verify"}
+    {
+        "up",
+        "down",
+        "restart",
+        "status",
+        "logs",
+        "models lock",
+        "models verify",
+        "models plan",
+        "models fetch",
+    }
 )
 
 # Commands whose --json success output is success_envelope(data).

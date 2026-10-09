@@ -1,0 +1,16 @@
+[
+  {
+    "file": "manual-fetch-config.toml",
+    "original_path": "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/scratchpad/812-S3/fetch/nexus.toml",
+    "only_changed_key": "memnon.retrieval.cross_encoder_reranking.model_path",
+    "target": "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/scratchpad/812-S3/fetch/reranker",
+    "sha256": "f718701fdf26d466d004f9362d218094f9f66ea847e0f6752ee52885f9f5fa2b"
+  },
+  {
+    "file": "manual-bad-boot-config.toml",
+    "original_path": "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/scratchpad/812-S3/boot/bad-nexus.toml",
+    "only_changed_key": "memnon.retrieval.cross_encoder_reranking.model_path",
+    "target": "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/scratchpad/812-S3/boot/bad-reranker",
+    "sha256": "ac509abf5596bb7b850fa853279aef6b71b9fad97c8145e8b93e19728b2f97ac"
+  }
+]

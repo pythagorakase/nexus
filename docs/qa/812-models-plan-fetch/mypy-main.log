@@ -1,0 +1,8 @@
+scratchpad/812-S3/static-main/tests/test_lore/test_runtime_config.py:226: error: "None" has no attribute "settings"  [attr-defined]
+scratchpad/812-S3/static-main/nexus/api/narrative.py:8: error: Skipping analyzing "frontmatter": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+scratchpad/812-S3/static-main/nexus/api/narrative.py:8: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+scratchpad/812-S3/static-main/nexus/api/narrative.py:236: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+scratchpad/812-S3/static-main/nexus/api/narrative.py:261: error: Incompatible default for argument "data" (default has type "None", argument has type "dict[Any, Any]")  [assignment]
+scratchpad/812-S3/static-main/nexus/api/narrative.py:261: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+scratchpad/812-S3/static-main/nexus/api/narrative.py:261: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+Found 3 errors in 2 files (checked 12 source files)

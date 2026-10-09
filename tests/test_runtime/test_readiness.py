@@ -78,6 +78,7 @@ EXPECTED_REGISTRY = [
     ("ui.bundle", ["owner-host"], []),
     ("secrets.seat_providers", ["owner-host"], ["config.valid"]),
     ("runtime.log_writers", ["owner-host"], ["config.valid"]),
+    ("models.artifacts", ["owner-host"], ["config.valid"]),
     ("gateway.reachable", ["owner-client"], ["config.valid"]),
     ("gateway.version", ["owner-client"], ["gateway.reachable"]),
     ("reachability.gate", ["ci-runner"], ["config.valid"]),
@@ -282,6 +283,7 @@ def test_invalid_config_fails_and_skips_every_dependent_by_root_cause(
         "tools.pg_dump",
         "secrets.seat_providers",
         "runtime.log_writers",
+        "models.artifacts",
     ):
         assert checks[check_id].status == "skip", check_id
         assert checks[check_id].observed == "config.valid failed"

@@ -1,0 +1,3 @@
+embedder 'Octen-Embedding-4B': present at /Users/pythagor/nexus/models/Octen-Embedding-4B; nexus models verify also compares sha256.
+reranker 'deberta-v3-trecdl22': present at /Users/pythagor/nexus/models/naver-trecdl22-crossencoder-debertav3; nexus models verify also compares sha256.
+

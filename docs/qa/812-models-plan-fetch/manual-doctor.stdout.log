@@ -1,0 +1,186 @@
+{
+  "checks": [
+    {
+      "depends_on": [],
+      "id": "config.valid",
+      "observed": "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/nexus.toml (checkout)",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host",
+        "owner-client",
+        "ci-runner"
+      ]
+    },
+    {
+      "depends_on": [
+        "config.valid"
+      ],
+      "id": "postgres.reachable",
+      "observed": "pythagor@default socket:5432/postgres: PostgreSQL 17.11 (Postgres.app)",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "postgres.reachable"
+      ],
+      "id": "postgres.extensions",
+      "observed": "vector 0.8.6, postgis 3.5.6",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "postgres.reachable"
+      ],
+      "id": "template.present",
+      "observed": "NEXUS_template exists",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "template.present"
+      ],
+      "id": "template.migrations_current",
+      "observed": "NEXUS_template at 148",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "template.present"
+      ],
+      "id": "slots.migrations_current",
+      "observed": "save_01 at 148; save_02 at 148; save_03 at 148; save_04 at 148; save_05 at 148",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "template.present"
+      ],
+      "id": "template.idf_analyzer_current",
+      "observed": "NEXUS_template at pg_catalog.english/v1/170011",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "template.present"
+      ],
+      "id": "slots.idf_analyzer_current",
+      "observed": "save_01 at pg_catalog.english/v1/170011; save_02 at pg_catalog.english/v1/170011; save_03 at pg_catalog.english/v1/170011; save_04 at pg_catalog.english/v1/170011; save_05 at pg_catalog.english/v1/170011",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "template.present"
+      ],
+      "id": "template.story_identity_absent",
+      "observed": "NEXUS_template: no story identity row",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "template.present"
+      ],
+      "id": "slots.story_identity_present",
+      "observed": "save_01: one story identity row; save_02: one story identity row; save_03: one story identity row; save_04: one story identity row; save_05: one story identity row",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "config.valid"
+      ],
+      "id": "tools.pg_dump",
+      "observed": "/Applications/Postgres.app/Contents/Versions/17/bin/pg_dump (via PATH)",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [],
+      "id": "ui.bundle",
+      "observed": "/Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/ui/dist/public/index.html missing",
+      "remediation": "Build it: npm --prefix ui run build",
+      "status": "fail",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "config.valid"
+      ],
+      "id": "secrets.seat_providers",
+      "observed": "missing: openai (skald, gaia, wizard, orrery.experiences.model, storyteller.correspondence.compaction_model, orrery.retrograde.maturation.model_ref, summaries.model) [environment only, NEXUS_KEYRING_DISABLE=1]",
+      "remediation": "Export OPENAI_API_KEY, or unset NEXUS_KEYRING_DISABLE to read the platform store.",
+      "status": "fail",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "config.valid"
+      ],
+      "id": "runtime.log_writers",
+      "observed": "no live service runs without its log writer",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    },
+    {
+      "depends_on": [
+        "config.valid"
+      ],
+      "id": "models.artifacts",
+      "observed": "embedder Octen-Embedding-4B, reranker deberta-v3-trecdl22 match /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/config/model_artifacts.lock.json (sha256)",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host"
+      ]
+    }
+  ],
+  "ok": false,
+  "omitted": [],
+  "schema_version": 1,
+  "target": "owner-host"
+}

@@ -1070,6 +1070,27 @@ def _check_log_writers(ctx: ReadinessContext) -> Outcome:
     return _failed(observed, f"Restart the service by name: {restarts}")
 
 
+def _check_model_artifacts(ctx: ReadinessContext) -> Outcome:
+    """Verify the production artifacts against their lock, including sha256."""
+    from nexus.agents.memnon.utils.artifact_manifest import (
+        ArtifactLockError,
+        verify_artifacts,
+    )
+
+    try:
+        check = verify_artifacts(ctx.require_settings(), hash_files=True)
+    except (
+        ArtifactLockError
+    ) as exc:  # nexus-exception-disposition: fail; reason=lock; safety=failed check
+        return _failed(one_line(exc), "Run nexus models verify for the full report.")
+    if not check.report.ok:
+        return _failed(
+            "; ".join(check.report.problems), " ".join(check.report.remediation)
+        )
+    verified = ", ".join(f"{spec.role} {spec.name}" for spec in check.specs)
+    return _passed(f"{verified} match {check.lock_path} (sha256)")
+
+
 # ---------------------------------------------------------------------------
 # Owner client
 # ---------------------------------------------------------------------------
@@ -1275,6 +1296,7 @@ REGISTRY: tuple[CheckSpec, ...] = (
     CheckSpec("ui.bundle", _HOST, (), _check_ui_bundle, gateway_evaluable=True),
     CheckSpec("secrets.seat_providers", _HOST, ("config.valid",), _check_seat_secrets),
     CheckSpec("runtime.log_writers", _HOST, ("config.valid",), _check_log_writers),
+    CheckSpec("models.artifacts", _HOST, ("config.valid",), _check_model_artifacts),
     CheckSpec(
         "gateway.reachable",
         ("owner-client",),

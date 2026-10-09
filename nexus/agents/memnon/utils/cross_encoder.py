@@ -22,7 +22,10 @@ import numpy as np
 import torch
 from sentence_transformers import CrossEncoder
 
-from nexus.agents.memnon.utils.artifact_manifest import restore_command
+from nexus.agents.memnon.utils.artifact_manifest import (
+    fetch_remedy_for,
+    restore_command,
+)
 
 # Set up logging
 logger = logging.getLogger("nexus.memnon.cross_encoder")
@@ -38,6 +41,9 @@ def _reranker_remedy(path: Path, repo_id: Optional[str]) -> str:
     artifact lock or the folder itself records one. Building it reads the
     lock and the folder, so loaders build it only once a load has failed.
     """
+    remedy = fetch_remedy_for(repo_id, path)
+    if remedy is not None:
+        return remedy
     if repo_id:
         install = f"Download it with `{restore_command(repo_id, path)}`"
     else:

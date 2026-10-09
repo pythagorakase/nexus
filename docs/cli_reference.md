@@ -18,7 +18,7 @@ Every command that `nexus.cli.build_parser()` registers, with its arguments and 
 | --- | --- | --- |
 | `http` | The NEXUS API only | `inspect slot`, `inspect chunks`, `inspect chunk`, `inspect incubator`, `inspect characters`, `inspect places`, `inspect factions`, `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `model --set`, `model --clear` |
 | `database` | A slot database directly | `jobs`, `inspect-turn`, `prune-manifests`, `tags audit`, `model`, `trait-audit`, `retrograde-packet`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, `faction-manifest`, `faction-apply`, `character-manifest`, `character-apply`, `place-manifest`, `place-apply`, `retrograde-seed-candidates --slot` |
-| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `receipts`, `window-replay`, `models lock`, `models verify`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
+| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `receipts`, `window-replay`, `models lock`, `models verify`, `models plan`, `models fetch`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
 
 Under the remote profile: `up` uses `http`; `status` uses `http`.
 
@@ -350,9 +350,9 @@ At most one of `--clear`, `--set`.
 
 ### `nexus models`
 
-Lock or verify the production model artifacts.
+Lock, verify, plan or fetch the production model artifacts.
 
-Verbs: `nexus models lock`, `nexus models verify`.
+Verbs: `nexus models lock`, `nexus models verify`, `nexus models plan`, `nexus models fetch`.
 
 ### `nexus models lock`
 
@@ -367,6 +367,26 @@ Transport: `local_operator`.
 ### `nexus models verify`
 
 Check local artifacts against the lock (read-only).
+
+Transport: `local_operator`.
+
+| Argument | Takes | Default | Description |
+| --- | --- | --- | --- |
+| `--config` | `CONFIG` | — | Path to nexus.toml (default: $NEXUS_HOME/nexus.toml, else NEXUS_RUNTIME_CONFIG, else the checkout's nexus.toml) |
+
+### `nexus models plan`
+
+Show what fetch would download (read-only).
+
+Transport: `local_operator`.
+
+| Argument | Takes | Default | Description |
+| --- | --- | --- | --- |
+| `--config` | `CONFIG` | — | Path to nexus.toml (default: $NEXUS_HOME/nexus.toml, else NEXUS_RUNTIME_CONFIG, else the checkout's nexus.toml) |
+
+### `nexus models fetch`
+
+Download missing artifacts at the locked revision, then verify.
 
 Transport: `local_operator`.
 

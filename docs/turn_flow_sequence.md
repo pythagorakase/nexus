@@ -31,7 +31,7 @@ sources:
   - nexus/agents/orrery/worker.py
   - nexus/agents/orrery/experience_embedding.py
   - nexus.toml
-verified_commit: "9c8f10501389ffe14388b6d684ea060b2058781b"
+verified_commit: "81163beb0f02041f2e83c50a96dfa60286cbb28a"
 ---
 
 # The Turn Cycle
@@ -265,6 +265,11 @@ After the commit, the optional presence audit runs and the gateway wakes the
 scheduler.
 
 ## 8. Deferred Work
+
+Before starting its scheduler, the gateway checks the production model artifact
+lock by file list, size and revision, and refuses startup on drift. A process
+marked `NEXUS_TEST_PROVIDER_ONLY=1` skips this boot check; full sha256 checks run
+through `nexus models verify` and the doctor's `models.artifacts` check.
 
 A gateway started with `NEXUS_SLOT` runs one `SlotScheduler`
 (`nexus/jobs/scheduler.py`) for that slot. It holds the durable

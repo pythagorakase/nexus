@@ -1,0 +1,152 @@
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_gateway_lifespan_skips_the_check_in_a_test_process ____________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-443/test_gateway_lifespan_skips_th0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x167ff92d0>
+
+    def test_gateway_lifespan_skips_the_check_in_a_test_process(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The provider-only test lane can boot with synthetic artifact drift."""
+        from nexus.api import narrative
+    
+        workspace, _ = _checkout_workspace(tmp_path)
+        _lock(workspace)
+        (workspace.embedder_dir / "model.safetensors").write_bytes(b"changed")
+        monkeypatch.setenv(TEST_PROVIDER_ONLY_ENV, "1")
+        monkeypatch.delenv("NEXUS_SLOT", raising=False)
+        monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(workspace.config))
+>       with TestClient(narrative.app) as client:
+
+tests/test_embedding_artifacts.py:938: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.venv/lib/python3.11/site-packages/starlette/testclient.py:680: in __enter__
+    portal.call(self.wait_startup)
+../../../../Library/Caches/pypoetry/virtualenvs/nexus-XhmFBQ1L-py3.11/lib/python3.11/site-packages/anyio/from_thread.py:290: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+../../../../.pyenv/versions/3.11.12/lib/python3.11/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+../../../../.pyenv/versions/3.11.12/lib/python3.11/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../../../../Library/Caches/pypoetry/virtualenvs/nexus-XhmFBQ1L-py3.11/lib/python3.11/site-packages/anyio/from_thread.py:221: in _call_func
+    retval = await retval_or_awaitable
+../../../.venv/lib/python3.11/site-packages/starlette/testclient.py:715: in wait_startup
+    await receive()
+../../../.venv/lib/python3.11/site-packages/starlette/testclient.py:706: in receive
+    self.task.result()
+../../../../.pyenv/versions/3.11.12/lib/python3.11/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+../../../../.pyenv/versions/3.11.12/lib/python3.11/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../../../../Library/Caches/pypoetry/virtualenvs/nexus-XhmFBQ1L-py3.11/lib/python3.11/site-packages/anyio/from_thread.py:221: in _call_func
+    retval = await retval_or_awaitable
+../../../.venv/lib/python3.11/site-packages/starlette/testclient.py:696: in lifespan
+    await self.app(scope, self.stream_receive.receive, self.stream_send.send)
+../../../.venv/lib/python3.11/site-packages/fastapi/applications.py:1054: in __call__
+    await super().__call__(scope, receive, send)
+../../../.venv/lib/python3.11/site-packages/starlette/applications.py:112: in __call__
+    await self.middleware_stack(scope, receive, send)
+../../../.venv/lib/python3.11/site-packages/starlette/middleware/errors.py:152: in __call__
+    await self.app(scope, receive, send)
+../../../.venv/lib/python3.11/site-packages/starlette/middleware/cors.py:77: in __call__
+    await self.app(scope, receive, send)
+../../../.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py:48: in __call__
+    await self.app(scope, receive, send)
+../../../.venv/lib/python3.11/site-packages/starlette/routing.py:714: in __call__
+    await self.middleware_stack(scope, receive, send)
+../../../.venv/lib/python3.11/site-packages/starlette/routing.py:723: in app
+    await self.lifespan(scope, receive, send)
+../../../.venv/lib/python3.11/site-packages/starlette/routing.py:692: in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+../../../.venv/lib/python3.11/site-packages/fastapi/routing.py:133: in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+nexus/api/narrative.py:125: in gateway_lifespan
+    summary = await asyncio.to_thread(check_artifacts_at_boot, load_settings())
+../../../../.pyenv/versions/3.11.12/lib/python3.11/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+../../../../.pyenv/versions/3.11.12/lib/python3.11/concurrent/futures/thread.py:58: in run
+    result = self.fn(*self.args, **self.kwargs)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+settings = Settings(global_=GlobalSettings(model=ModelConfig(tokenizer_probe_timeout_seconds=120.0, default_model_policy='fixed',...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+
+    def check_artifacts_at_boot(settings: Settings) -> str:
+        """Refuse gateway boot on file-list, size, revision or configuration drift."""
+        check = verify_artifacts(settings, hash_files=False)
+        if not check.report.ok:
+>           raise ArtifactLockError(
+                "\n".join(
+                    [
+                        "The gateway will not start: model artifacts do not match "
+                        f"{check.lock_path} by file list, size and revision:",
+                        *_mismatch_lines(check.report),
+                    ]
+                )
+            )
+E           nexus.agents.memnon.utils.artifact_manifest.ArtifactLockError: The gateway will not start: model artifacts do not match /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-443/test_gateway_lifespan_skips_th0/config/model_artifacts.lock.json by file list, size and revision:
+E             - embedder 'Octen-Embedding-4B': model.safetensors is 7 bytes; the lock records 16384
+E           Remediation:
+E             - Move /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-443/test_gateway_lifespan_skips_th0/models/embedder aside (`nexus models fetch` never replaces an existing folder), then run `nexus models fetch` to download embedder 'Octen-Embedding-4B' again.
+E             - If a changed artifact is an intentional upgrade, re-run `nexus models lock` on the host that holds it and commit the lock.
+
+nexus/agents/memnon/utils/artifact_manifest.py:735: ArtifactLockError
+------------------------------ Captured log call -------------------------------
+WARNING  nexus.api.static_ui:static_ui.py:97 UI build not found at /Users/pythagor/nexus/.claude/worktrees/812-models-plan-fetch/ui/dist/public - the gateway will serve APIs only. Run `npm --prefix ui run build` (or use the Vite dev server).
+=============================== warnings summary ===============================
+tests/test_embedding_artifacts.py::test_gateway_lifespan_skips_the_check_in_a_test_process
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_embedding_artifacts.py::test_gateway_lifespan_skips_the_check_in_a_test_process
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_embedding_artifacts.py::test_gateway_lifespan_skips_the_check_in_a_test_process
+1 failed, 2 warnings in 2.88s
