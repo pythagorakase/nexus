@@ -358,4 +358,11 @@ receipt/tables were restored after exact evidence preservation. Final capture,
 full UI acceptance, main merge, freshness and final Python-source provenance
 remain pending. This branch is not publication-ready.
 
+The [minimal legacy-listener repair](matchmedia-legacy-repair/README.md) is now
+committed and verified at `772dd499ed5cd00e5ceb5c2577efa428eb8866f8`:
+all four previously affected UI files passed, 77 tests in 5.17s, with no uncaught
+errors. Its new fingerprint changes only `client/src/tests/setup.ts`; no old
+capture is reused. The palette decision and remaining acceptance work above
+are still pending.
+
 Codex — GPT-6
