@@ -8,7 +8,13 @@
  * prose sections from the live characters table. Hovering the portrait
  * reveals an icon-only upload affordance; uploads fail loud.
  */
-import { useMemo, useRef, useState } from "react";
+import {
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImagePlus, Loader2, User } from "lucide-react";
 import { DecoDivider } from "@/components/deco";
@@ -46,6 +52,11 @@ function DossierSection({ title, body }: { title: string; body: string | null })
 
 export function CharactersPane({ slot }: CharactersPaneProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // Roving tab stop for the roster listbox: the one row Tab reaches. It
+  // follows clicks, arrows, Home and End; selection changes only on click,
+  // Enter or Space.
+  const [focusedId, setFocusedId] = useState<number | null>(null);
+  const rosterId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -114,6 +125,47 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
     );
   }
 
+  const optionId = (characterId: number) => `${rosterId}-cast-${characterId}`;
+  const tabStopId =
+    characters.find((c) => c.id === focusedId)?.id ?? selected?.id ?? null;
+
+  const focusRow = (index: number) => {
+    const target = characters[Math.max(0, Math.min(characters.length - 1, index))];
+    setFocusedId(target.id);
+    document.getElementById(optionId(target.id))?.focus();
+  };
+
+  const handleRowKeyDown = (
+    event: ReactKeyboardEvent<HTMLLIElement>,
+    index: number,
+    characterId: number,
+  ) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        focusRow(index + 1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        focusRow(index - 1);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusRow(0);
+        break;
+      case "End":
+        event.preventDefault();
+        focusRow(characters.length - 1);
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        setFocusedId(characterId);
+        setSelectedId(characterId);
+        break;
+    }
+  };
+
   const mainImage =
     images?.find((img) => img.isMain === 1) ?? images?.[0] ?? null;
   const hasDetails =
@@ -129,12 +181,21 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
   return (
     <div className="charspane" data-testid="characters-pane">
       <div className="charspane-list">
-        <ul>
-          {characters.map((character) => (
+        <ul role="listbox" aria-label="Characters">
+          {characters.map((character, index) => (
             <li
               key={character.id}
+              id={optionId(character.id)}
+              role="option"
+              aria-label={character.name}
+              aria-selected={selected?.id === character.id}
+              tabIndex={tabStopId === character.id ? 0 : -1}
               className={selected?.id === character.id ? "on" : ""}
-              onClick={() => setSelectedId(character.id)}
+              onClick={() => {
+                setFocusedId(character.id);
+                setSelectedId(character.id);
+              }}
+              onKeyDown={(event) => handleRowKeyDown(event, index, character.id)}
               data-testid={`cast-member-${character.id}`}
             >
               {character.portraitPath ? (

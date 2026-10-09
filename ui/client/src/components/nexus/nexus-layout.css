@@ -922,6 +922,13 @@
   border-color: var(--brass);
   background: hsl(320 55% 50% / .12);
 }
+/* Keyboard focus on a roster row: the shell's shadcn focus ring
+   (`focus-visible:ring-1 ring-ring` on Button), drawn outside the row's
+   own border so the selected row's brass edge stays readable under it. */
+.charspane-list li:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px hsl(var(--ring));
+}
 .char-glyph {
   width: 30px;
   height: 30px;
