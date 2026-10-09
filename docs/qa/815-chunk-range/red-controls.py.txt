@@ -1,0 +1,47 @@
+"""Run ordered temporary regressions, restoring each source exactly in finally."""
+from pathlib import Path
+import difflib
+import hashlib
+import os
+import subprocess
+
+root = Path('/Users/pythagor/nexus/.claude/worktrees/815-chunk-range-and-spoilers')
+evidence = root / 'docs/qa/815-chunk-range'
+python = '/Users/pythagor/nexus/.venv/bin/python'
+env = dict(os.environ, PYTHONPATH=str(root), NEXUS_RUN_POSTGRES='1')
+for key in ('NEXUS_GATEWAY_PORT', 'NEXUS_API_URL', 'NEXUS_SLOT', 'NEXUS_RUN_LIVE_LLM', 'NEXUS_RUN_CORPUS'):
+    env.pop(key, None)
+common = ['nice', '-n', '15', python, '-m', 'pytest', '-q', '-p', 'tests.dbname_audit', '-p', 'no:cacheprovider']
+controls = [
+    ('route-probe-red', 'nexus/api/reader_endpoints.py', 'params.append(page_size + 1)', 'params.append(page_size)', 'tests/test_api/test_reader_chunk_range_pg.py::test_desc_pages_walk_every_playable_chunk_across_gaps'),
+    ('cli-desc-first-page-red', 'nexus/cli.py', '            if cursor is None:\n                break\n        chunks.reverse()', '            break\n        chunks.reverse()', 'tests/test_cli_inspect_pg.py::test_continue_waits_then_inspect_reads_the_played_clone'),
+    ('cli-asc-first-page-red', 'nexus/cli.py', '        if cursor is None:\n            break\n        after = cursor', '        break\n        after = cursor', 'tests/test_cli_inspect_pg.py::test_continue_waits_then_inspect_reads_the_played_clone'),
+]
+for label, name, old, new, test in controls:
+    assert os.getloadavg()[0] < 24, 'load gate exceeded'
+    source = root / name
+    original = source.read_bytes()
+    before = original.decode()
+    assert before.count(old) == 1, (name, old)
+    changed = before.replace(old, new)
+    (evidence / f'{label}.patch.txt').write_text(''.join(difflib.unified_diff(before.splitlines(True), changed.splitlines(True), fromfile=name, tofile=name)))
+    try:
+        source.write_text(changed)
+        with (evidence / f'{label}.txt').open('w') as output:
+            output.write('Command: ' + ' '.join(common + [test]) + '\n')
+            output.write(f'Initial load: {os.getloadavg()}\n')
+            output.flush()
+            result = subprocess.run(common + [test], cwd=root, env=env, stdout=output, stderr=subprocess.STDOUT, timeout=540)
+        log = (evidence / f'{label}.txt').read_text()
+        assert result.returncode == 1, (label, result.returncode)
+        assert f'FAILED {test}' in log, (label, 'wrong failure')
+        assert '1 failed' in log, (label, 'unexpected failure count')
+        assert 'dbname audit: owner targets: none' in log
+        assert 'secret-store guard: active; nexus-api: denied' in log
+        assert 'receipt isolation: checkout and user receipts untouched' in log
+    finally:
+        source.write_bytes(original)
+        assert source.read_bytes() == original
+        with (evidence / 'control-restoration.txt').open('a') as output:
+            output.write(f'{label}: restored {name} SHA256 {hashlib.sha256(original).hexdigest()}\n')
+    print(f'{label}: expected failure recorded, original source restored', flush=True)

@@ -1,0 +1,12 @@
+--- nexus/cli.py
++++ nexus/cli.py
+@@ -1540,8 +1540,7 @@
+             page, cursor = _chunk_page(slot, params, descending=True, last_id=cursor)
+             chunks.extend(page)
+             remaining -= len(page)
+-            if cursor is None:
+-                break
++            break
+         chunks.reverse()
+         return chunks
+     after = (1 if args.from_id is None else args.from_id) - 1

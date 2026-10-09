@@ -1,0 +1,3 @@
+route-probe-red: restored nexus/api/reader_endpoints.py SHA256 ca346db83d506dcbc60979b8e7e784cc797a2bb6d3ad9d5fb67504944a7ce2f2
+cli-desc-first-page-red: restored nexus/cli.py SHA256 08dbf12479cbc1f6cc148bf05ac8d625088dba5f7043504a3597e924ee5c5547
+cli-asc-first-page-red: restored nexus/cli.py SHA256 08dbf12479cbc1f6cc148bf05ac8d625088dba5f7043504a3597e924ee5c5547

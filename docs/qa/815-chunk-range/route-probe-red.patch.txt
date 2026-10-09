@@ -1,0 +1,11 @@
+--- nexus/api/reader_endpoints.py
++++ nexus/api/reader_endpoints.py
+@@ -335,7 +335,7 @@
+         params.append(before)
+     direction = "ASC" if order == "asc" else "DESC"
+     query += f" ORDER BY nc.id {direction} LIMIT %s"
+-    params.append(page_size + 1)
++    params.append(page_size)
+     rows = _fetch_all(dbname, query, tuple(params))
+     page = rows[:page_size]
+     return ChunkRangeResponse(
