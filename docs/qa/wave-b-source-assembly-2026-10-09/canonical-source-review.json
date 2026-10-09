@@ -1,0 +1,492 @@
+{
+  "review_kind": "independent source-only canonical-body review",
+  "reviewer": "Codex — GPT-6 (/root/inventory_worktrees)",
+  "recorded_at_utc": "2026-10-09T01:42:15.421666+00:00",
+  "integration_worktree": "/Users/pythagor/.codex/worktrees/resume-wave-b-integration/nexus",
+  "base": "f073b3711a3bd0273943c9defad85913452fd00b",
+  "reviewed_head": "825c9fd997c1d75a47acd9f5ea6fbb06e3465b2a",
+  "closure_manifest_sha256": "d3f6fd4fcd4cf79148e2b61f2d040f7be3b02d7b0fa76e42292a198851886605",
+  "document_count": 21,
+  "conclusion": "No material contradiction introduced in the 21 canonical document bodies by the reviewed source diff.",
+  "limitations": [
+    "No runtime imports, tests, static checks, database access, services, ref changes, branch edits or freshness stamps were performed.",
+    "This review is limited to the pinned source delta and the listed canonical bodies; it is not full campaign/runtime approval.",
+    "Root has an uncommitted docs/orrery_retrograde_spec.md correction restoring packet between derivation and seed_candidates. That one-line source-document correction was read separately and matches the implemented stage list; it is not falsely included in reviewed_head.",
+    "All original owner quotations/statuses remain verbatim. Historical quoted observations are not restated as live facts.",
+    "Build rulings are preserved as decisions, including unimplemented follow-on scope; 0054 does not claim final responsive-shell/UI landing.",
+    "Final Wave A/777/809/824/UI-B integration requires another changed-source and freshness review."
+  ],
+  "freshness_note": "Root may apply the agreed f073b371 merge-base freshness stamps after incorporating the separately identified packet prose repair and recording final checkpoint provenance. This file changes no stamps.",
+  "material_findings": [],
+  "records": [
+    {
+      "document": "AGENTS.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The package, agent, memory, gateway, slot and test descriptions still match the assembled source. CLAUDE changes only the implementation location of the migration allowlist while the scripts/migrate.py entrypoint remains. The typed worker/scheduler/fixture adaptations, event-horizon parameter and place-coordinate validator do not change the guidelines or their described boundaries.",
+      "reviewed_changed_sources": [
+        "CLAUDE.md",
+        "nexus.toml",
+        "nexus/agents/logon/apex_schema.py",
+        "nexus/agents/lore/utils/turn_cycle.py",
+        "nexus/agents/orrery/worker.py",
+        "nexus/jobs/scheduler.py",
+        "tests/pg_fixtures.py"
+      ],
+      "source_evidence": [
+        "CLAUDE.md migration-runner paragraph",
+        "nexus/agents/logon/apex_schema.py:NewEntityDeclaration.coordinates_are_place_only",
+        "nexus/agents/lore/utils/turn_cycle.py:TurnCycleManager",
+        "nexus/agents/orrery/worker.py",
+        "nexus/jobs/scheduler.py:SlotScheduler",
+        "tests/pg_fixtures.py"
+      ],
+      "body_sha256": "31463604237db6a45ebed6bc37198147887bcf36a6fd672dbca1634cb5ae8c3a",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0006-who-owns-the-choice.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The slot-endpoint delta removes only retired wizard introduction-claim reconciliation after transcript/choices become atomic. It does not move player choice ownership, change narrative undo/recovery, or alter the parent-owned choice contract. The owner quotation remains a preserved ruling.",
+      "reviewed_changed_sources": [
+        "nexus/api/slot_endpoints.py"
+      ],
+      "source_evidence": [
+        "nexus/api/slot_endpoints.py:get_slot_state_endpoint",
+        "nexus/api/new_story_cache.py:record_wizard_reply",
+        "nexus/api/choice_handling.py (unchanged declared source)"
+      ],
+      "body_sha256": "46457155fe639a46f877cdffe11dd93d8d6d597508efa1538c16c433cf7eedd7",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "0d5198bbddb02b3e4e254e2bd9c6937a88c28530fbb6858719413277eca77d13",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0007-secrets-with-authors.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "Expansion changes require points for newly introduced places and remove geo-only maturation input; the secret authoring, holder, sealed-detail and disclosure-gate contract is not removed or broadened. Epistemics remains unchanged, including author_backstory_secret_sync and latent-secret exclusion from public/searchable scope.",
+      "reviewed_changed_sources": [
+        "nexus/agents/orrery/retrograde_expansion.py"
+      ],
+      "source_evidence": [
+        "nexus/agents/orrery/retrograde_expansion.py:_expansion_contract_issues",
+        "nexus/agents/orrery/retrograde_expansion.py:_new_place_point_issues",
+        "nexus/agents/orrery/epistemics.py:author_backstory_secret_sync"
+      ],
+      "body_sha256": "db5d3a4a9fded6219e065001bcc9f99c8af50ed0b95d7822ef5432927842166f",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "de779b0e99646b0ac13e47030de8495c27101a7f1a8943d0d5ec32a88eeecd0c",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The sole TOML delta adds recent_event_horizon_hours. CLI adds init planning, operator inspection, acceptance and resumable-genesis handling; no price table, dollars usage column or pool-map policy is added. Token-only usage implementation is untouched.",
+      "reviewed_changed_sources": [
+        "nexus.toml",
+        "nexus/cli.py"
+      ],
+      "source_evidence": [
+        "nexus.toml:[orrery.binding]",
+        "nexus/cli.py:run_init",
+        "nexus/cli.py:run_inspect",
+        "nexus/cli.py:run_accept",
+        "nexus/telemetry/usage.py (unchanged declared source)"
+      ],
+      "body_sha256": "f4bb849f4e28bcaf005d1d726ab55ea1a00628da61e15ddce941d2010b34c54e",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "ebe77deaa8abbc79edc06995d58f733b8fe570eb0c435eeedd52dcbf66959e59",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0010-the-gaia-seat.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "story_model moves evaluation helpers to nexus.maintenance and accepts validated Settings for enqueue-time seat resolution. The configured model names and follow-slot Gaia resolution are not changed by this diff. The dated working-tree/model statement remains an owner quotation, not a freshly asserted deployment report.",
+      "reviewed_changed_sources": [
+        "nexus.toml",
+        "nexus/config/story_model.py"
+      ],
+      "source_evidence": [
+        "nexus/config/story_model.py:read_story_settings",
+        "nexus/config/story_model.py:resolve_enqueued_seat",
+        "nexus.toml (only event-horizon addition)"
+      ],
+      "body_sha256": "f9152c1a59d646683446a8ac22c822a62fd02897c6f4f5e27951d3b47a91beab",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "6e97c4032f1ddd76c86cc8be160912dc05a6de52f11dd52326a790e90e4ec9eb",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0016-speculative-maturation.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "No speculative maturation from unchosen choice text is added. Enqueueing still requires a declared entity name in committed prose; new place points are required at declaration, and pointless legacy places refuse maturation. The source-spec progress/embedding additions concern wizard resume, not speculative runtime branches. Parked status remains accurate.",
+      "reviewed_changed_sources": [
+        "docs/orrery_retrograde_spec.md",
+        "nexus/agents/orrery/retrograde_maturation.py"
+      ],
+      "source_evidence": [
+        "nexus/agents/orrery/retrograde_maturation.py:enqueue_declared_entity_maturations",
+        "nexus/agents/orrery/retrograde_maturation.py:_load_job_context",
+        "docs/orrery_retrograde_spec.md decisions 12 and 14"
+      ],
+      "body_sha256": "6f9327f49ae530e1f4452fb707b5f66ae6299732517b3824f5435d3fe54d6417",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "57eb4e8f607748838dd17390923145a340e8ce45d0f96de9b77d217eab7dfb91",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0017-sparse-entity-enrichment.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The maturation queue remains one job per entity, with ON CONFLICT (entity_id) DO NOTHING and reuse of an already persisted result. Typed settings and removal of geo-only maturation introduce no additional enrichment pass or repeated canonical authoring. Parked status and its one-shot reopening condition remain accurate.",
+      "reviewed_changed_sources": [
+        "docs/orrery_retrograde_spec.md",
+        "nexus/agents/orrery/retrograde_maturation.py"
+      ],
+      "source_evidence": [
+        "nexus/agents/orrery/retrograde_maturation.py:_enqueue_job",
+        "nexus/agents/orrery/retrograde_maturation.py:_mature_one",
+        "docs/orrery_retrograde_spec.md"
+      ],
+      "body_sha256": "5a89224ad33b379c217469cca6cab524466f6655ec4780aa5d472841d7f03bb9",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "7f415359db93190617aeacc9411e77bf246d5809afe68ff9344c547182581ee8",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0019-killed-c014.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The worker change is typed configuration admission and plumbing. drain_narration_outbox_sync still persists deterministic perceptual descriptors without provider calls; it neither restores off-screen prose generation nor changes reader-visible authorship. Historical quoted line numbers/verdicts are preserved verbatim.",
+      "reviewed_changed_sources": [
+        "nexus/agents/orrery/worker.py"
+      ],
+      "source_evidence": [
+        "nexus/agents/orrery/worker.py:drain_narration_outbox_sync",
+        "nexus/agents/orrery/bleed.py (unchanged declared source)",
+        "ui/client/src/components/nexus/NarrativePane.tsx (unchanged declared source)"
+      ],
+      "body_sha256": "3340cd5177bc758656712e4b38e154af6b3f9495361db5618262c989fe931d80",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "cf76e37b36f795b9ff66cc86bf15717f99bba8dade3e841e5ed0cbf65b28a72a",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0022-killed-c068.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The slot-endpoint removal is confined to obsolete wizard introduction claims. It does not add guest principals, capabilities, authentication policy or slot-blind mutations and does not remove locked-slot enforcement. The narrower golden-master ruling and deferred guest-policy scope remain intact.",
+      "reviewed_changed_sources": [
+        "nexus/api/slot_endpoints.py"
+      ],
+      "source_evidence": [
+        "nexus/api/slot_endpoints.py:get_slot_state_endpoint",
+        "nexus/api/runtime_status.py (unchanged declared source)"
+      ],
+      "body_sha256": "153170a353c75a6762fd3aa2144e5309ba38cd6750852240e5526288bc817ac1",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "1af85e879328f8b3d033d4bb29b5f21037ff29b4f5a9525a9d0024b4317987dd",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0024-killed-c102.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The TOML event horizon and Retrograde status/embedding-resume documentation do not combine canonical stores or introduce off-screen semantic embeddings. Dedicated Retrograde summary storage, source-specific embedding families and identity remain intact. The historical multi-model and corpus observations are quoted evidence, not statements to rewrite as current inventory.",
+      "reviewed_changed_sources": [
+        "docs/orrery_retrograde_spec.md",
+        "nexus.toml"
+      ],
+      "source_evidence": [
+        "nexus.toml:[orrery.binding]",
+        "docs/orrery_retrograde_spec.md decision 14",
+        "nexus/agents/memnon/utils/embedding_tables.py (unchanged declared source)",
+        "docs/orrery_design_plan.md (unchanged declared source)"
+      ],
+      "body_sha256": "a7901e1e068fb3d3d458d53c93a5ecf4d25d1ab9f82503a69b515ed241d984eb",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "1ba1785a2229a3134973778a1ff500ad0d09810240a6903079e5d71ceff92add",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0025-legacy-new-story-seed-columns.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "Wizard transcript and atomic-reply changes remove introduction-claim bookkeeping but do not repurpose the five parked legacy seed/zone columns. Cache writers still clear them to NULL, and row reconstruction still does not read them. Baseline and subtraction-manifest sources are unchanged.",
+      "reviewed_changed_sources": [
+        "nexus/api/new_story_cache.py"
+      ],
+      "source_evidence": [
+        "nexus/api/new_story_cache.py:_row_to_cache",
+        "nexus/api/new_story_cache.py:write_seed",
+        "nexus/api/new_story_cache.py reset/update NULL assignments",
+        "config/schema_docs_baseline.json (unchanged declared source)"
+      ],
+      "body_sha256": "fea3cc08ed0cad710e8acb025d9e35afb077fd8ddcf0487851b417e3280d98dd",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "26dae59c2e452ad67467ec5d687bc813284b452f903c4ea5803a342cc698aa1f",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0027-narration-job-provider-columns.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "Typed worker settings do not introduce writers or new semantics for provider-era narration-job model_ref/provider columns. The narration drain explicitly retains existing provenance without calling a provider; schema baseline and parked-column documentation remain unchanged.",
+      "reviewed_changed_sources": [
+        "nexus/agents/orrery/worker.py"
+      ],
+      "source_evidence": [
+        "nexus/agents/orrery/worker.py:drain_narration_outbox_sync",
+        "config/schema_docs_baseline.json (unchanged declared source)",
+        "docs/dead_retrieval_subtraction.md (unchanged declared source)"
+      ],
+      "body_sha256": "3633db84d2080983dd9406dd2156f58743dde38a4fd2103207936da713c83b86",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "21dcf62a323b2b9927b75f5fd10a95dce4abde80b9354145d8bfa5b7d461338a",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0034-conspiracy-channel.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "Gaia prompt changes only require coordinates for place declarations. The private DMs, plans and compaction paragraph is unchanged; the only TOML addition is the independent event horizon. Correspondence hysteresis, exchange-pair units and off-hot-path compaction retain their existing contract.",
+      "reviewed_changed_sources": [
+        "nexus.toml",
+        "prompts/storyteller_gaia.md"
+      ],
+      "source_evidence": [
+        "prompts/storyteller_gaia.md world-peoples and DMs paragraphs",
+        "nexus.toml:[orrery.binding]",
+        "nexus/memory/correspondence.py (unchanged declared source)"
+      ],
+      "body_sha256": "c41c99abbe62fb232250588bfe9c76a132fc8599961e1832f1368705520b4fa2",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "bf5324bc070d8100a81439e73c808d19b41faa4cc332d39eb80d65eacef3fba8",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0040-story-bundles.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "811 correctly retargets the declared implementation source to nexus/maintenance/new_story_setup.py. Comparison with the prior scripts implementation shows that both ordinary clone and new staging clone mint a new identity and record parent lineage; no duplicate-UUID overwrite/import-as-replace policy is introduced. The Build/reader-later ruling remains a decision rather than a claim bundle publication is complete.",
+      "reviewed_changed_sources": [
+        "nexus/maintenance/new_story_setup.py"
+      ],
+      "source_evidence": [
+        "nexus/maintenance/new_story_setup.py:clone_slot_with_data",
+        "nexus/maintenance/new_story_setup.py:stage_slot_clone",
+        "nexus/maintenance/new_story_setup.py:_clone_source_identity"
+      ],
+      "body_sha256": "fd7ca78c40ada261ee6315fcf6a139fb41628b7b3ee10b872db570de378423ba",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "89ac742d9d51753553016546587662296a774b66d8850dc80fabb0a7e4e667c2",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": {
+        "before": [
+          "scripts/new_story_setup.py"
+        ],
+        "after": [
+          "nexus/maintenance/new_story_setup.py"
+        ]
+      }
+    },
+    {
+      "document": "docs/decisions/0042-durable-intentions.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "Substrate adds world-hour predicates and branch attention metadata plus a behavior-preserving milestone helper extraction. It does not change the active-project limit or implement/overturn the separate durable-intentions ruling. The existing runtime still fixes max_active_per_character to one; the record says Build and contains no claim that the approved several-intention design is already shipped.",
+      "reviewed_changed_sources": [
+        "nexus/agents/orrery/substrate.py"
+      ],
+      "source_evidence": [
+        "nexus/agents/orrery/substrate.py:Branch",
+        "nexus/agents/orrery/substrate.py:branch_declares_milestone",
+        "nexus/agents/orrery/substrate.py:ProjectPolicy",
+        "nexus/config/settings_models.py:OrreryProjectSettings"
+      ],
+      "body_sha256": "bd9604eb07cbcc2b6026b4e92058c4a51e676c4718f7a2574e258f1f99c2a569",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "4223978990196ce0033ea20c169e5a4af0b2c7717bcb300ed7ab501ea534957d",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0044-mundane-texture.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The worker diff preserves deterministic descriptor and promotion behavior. Attention is additive server-authored Branch metadata independent of existing promotable/preemptive flags; no model wire or replacement three-way policy is introduced. This is consistent with the extend-flags ruling and does not claim later attention-based routing has landed.",
+      "reviewed_changed_sources": [
+        "nexus/agents/orrery/worker.py"
+      ],
+      "source_evidence": [
+        "nexus/agents/orrery/worker.py",
+        "nexus/agents/orrery/substrate.py:AttentionClass",
+        "nexus/agents/orrery/substrate.py:Branch",
+        "nexus/agents/orrery/substrate.py:Template.__post_init__"
+      ],
+      "body_sha256": "af3fcb17ae1f075db8a547e686b7f0903144191901e16e5421fe472e56d50d9e",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "c5dad19fa4b65ac3aadc28c4e894dfcf08285f3d0fcf80d1948065624ec27d09",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0049-faction-seeding.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "Trait-compiler changes carry coordinates for Domain place targets, refuse unmatched pointless places and resolve zones from authored points. They do not move faction generation into the set designer or change its count/authoring decision. The record retains the bounded-follow-on/minimum-one Build ruling without asserting this future lane is implemented by the point work.",
+      "reviewed_changed_sources": [
+        "nexus/api/trait_compiler.py"
+      ],
+      "source_evidence": [
+        "nexus/api/trait_compiler.py:_pre_resolve_named_targets",
+        "nexus/api/trait_compiler.py:_create_target_stub",
+        "nexus/api/trait_compiler.py:_insert_place_stub"
+      ],
+      "body_sha256": "da0f5d84f27b7ba70e51a6c6ddad1ee0fc6fbb4f77906f12cc6daaa6a55c8fd8",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "58cf200cc5c386ad6b822bd3fd19d781bec44301f8b62d25b3aaa4d8f70c2a72",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0053-resumable-genesis.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "Conversations become a slot-backed transcript with UUID identity and atomic assistant-message/choice persistence. Migration 150 explicitly discards hosted conv_ caches under the frozen legacy ruling while preserving UUID rows and refusing retired local/test/NULL IDs; resumable saved-stage work remains ledger-backed. No hosted object is read/deleted by that migration, and the record makes no paid Phase 2 readiness claim.",
+      "reviewed_changed_sources": [
+        "nexus/api/conversations.py"
+      ],
+      "source_evidence": [
+        "nexus/api/conversations.py:ConversationsClient",
+        "nexus/api/new_story_cache.py:record_wizard_reply",
+        "migrations/150_wizard_messages.sql",
+        "nexus/api/new_story_flow.py:_reuse_genesis_stage",
+        "nexus/api/new_story_flow.py:resume_committed_genesis_run"
+      ],
+      "body_sha256": "fb59302db88b5a778796f8e2d3b0d3eede74a9a7eef0b52b71eae8eafcaadabd",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "fa6f7c16710657a55846d2141d2e5b8a26aab2bd93e037e1aafe5eb7aa4f76e3",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0054-responsive-shell.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The CSS delta adds only opacity .55 for background Orrery rows. It neither changes narrow-shell pane navigation nor adopts a drawer over the reading column. Preserve the existing rail ruling and source list at this assembled head; final 777/809/824/UI-B source and receipt integration is still pending and requires a later review.",
+      "reviewed_changed_sources": [
+        "ui/client/src/components/nexus/nexus-layout.css"
+      ],
+      "source_evidence": [
+        "ui/client/src/components/nexus/nexus-layout.css:.nexus-backstage-orrery-row[data-attention=\"background\"]"
+      ],
+      "body_sha256": "b71984dd0d72b458ae2fa1123af2370bb9e11ef35b917d1a0e144c9e20699443",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "029e07e05b7f12d8a8e44defd7fa4ef146a3fdd2c9f100ad565cff3765e7722a",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/decisions/0055-weirdness-control.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "Maturation changes typed configuration admission and point handling, but build_runtime_maturation_packet still resolves weirdness from the story setting/genesis data through _resolve_maturation_weird and records the resulting level/source/band. No fixed all-story strangeness policy is introduced.",
+      "reviewed_changed_sources": [
+        "nexus/agents/orrery/retrograde_maturation.py"
+      ],
+      "source_evidence": [
+        "nexus/agents/orrery/retrograde_maturation.py:build_runtime_maturation_packet",
+        "nexus/agents/orrery/retrograde_maturation.py:_resolve_maturation_weird",
+        "nexus/agents/orrery/retrograde_maturation.py:_manifest_weird_block"
+      ],
+      "body_sha256": "b7f0ac5271377b6ed9efcab2bcfc810f1a1a5a5c9e4b9c2da4f0a5067279e69f",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "21238edbb52c80b3b7c72abaf5b08f93e5fd41ac2d0da50c05c1eeed7f75bbff",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    },
+    {
+      "document": "docs/turn_flow_sequence.md",
+      "conclusion": "no material contradiction from reviewed diff",
+      "reason": "The turn acceptance transaction, parent-owned input, staged draft and deferred queue ordering remain as described. Acceptance now passes one validated Settings object and dumps only the Orrery section for unchanged mapping interfaces; worker/scheduler and experience embedding use typed readers; summaries import the moved implementation. The horizon is an additional read-only preview input, and the UI helper change concerns genesis status. These do not change the mapped turn lifecycle or the existing boot artifact-admission statement.",
+      "reviewed_changed_sources": [
+        "nexus.toml",
+        "nexus/agents/lore/utils/turn_cycle.py",
+        "nexus/agents/orrery/experience_embedding.py",
+        "nexus/agents/orrery/worker.py",
+        "nexus/api/commit_handler_sync.py",
+        "nexus/config/story_model.py",
+        "nexus/jobs/scheduler.py",
+        "nexus/jobs/summaries.py",
+        "ui/client/src/lib/narrative-api.ts"
+      ],
+      "source_evidence": [
+        "nexus/api/commit_handler_sync.py:commit_incubator_to_database_sync",
+        "nexus/config/story_model.py:resolve_enqueued_seat",
+        "nexus/jobs/scheduler.py:SlotScheduler.run_pass",
+        "nexus/jobs/summaries.py:drain_summary",
+        "nexus/agents/orrery/experience_embedding.py:drain_experience_embeddings_sync",
+        "nexus/agents/lore/utils/turn_cycle.py:TurnCycleManager",
+        "ui/client/src/lib/narrative-api.ts:skippedRetrogradeStages"
+      ],
+      "body_sha256": "2a7c35104eac1c00ca2f9c30e3a73b88f512bfc7bc4bc4aa3dd673123514f499",
+      "body_unchanged": true,
+      "quoted_lines_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "quoted_lines_unchanged": true,
+      "status_unchanged": true,
+      "declared_sources_present": true,
+      "declared_source_change": null
+    }
+  ],
+  "additional_independent_spot_check": {
+    "reviewer": "/root/inventory_prs",
+    "documents": [
+      "AGENTS.md",
+      "docs/turn_flow_sequence.md"
+    ],
+    "head": "825c9fd997c1d75a47acd9f5ea6fbb06e3465b2a",
+    "conclusion": "No material body contradiction. Typed Settings preserves seat resolution, transactional acceptance and scheduler ordering; 811 retains wrapper commands and summary behavior; horizon/point changes remain compatible with the overviews; genesis status does not alter narrative turn flow; 812 artifact-admission paragraph remains intact. Freshness stamps remain root-owned.",
+    "execution": "Source only; no imports, tests, owner access, edits or ref changes."
+  }
+}
