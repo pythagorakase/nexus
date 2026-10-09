@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Combined #803 init planning and #823 journaled staging production closure; final assembled AST admission remains pending",
+  "reason": "Combined #803 init/desktop readiness and #823 journaled staging closure; final assembled AST admission remains pending",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -257,6 +257,7 @@
     "nexus/prompts/registry.py",
     "nexus/runtime/__init__.py",
     "nexus/runtime/contract.py",
+    "nexus/runtime/desktop_config.py",
     "nexus/runtime/home.py",
     "nexus/runtime/home_plan.py",
     "nexus/runtime/init_plan.py",
