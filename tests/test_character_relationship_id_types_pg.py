@@ -126,6 +126,7 @@ TABLE_INDEXES = (
     "idx_character_relationships_type",
 )
 TABLE_TRIGGERS = (
+    "trg_character_relationships_entity_ids",
     "trg_character_relationships_valence_boundary",
     "trg_version_character_relationships",
 )
@@ -356,7 +357,7 @@ def test_migration_139_reruns_from_integer_ids() -> None:
             before_types = _all_column_types(cur)
         assert [name for name, _ in before["indexes"]] == sorted(TABLE_INDEXES)
         assert [name for name, _ in before["triggers"]] == sorted(TABLE_TRIGGERS)
-        assert len(before["constraints"]) == 5
+        assert len(before["constraints"]) == 7
         assert [
             (row["character1_id"], row["character2_id"]) for row in before["rows"]
         ] == sorted([(actor, target), (target, actor)])
