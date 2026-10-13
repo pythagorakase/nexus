@@ -236,7 +236,6 @@ def get_maintenance_connection(
             conn.cursor_factory = RealDictCursor
         try:
             yield conn
-            commit_transaction(conn)
         except BaseException:
             try:
                 conn.rollback()
@@ -249,6 +248,10 @@ def get_maintenance_connection(
                     "Rollback failed for maintenance database %s", target.dbname
                 )
             raise
+        else:
+            # Commit stays outside the rollback path: an ambiguous commit has
+            # already closed the connection and must surface unchanged.
+            commit_transaction(conn)
     finally:
         conn.close()
 

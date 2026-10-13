@@ -24,12 +24,15 @@ from nexus.api.story_identity import record_fork
 from nexus.maintenance import migrate, new_story_setup
 from nexus.runtime.slot_operations import (
     MaintenanceTargetError,
+    OperationHandle,
     SlotOperation,
     StagingRefused,
+    _advanced,
     open_operation,
     read_operation,
     staging_dbname,
     sweep_staging,
+    validate_staging,
 )
 from scripts import rebuild_memory_idf
 from tests.pg_fixtures import (
@@ -326,6 +329,149 @@ def test_clone_staging_refuses(scenario: Scenario, defect: str, prefix: str) -> 
         )
     with pytest.raises(MaintenanceTargetError):
         rebuild_memory_idf.rebuild_database(target.dbname, maintenance_target=target)
+    with pytest.raises(MaintenanceTargetError):
+        rebuild_memory_idf.rebuild_database(
+            target.dbname, dry_run=True, maintenance_target=target
+        )
+
+
+@pytest.fixture
+def built(template: str, scenario: Scenario) -> Iterator[OperationHandle]:
+    """A real template staging left in phase built, before any validation."""
+    handle = open_operation(
+        "stage_template",
+        slot=DEST_SLOT,
+        source_db=template,
+        journal_dir=scenario.journal_dir,
+    )
+    try:
+        handle.advance("building")
+        new_story_setup._build_from_template(
+            handle.target,
+            template,
+            new_story_setup._postgres_tools("createdb", "pg_dump", "psql"),
+            None,
+            failure_guidance=new_story_setup._STAGING_FAILURE_GUIDANCE,
+        )
+        new_story_setup._align_slot_number(handle.target, DEST_SLOT)
+        handle.advance("built")
+        yield handle
+    finally:
+        handle.close()
+
+
+@pytest.mark.parametrize(
+    "defect, statement, expected",
+    [
+        (
+            "idf_key",
+            "UPDATE memory_idf_corpora SET analyzer_version = "
+            "'pg_catalog.english/v1/0' WHERE corpus_kind = 'narrative'",
+            "idf: narrative analyzer 'pg_catalog.english/v1/0', expected "
+            "pg_catalog.english/v1/",
+        ),
+        (
+            "idf_missing",
+            "DELETE FROM memory_idf_corpora WHERE corpus_kind = 'retrograde_summary'",
+            "idf: missing retrograde_summary corpus",
+        ),
+        (
+            "slot",
+            "UPDATE global_variables SET slot_number = 3",
+            "slot: slot_number is 3, expected 5",
+        ),
+        (
+            "stamps_missing",
+            "DELETE FROM schema_migrations WHERE version = "
+            "(SELECT max(version) FROM schema_migrations)",
+            "stamps: missing ",
+        ),
+        (
+            "story",
+            "DELETE FROM global_variables",
+            "story: global_variables row is missing",
+        ),
+    ],
+)
+def test_validator_refuses_a_mutated_built_staging(
+    scenario: Scenario,
+    built: OperationHandle,
+    defect: str,
+    statement: str,
+    expected: str,
+) -> None:
+    assert built.record.phase == "built"
+    assert (
+        validate_staging(built.target, slot=DEST_SLOT, uploads_dir=scenario.uploads_dir)
+        == []
+    )
+    with (
+        get_maintenance_connection(built.target) as conn,
+        conn.cursor() as cur,
+    ):
+        cur.execute(statement)
+        assert cur.rowcount == 1
+    # Each case fails if its check is removed; the story case also fails if a
+    # check that needs the singleton raises instead of returning the refusal.
+    refusals = validate_staging(
+        built.target, slot=DEST_SLOT, uploads_dir=scenario.uploads_dir
+    )
+    assert len(refusals) == 1 and refusals[0].startswith(expected), refusals
+
+
+def test_migration_runner_revalidates_every_checkout(
+    scenario: Scenario, tmp_path: Path
+) -> None:
+    handle = open_operation(
+        "stage_clone",
+        slot=DEST_SLOT,
+        source_db=scenario.src,
+        journal_dir=scenario.journal_dir,
+    )
+    try:
+        handle.advance("building")
+        target = handle.target
+        new_story_setup._restore_clone(
+            target,
+            scenario.src,
+            new_story_setup._postgres_tools("createdb", "pg_dump", "psql"),
+        )
+        revoked = _advanced(handle.record, "failed", error="qa640 revoked mid-run")
+        tree = tmp_path / "migrations"
+        shutil.copytree(ROOT / "migrations", tree)
+        # The first probe rewrites the journal through the server between the
+        # runner's per-migration checkouts; the second must then be refused.
+        (tree / "998_qa640_revoke.sql").write_text(
+            "COPY (SELECT {}) TO {};".format(
+                "'" + revoked.model_dump_json().replace("'", "''") + "'",
+                "'" + str(handle.path).replace("'", "''") + "'",
+            )
+        )
+        (tree / "999_qa640_after.sql").write_text(
+            "CREATE TABLE qa640_823s1_after (id int); "
+            "COMMENT ON TABLE qa640_823s1_after IS 'Test probe.';"
+        )
+        with pytest.raises(MaintenanceTargetError, match="phase failed"):
+            migrate.migrate_database(
+                target.dbname,
+                skip_locked=False,
+                migrations_dir=tree,
+                maintenance_target=target,
+            )
+        assert read_operation(handle.path).phase == "failed"
+        # The revoked target cannot use maintenance admission; inspect only this
+        # exact owned qa640_ name through the disposable fixture connection.
+        assert target.dbname.startswith(scenario.dest + "_staging_")
+        assert _rows(
+            target.dbname,
+            "SELECT version FROM schema_migrations "
+            "WHERE version IN ('998', '999') ORDER BY version",
+        ) == [("998",)]
+        assert _rows(target.dbname, "SELECT to_regclass('qa640_823s1_after')") == [
+            (None,)
+        ]
+    finally:
+        handle.close()
 
 
 def test_unstamped_clone_fails_before_migrating(scenario: Scenario) -> None:

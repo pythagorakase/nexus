@@ -297,9 +297,7 @@ def _staging_story(
         )
     except (
         ValidationError
-    ) as exc:  # nexus-exception-disposition: fail; reason=invalid; safety=refused
-        # A validation failure becomes a staging refusal; the refusal blocks
-        # the operation and the staging database is kept.
+    ) as exc:  # nexus-exception-disposition: fail; reason=a validation failure becomes a staging refusal; safety=the refusal blocks the operation and the staging database is kept
         refusals.append(f"story: {exc}")
         return None
 
@@ -314,9 +312,7 @@ def _validate_pins(
             resolve_seat(seat, settings=settings, story=story)
         except (
             ValueError
-        ) as exc:  # nexus-exception-disposition: fail; reason=invalid; safety=refused
-            # A validation failure becomes a staging refusal; the refusal
-            # blocks the operation and the staging database is kept.
+        ) as exc:  # nexus-exception-disposition: fail; reason=a validation failure becomes a staging refusal; safety=the refusal blocks the operation and the staging database is kept
             refusals.append(f"pins: {seat}: {exc}")
 
 
@@ -344,9 +340,7 @@ def _validate_pass2(
         baseline = parse_pass2_baseline(baseline_row[1])
     except (
         ValidationError
-    ) as exc:  # nexus-exception-disposition: fail; reason=invalid; safety=refused
-        # A validation failure becomes a staging refusal; the refusal blocks
-        # the operation and the staging database is kept.
+    ) as exc:  # nexus-exception-disposition: fail; reason=a validation failure becomes a staging refusal; safety=the refusal blocks the operation and the staging database is kept
         refusals.append(f"pass2: chunk {chunk_id}: {exc}")
         return
     if baseline_row[0] != baseline.schema_version:
@@ -363,6 +357,31 @@ def _validate_pass2(
         refusals.append(f"pass2: chunk {chunk_id}: {reason}")
 
 
+def _validate_invariants(cur: Any, refusals: list[str]) -> None:
+    from nexus.agents.orrery.replay import (
+        verify_checkpoints_sync,
+        verify_chunk_clocks_sync,
+    )
+    from scripts.replay_state import _verify_correspondence_provenance
+
+    for verdict in verify_checkpoints_sync(cur):
+        if verdict.drifts:
+            refusals.append(
+                f"invariants: checkpoints {verdict.base_checkpoint_id} -> "
+                f"{verdict.target_checkpoint_id}: "
+                f"{len(verdict.drifts)} drifts; {asdict(verdict.drifts[0])}"
+            )
+    clock_findings = verify_chunk_clocks_sync(cur)
+    if clock_findings:
+        refusals.append(
+            f"invariants: {len(clock_findings)} chunk clock findings; "
+            f"{asdict(clock_findings[0])}"
+        )
+    refusals.extend(
+        f"invariants: {finding}" for finding in _verify_correspondence_provenance(cur)
+    )
+
+
 def validate_staging(
     target: MaintenanceTarget,
     *,
@@ -371,14 +390,9 @@ def validate_staging(
     migrations_dir: Path | None = None,
 ) -> list[str]:
     """Collect staging refusals in one repeatable-read, read-only transaction."""
-    from nexus.agents.orrery.replay import (
-        verify_checkpoints_sync,
-        verify_chunk_clocks_sync,
-    )
     from nexus.config import load_settings
-    from nexus.runtime.home import UPLOADS_DIR, repo_root
     from nexus.maintenance.migrate import SCRIPT_ONLY_MIGRATIONS, discover_migrations
-    from scripts.replay_state import _verify_correspondence_provenance
+    from nexus.runtime.home import UPLOADS_DIR, repo_root
 
     # #820 moves uploads into the runtime home; until then the endpoints
     # serve the checkout.
@@ -426,23 +440,10 @@ def validate_staging(
                     refusals.append(
                         f"idf: {kind} analyzer {corpora[kind]!r}, expected {live_key}"
                     )
-            for verdict in verify_checkpoints_sync(cur):
-                if verdict.drifts:
-                    refusals.append(
-                        f"invariants: checkpoints {verdict.base_checkpoint_id} -> "
-                        f"{verdict.target_checkpoint_id}: "
-                        f"{len(verdict.drifts)} drifts; {asdict(verdict.drifts[0])}"
-                    )
-            clock_findings = verify_chunk_clocks_sync(cur)
-            if clock_findings:
-                refusals.append(
-                    f"invariants: {len(clock_findings)} chunk clock findings; "
-                    f"{asdict(clock_findings[0])}"
-                )
-            refusals.extend(
-                f"invariants: {finding}"
-                for finding in _verify_correspondence_provenance(cur)
-            )
+            if row is not None:
+                # The replay checks read the global_variables singleton; with
+                # the row missing, the story: refusal above already blocks.
+                _validate_invariants(cur, refusals)
             cur.execute(
                 "SELECT file_path FROM assets.character_images UNION ALL "
                 "SELECT file_path FROM assets.place_images"
@@ -473,9 +474,7 @@ def _try_sweep_lock(lock_fd: int) -> bool:
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except (
         BlockingIOError
-    ):  # nexus-exception-disposition: safe-continuation; reason=locked; safety=kept
-        # A live process holds the operation lock; its staging database and
-        # record are left untouched.
+    ):  # nexus-exception-disposition: safe-continuation; reason=a live process holds the operation lock; safety=its staging database and record are left untouched
         return False
     return True
 
