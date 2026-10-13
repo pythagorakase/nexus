@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from nexus.api import new_story_flow, setup_endpoints
 from nexus.api.config_utils import get_new_story_model
+from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import read_cache_raw
 from nexus.api.narrative_schemas import ChatRequest, StartSetupRequest
 from nexus.api.new_story_flow import resolve_setup_model
@@ -127,6 +128,13 @@ def test_setup_endpoint_passes_omitted_model_to_core(
             "SELECT choice_object FROM assets.new_story_creator WHERE id = TRUE"
         )
         assert cur.fetchone()[0]["presented"] == result["welcome_choices"]
+    # The welcome reply is in the transcript beside its presented choices.
+    assert result["welcome_message"]
+    assert ConversationsClient(offline_gate_db).list_messages(
+        result["thread_id"], limit=0
+    ) == [
+        {"role": "assistant", "content": result["welcome_message"], "phase": "setting"}
+    ]
 
 
 def test_configured_wizard_default_is_not_the_mock() -> None:

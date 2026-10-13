@@ -186,7 +186,7 @@ async def test_revision_requires_actual_replacement_and_preserves_mechanics(
 @pytest.mark.requires_postgres
 @pytest.mark.parametrize("stale", ["thread", "phase", "complete"])
 def test_chat_rejects_stale_or_unconfirmed_character_before_provider_setup(
-    monkeypatch, seed_wizard_cache, stale
+    monkeypatch, offline_gate_db: str, seed_wizard_cache, stale
 ) -> None:
     cache = seed_wizard_cache(character_cache())
     provider = Mock(side_effect=AssertionError("must reject before provider access"))
@@ -204,6 +204,10 @@ def test_chat_rejects_stale_or_unconfirmed_character_before_provider_setup(
     )
     assert response.status_code == 409
     provider.assert_not_called()
+    # The refusal precedes the player's transcript write as well.
+    with closing(connect(offline_gate_db)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM assets.wizard_messages")
+        assert cur.fetchone()[0] == 0
 
 
 @pytest.mark.asyncio
@@ -608,7 +612,7 @@ def test_concurrent_introduction_keeps_only_the_committed_reply(
     accepted: str,
     introduced: str,
 ) -> None:
-    """An introduction committed during generation wins the actual row lock."""
+    """A reply committed mid-generation stands; the late introduction is refused."""
     routes: SimpleNamespace
 
     def concurrent_winner_goes_first() -> WizardResponse:

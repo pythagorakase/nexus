@@ -3,8 +3,11 @@
 Needs assets.new_story_creator and assets.traits; no provider calls or real saves.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+import json
 from pathlib import Path
+import time
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -14,6 +17,7 @@ from psycopg2.errors import RaiseException
 from nexus.api import setup_endpoints
 from nexus.api.conversations import ConversationsClient, new_conversation_id
 from nexus.api.new_story_cache import (
+    add_wizard_message,
     init_cache,
     read_cache,
     record_wizard_reply,
@@ -551,7 +555,7 @@ def test_reply_and_choices_commit_together(
 
 
 def test_second_introduction_is_refused(offline_gate_db: str) -> None:
-    """The cache row lock admits only one introduction and one transcript row."""
+    """Recorded choices refuse a second introduction; one transcript row remains."""
     thread = new_conversation_id()
     init_cache(offline_gate_db, thread, 4)
     assert (
@@ -575,3 +579,119 @@ def test_second_introduction_is_refused(offline_gate_db: str) -> None:
     assert ConversationsClient(offline_gate_db).list_messages(thread, limit=0) == [
         {"role": "assistant", "content": "The first introduction.", "phase": "setting"}
     ]
+
+
+def _wait_for_waiters(dbname: str, holder_pid: int, count: int) -> None:
+    """Return once ``count`` other backends on the clone wait on a lock.
+
+    The first waiter is blocked by the holder; a later one queues behind the
+    first waiter's tuple lock, so each is counted by its lock wait, not by pid.
+    """
+    deadline = time.monotonic() + 30
+    with closing(connect(dbname)) as observer:
+        observer.autocommit = True
+        with observer.cursor() as cur:
+            while True:
+                cur.execute(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database() "
+                    "AND wait_event_type = 'Lock' "
+                    "AND pid NOT IN (%s, pg_backend_pid()) "
+                    "AND cardinality(pg_blocking_pids(pid)) > 0",
+                    (holder_pid,),
+                )
+                if cur.fetchone()[0] == count:
+                    return
+                if time.monotonic() > deadline:
+                    pytest.fail(f"{count} writer(s) never waited on the cache row lock")
+                time.sleep(0.05)
+
+
+def _hold_cache_row(dbname: str) -> tuple[object, int]:
+    """Open a transaction that holds the wizard cache row lock; return its pid."""
+    holder = connect(dbname)
+    with holder.cursor() as cur:
+        cur.execute("SELECT pg_backend_pid()")
+        pid = cur.fetchone()[0]
+        cur.execute("SELECT 1 FROM assets.new_story_creator WHERE id FOR UPDATE")
+    return holder, pid
+
+
+def test_introduction_waits_on_the_cache_row_lock(offline_gate_db: str) -> None:
+    """A waiting introduction sees the introduction committed by the lock holder."""
+    thread = new_conversation_id()
+    init_cache(offline_gate_db, thread, 4)
+    holder, holder_pid = _hold_cache_row(offline_gate_db)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        try:
+            late = pool.submit(
+                record_wizard_reply,
+                offline_gate_db,
+                expected_thread_id=thread,
+                message="The late introduction.",
+                choices=["Late"],
+                introduction=True,
+            )
+            _wait_for_waiters(offline_gate_db, holder_pid, 1)
+            assert not late.done()
+            with holder.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO assets.wizard_messages "
+                    "(conversation_id, seq, role, content, phase) "
+                    "VALUES (%s::uuid, 1, 'assistant', 'The winning introduction.', "
+                    "'setting')",
+                    (thread,),
+                )
+                cur.execute(
+                    "UPDATE assets.new_story_creator SET choice_object = %s::jsonb "
+                    "WHERE id",
+                    (json.dumps({"presented": ["Winner"], "selected": None}),),
+                )
+            holder.commit()
+            with pytest.raises(WizardStateConflict, match="already introduced"):
+                late.result(timeout=30)
+        finally:
+            holder.close()
+    assert ConversationsClient(offline_gate_db).list_messages(thread, limit=0) == [
+        {
+            "role": "assistant",
+            "content": "The winning introduction.",
+            "phase": "setting",
+        }
+    ]
+    cache = read_cache(offline_gate_db)
+    assert cache is not None and cache.choices == ["Winner"]
+
+
+def test_concurrent_messages_take_consecutive_seqs(offline_gate_db: str) -> None:
+    """Writers queued on the cache row lock append seq 1 and 2 without a collision."""
+    thread = new_conversation_id()
+    init_cache(offline_gate_db, thread, 4)
+    holder, holder_pid = _hold_cache_row(offline_gate_db)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        try:
+            writers = [
+                pool.submit(
+                    add_wizard_message,
+                    offline_gate_db,
+                    expected_thread_id=thread,
+                    role="user",
+                    content=content,
+                    origin="user",
+                )
+                for content in ("First player line.", "Second player line.")
+            ]
+            _wait_for_waiters(offline_gate_db, holder_pid, 2)
+            assert not any(writer.done() for writer in writers)
+            holder.commit()
+            seqs = sorted(writer.result(timeout=30) for writer in writers)
+        finally:
+            holder.close()
+    assert seqs == [1, 2]
+    with closing(connect(offline_gate_db)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT seq FROM assets.wizard_messages WHERE conversation_id = %s::uuid "
+            "ORDER BY seq",
+            (thread,),
+        )
+        assert cur.fetchall() == [(1,), (2,)]
