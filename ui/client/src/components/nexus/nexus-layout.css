@@ -1915,6 +1915,12 @@
   flex-direction: column;
   gap: 4px;
 }
+/* A job queue name is longer than a seat; let it widen its own row instead of
+   painting over the copy beside it. */
+.nexus-backstage-economics .nexus-backstage-kind {
+  width: auto;
+  min-width: 68px;
+}
 .nexus-backstage-economics-pending {
   display: flex;
   flex-direction: column;
