@@ -133,8 +133,8 @@ failure. A traceback means a programming fault.
 `model --set`/`--clear`. `[runtime.cli].turn_request_timeout_seconds` bounds
 each model-turn request: wizard chat, trait toggles, phase introductions, the
 POSTs that schedule `continue`, `retry`, `regenerate`, and the seed's opening
-turn, and the commit POST of `accept`. The wizard's transition to narrative takes
-`[orrery.retrograde.wizard].transition_timeout_seconds`. Waiting on a
+turn, and the commit POST of `accept`. The wizard's transition to narrative
+takes `[orrery.retrograde.wizard].transition_timeout_seconds`. Waiting on a
 generation session is described in Waiting on a Generation below.
 
 ### Transports
