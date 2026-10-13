@@ -72,10 +72,13 @@ GAIA_OUTPUT: dict[str, Any] = {
 }
 
 # Recorded from an export of 688cb431, where every reader still used the alias
-# dict, with SEAT_OVERRIDES applied (issue #809).
+# dict, with SEAT_OVERRIDES applied (issue #809). The Gaia digest was refreshed
+# for #840 (840-S2): the Gaia prompt gained the place-point sentence and the
+# NewEntityDeclaration.coordinates description changed. The writer request
+# carries neither (SkaldWriterWire has no new_entities), so it is unchanged.
 EXPECTED_REQUEST_DIGESTS: dict[str, str] = {
     "writer": "09b26dfed922d661ebbed44ac7f8e5621f5a21734d99d078c2718cb5b505cac6",
-    "gaia": "cac3d730f8b3e3081aa4f297a642694fb1f937ffd0639f4f906c70c14e11da6f",
+    "gaia": "0003d4d83ad6d44a7658b580f68f30de01e23d12120051f987917af4b0916d3c",
 }
 # "provider" is the writer route after _initialize_provider; the seat entries
 # are each pass's provider after _clone_provider_for_two_pass configures it.

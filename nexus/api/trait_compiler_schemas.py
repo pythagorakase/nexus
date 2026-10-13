@@ -151,7 +151,7 @@ class DomainTraitInput(BaseModel):
         min_length=1,
     )
     coordinates: Optional[Coordinates] = Field(
-        None,
+        default=None,
         description=(
             "Real-Earth point for the place; required when the name matches "
             "no existing place."

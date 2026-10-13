@@ -10,5 +10,5 @@
     "docs/decisions/0055-weirdness-control.md"
   ],
   "review": "Source review: place-point enforcement leaves secret disclosure, committed one-shot maturation, story-derived weirdness, correspondence compaction and faction rulings intact. AGENTS structure/schema description remains accurate. Stamps only; quoted rulings unchanged.",
-  "runtime_frontmatter_proof": "pending"
+  "runtime_frontmatter_proof": "tests/test_doc_front_matter.py passed on the integrated tree at 9b755ba3 (see verification.md); the assembly moved every listed stamp to f073b371, while base above is the lane's original 4ae8b8d2."
 }

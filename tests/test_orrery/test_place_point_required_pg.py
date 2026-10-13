@@ -14,6 +14,31 @@ from tests.pg_fixtures import connect, disposable_slot_database, seed_zone
 pytestmark = pytest.mark.requires_postgres
 ROOT = Path(__file__).resolve().parents[2]
 POINT = "ST_SetSRID(ST_MakePoint(0, 0, 0, 0), 4326)::geography"
+ORDERED_COMMENTS = {
+    "FUNCTION public.places_refuse_missing_point()": (
+        "Trigger function for trg_places_require_point and "
+        "trg_places_keep_point: raises not_null_violation naming the place. "
+        "Every place inserted since migration 149 carries a real-Earth point, "
+        "whatever its type, and a point is never removed (#840, Decisions "
+        "840-Q5 and 840-Q6)."
+    ),
+    "TRIGGER trg_places_require_point ON public.places": (
+        "Refuses an INSERT of a places row whose coordinates is NULL, for "
+        "every place type, virtual places and vehicles included."
+    ),
+    "TRIGGER trg_places_keep_point ON public.places": (
+        "Refuses an UPDATE that sets a non-NULL coordinates to NULL. A row "
+        "inserted before migration 149 without a point stays updatable and "
+        "may gain a point."
+    ),
+    "COLUMN public.places.coordinates": (
+        "Real-Earth point of the place (geography PointZM, SRID 4326, "
+        "longitude as x; z and m are 0). Every row inserted since migration "
+        "149 carries one, authored by the structured output that introduced "
+        "the place; a point is never removed. Rows inserted earlier may be "
+        "NULL and are left as they are (#840)."
+    ),
+}
 
 
 @pytest.fixture
@@ -93,6 +118,9 @@ def test_migration_149_keeps_existing_rows(point_db: str) -> None:
         cur.execute("DROP TRIGGER trg_places_require_point ON places")
         cur.execute("DROP TRIGGER trg_places_keep_point ON places")
         cur.execute("DROP FUNCTION public.places_refuse_missing_point()")
+        # The column outlives the replay; clear its comment so only the
+        # re-applied migration can set it again.
+        cur.execute("COMMENT ON COLUMN public.places.coordinates IS NULL")
         cur.execute("DELETE FROM schema_migrations WHERE version = '149'")
         cur.execute(
             "INSERT INTO places (name, type) "
@@ -128,6 +156,9 @@ def test_migration_149_keeps_existing_rows(point_db: str) -> None:
             "AND attname = 'coordinates'"
         )
         observed = dict(cur.fetchall())
+    # Pinned verbatim from work order 840-S2 item 1, so drift in the migration
+    # text is caught; the parse of the migration file below is a second check.
+    assert observed == ORDERED_COMMENTS
     source = (ROOT / "migrations/149_place_point_required.sql").read_text()
     expected = {
         object_name: value.replace("''", "'")

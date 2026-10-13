@@ -134,6 +134,9 @@ class TraitCompilerCursor:
         self.character_relationships: list[dict[str, Any]] = []
         self.fail_relationship = fail_relationship
         self.story_zone = 77
+        # The zone the point-to-zone query answers; distinct from the story
+        # zone, so a writer that still zoned by the story zone would fail.
+        self.point_zone = 88
         self.rowcount = 0
         self._next_row: Optional[Any] = None
         self._next_rows: list[Any] = []
@@ -277,7 +280,7 @@ class TraitCompilerCursor:
 
         if normalized.startswith("WITH POINT AS") and "FROM ZONES Z" in normalized:
             assert params == (-73.9857, 40.7484)
-            self._next_row = (self.story_zone,)
+            self._next_row = (self.point_zone,)
             self.rowcount = 1
             return
 
@@ -1240,7 +1243,7 @@ def test_domain_creates_place_stub_for_unknown_name() -> None:
     assert stub_row["extra_data"]["stub_kind"] == "trait_compiler_target_ref"
     assert stub_row["extra_data"]["sources"][0]["trait"] == "domain"
     assert stub_row["coordinates"] == {"lon": -73.9857, "lat": 40.7484}
-    assert stub_row["zone"] == cur.story_zone
+    assert stub_row["zone"] == cur.point_zone
     assert cur.entity_pair_tags[0]["object_entity_id"] == created.entity_id
 
 

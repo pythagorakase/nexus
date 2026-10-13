@@ -131,7 +131,7 @@ def test_retrograde_persistence_place_stub_is_zoned(stub_cur: Any) -> None:
 
 
 def test_declared_place_without_coordinates_refused(stub_cur: Any) -> None:
-    payload = {
+    payload: dict[str, Any] = {
         "kind": "place",
         "name": "Missing Point",
         "summary": "No authored point.",
@@ -150,7 +150,7 @@ def test_declared_place_coordinates_persist_and_resolve(stub_cur: Any) -> None:
             kind="place",
             name="Declared Remote Place",
             summary="A location with declaration-time GIS.",
-            coordinates={"lat": 50, "lon": 50},
+            coordinates=Coordinates(lat=50, lon=50),
         ),
     )
 

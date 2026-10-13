@@ -311,6 +311,8 @@ def _resolve_or_create_stub(
             name=declaration.name,
             created=False,
         )
+        if declaration.kind == "place":
+            _fill_legacy_place_point(cur, record=record, declaration=declaration)
     else:
         record = _insert_declared_stub(cur, declaration)
         logger.info(
@@ -338,6 +340,56 @@ def _resolve_or_create_stub(
         )
 
     return record
+
+
+def _fill_legacy_place_point(
+    cur: Any, *, record: _DeclaredEntityRecord, declaration: NewEntityDeclaration
+) -> None:
+    """Give a pre-149 place without a point the point its declaration authored.
+
+    A place declaration always carries a point. When its name matches a row
+    inserted before migration 149 without one, that authored point (and the
+    zone it resolves to) fills the row, as ``trg_places_keep_point`` allows; a
+    row that already has a point keeps it. Afterwards the place must have a
+    point, or no maturation job may be enqueued for it.
+    """
+
+    coordinates = declaration.coordinates
+    if coordinates is None:
+        raise ValueError(
+            f"Place declaration {declaration.name!r} has no point; "
+            "a place declaration carries coordinates"
+        )
+    cur.execute(
+        "SELECT coordinates IS NOT NULL AS has_point FROM places WHERE id = %s",
+        (record.subtype_id,),
+    )
+    if bool(_row_value(cur.fetchone(), "has_point", 0)):
+        return
+    zone_id = resolve_zone_for_point(
+        cur, longitude=coordinates.lon, latitude=coordinates.lat
+    )
+    cur.execute(
+        """
+        UPDATE places
+        SET coordinates = ST_SetSRID(ST_MakePoint(%s, %s, 0, 0), 4326)::geography,
+            zone = %s
+        WHERE id = %s AND coordinates IS NULL
+        """,
+        (coordinates.lon, coordinates.lat, zone_id, record.subtype_id),
+    )
+    if cur.rowcount != 1:
+        raise RuntimeError(
+            f"Place {record.subtype_id} {record.name!r} has no point after its "
+            "declaration's point was written; no maturation job is enqueued"
+        )
+    logger.info(
+        "Declared place %r (id=%s) had no point; its authored point fills it "
+        "(zone %s)",
+        record.name,
+        record.subtype_id,
+        zone_id,
+    )
 
 
 def _apply_declared_pair_tag_hints(

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterator
 
 import pytest
 from psycopg2.extras import RealDictCursor
@@ -32,11 +32,13 @@ from nexus.agents.orrery.retrograde_maturation import (
     _load_story_weird_inputs,
     _resolve_maturation_weird,
     _slot_label,
+    drain_maturation_jobs_sync,
     enqueue_declared_entity_maturations,
     namespace_expansion_event_refs,
 )
 from nexus.api.lore_adapter import extract_new_entities
 from nexus.config import load_settings
+from nexus.config.story_model import resolve_enqueued_seat
 from nexus.config.settings_models import (
     OrreryEpistemicsSettings,
     OrreryRetrogradeMaturationSettings,
@@ -994,59 +996,252 @@ def maturation_conn(maturation_story: str) -> Iterator[Any]:
         conn.close()
 
 
-@pytest.mark.requires_postgres
-def test_pointless_place_target_is_not_matured(maturation_conn: Any) -> None:
-    """A legacy job cannot mature a place whose pre-149 row lacks a point."""
+def _insert_legacy_pointless_place(cur: Any, *, name: str, summary: str) -> Any:
+    """Insert one pre-149 place without a point on a disposable clone.
 
-    name = "Legacy Pointless Atrium (Rollback)"
+    The subject is pre-149 data, so only the insert guard is disabled, for
+    this one row, and it is enabled again before the code under test runs.
+    """
+
+    cur.execute("ALTER TABLE places DISABLE TRIGGER trg_places_require_point")
+    cur.execute(
+        """
+        INSERT INTO places (name, type, summary)
+        VALUES (%s, 'other', %s) RETURNING id, entity_id
+        """,
+        (name, summary),
+    )
+    place = cur.fetchone()
+    cur.execute("ALTER TABLE places ENABLE TRIGGER trg_places_require_point")
+    return place
+
+
+def _insert_bounded_zone(cur: Any, *, name: str) -> int:
+    """Insert a zone bounding lon 100..104, lat 10..14 (a RealDictCursor)."""
+
+    cur.execute(
+        "INSERT INTO layers (name) VALUES (%s) RETURNING id",
+        (f"{name} Layer",),
+    )
+    layer_id = int(cur.fetchone()["id"])
+    cur.execute(
+        """
+        INSERT INTO zones (name, boundary, layer)
+        VALUES (%s, ST_Multi(ST_MakeEnvelope(100, 10, 104, 14, 4326)), %s)
+        RETURNING id
+        """,
+        (name, layer_id),
+    )
+    return int(cur.fetchone()["id"])
+
+
+@pytest.mark.requires_postgres
+def test_pointless_place_target_is_not_matured() -> None:
+    """The real drain refuses a job whose pre-149 place lacks a point.
+
+    The job runs through ``drain_maturation_jobs_sync``: the loader raises
+    before any provider call, and the runner records the refusal on the job.
+    The place keeps its NULL point. The drain commits, so this proof owns a
+    fresh disposable clone.
+    """
+
+    name = "Legacy Pointless Atrium"
     declaration = {
         "kind": "place",
         "name": name,
         "summary": "A pre-149 place whose missing point remains unauthored.",
     }
-    chunk_id = _latest_chunk_id(maturation_conn)
-    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        # This test's subject is pre-149 data. Disable only the insert guard
-        # for this one legacy row on the disposable clone, then restore it
-        # before exercising the real job loader. The transaction rolls back.
-        cur.execute("ALTER TABLE places DISABLE TRIGGER trg_places_require_point")
-        cur.execute(
-            """
-            INSERT INTO places (name, type, summary)
-            VALUES (%s, 'other', %s) RETURNING id, entity_id
-            """,
-            (name, declaration["summary"]),
+    cfg = _ENABLED_SETTINGS.require_orrery(
+        "Retrograde maturation"
+    ).retrograde.maturation
+    with disposable_slot_database("qa640_840s2_drain") as dbname:
+        seed_story_clock(
+            dbname,
+            world_time=MATURATION_WORLD_TIME,
+            raw_text="The archive stacks settle into their night silence.",
         )
-        place = cur.fetchone()
-        cur.execute("ALTER TABLE places ENABLE TRIGGER trg_places_require_point")
-        cur.execute(
-            """
-            INSERT INTO orrery_maturation_jobs (
-                entity_id, entity_kind, entity_subtype_id, entity_name,
-                slot, requesting_chunk_id, declaration
-            ) VALUES (%s, 'place', %s, %s, '2', %s, %s::jsonb)
-            RETURNING id AS job_id, entity_id, entity_kind, entity_subtype_id,
-                      entity_name, requesting_chunk_id
-            """,
-            (place["entity_id"], place["id"], name, chunk_id, json.dumps(declaration)),
-        )
-        job = cur.fetchone()
-        with pytest.raises(ValueError, match="which has no point") as caught:
-            _load_job_context(cur, row=job, cfg=OrreryRetrogradeMaturationSettings())
-        assert str(caught.value) == (
-            f"Maturation job {job['job_id']} targets place {place['id']} {name!r}, "
+        conn = connect(dbname)
+        try:
+            chunk_id = _latest_chunk_id(conn)
+            with conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    place = _insert_legacy_pointless_place(
+                        cur, name=name, summary=declaration["summary"]
+                    )
+                    resolution = resolve_enqueued_seat(
+                        "orrery.retrograde.maturation.model_ref",
+                        cur,
+                        settings=_ENABLED_SETTINGS,
+                        slot=2,
+                    )
+                    cur.execute(
+                        """
+                        INSERT INTO orrery_maturation_jobs (
+                            entity_id, entity_kind, entity_subtype_id,
+                            entity_name, slot, requesting_chunk_id, declaration,
+                            resolved_model, resolved_source
+                        ) VALUES (%s, 'place', %s, %s, '2', %s, %s::jsonb, %s, %s)
+                        RETURNING id
+                        """,
+                        (
+                            place["entity_id"],
+                            place["id"],
+                            name,
+                            chunk_id,
+                            json.dumps(declaration),
+                            resolution.model,
+                            resolution.source,
+                        ),
+                    )
+                    job_id = int(cur.fetchone()["id"])
+
+            assert drain_maturation_jobs_sync(
+                2, settings=_ENABLED_SETTINGS, conn=conn
+            ) == (0, 1)
+
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT j.state::text AS state, j.attempts, j.last_error,
+                           j.result_manifest ->> 'failure_class' AS failure_class,
+                           p.coordinates
+                    FROM orrery_maturation_jobs j
+                    JOIN places p ON p.id = j.entity_subtype_id
+                    WHERE j.id = %s
+                    """,
+                    (job_id,),
+                )
+                job = dict(cur.fetchone())
+            conn.rollback()
+        finally:
+            conn.close()
+
+    assert job == {
+        "state": "queued" if cfg.max_attempts > 1 else "failed",
+        "attempts": 1,
+        "last_error": (
+            f"Maturation job {job_id} targets place {place['id']} {name!r}, "
             "which has no point; a place without a point is not matured"
+        ),
+        "failure_class": "ValueError",
+        "coordinates": None,
+    }
+
+
+@pytest.mark.requires_postgres
+def test_redeclared_legacy_place_takes_the_authored_point(
+    maturation_conn: Any,
+) -> None:
+    """A declaration's point fills a pre-149 place, so its job can mature."""
+
+    name = "Legacy Redeclared Hall (Rollback)"
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
+        zone_id = _insert_bounded_zone(cur, name="Redeclared Hall Zone")
+        place = _insert_legacy_pointless_place(
+            cur, name=name, summary="A pre-149 hall stored without a point."
         )
+
+    result = enqueue_declared_entity_maturations(
+        maturation_conn,
+        declarations=[
+            {
+                "kind": "place",
+                "name": name,
+                "summary": "The hall, named again in the prose.",
+                "coordinates": {"lat": 12.5, "lon": 102.25},
+            }
+        ],
+        chunk_id=_latest_chunk_id(maturation_conn),
+        raw_text=f"The doors of {name} stand open.",
+        slot=2,
+        settings=_ENABLED_SETTINGS,
+    )
+    assert result.stubs_created == 0
+    assert result.jobs_enqueued == 1
+
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT j.state::text AS state, p.coordinates
-            FROM orrery_maturation_jobs j
-            JOIN places p ON p.id = j.entity_subtype_id
-            WHERE j.id = %s
+            SELECT p.zone,
+                   ST_X(p.coordinates::geometry) AS lon,
+                   ST_Y(p.coordinates::geometry) AS lat,
+                   (
+                       SELECT count(*) FROM orrery_maturation_jobs j
+                       WHERE j.entity_subtype_id = p.id
+                         AND j.entity_kind = 'place'
+                   ) AS jobs
+            FROM places p WHERE p.id = %s
             """,
-            (job["job_id"],),
+            (place["id"],),
         )
-        assert dict(cur.fetchone()) == {"state": "queued", "coordinates": None}
+        assert dict(cur.fetchone()) == {
+            "zone": zone_id,
+            "lon": 102.25,
+            "lat": 12.5,
+            "jobs": 1,
+        }
+        job = {
+            "job_id": 0,
+            "entity_id": place["entity_id"],
+            "entity_kind": "place",
+            "entity_subtype_id": place["id"],
+            "entity_name": name,
+            "requesting_chunk_id": _latest_chunk_id(maturation_conn),
+        }
+        context = _load_job_context(
+            cur, row=job, cfg=OrreryRetrogradeMaturationSettings()
+        )
+    assert context is not None
+
+
+@pytest.mark.requires_postgres
+def test_redeclared_pointed_place_keeps_its_point(maturation_conn: Any) -> None:
+    """A place that already has a point keeps it; the declared point is unused."""
+
+    name = "Pointed Redeclared Hall (Rollback)"
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
+        zone_id = _insert_bounded_zone(cur, name="Pointed Hall Zone")
+        cur.execute(
+            """
+            INSERT INTO places (name, type, summary, zone, coordinates)
+            VALUES (
+                %s, 'fixed_location', 'A hall stored with its point.', %s,
+                ST_SetSRID(ST_MakePoint(101, 11, 0, 0), 4326)::geography
+            )
+            RETURNING id
+            """,
+            (name, zone_id),
+        )
+        place_id = int(cur.fetchone()["id"])
+
+    result = enqueue_declared_entity_maturations(
+        maturation_conn,
+        declarations=[
+            {
+                "kind": "place",
+                "name": name,
+                "summary": "The hall, named again in the prose.",
+                "coordinates": {"lat": 13.5, "lon": 103.5},
+            }
+        ],
+        chunk_id=_latest_chunk_id(maturation_conn),
+        raw_text=f"The doors of {name} stand open.",
+        slot=2,
+        settings=_ENABLED_SETTINGS,
+    )
+    assert result.stubs_created == 0
+    assert result.jobs_enqueued == 1
+
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT zone, ST_X(coordinates::geometry) AS lon,
+                   ST_Y(coordinates::geometry) AS lat
+            FROM places WHERE id = %s
+            """,
+            (place_id,),
+        )
+        assert dict(cur.fetchone()) == {"zone": zone_id, "lon": 101.0, "lat": 11.0}
 
 
 @pytest.mark.requires_postgres
