@@ -292,8 +292,8 @@ def discover_migrations(
         if extension == "py" and version not in PYTHON_MIGRATION_ALLOWLIST:
             raise RuntimeError(
                 f"Python migration {path} is not in PYTHON_MIGRATION_ALLOWLIST. "
-                "New migrations are SQL; allowlist Python in scripts/migrate.py "
-                "only with a reason comment."
+                "New migrations are SQL; allowlist Python in "
+                "nexus/maintenance/migrate.py only with a reason comment."
             )
         if version in SCRIPT_ONLY_MIGRATIONS:
             continue
