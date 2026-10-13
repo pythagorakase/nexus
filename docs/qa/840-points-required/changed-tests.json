@@ -10,6 +10,7 @@
     "tests/test_character_name_reveals.py",
     "tests/test_commit_choice_presence_pg.py",
     "tests/test_gis_scripts_live.py",
+    "tests/test_lore/test_assembled_prompt_fingerprint.py",
     "tests/test_lore/test_character_dossier_tags_pg.py",
     "tests/test_lore/test_entity_phase_subtraction_pg.py",
     "tests/test_lore/test_pass2_baseline_pg.py",
@@ -34,6 +35,7 @@
     "tests/test_orrery_tag_validation_pg.py",
     "tests/test_player_identity_consumers_pg.py",
     "tests/test_presence_roster_pg.py",
+    "tests/test_runtime/test_init_plan_pg.py",
     "tests/test_skald_wire.py",
     "tests/test_trait_compiler.py",
     "tests/test_trait_compiler_integration.py",
@@ -41,5 +43,5 @@
     "tests/test_travel_reachability_pg.py",
     "tests/test_wizard_opening_presence_pg.py"
   ],
-  "note": "Includes two ordered retired test files; all existing or new changed files join proof, deleted files do not execute."
+  "note": "Includes two ordered retired test files; all existing or new changed files join proof, deleted files do not execute. The fixer (2026-10-13) added the Gaia digest refresh and the init-plan migrate import."
 }
