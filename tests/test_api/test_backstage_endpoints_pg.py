@@ -20,11 +20,13 @@ import tomlkit
 
 from nexus.agents.orrery.backstage import BackstagePayloadError, build_backstage_turn
 from nexus.agents.orrery.relationship_provenance import relationship_producer
+from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
 from nexus.agents.orrery.retrograde_persistence import (
     _ensure_prologue_metadata,
     _insert_prologue_chunk,
 )
 from nexus.agents.orrery.tag_writer import apply_pair_tag_bestowal
+from nexus.agents.orrery.templates import STROLL
 from nexus.api import backstage_endpoints, commit_handler_sync
 from nexus.memory.correspondence import (
     CorrespondenceCompactionPlan,
@@ -575,7 +577,13 @@ def test_payload_reports_known_branch_attention(
     backstage_case: dict[str, Any],
     disposable_db: str,
 ) -> None:
-    """Real endpoint assembly resolves both classes on a template-only clone."""
+    """The legacy pressure-join path maps each known branch to its class.
+
+    Without a snapshot, ``branch_label`` comes only from
+    ``orrery_scene_pressures``. The stroll pressure row is a join fixture: no
+    background branch writes one at runtime, so legacy background rows read
+    ``None``. The snapshot test below covers the path live turns take.
+    """
 
     chunk_id = backstage_case["chunks"][0]
     expected = {
@@ -641,6 +649,80 @@ def test_payload_reports_known_branch_attention(
             cur.execute(
                 "DELETE FROM orrery_resolutions WHERE id = ANY(%s)",
                 (resolution_ids,),
+            )
+
+
+def test_snapshot_reports_background_attention_without_pressure_row(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """A live-shaped proposal snapshot alone carries the background class.
+
+    Live turns persist ``narrative_chunks.orrery_proposal``; no background
+    branch writes a scene pressure, so the snapshot is the only label source.
+    """
+
+    chunk_id = backstage_case["chunks"][0]
+    branch = next(
+        branch for branch in STROLL.branches if branch.label == "Pace the near ground"
+    )
+    draft = OrreryResolutionDraft(
+        template_id=STROLL.id,
+        priority=STROLL.priority,
+        binding_hash="attention-snapshot-proof",
+        bindings={},
+        branch_label=branch.label,
+        narrative_stub=branch.narrative_stub.format(actor="Celia"),
+        state_delta=dict(branch.state_delta),
+        event_type=branch.event_type,
+        changed_fields=tuple(branch.changed_fields),
+        magnitude=branch.magnitude,
+        promotable=branch.promotable,
+        binding_names={"actor": "Celia"},
+        position=1,
+        evaluated_at="2189-10-17T19:00:00+00:00",
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=chunk_id,
+        actor_count=1,
+        resolutions=(draft,),
+        rendered_cards=({"kind": "resolution", "proposal_id": draft.proposal_id},),
+    )
+    try:
+        with closing(connect(disposable_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT orrery_proposal FROM narrative_chunks WHERE id = %s",
+                (chunk_id,),
+            )
+            assert cur.fetchone()[0] is None
+            cur.execute(
+                "SELECT count(*) FROM orrery_scene_pressures "
+                "WHERE tick_chunk_id = %s",
+                (chunk_id,),
+            )
+            assert cur.fetchone()[0] == 0
+            cur.execute(
+                "UPDATE narrative_chunks SET orrery_proposal = %s::jsonb "
+                "WHERE id = %s",
+                (json.dumps(proposal.to_dict()), chunk_id),
+            )
+
+        response = client.get(
+            "/api/dev/backstage/4/turn", params={"chunk_id": chunk_id}
+        )
+        assert response.status_code == 200
+        orrery = response.json()["orrery"]
+        for key in ("rows", "inventory"):
+            assert [
+                (row["template_id"], row["branch_label"], row["attention"])
+                for row in orrery[key]
+            ] == [("stroll", "Pace the near ground", "background")]
+    finally:
+        with closing(connect(disposable_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE narrative_chunks SET orrery_proposal = NULL WHERE id = %s",
+                (chunk_id,),
             )
 
 
