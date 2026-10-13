@@ -143,20 +143,20 @@ Each command declares the most privileged resource its handler opens; the
 [Transports](cli_reference.md#transports) table of the generated reference
 lists each transport and its commands.
 
-The runtime is remote when the active `nexus.toml` sets `[runtime] profile =
-"remote"`, or when `NEXUS_API_URL` names a host other than `localhost` or a
-loopback address. A remote runtime refuses `database`, `local_operator` and
-`operator_api` commands with exit 3 before any connection is opened. Two exceptions follow
-the remote profile itself: `up` and `status` probe the hosted runtime's
-`/runtime/status` over HTTP. The runtime commands that accept `--config`
-(`up`, `down`, `restart`, `status`, `logs`, `models lock`, `models verify`,
-`models plan`, `models fetch`)
-check the profile of that file. `doctor` and `init` are exempt from the refusal
-and from the configuration check below: they diagnose this machine's
-configuration and role themselves, so they run under any profile, and an
-invalid `nexus.toml` is their `config.valid` finding rather than a `config_error`.
-`receipts` is exempt in
-the same way: it reads this machine's receipts when no configuration loads.
+The runtime is remote when the active `nexus.toml` sets
+`[runtime] profile = "remote"`, or when `NEXUS_API_URL` names a host other
+than `localhost` or a loopback address. A remote runtime refuses `database`,
+`local_operator` and `operator_api` commands with exit 3 before any connection
+is opened. Two exceptions follow the remote profile itself: `up` and `status`
+probe the hosted runtime's `/runtime/status` over HTTP. The runtime commands
+that accept `--config` (`up`, `down`, `restart`, `status`, `logs`,
+`models lock`, `models verify`, `models plan`, `models fetch`) check the
+profile of that file. `doctor` and `init` are exempt from the refusal and from
+the configuration check below: they diagnose this machine's configuration and
+role themselves, so they run under any profile, and an invalid `nexus.toml` is
+their `config.valid` finding rather than a `config_error`. `receipts` is
+exempt in the same way: it reads this machine's receipts when no configuration
+loads.
 
 `clear`, `lock`, `unlock` and `model --set`/`--clear` call operator routes over
 `http` and still run under a remote runtime; issue #824 decides their class
@@ -164,9 +164,9 @@ when it splits the listeners.
 
 Only the host name decides: a LAN address, a Tailscale name, or `0.0.0.0`
 counts as remote even when it reaches this machine, so every `database`,
-`local_operator` and `operator_api` command, `up`, `status` and `logs` included,
-is refused while `NEXUS_API_URL` names it. Point `NEXUS_API_URL` at `localhost` or `127.0.0.1`
-for this machine's runtime.
+`local_operator` and `operator_api` command, `up`, `status` and `logs`
+included, is refused while `NEXUS_API_URL` names it. Point `NEXUS_API_URL` at
+`localhost` or `127.0.0.1` for this machine's runtime.
 
 ### JSON Failure Envelope
 
