@@ -102,7 +102,7 @@ def test_start_setup_keeps_every_non_null_slot_pin(
     preference names a second test-provider entry, which must not win.
     """
     config = tmp_path / "nexus.toml"
-    doc = tomlkit.parse(Path("nexus.toml").read_text())
+    doc: Any = tomlkit.parse(Path("nexus.toml").read_text())
     doc["runtime"]["state_dir"] = str(tmp_path / "player-state")
     models = doc["global"]["model"]["api_models"]["test"]["models"]
     second = tomlkit.inline_table()
