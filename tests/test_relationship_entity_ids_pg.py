@@ -25,6 +25,7 @@ from tests.pg_fixtures import (
     CharacterPairSeed,
     connect,
     disposable_slot_database,
+    route_slot_to_disposable,
     seed_character,
     seed_character_pair,
     seed_committed_chunk,
@@ -33,7 +34,10 @@ from tests.pg_fixtures import (
     seed_relationship,
 )
 from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
-from tests.test_orrery.test_need_clock_anchor_pg import _build_story_transition
+from tests.test_orrery.test_need_clock_anchor_pg import (
+    STORY_BASE,
+    _build_story_transition,
+)
 
 pytestmark = pytest.mark.requires_postgres
 WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
@@ -53,12 +57,24 @@ PAIRS = {
     ),
 }
 ENTITY_KEYS = [pair[1] for pairs in PAIRS.values() for pair in pairs]
+# The NOT NULL payload of a direct character_relationships INSERT, in
+# seed_relationship's shape; valence_current is derived from emotional_valence.
+_REQUIRED_COLUMNS = (
+    "relationship_type, emotional_valence, dynamic, recent_events, history"
+)
+_REQUIRED_VALUES = "'ally', '+3|trusting', 'Fixture.', 'None.', 'Fixture.'"
 
 
 @pytest.fixture
-def relationship_db() -> Iterator[str]:
-    """Own one fully migrated clone; leave no database after the test."""
+def relationship_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Own one fully migrated clone routed as slot 3; leave no database after.
+
+    The wizard reset in the stale-ledger case writes its cache through
+    ``require_slot_dbname``, so slot 3 resolves to this clone as it does in
+    ``disposable_need_clock_db``.
+    """
     with disposable_slot_database("qa640_836s6a") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=3, dbname=dbname)
         yield dbname
 
 
@@ -250,8 +266,8 @@ def test_entity_ids_cannot_diverge(relationship_db: str) -> None:
             cur.execute(
                 "INSERT INTO character_relationships "
                 "(character1_id, character2_id, character1_entity_id, "
-                "relationship_type) "
-                "VALUES (%s, %s, %s, 'ally')",
+                f"{_REQUIRED_COLUMNS}) "
+                f"VALUES (%s, %s, %s, {_REQUIRED_VALUES})",
                 (pair.actor_character_id, pair.target_character_id, third_entity),
             )
     assert (
@@ -292,8 +308,8 @@ def test_entity_ids_cannot_diverge(relationship_db: str) -> None:
             cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 "INSERT INTO character_relationships "
-                "(character1_id, character2_id, relationship_type) "
-                "VALUES (%s, %s, 'ally')",
+                f"(character1_id, character2_id, {_REQUIRED_COLUMNS}) "
+                f"VALUES (%s, %s, {_REQUIRED_VALUES})",
                 (absent, pair.target_character_id),
             )
     assert (
@@ -307,9 +323,11 @@ def test_migration_151_refuses_stale_ledger(
     relationship_db: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Fails without the guard: a real reset reuses subtype IDs for new entities."""
+    # Migration 144 fixes base_timestamp once a chunk exists, and the reset
+    # keeps chunks: seed on the clock the replacement wizard world names.
     pair = seed_character_pair(
         relationship_db,
-        world_time=WORLD_TIME,
+        world_time=STORY_BASE,
         actor_name="Old Actor",
         target_name="Old Target",
     )
