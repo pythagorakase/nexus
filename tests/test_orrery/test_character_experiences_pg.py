@@ -56,6 +56,7 @@ from nexus.api import narrative as narrative_api
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config.settings_models import Settings
+from nexus.config.story_model import StorySettings, write_story_settings
 from tests.settings_helpers import settings_with
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.memory.manager import empty_pass2_baseline
@@ -103,6 +104,10 @@ def _disposable_database(*, apply_formation_migration: bool = True) -> Iterator[
         try:
             with conn:
                 with conn.cursor() as cur:
+                    # A fresh slot stores no model pin; pin TEST as pin_clone does.
+                    write_story_settings(
+                        cur, StorySettings(skald_model="TEST", gaia_model=None)
+                    )
                     if not apply_formation_migration:
                         cur.execute(
                             "DROP INDEX IF EXISTS "
