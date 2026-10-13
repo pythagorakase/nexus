@@ -316,9 +316,10 @@ interface RetrogradeStatusRecord {
 }
 
 /**
- * GET /api/story/new/retrograde/status. "idle" means the run has recorded no
- * stage yet (or no run has started); "failed" names the stage that failed
- * in detail.stage.
+ * GET /api/story/new/retrograde/status. "idle" means the run is at no
+ * pipeline stage: it has recorded none yet, no run has started, or the run
+ * skipped Retrograde (a skipped run keeps any derivation record in `stages`);
+ * "failed" names the stage that failed in detail.stage.
  */
 export type RetrogradeStatus = RetrogradeStatusRecord &
   (
