@@ -15,10 +15,12 @@ export default function SplashPage() {
   // One theme menu outside the variant swap: a pick switches the variant
   // optimistically and a rejected save switches it back, and a menu inside
   // the variant would remount and lose the rejection it should show.
+  // It comes first so it stays the first stop in the tab order, as it was
+  // inside each variant; its z-index keeps it painted above the variant.
   return (
     <>
-      {isVeil ? <VeilSplash /> : isVector ? <VectorSplash /> : <GildedSplash />}
       <SplashThemeMenu />
+      {isVeil ? <VeilSplash /> : isVector ? <VectorSplash /> : <GildedSplash />}
     </>
   );
 }

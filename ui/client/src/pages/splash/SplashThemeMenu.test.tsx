@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPane } from "@/components/nexus/SettingsPane";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
@@ -153,17 +154,27 @@ describe("Home theme menu save failures (#961)", () => {
   });
 
   it("shows a second rejection after a new pick cleared the first", async () => {
-    spyFetch(() => new Response("PermissionError: [Errno 13] Permission denied", { status: 500 }));
+    const rejected = () =>
+      new Response("PermissionError: [Errno 13] Permission denied", { status: 500 });
+    const fetchSpy = spyFetch(rejected);
     renderHome();
     openMenu();
     pick("Gilded");
     await screen.findByTestId("splash-theme-save-error");
 
+    // Hold the second answer, so the cleared state is visible before it arrives.
+    // The menu closes on the select, so read the cleared rejection from the context.
+    let answer: (response: Response) => void = () => {};
+    fetchSpy.mockImplementation(() => new Promise<Response>((resolve) => { answer = resolve; }));
     pick("Gilded");
-    expect(screen.queryByTestId("splash-theme-save-error")).not.toBeInTheDocument();
-    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByTestId("save-error-probe")).toHaveTextContent("none"));
+
+    answer(rejected());
     const alert = await screen.findByTestId("splash-theme-save-error");
     expect(alert).toHaveTextContent("500: PermissionError: [Errno 13] Permission denied");
+    expect(screen.getByRole("menu")).toContainElement(alert);
     await waitFor(() => expect(item("Veil")).toHaveTextContent("Veil ✓"));
   });
 
@@ -249,5 +260,11 @@ describe("Home theme menu save failures (#961)", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(screen.queryByTestId("splash-theme-save-error")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { expanded: false })).toHaveLength(1);
+  });
+
+  it("keeps the theme menu trigger first in the tab order on Home", async () => {
+    renderHome();
+    await userEvent.setup().tab();
+    expect(menuTrigger()).toHaveFocus();
   });
 });
