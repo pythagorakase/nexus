@@ -131,8 +131,9 @@ function ThemeSection({
 }) {
   const { fonts } = useFonts();
   const { clearSaveError } = useTheme();
-  // The theme mutation is shared with the nav and splash switchers, which
-  // render no error. Only failures caused during this visit belong here.
+  // The theme mutation is shared with the Home and wizard theme menus, which
+  // show and hold their own rejection. Only failures caused during this visit
+  // belong here.
   useEffect(() => clearSaveError(), [clearSaveError]);
 
   return (

@@ -110,6 +110,34 @@ describe("wizard theme menu save failures (#961)", () => {
     await waitFor(() => expect(item("Veil")).toHaveTextContent("Veil ✓"));
   });
 
+  it("shows a second rejection after a new pick cleared the first", async () => {
+    const rejected = () =>
+      new Response("PermissionError: [Errno 13] Permission denied", { status: 500 });
+    let answerSave: () => Response | Promise<Response> = rejected;
+    const fetchSpy = spyFetch(() => answerSave());
+    const saves = () =>
+      fetchSpy.mock.calls.filter(([, init]) => init?.method === "PATCH").length;
+    renderWizard();
+    openMenu();
+    pick("Gilded");
+    await screen.findByTestId("wizard-theme-save-error");
+
+    // Hold the second answer, so the cleared state is visible before it arrives.
+    // The menu closes on the select, so read the cleared rejection from the context.
+    let answer: (response: Response) => void = () => {};
+    answerSave = () => new Promise<Response>((resolve) => { answer = resolve; });
+    pick("Gilded");
+    await waitFor(() => expect(saves()).toBe(2));
+    await waitFor(() =>
+      expect(screen.getByTestId("save-error-probe")).toHaveTextContent("none"));
+
+    answer(rejected());
+    const alert = await screen.findByTestId("wizard-theme-save-error");
+    expect(alert).toHaveTextContent("500: PermissionError: [Errno 13] Permission denied");
+    expect(screen.getByRole("menu")).toContainElement(alert);
+    await waitFor(() => expect(item("Veil")).toHaveTextContent("Veil ✓"));
+  });
+
   it.each([
     ["an HTTP 500", () => new Response("PermissionError", { status: 500 })],
     ["a network failure", () => { throw new TypeError("Failed to fetch"); }],
