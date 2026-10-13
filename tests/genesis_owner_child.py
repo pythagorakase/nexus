@@ -99,7 +99,10 @@ def main() -> None:
         time.sleep(EXPANSION_HOLD_SECONDS)
         raise RuntimeError("genesis owner child was not killed")
 
-    boundaries = {**capture_boundaries(capture), "expansion": hold}
+    boundaries: dict[str, Callable[..., Any]] = {
+        **capture_boundaries(capture),
+        "expansion": hold,
+    }
     for stage, target in BOUNDARY_TARGETS.items():
         _install(target, boundaries[stage])
     asyncio.run(transition_to_narrative_endpoint(TransitionRequest(slot=slot)))

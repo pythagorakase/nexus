@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pytest
-import requests
+import requests  # type: ignore[import-untyped]
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.orrery.retrograde_orchestrator import GENESIS_RUN_INTERRUPTED

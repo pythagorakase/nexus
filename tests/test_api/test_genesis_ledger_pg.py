@@ -712,6 +712,7 @@ def test_changed_input_rebuilds_the_run(
     change: str,
 ) -> None:
     """Any changed whole-run input rebuilds every stage (Decision 776-Q4)."""
+    from nexus.api.narrative_schemas import WeirdLevel
     from nexus.api.new_story_cache import read_cache, write_weird_level
     from nexus.api.save_slots import get_slot_model
     from nexus.config import load_settings
@@ -722,9 +723,8 @@ def test_changed_input_rebuilds_the_run(
     if change == "weird_level":
         cache = read_cache(dbname)
         assert cache is not None
-        level = next(
-            level for level in ("low", "medium", "high") if level != cache.weird_level
-        )
+        levels: tuple[WeirdLevel, ...] = ("low", "medium", "high")
+        level = next(level for level in levels if level != cache.weird_level)
         write_weird_level(dbname, level)
     else:
         current = get_slot_model(4, dbname=dbname)
