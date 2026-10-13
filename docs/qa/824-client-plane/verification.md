@@ -121,13 +121,69 @@ FAILED tests/test_api/test_route_capabilities.py::test_health_reports_the_servin
 
 Vitest (`ThemeContext.tsx`, `FontContext.tsx`, `useSettings.ts` reverted):
 
+The verbatim tail of `red-ui.log` (from the "Failed Tests" banner to the end;
+ANSI colour codes stripped, nothing else removed): the assertion expected
+`theme-gilded` on `<html>` and received only `dark`.
+
 ```
 $ (cd ui && npx vitest run client/src/contexts/PreferenceProviders.test.tsx)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
  FAIL  src/contexts/PreferenceProviders.test.tsx > preference providers > applies saved theme and fonts from preferences alone
+Error: expect(element).toHaveClass("theme-gilded")
+
 Expected the element to have class:
+  theme-gilded
 Received:
+  dark
+
+Ignored nodes: comments, script, style
+<html
+  class="dark"
+  style="--font-narrative: Spectral; --font-display: Megrim; --font-sans: Spectral; --font-serif: Spectral; --font-mono: Cinzel;"
+>
+  <head>
+    <link
+      href="/icons/veil/icon-32.png?v=20260612b"
+      rel="icon"
+      sizes="32x32"
+      type="image/png"
+    />
+    <link
+      href="/icons/veil/icon-16.png?v=20260612b"
+      rel="icon"
+      sizes="16x16"
+      type="image/png"
+    />
+    <link
+      href="/icons/veil/icon-180.png?v=20260612b"
+      rel="apple-touch-icon"
+      type="image/png"
+    />
+  </head>
+  <body>
+    <div>
+      <span />
+    </div>
+  </body>
+</html>
+ ❯ src/contexts/PreferenceProviders.test.tsx:56:38
+     54| 
+     55|     const root = document.documentElement;
+     56|     await waitFor(() => expect(root).toHaveClass("theme-gilded"));
+       |                                      ^
+     57|     await waitFor(() =>
+     58|       expect(root.style.getPropertyValue("--font-narrative")).toBe("Sp…
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
  Test Files  1 failed (1)
       Tests  1 failed (1)
+   Start at  10:51:14
+   Duration  1.91s (transform 41ms, setup 64ms, collect 101ms, tests 1.02s, environment 375ms, prepare 216ms)
 ```
 
 Both pass on the branch (Python in the PostgreSQL proof set below; Vitest in
@@ -160,11 +216,32 @@ The two skips are `tests/test_orrery/test_card_identity.py:122-125`
 
 `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT` and `NEXUS_RUN_POSTGRES`
 unset. The order's first command (`tests --ignore=tests/test_api
---ignore=tests/test_orrery`) ran in three sequential pieces that together
-cover the same files, because one piece alone runs past the ten-minute
-command limit under this machine's load (the one-minute load reached 39):
-the subdirectories, then the 144 top-level `tests/test_*.py` files in two
-alphabetical halves (78 + 66 files).
+--ignore=tests/test_orrery`) ran in three sequential pieces, because one
+piece alone runs past the ten-minute command limit under this machine's load
+(the one-minute load reached 39): the subdirectories, then the top-level
+modules in two alphabetical halves. pytest's default `python_files`
+(`test_*.py` and `*_test.py`; `pytest.ini` sets only `testpaths = tests`)
+also collects the two top-level `*_test.py` modules
+`tests/live_seed_schema_test.py` and `tests/live_set_designer_test.py`. The
+first second-half run listed only `tests/test_*.py` and missed them; the
+second half was re-run with both added (review round 3, below the first
+run's tail), so the three pieces now cover the same files as the order's
+command. Both modules skip at module level offline (`283 skipped` against
+`281`).
+
+The halves are the 144 files of `ls tests/test_*.py` split 78 + 66
+(`ls tests/test_*.py | head -78` and `| tail -66` reproduce both lists
+exactly at this head). First half:
+
+```
+tests/test_backfill_review_packet.py tests/test_bootstrap_episode_pg.py tests/test_character_identity.py tests/test_character_name_reveals_pg.py tests/test_character_name_reveals.py tests/test_character_relationship_id_types_pg.py tests/test_character_tag_manifest.py tests/test_chunk_entity_references_pg.py tests/test_chunk_lifecycle_columns_migration_pg.py tests/test_cli_choice_http.py tests/test_cli_contract.py tests/test_cli_generation_http.py tests/test_cli_inspect_pg.py tests/test_cli_model_selection.py tests/test_cli_reference_doc.py tests/test_cli_review_pg.py tests/test_cli_session_wait.py tests/test_cli_wizard_confirmation.py tests/test_cli.py tests/test_clock_face.py tests/test_commit_choice_presence_pg.py tests/test_commit_chronology.py tests/test_commit_handler_sync.py tests/test_connection_lifecycle.py tests/test_correspondence_live.py tests/test_correspondence.py tests/test_database_contract.py tests/test_db_converters.py tests/test_dbname_audit.py tests/test_doc_front_matter.py tests/test_embedding_artifacts.py tests/test_embedding_table_ownership_pg.py tests/test_entity_reference_parity_pg.py tests/test_entity_tag_manifest_apply.py tests/test_enum_column_comment_labels_pg.py tests/test_faction_table_audit.py tests/test_gis_scripts_live.py tests/test_golden_path_live.py tests/test_idf_dictionary_pg.py tests/test_inherited_slot_isolation_pg.py tests/test_intention_revision_weight.py tests/test_interaction_boundary.py tests/test_interactions_pg.py tests/test_issue_601_wizard_live.py tests/test_jobs_cli_pg.py tests/test_live_gate_clones_pg.py tests/test_local_skald_live.py tests/test_logon_mock_integration.py tests/test_lore_adapter_metadata.py tests/test_measure_place_scale_grammar_pg.py tests/test_measure_place_scale_grammar.py tests/test_memnon_cross_encoder_artifact.py tests/test_memnon_cross_encoder_dependencies.py tests/test_memnon_cross_encoder.py tests/test_memnon_db_access.py tests/test_memnon_embedding_cache.py tests/test_memnon_embedding_contract.py tests/test_memnon_model_failures_pg.py tests/test_memnon_runtime_config.py tests/test_memnon_script_model_loaders.py tests/test_migration_comment_lint.py tests/test_mock_openai.py tests/test_model_artifact_lock_committed.py tests/test_model_drift.py tests/test_model_registry_live.py tests/test_name_reveal_staged_bindings_pg.py tests/test_name_reveal_staged_bindings.py tests/test_name_reveal_tag_validation_pg.py tests/test_name_reveal_tag_validation.py tests/test_native_structured_output.py tests/test_new_story_cache.py tests/test_new_story_cli.py tests/test_new_story_integration.py tests/test_new_story_schemas.py tests/test_new_story_setup_config.py tests/test_new_story_setup.py tests/test_openai_registry_capabilities.py tests/test_orrery_tag_validation_pg.py
+```
+
+Second half (plus the two `*_test.py` modules in the re-run):
+
+```
+tests/test_orrery_tag_validation.py tests/test_owner_target_guard.py tests/test_pg_accepted_turn_factory.py tests/test_pg_adjudication_ledger_seed.py tests/test_pg_anchor_pair_tag_seeds.py tests/test_pg_character_pair_seed.py tests/test_pg_disposable_target.py tests/test_pg_experience_seeds.py tests/test_pg_fixtures_corpus_clone.py tests/test_pg_legacy_faction_tag_seed.py tests/test_pg_target_contract.py tests/test_place_tag_manifest.py tests/test_player_identity_consumers_pg.py tests/test_postgres_tools.py tests/test_presence_audit.py tests/test_presence_boost_pg.py tests/test_presence_boost.py tests/test_presence_reconciliation.py tests/test_presence_roster_pg.py tests/test_presence_roster.py tests/test_prompt_lint.py tests/test_prompt_tag_vocabulary_pg.py tests/test_prose_metrics_pg.py tests/test_prose_metrics.py tests/test_qa_shift.py tests/test_reachability.py tests/test_rebuild_memory_idf_pg.py tests/test_record_revelation_cli_pg.py tests/test_reentry_wire_ledger.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_register_drift_study.py tests/test_relationship_entity_ids_pg.py tests/test_retrograde_summary_retrieval.py tests/test_routine_delta_grammar_probe_pg.py tests/test_runtime_home.py tests/test_scheduler_helpers_basetemp.py tests/test_scheduler_helpers_routing.py tests/test_schema_docs_baseline_routing.py tests/test_schema_documentation_pg.py tests/test_schema_ownership.py tests/test_script_wrappers.py tests/test_secret_manager.py tests/test_secret_store_guard.py tests/test_secret_store_integration.py tests/test_skald_wire.py tests/test_slot_operations_journal.py tests/test_slot_operations_pg.py tests/test_slot_routed_entrypoints.py tests/test_slot_utils.py tests/test_story_identity_pg.py tests/test_summary_triggers.py tests/test_tags_audit_pg.py tests/test_test_provider_seeder.py tests/test_trait_compiler_integration.py tests/test_trait_compiler.py tests/test_trait_input_derivation.py tests/test_trait_menu_docs.py tests/test_travel_reachability_pg.py tests/test_travel_reachability.py tests/test_turn_observation.py tests/test_unowned_index_adoption_pg.py tests/test_usage_recorder.py tests/test_wizard_agent.py tests/test_wizard_live.py tests/test_wizard_opening_presence_pg.py tests/test_world_clock_contract_pg.py
+```
 
 ```
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider tests/config tests/fixtures tests/proofs tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util
@@ -174,18 +251,27 @@ FAILED tests/test_lore/test_assembled_prompt_fingerprint.py::test_assembled_writ
 FAILED tests/test_lore/test_two_pass_pipeline.py::test_gaia_prompt_is_concise_and_self_contained
 2 failed, 1043 passed, 89 skipped, 7 warnings in 161.26s (0:02:41)
 
-$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider <tests/test_*.py, first 78 files>
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider $(ls tests/test_*.py | head -78)
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 1088 passed, 299 skipped, 8 warnings in 404.98s (0:06:44)
 
-$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider <tests/test_*.py, last 66 files>
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider $(ls tests/test_*.py | tail -66)
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 FAILED tests/test_script_wrappers.py::test_no_tracked_file_binds_a_wrapper_module
 FAILED tests/test_skald_wire.py::test_wire_schema_size_and_description_budget
 FAILED tests/test_wizard_agent.py::test_transition_rejects_missing_diegetic_timestamp
 3 failed, 1061 passed, 281 skipped, 7 warnings in 100.07s (0:01:40)
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider $(ls tests/test_*.py | tail -66) tests/live_seed_schema_test.py tests/live_set_designer_test.py   # re-run on a239f55a
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_script_wrappers.py::test_no_tracked_file_binds_a_wrapper_module
+FAILED tests/test_skald_wire.py::test_wire_schema_size_and_description_budget
+FAILED tests/test_wizard_agent.py::test_transition_rejects_missing_diegetic_timestamp
+3 failed, 1061 passed, 283 skipped, 7 warnings in 97.87s (0:01:37)
 
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider tests/test_api
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
@@ -760,6 +846,130 @@ receipt isolation: checkout and user receipts untouched
 $ $PY -m black --check <the 8 changed Python files>
 All done! ✨ 🍰 ✨
 8 files would be left unchanged.
+```
+
+The only Vitest failure is still the expected stale state-surface receipt.
+
+## Review Fixes, Round 3 (2026-10-13)
+
+Applied in `67ab65f7` (UI suites and `SlotSelector.tsx`), `a239f55a` (the
+`/health` plane test) and the evidence commit that adds this section. Every
+tail below ran on the tree committed as `a239f55a`.
+
+- Retired theme seeds. `ThemeProvider` reads its theme only from
+  `usePreferencesQuery()` (`ThemeContext.tsx:42`). Eight suites still seeded
+  `["/api/settings"]` with `{ ui: { theme: "veil" } }`:
+  `NarrativePane.test.tsx`, `NarrativePane.drafts.test.tsx`,
+  `NarrativePane.regenerate.test.tsx`, `ReturnRecapCard.test.tsx`,
+  `Intertitle.test.tsx`, `NexusLayout.announcer.test.tsx`,
+  `InteractiveWizard.transition.test.tsx` and `WaitScreen.test.tsx`. Each now
+  seeds `["/api/preferences"]` with
+  `{ theme: "veil", fonts: KEEPERS, wizard_model: "TEST" }` (`KEEPERS` from
+  `@/contexts/FontContext`), as `2a97d5fa` did for the recovery suite; the
+  wizard and wait-screen suites' second, settings-shaped `/api/preferences`
+  seed folded into that one line. `StateGlyphs.test.tsx:35` takes the same
+  `Preferences` shape and keeps its `["/api/settings"]` seed (`:34`), which
+  carries the MemoryMeter's `ui.local_models` knobs on the operator plane.
+  `NexusLayout.announcer.test.tsx` keeps an `["/api/settings"]` seed, now
+  `{}`: its probe stub reports the operator plane, so NexusLayout's
+  operator read of the backstage knobs (`NexusLayout.tsx:68-71`) is enabled
+  and this client has no query function. No other suite of the eight mounts
+  an `/api/settings` reader (only `TopBar.tsx`, `SettingsPane.tsx`,
+  `NexusLayout.tsx` and `useSettings.ts` read it).
+- Player-plane occupied slot card. On the player plane an occupied unlocked
+  card now adds `cursor-default hover:border-primary/30` through `cn`
+  (`tailwind-merge` drops the base `cursor-pointer` and the lit
+  `hover:border-primary/60`), so it no longer looks clickable; RESUME stays
+  its only action. The operator plane and the design-sync card (stubbed to
+  the operator plane) are unchanged. The `player plane offers no clear and no
+  overwrite` case asserts the occupied card has `cursor-default` and not
+  `cursor-pointer`, and the empty card keeps `cursor-pointer`. This is the
+  finding's example taken as written; `tabIndex` and the Enter/Space handler
+  stay, so keyboard focus order does not change.
+- `/health` plane test. `test_health_reports_the_serving_plane` now builds
+  the player and operator projections before it sends any request, then
+  requests `/health` from the player, operator and unprojected apps in that
+  order. A shared-plane implementation therefore answers every request with
+  the last declaration. Proof with a pytest plugin that replaces
+  `set_serving_plane` and `serving_plane` with one module global
+  (`<scratchpad>/824-S1-resume/fix3/shared_plane.py`, loaded with
+  `-p shared_plane`): the restructured test fails on the player case, and
+  the previous structure (`git show HEAD~1:tests/test_api/test_route_capabilities.py`
+  copied in for one run, then restored) passed under the same plugin.
+- Evidence: the offline split now names the two `*_test.py` modules, the
+  half commands are the real shell forms with both file lists pasted, and
+  the Vitest red run above is the verbatim tail of `red-ui.log`.
+
+```
+$ PYTHONPATH=$PWD:<scratch>/fix3 nice -n 15 $PY -m pytest -q -p no:cacheprovider -p shared_plane tests/test_api/test_route_capabilities.py::test_health_reports_the_serving_plane
+E       AssertionError: assert {'plane': 'op...s': 'healthy'} == {'plane': 'pl...s': 'healthy'}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'plane': 'operator'} != {'plane': 'player'}
+E         Use -v to get more diff
+
+tests/test_api/test_route_capabilities.py:234: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_api/test_route_capabilities.py::test_health_reports_the_serving_plane[dist-missing]
+FAILED tests/test_api/test_route_capabilities.py::test_health_reports_the_serving_plane[dist-built]
+2 failed in 0.14s
+
+$ # same command, previous test structure (HEAD before a239f55a) copied in for one run
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+2 passed in 0.05s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider tests/test_api/test_route_capabilities.py::test_health_reports_the_serving_plane tests/test_api/test_route_capabilities.py::test_serving_plane_requires_a_declaration
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3 passed, 7 warnings in 0.67s
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_api/test_route_capabilities.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 2 targets: postgres, qa640_offline_gate_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+37 passed, 7 warnings in 5.86s
+
+$ $PY -m black --check tests/test_api/test_route_capabilities.py
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+
+$ nice -n 15 npx --prefix ui vitest run --root ui <the nine suites above> client/src/components/NewStoryWizard/SlotSelector.test.tsx
+ ✓ client/src/components/nexus/Intertitle.test.tsx (4 tests) 23ms
+ ✓ client/src/components/NewStoryWizard/WaitScreen.test.tsx (12 tests) 86ms
+ ✓ client/src/components/nexus/NarrativePane.test.tsx (3 tests) 63ms
+ ✓ client/src/components/NewStoryWizard/SlotSelector.test.tsx (15 tests) 300ms
+ ✓ client/src/components/nexus/ReturnRecapCard.test.tsx (16 tests) 293ms
+ ✓ client/src/components/nexus/NarrativePane.regenerate.test.tsx (10 tests) 378ms
+ ✓ client/src/components/nexus/NarrativePane.drafts.test.tsx (36 tests) 408ms
+ ✓ client/src/components/nexus/NexusLayout.announcer.test.tsx (3 tests) 271ms
+ ✓ client/src/components/nexus/StateGlyphs.test.tsx (6 tests) 432ms
+ ✓ client/src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx (50 tests) 4952ms
+
+ Test Files  10 passed (10)
+      Tests  155 passed (155)
+
+$ nice -n 15 npm --prefix ui run check
+> nexus-ui@1.0.0 check:design-sync
+> tsc -p .design-sync/tsconfig.previews.json
+(exit 0)
+
+$ nice -n 15 npm --prefix ui test
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ Test Files  1 failed | 41 passed (42)
+      Tests  639 passed (639)
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+66 passed, 5 warnings in 6.91s
 ```
 
 The only Vitest failure is still the expected stale state-surface receipt.

@@ -21,7 +21,7 @@ Base: `claude/wave-b-integration` at `7eb9a10c` (merge base with `origin/main`: 
 - `ui/client/src/hooks/usePlane.ts` (new): `Plane`, `HealthPayload`, `HEALTH_QUERY_KEY`, `usePlane()`. An unknown plane counts as not operator.
 - `useNarrativeEngine.ts`: the probe reads `GET /health`, caches the payload under `HEALTH_QUERY_KEY` when `res.ok`, and sets reachability from `res.ok` as before; a failed probe keeps the cached plane. `ui/vite.config.ts` proxies `/health`. The `HEAD /api/settings` handler stays; only its docstring changes.
 - `useSettings.ts`: `usePreferencesQuery()`; `useSettingsQuery` fetches the operator defaults only on the operator plane and keeps the merge. Theme and Font providers read `usePreferencesQuery()`.
-- Player plane withholds: the memory meter (`TopBar.tsx`), NexusLayout's `/api/settings` read, the backstage gate query (`gateOpen` stays false), the settings pane's model, API keys, context length and advanced sections (the pane renders theme, typography and app icon from `SettingsConsole settings={null}`), portrait upload (`CharactersPane.tsx`, upload region only), CLEAR (`SlotSelector.tsx`). An occupied slot on the player plane opens no overwrite dialog and starts nothing; RESUME and empty slots behave as before.
+- Player plane withholds: the memory meter (`TopBar.tsx`), NexusLayout's `/api/settings` read, the backstage gate query (`gateOpen` stays false), the settings pane's model, API keys, context length and advanced sections (the pane renders theme, typography and app icon from `SettingsConsole settings={null}`), portrait upload (`CharactersPane.tsx`, upload region only), CLEAR (`SlotSelector.tsx`). An occupied slot on the player plane opens no overwrite dialog and starts nothing, and its card drops the pointer cursor and hover brightening; RESUME and empty slots behave as before.
 - `useLocalModels.ts` and `narrative-api.ts` need no change: after these edits their operator calls run only from operator-plane components.
 - Harness stubs: `ui/.design-sync/ds-provider.tsx` answers `/health` (operator plane) and `/api/preferences`; `ui/.design-sync/NOTES.md` names both; `ui/scripts/state-surfaces/fixture.tsx` answers `GET /health`, seeds `['/health']` and a full `['/api/preferences']`.
 - `docs/runtime.md`: the planes paragraph states what `/health` reports and what the player-plane client withholds; the dev-server proxy list names `/health`.
@@ -35,7 +35,7 @@ Base: `claude/wave-b-integration` at `7eb9a10c` (merge base with `origin/main`: 
 ### Tests
 
 - Python (`tests/test_api/test_route_capabilities.py`, real dispatch through `TestClient`): `test_health_reports_the_serving_plane` (player, operator and unprojected, both static branches), `test_serving_plane_requires_a_declaration`, `test_retired_slot_select_is_not_served`; `slot/select` removed from `OPERATOR_REQUESTS` and from `tests/test_api/test_slot_mutation_guard.py`.
-- Vitest: `PreferenceProviders.test.tsx` (applies saved theme and fonts from preferences alone), and player-plane cases in `SettingsPane.test.tsx`, `TopBar.test.tsx`, `CharactersPane.test.tsx`, `SlotSelector.test.tsx`, `NexusLayout.test.tsx`, `useNarrativeEngine.recovery.test.tsx`. Suites that render operator controls seed the operator plane. The live-engine stubs in `NexusLayout.announcer.test.tsx` and `NarrativePane.regenerate.test.tsx` answer `GET /health` with a JSON body (they answered the retired `HEAD /api/settings` probe), and the recovery suite seeds `/api/preferences`, the key `ThemeProvider` reads.
+- Vitest: `PreferenceProviders.test.tsx` (applies saved theme and fonts from preferences alone), and player-plane cases in `SettingsPane.test.tsx`, `TopBar.test.tsx`, `CharactersPane.test.tsx`, `SlotSelector.test.tsx`, `NexusLayout.test.tsx`, `useNarrativeEngine.recovery.test.tsx`. Suites that render operator controls seed the operator plane. The live-engine stubs in `NexusLayout.announcer.test.tsx` and `NarrativePane.regenerate.test.tsx` answer `GET /health` with a JSON body (they answered the retired `HEAD /api/settings` probe), and every suite that mounts `ThemeProvider` seeds `/api/preferences` in the `Preferences` shape, the key `ThemeProvider` reads (the retired `/api/settings` theme seeds are gone; an `/api/settings` seed stays only where an operator surface reads it: StateGlyphs' MemoryMeter knobs and NexusLayout's backstage knobs in the announcer suite). The `/health` plane test builds both projections before its first request, so a plane kept in one shared place fails it.
 
 ## Proof
 
@@ -51,6 +51,12 @@ E         {'plane': 'player'}
 
 client/src/contexts/PreferenceProviders.test.tsx
  FAIL  src/contexts/PreferenceProviders.test.tsx > preference providers > applies saved theme and fonts from preferences alone
+Error: expect(element).toHaveClass("theme-gilded")
+
+Expected the element to have class:
+  theme-gilded
+Received:
+  dark
  Test Files  1 failed (1)
       Tests  1 failed (1)
 ```
@@ -66,12 +72,14 @@ dbname audit: owner targets: none
 
 The two skips are the `requires_corpus` case of `test_card_identity.py`.
 
-Offline (`tests --ignore=tests/test_api --ignore=tests/test_orrery` in three sequential pieces that cover the same files, because one run passes the ten-minute command limit under this machine's load):
+The `/health` plane test builds both projections before its first request. With a pytest plugin that keeps the plane in one module global, it fails on the player case (`{'plane': 'operator'} != {'plane': 'player'}`, `2 failed`), where the earlier request-per-build structure passed (`2 passed`). After that change, `tests/test_api/test_route_capabilities.py` under PostgreSQL: `37 passed`, `dbname audit: owner targets: none`.
+
+Offline (`tests --ignore=tests/test_api --ignore=tests/test_orrery` in three sequential pieces, because one run passes the ten-minute command limit under this machine's load). The pieces: `tests/config tests/fixtures tests/proofs tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util`; `$(ls tests/test_*.py | head -78)`; and `$(ls tests/test_*.py | tail -66) tests/live_seed_schema_test.py tests/live_set_designer_test.py`. The two `*_test.py` modules are collected by pytest's default `python_files`; the first second-half run missed them, so the second half was re-run with them (both skip at module level offline). Together the pieces cover the same files as the order's command. Both file lists are in `verification.md`.
 
 ```
 subdirectories:          2 failed, 1043 passed, 89 skipped in 161.26s
 top-level, first half:   1088 passed, 299 skipped in 404.98s
-top-level, second half:  3 failed, 1061 passed, 281 skipped in 100.07s
+top-level, second half:  3 failed, 1061 passed, 283 skipped in 97.87s   (re-run with the two *_test.py modules)
 tests/test_api:          2 failed, 544 passed, 330 skipped in 34.47s
 tests/test_orrery:       9 failed, 1349 passed, 1187 skipped in 14.07s
 tests/test_reachability.py tests/test_doc_front_matter.py: 120 passed in 19.57s
