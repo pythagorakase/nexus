@@ -419,6 +419,7 @@ describe("TopBar generation announcer", () => {
       setStatus("RECEIVING");
       setStatus("READY");
       act(() => vi.advanceTimersByTime(4321));
+      expect(announcer()).toBeEmptyDOMElement();
       setStatus("TRANSMITTING");
       expect(announcer()).toHaveTextContent("Generation started");
       unmount();
