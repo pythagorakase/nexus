@@ -17,10 +17,10 @@ import pytest
 
 from nexus.api.save_slots import is_slot_locked
 from nexus.config import load_settings
+from nexus.maintenance import migrate
 from nexus.runtime.contract import HOME_ENV, RUNTIME_CONFIG_ENV
 from nexus.runtime.init_plan import build_init_plan, render_plan
 from nexus.runtime.readiness import REGISTRY, CheckSpec, ReadinessContext
-from nexus.maintenance import migrate
 from tests import pg_fixtures
 
 pytestmark = pytest.mark.requires_postgres

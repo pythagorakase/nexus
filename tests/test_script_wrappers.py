@@ -83,6 +83,17 @@ def test_wrapper_reexports_every_defined_name(
         ),
     }
     wrapper, module = modules[wrapper_name], modules[module_name]
+    wrapper_tree = ast.parse(
+        (ROOT / (wrapper_name.replace(".", "/") + ".py")).read_text()
+    )
+    reexports = [
+        node
+        for node in ast.walk(wrapper_tree)
+        if isinstance(node, ast.ImportFrom) and node.module == module_name
+    ]
+    assert len(reexports) == 1, [node.lineno for node in reexports]
+    imported = [alias.asname or alias.name for alias in reexports[0].names]
+    assert sorted(imported) == sorted(expected)
     assert wrapper.__all__ == sorted(expected)
     for name in expected:
         assert getattr(wrapper, name) is getattr(module, name), name
@@ -107,7 +118,7 @@ def _moved_imports(tree: ast.Module, *, named_imports: bool) -> list[int]:
 
 def test_runtime_imports_no_moved_script_module() -> None:
     """Fails if any runtime path, including a lazy import, retains a wrapper."""
-    findings = []
+    findings: list[str] = []
     for path in sorted((ROOT / "nexus").rglob("*.py")):
         findings.extend(
             f"{path.relative_to(ROOT)}:{line}"
@@ -126,7 +137,7 @@ def test_no_tracked_file_binds_a_wrapper_module() -> None:
         check=True,
         timeout=30,
     ).stdout.split("\0")
-    findings = []
+    findings: list[str] = []
     for relative in tracked:
         if not relative.endswith(".py") or relative in WRAPPER_PATHS:
             continue

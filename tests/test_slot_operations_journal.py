@@ -10,6 +10,7 @@ from typing import Iterator
 import pytest
 
 from nexus.api import db_pool, slot_utils
+from nexus.maintenance import new_story_setup
 from nexus.runtime.slot_operations import (
     MaintenanceTargetError,
     OperationHandle,
@@ -19,7 +20,6 @@ from nexus.runtime.slot_operations import (
     require_authorized,
     staging_dbname,
 )
-from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import route_slot_to_disposable
 
 

@@ -36,8 +36,7 @@ import tomlkit
 
 from nexus.api import slot_utils
 from nexus.api.save_slots import is_slot_locked
-from nexus.maintenance import migrate
-from nexus.maintenance import new_story_setup
+from nexus.maintenance import migrate, new_story_setup
 from tests.pg_fixtures import (
     connect,
     disposable_database,
