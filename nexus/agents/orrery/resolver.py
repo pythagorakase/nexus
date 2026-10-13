@@ -553,7 +553,14 @@ def hydrate_world_state(
     """Hydrate the read-side Orrery state snapshot from database tables.
 
     Raise ValueError before database hydration if neither the anchor nor an
-    explicit ``world_time_override`` supplies a world clock.
+    explicit ``world_time_override`` supplies a world clock, and raise
+    ValueError naming ``anchor_chunk_id`` when that clock (anchor or
+    override) is naive.
+
+    ``event_horizon_hours`` sets how many world hours of dated,
+    anchor-bounded events load into ``horizon_events`` by occurrence time,
+    separate from the tick window that fills ``recent_events``. ``None``
+    reads ``[orrery.binding] recent_event_horizon_hours``.
 
     ``win_history_window`` > 0 additionally hydrates committed win counts
     per (actor, template) over that many trailing ticks for habituation

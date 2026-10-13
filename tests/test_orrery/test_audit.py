@@ -32,11 +32,11 @@ from nexus.agents.orrery.substrate import (
     Condition,
     count_recent_events_at_least,
     count_recent_events_within_hours_at_least,
-    recent_event_within_hours,
-    knows_recent_event_within_hours,
-    since_last_event_hours_at_least,
     knows_recent_event,
+    knows_recent_event_within_hours,
     recent_event,
+    recent_event_within_hours,
+    since_last_event_hours_at_least,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.config import load_settings_as_dict

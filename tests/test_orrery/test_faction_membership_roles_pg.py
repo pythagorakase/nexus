@@ -197,10 +197,12 @@ def _resolve_phase_sections(orrery: Mapping[str, Any]) -> dict[str, Any]:
     """Return the sections the resolve phase hands ``resolve_dry_run``.
 
     Mirrors ``TurnCycle`` in ``nexus/agents/lore/utils/turn_cycle.py``: every
-    section comes from one dump of the Orrery settings.
+    section comes from one dump of the Orrery settings, including the
+    ``[orrery.binding]`` event horizon it passes beside ``window_chunks``.
     """
 
     return {
+        "event_horizon_hours": orrery["binding"]["recent_event_horizon_hours"],
         "sunhelm_settings": orrery["sunhelm"],
         "selection_settings": orrery["selection"],
         "habituation_settings": orrery["habituation"],
