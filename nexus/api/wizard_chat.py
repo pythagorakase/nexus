@@ -346,6 +346,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 status_code=409,
                 detail="The wizard phase or conversation changed. Resume before continuing.",
             )
+        if request.thread_id is None:
+            raise WizardStateConflict("The saved wizard is missing its conversation.")
         persisted_cache = read_cache(slot_dbname(request.slot))
         if persisted_cache and persisted_cache.character_revision_pending:
             if request.trait_choice is not None or request.accept_fate:
