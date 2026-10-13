@@ -824,11 +824,12 @@ def test_repeated_post_joins_the_running_run(
         if second.is_alive() or second.ident is not None:
             second.join(RUN_SECONDS)
     assert not first.is_alive() and not second.is_alive()
+    runs = _runs_after(seeded)
+    assert (len(runs), boundaries.calls) == (1, ["expansion"]), (runs, answers)
     assert not isinstance(answers["first"], Exception), answers["first"]
     assert not isinstance(answers["second"], Exception), answers["second"]
     assert answers["first"] == answers["second"]
-    assert _runs_after(seeded) == [answers["first"].run]
-    assert boundaries.calls == ["expansion"]
+    assert runs == [answers["first"].run]
 
 
 def test_stopped_owner_run_is_closed_and_resumed(
