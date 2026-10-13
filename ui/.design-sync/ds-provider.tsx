@@ -132,9 +132,7 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
     if (method === "GET") {
       if (url.includes("/api/secrets/status")) return Promise.resolve(json(SECRETS));
       if (url.includes("/api/config/ui")) {
-        return new Response(JSON.stringify({ announcer: { hold_ms: 5000 } }), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return Promise.resolve(json({ announcer: { hold_ms: 5000 } }));
       }
       if (url.includes("/api/settings")) {
         const theme = window.localStorage.getItem("nexus-theme") || "veil";

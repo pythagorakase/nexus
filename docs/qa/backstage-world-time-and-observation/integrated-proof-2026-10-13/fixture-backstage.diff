@@ -1,0 +1,29 @@
+--- ui/scripts/state-surfaces/fixture.tsx	2026-10-09 03:18:11
++++ <scratch>/shots/fixture-backstage.tsx	2026-10-13 18:13:39
+@@ -13,6 +13,9 @@
+ import { secretsQueryKey } from '@/hooks/useSecrets';
+ 
+ localStorage.removeItem('activeSlot');
++localStorage.setItem('nexus-developer-mode', 'true');
++let backstageTurn: unknown = null;
++(window as any).setBackstageTurn = (payload: unknown) => { backstageTurn = payload; };
+ const replace = history.replaceState.bind(history);
+ history.replaceState = (data, unused, url) => replace(data, unused,
+   new URL(`?tab=${new URL(String(url), 'http://fixture').searchParams.get('tab') ?? 'narrative'}`, location.href));
+@@ -26,6 +29,7 @@
+   (window as any).fixtureTransport.push({ method, url });
+   if (method === 'HEAD' && url === '/api/settings') return new Response(null);
+   if (method === 'GET' && url === '/api/narrative/active?slot=4') return Response.json(null);
++  if (method === 'GET' && url === '/api/dev/backstage/4/turn') return Response.json(backstageTurn);
+   if (method === 'GET' && url === '/api/secrets/status?slot=4') return Response.json(keyRows);
+   if (method === 'POST' && /^\/api\/secrets\/verified\/verify$/.test(url))
+     return Response.json({ provider: 'verified', verified: true, detail: 'synthetic fixture revision' });
+@@ -47,7 +51,7 @@
+   c.setQueryData(['/api/slot/state', 4], { narrative_generation: generation, frontier_clock: null });
+   c.setQueryData(['/api/preferences', 'narrative-recovery'], { narrative_generation: generation });
+   c.setQueryData(['/api/preferences'], { theme });
+-  c.setQueryData(['/api/dev/backstage/health'], false);
++  c.setQueryData(['/api/dev/backstage/health'], true);
+   c.setQueryData(['/api/local-models/status'], status(mode === 'memory', over));
+   c.setQueryData(['/api/local-models/download'], { state: 'idle' });
+   const [lng, lat] = terrain === 'land' ? [-100, 40] : [-30, 0];

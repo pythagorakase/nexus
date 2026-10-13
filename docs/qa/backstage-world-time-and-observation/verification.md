@@ -1,6 +1,6 @@
 # Backstage World Time and Observation: Source Checkpoint
 
-Date: 2026-10-08. **The coordinator accepted the initial reds; implementation is authored, and green proof remains pending.**
+Date: 2026-10-08. **The coordinator accepted the initial reds; implementation is authored.** The green proof ran on the integrated wave-B tree on 2026-10-13; see "Integrated-Tree Proof (2026-10-13)" at the end. The sections between here and there are the historical 2026-10-08 checkpoint.
 The frozen UI-B order explicitly requires each new test before implementation.
 The tests-only checkpoint authored those regressions against unchanged UI-B product
 code. Its source preparation ran no tests. The later coordinator execution below
@@ -12,17 +12,20 @@ The product baseline is merge `28e7070bfaa48e77866f0a11ebce23ca9ec7970f`:
 `149704d16fa126b8ac9d142a22bf51b42a669552`. The only merge conflict was the
 responsive-shell decision's source list; the union retains the layout, CSS and
 `useNarrowShell` sources, unchanged ruling/status/quotation and the shared
-`4ae8b8d2` verification base. All normal merge hooks passed. No shared reference
+`4ae8b8d2` verification base (historical; the assembly has since moved the
+stamps to `f073b371`). All normal merge hooks passed. No shared reference
 or predecessor worktree changed.
 
 ## Recorded Decision and Component Check
 
-The user approved an explicit unavailable observation for a pending draft whose
-UUID has no generation-session row, with its explanation and the rest of
-Backstage usable. Its exact explanation is
+The unbound-pending branch (UI-B item 5) reads a pending draft whose UUID has
+no generation-session row as an explicit unavailable observation, with its
+explanation and the rest of Backstage usable. Its exact explanation is
 `session <uuid>: no generation session (staged before session binding)`.
-This pending analogue is an authorized extension of 802-Q1, not a quotation
-from the earlier accepted-chunk ruling. No owner confirmation remains pending.
+This pending analogue is a coordinator mechanism extension of 802-Q1, not a
+quotation from the accepted-chunk ruling. It is pending the owner's
+confirmation; the coordinator asks on #802 at landing. No recorded owner
+approval exists in the repository or on #802.
 
 Before authoring the UI tests, an independent delegated source review checked
 the official [Collapsible documentation](https://ui.shadcn.com/docs/components/radix/collapsible)
@@ -174,22 +177,24 @@ provider call, owner write or service action in this source work.
 Black left both changed Python files unchanged (see `source-black.txt`). This
 is formatting evidence, not runtime/import, lint, type or green test proof.
 `canonical-source-closure.json` records the source-only canonical review:
-0054's rail ruling is unchanged; current merge base and its stamp are both
-`4ae8b8d2`. Final predecessor/main merging still requires renewed closure and
+0054's rail ruling is unchanged; current merge base and its stamp were both
+`4ae8b8d2` at that checkpoint (historical: the wave-B assembly has since moved
+the canonical documents' `verified_commit` stamps, 0054 included, to
+`f073b371`). Final predecessor/main merging still requires renewed closure and
 freshness verification. `pending-focused-selectors.json` lists the required
 focused scopes, including the announcer suite selected by the frozen UI filter.
 
 Root and an independent peer reviewed the five-file product diff against
-`1c8b92fb` and found no source blocker. The peer recorded diff SHA-256
-`e6606bda67e0a056f4f6f5b58a02fe228ea61dc7d928d34296e627fbc108a448`.
-Their review covered required fields, exact clock refusal, the builder/route
+`1c8b92fb` and found no source blocker. The peer review's output was not
+retained in the repository, so its diff hash is not cited here. The review covered required fields, exact clock refusal, the builder/route
 split, the narrow exception, transaction boundaries, session/parent correlation,
 verbatim observations and preserved 784/777 behavior. This is source review;
 neither review imported the application or ran tests. The 0054 review read its
 unchanged bottom-rail ruling at this branch's actual `4ae8b8d2` merge base and
-does not claim review against a future final main.
+does not claim review against a future final main (historical; the assembly
+has since moved 0054's stamp to `f073b371`, re-verified on 2026-10-13 below).
 
-## Remaining Proof
+## Remaining Proof (Historical, 2026-10-08)
 
 Then perform the frozen focused PostgreSQL selection (Backstage endpoints,
 attempt manifests, turn observation, slot-routed entrypoints, card identity and
@@ -209,3 +214,259 @@ and scheduled gateway restart remain later landing work. No migration is added;
 149/150/151 keep their existing owners.
 
 Codex — GPT-6
+
+## Integrated-Tree Proof (2026-10-13)
+
+Fixer: Claude Opus 5.5, worktree `fix-ui-b`, branch `claude/waveb-fix-ui-b`, cut
+from integration head `a563203a` (origin/main `f073b371` plus the wave-B lanes,
+the 777 shell and nine lane fixes). Raw logs live in
+[`integrated-proof-2026-10-13/`](integrated-proof-2026-10-13/). `<scratch>` is
+the session scratchpad subdirectory `fix-waveb-r3-UI-B`; `$PY` is
+`/Users/pythagor/nexus/.venv/bin/python`. Every command ran from the worktree
+root with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset. The
+one-minute load before each PostgreSQL run was between 13.6 and 21.0 (below 24),
+so no wait was needed; each log's first line records it (the first file's
+reading, 14.32 at 17:54, printed to the terminal).
+
+### Fixes Made on This Tree
+
+- `7b4a347e`: `ui/.design-sync/ds-provider.tsx` answers `/api/config/ui` with
+  `Promise.resolve(json({ announcer: { hold_ms: 5000 } }))`, as every other GET
+  branch does. `TopBar.test.tsx` asserts the announcer is empty after the
+  second hold, before the second "Generation started".
+- `25758c48`: `test_economics_matches_inspect_turn_for_a_test_turn` reads each
+  parity pair (endpoint, then `inspect-turn`) through `_same_utc_day_reads`,
+  which rereads both once when the two `read_at` values fall on different UTC
+  dates. `ledger_days_read` stays in the comparison; only `read_at` is removed,
+  as before. The same commit clears this lane's new mypy diagnostics: the
+  `requests` import carries `# type: ignore[import-untyped]` (no stub package is
+  installed; the convention of `tests/test_api/test_genesis_resume_live.py:33`
+  and `test_set_designer_failure.py:19`; the gateway tests use `requests`, no
+  typed client) and the tomlkit assignment carries `# type: ignore[index]` (the
+  convention of the same file's `test_backstage_gate_both_arms`). The tomlkit
+  diagnostic the 784-S2 fixer reported at `:1068` is this assignment; on this
+  tree it sat at `:986`.
+- `fc7c5a3c`: Chicago title case for the three assembly-evidence headings.
+- `220772a2`: the screenshot below showed the `correspondence_compaction`
+  queue name painting over its row copy (the shared kind column is 68px). Inside
+  `.nexus-backstage-economics` the kind column now has `width: auto;
+  min-width: 68px`. Before the fix the readback measured the queue name's text
+  ending at x=245.6 while its copy began at x=172
+  ([before](integrated-proof-2026-10-13/screenshot-readback-before-kind-fix.txt));
+  after it, no row overlaps
+  ([after](integrated-proof-2026-10-13/screenshot-readback.json)).
+
+### Import Cycle (fc7c5a3c)
+
+```text
+$ PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
+/Users/pythagor/nexus/.claude/worktrees/fix-ui-b/nexus/__init__.py
+$ PYTHONPATH=$PWD $PY -c 'import nexus.agents.orrery.backstage' ; echo "exit=$?"
+exit=0
+```
+
+### Focused PostgreSQL Set (fc7c5a3c)
+
+Each file ran alone, in order, as
+`NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit <file>`.
+
+```text
+tests/test_api/test_backstage_endpoints_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 4 targets: postgres, qa640_778s6a_backstage_*, qa640_778s6a_empty_*, qa640_uib_turn_*
+dbname audit: owner targets: none
+14 passed, 9 warnings in 26.46s
+
+tests/test_api/test_attempt_manifest_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+5 passed, 9 warnings in 41.53s
+
+tests/test_turn_observation.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+43 passed in 1.48s
+
+tests/test_slot_routed_entrypoints.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+35 passed in 34.12s
+
+tests/test_orrery/test_card_identity.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+9 passed, 2 skipped, 2 warnings in 11.66s
+
+tests/test_connection_lifecycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+1 passed in 30.07s
+```
+
+The Backstage file has 14 test functions and 14 passed, so the four UI-B tests
+ran to completion; `test_economics_matches_inspect_turn_for_a_test_turn` ran the
+real TEST turn on `qa640_uib_turn_*` through the CLI schema-3 parity, the
+approve POST and the post-acceptance assertions, with no skip. The two
+card-identity skips are the one `@pytest.mark.requires_corpus` test
+(`tests/test_orrery/test_card_identity.py:123`, parametrized twice), which
+needs `NEXUS_RUN_CORPUS=1`. Afterwards `pg_database` held no `qa640_uib%` or
+`qa640_778s6a%` database. The 777 order's Python set also ran
+(`tests/test_api/test_ui_config.py tests/test_config tests/test_api/test_route_capabilities.py tests/test_api/test_preferences.py tests/test_api/test_settings_endpoints.py`):
+`156 passed, 7 warnings in 16.09s`, guard line and `owner targets: none`
+present ([log](integrated-proof-2026-10-13/pg-777-set.txt)). The whole-tree
+PostgreSQL gate is the coordinator's step.
+
+### Offline Splits (fc7c5a3c)
+
+Each split was collected once and run in file-list pieces (each under ten
+minutes), with `NEXUS_RUN_POSTGRES` unset, as
+`PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider $(cat <scratch>/offline-part-N.txt)`.
+
+```text
+tests --ignore=tests/test_api --ignore=tests/test_orrery: 3872 tests collected
+  part 0: 739 passed, 165 skipped, 7 warnings in 118.60s
+  part 1: 874 passed, 162 skipped, 7 warnings in 212.91s
+  part 2: 778 passed, 161 skipped, 8 warnings in 200.63s
+  part 3: 806 passed, 187 skipped, 7 warnings in 94.43s
+  total:  3197 passed, 675 skipped, 0 failed
+
+tests/test_api tests/test_orrery: 3441 tests collected
+  part 0: 633 passed, 349 skipped, 7 warnings in 20.43s
+  part 1: 1 failed, 719 passed, 858 skipped, 7 warnings in 7.59s
+  part 2: 560 passed, 321 skipped, 7 warnings in 15.20s
+  total:  1912 passed, 1528 skipped, 1 failed
+FAILED tests/test_orrery/test_config.py::test_epistemics_rejects_event_type_without_birth_role_policy
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'without birth-role policies.*ate'
+E    Input: "1 validation error for OrreryEpistemicsSettings\nclaim_event_types\n  Value error, claim_event_types contains event types emitted by background branches: ['ate'] [type=value_error, ...]"
+```
+
+The one failure is not this lane's: neither file changed here. `ate` became a
+background-branch event type through 784-S2's attention metadata (`9641f184`),
+so the background-branch check in
+`OrreryEpistemicsSettings._validate_claim_event_types`
+(`nexus/config/settings_models.py:2330-2370`) now fires before the
+missing-policy check the test expects. It is reported to the coordinator, not
+fixed here. `tests/test_reachability.py` and `tests/test_doc_front_matter.py`
+ran in split one and again at `220772a2`:
+`120 passed, 5 warnings in 16.72s` ([log](integrated-proof-2026-10-13/doc-reach.txt)).
+`docs/decisions/0054-responsive-shell.md` declares `nexus-layout.css`; its
+`verified_commit` is `f073b371`, the merge base, and its rail ruling is
+untouched by the economics-only CSS rule of `220772a2`.
+
+### Static Comparisons (fc7c5a3c Against origin/main f073b371)
+
+The origin/main side ran in a `git archive origin/main nexus tests scripts pyproject.toml .flake8`
+extraction under `<scratch>/mainsrc` (full import context).
+
+```text
+== black --check (branch fc7c5a3c)
+3 files would be left unchanged.
+== flake8 (branch)
+nexus/agents/orrery/backstage.py:650:89: E501 line too long (91 > 88 characters)
+== flake8 (origin/main)
+nexus/agents/orrery/backstage.py:547:89: E501 line too long (91 > 88 characters)
+== mypy --explicit-package-bases (branch): Found 7 errors in 1 file (checked 3 source files)
+== mypy --explicit-package-bases (origin/main): Found 7 errors in 1 file (checked 3 source files)
+== $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+No new diagnostics. The E501 is the same pre-existing SQL line (`git blame`:
+`261005d3a`, 2026-09-24). The seven mypy errors are the same seven messages on
+both sides at shifted lines (`backstage.py` 280/310/345/590/601 on main,
+378/408/443/693/704 here), all on lines this lane did not write; before
+`25758c48` the branch had three more in the test file (`:16` requests stubs,
+`:986` twice). Full outputs:
+[black/flake8](integrated-proof-2026-10-13/static-black-flake8.txt),
+[mypy/dispositions](integrated-proof-2026-10-13/static-mypy-dispositions.txt).
+
+### UI Proof
+
+```text
+$ nice -n 15 npm --prefix ui ci          (fc7c5a3c)   exit=0
+$ nice -n 15 npm --prefix ui test -- NexusLayout BackstageDrawer TopBar MapPane shell-accessibility
+  (fc7c5a3c)  Test Files  6 passed (6)   Tests  54 passed (54)
+  (220772a2 content, run just before that commit)  Test Files  6 passed (6)   Tests  54 passed (54)
+$ nice -n 15 npm --prefix ui test        (220772a2; first run at fc7c5a3c identical)
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ Test Files  1 failed | 40 passed (41)
+      Tests  632 passed (632)
+$ nice -n 15 npm --prefix ui run check   (fc7c5a3c and 220772a2)
+> tsc && npm run check:design-sync
+> tsc -p .design-sync/tsconfig.previews.json
+exit=0, 0 "error TS" lines
+$ nice -n 15 npm --prefix ui run build   (fc7c5a3c and 220772a2)   exit=0
+```
+
+The only full-suite failure is the expected stale state-surface receipt; the
+regeneration and the green full `npm --prefix ui test` after it are the
+coordinator's step. The full suite includes every file that the global
+`ui/client/src/tests/setup.ts` shim affects (40 of 41 files green). The branch
+type check reports zero diagnostics, so no origin/main comparison can show a
+new one; the main-side check was not rerun. Red for the hold-clear assertion:
+with `TopBar.tsx`'s clear effect planted to arm only for serial 1
+(`|| serial > 1`), `npm --prefix ui test -- TopBar` failed at the new line,
+`TopBar.test.tsx:422:27 expect(announcer()).toBeEmptyDOMElement()`,
+`Tests 1 failed | 17 passed (18)`; the file was restored from a copy and
+`git diff --quiet -- ui/client/src/components/nexus/TopBar.tsx` passed
+([log](integrated-proof-2026-10-13/ui-topbar-plant-red.txt)).
+
+### Screenshots and Visual-Minimalism Audit (220772a2)
+
+`nice -n 15 node <scratch>/shots/shoot.mjs $PWD/ui <scratch>/shots/out`
+([script](integrated-proof-2026-10-13/screenshot-proof.mjs)) bundles a scratch
+copy of `ui/scripts/state-surfaces/fixture.tsx` (its whole
+[diff](integrated-proof-2026-10-13/fixture-backstage.diff): Backstage health
+true, developer mode on, and an in-page `GET /api/dev/backstage/4/turn` answer;
+`fixture.tsx` itself is unchanged) with the production CSS of this tree's
+`npm --prefix ui run build`. It mounts the real `NexusLayout` in Veil at
+1200x900 (device scale 2, dark, reduced motion, network aborted), opens the
+drawer with the backtick key, and captures the Vitest payloads: read A accepted
+with read B pending, and the legacy-accepted plus unbound-pending unavailable
+state. Page errors: none in either state.
+
+- [Observed with pending](integrated-proof-2026-10-13/backstage-observed-with-pending-1200x900.png)
+  ([drawer](integrated-proof-2026-10-13/backstage-observed-with-pending-drawer.png)):
+  header `slot 04 · t.17 · +7 min`; ECONOMICS summary
+  `critical 2,000/1,600 · background unknown/unknown · wall 11.1s · choices ready 11.1s`;
+  pending block border `1px dashed rgba(230, 115, 77, 0.5)`, opacity 0.7.
+- [Unavailable](integrated-proof-2026-10-13/backstage-unavailable-1200x900.png)
+  ([drawer](integrated-proof-2026-10-13/backstage-unavailable-drawer.png)):
+  header `slot 04 · t.17 · +1 h`; ECONOMICS summary `unavailable`; the two
+  detail lines.
+
+Audit against CLAUDE.md "UI Design: Visual Minimalism", per new element:
+- Elapsed delta: unlabeled text appended to the existing header line after one
+  `·`; it adds no label, icon or chrome, and the first turn shows nothing.
+- ECONOMICS section: one label matching the drawer's other section labels, on
+  the existing `SectionHeader`; its summary line is data, not prose, and the
+  collapsed state keeps only that line.
+- Accepted rows: reuse the write-row and kind styles; the seat is the only
+  per-row label, and no copy repeats the section summary.
+- Pending block: marked only by the dashed accent rule and dimming; no copy
+  names it.
+- Read foot: reuses the history style; `read <instant>` and the ledger days are
+  data.
+- Unavailable state: one detail line per read, stating the reason once.
+- No internal module name appears in the new copy. The drawer renders its copy
+  in the menu font's capitals, as its three existing sections already do; the
+  provenance tokens (`attempt_manifest`, `provider_usage_ledger`) are ledger
+  names shown as data in this developer-only surface, as the order requires.
+The kind-column overlap the first capture showed is fixed in `220772a2`.
+
+### #1102 and Landing Notes
+
+#1102 is not fully fixed (ruled): natural Tab auto-scroll of the settings list
+still dismisses the exceeds-RAM row tooltip through Radix's ancestor-scroll
+close; the landed trace keeps its stationary-viewport precondition, and the PR
+line reads `Refs #1102`, not `Closes`. The controlled-tooltip fix is a
+follow-up the coordinator files on #1102; see the 777 evidence
+(`docs/qa/777-shell-ui-bundle/verification.md`).
+
+Coordinator's steps, not run here: the whole-tree PostgreSQL gate; the
+state-surface regeneration (`npm --prefix ui run resolve-state-surfaces`) and the
+green full `npm --prefix ui test` after it; fleet migrations (none in this
+lane); the owner's gateway restart and UI rebuild; asking the owner on #802 to
+confirm the unbound-pending branch.

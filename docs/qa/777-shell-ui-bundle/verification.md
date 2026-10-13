@@ -366,3 +366,41 @@ capture is reused. The palette decision and remaining acceptance work above
 are still pending.
 
 Codex — GPT-6
+
+## Integrated-Tree Status (2026-10-13)
+
+Recorded by the UI-B+777-shell fixer (Claude Opus 5.5) on branch
+`claude/waveb-fix-ui-b`, cut from integration head `a563203a`. Raw logs and
+commands are in `docs/qa/backstage-world-time-and-observation/verification.md`,
+"Integrated-Tree Proof (2026-10-13)".
+
+**#1102 is not fully fixed.** With item 16's `onBlur` in place, a keyboard user
+who Tabs onto the exceeds-RAM row while the settings list must scroll to reveal
+it still loses the tooltip: the Tab auto-scroll fires Radix's ancestor-scroll
+close. The landed trace keeps its stationary-viewport precondition (the row is
+scrolled into view before tabbing), as ruled, so it does not exercise that
+case, and in the browser it reads 50/50/50 with or without item 16 (the
+`focusOut` Vitest case is the discriminating test). The PR line reads
+`Refs #1102`, not `Closes #1102`. Making the row tooltip controlled from
+focus-within (ignoring Radix's scroll close while focus stays in the row) is a
+follow-up the coordinator files on #1102. The README passage differs from item
+17's ordered text; its wording is for the coordinator to confirm.
+
+Fixes on this tree: `ui/.design-sync/ds-provider.tsx` now answers
+`/api/config/ui` with a promise like every other GET stub (`7b4a347e`), and
+the TopBar hold test asserts the region is empty after the second hold before
+the second "Generation started" (`7b4a347e`; with the clear planted to arm only
+once, the test fails at `TopBar.test.tsx:422`).
+
+The global `ui/client/src/tests/setup.ts` shim is covered by a whole-suite run,
+not the 12-file selection: `nice -n 15 npm --prefix ui test` at `220772a2`
+gave `Test Files 1 failed | 40 passed (41)`, `Tests 632 passed (632)`; the one
+failure is `src/state-shades.test.ts` "Stale browser-resolved state surfaces",
+expected until the coordinator regenerates the receipt. The regeneration and
+the green full suite after it are the coordinator's step. The 777 Python set
+(`tests/test_api/test_ui_config.py tests/test_config tests/test_api/test_route_capabilities.py tests/test_api/test_preferences.py tests/test_api/test_settings_endpoints.py`,
+`NEXUS_RUN_POSTGRES=1`, `-p tests.dbname_audit`) passed on `fc7c5a3c`:
+`156 passed, 7 warnings in 16.09s`, with the secret-store guard line and
+`dbname audit: owner targets: none`. This evidence cites the
+`4ae8b8d2` merge base above as historical; the assembly has since moved the
+canonical documents' `verified_commit` stamps to `f073b371`.

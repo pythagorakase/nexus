@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 import uuid
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
-import requests
+import requests  # type: ignore[import-untyped]
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 import tomlkit
@@ -1056,6 +1056,38 @@ def _without_read_at(observation: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in observation.items() if key != "read_at"}
 
 
+def _read_utc_day(observation: dict[str, Any]) -> str:
+    """Return the UTC date of one observation's ``read_at``."""
+    read_at = datetime.fromisoformat(observation["read_at"])
+    return read_at.astimezone(timezone.utc).date().isoformat()
+
+
+def _backstage_read(client: TestClient) -> dict[str, Any]:
+    """Read the latest Backstage turn and require a 200."""
+    response = client.get("/api/dev/backstage/4/turn")
+    assert response.status_code == 200, response.text
+    payload: dict[str, Any] = response.json()
+    return payload
+
+
+def _same_utc_day_reads(
+    read_endpoint: Callable[[], dict[str, Any]],
+    endpoint_observation: Callable[[dict[str, Any]], dict[str, Any]],
+    read_cli: Callable[[], dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read the endpoint, then the CLI; reread both once across UTC midnight.
+
+    ``ledger_days_read`` runs through each read's own ``read_at`` date, so a pair
+    whose reads fall on different UTC dates differs by design. Both reads are
+    then repeated once; nothing is dropped from the comparison, and a second
+    straddling pair is returned as is and fails the comparison loudly.
+    """
+    payload, cli_observation = read_endpoint(), read_cli()
+    if _read_utc_day(endpoint_observation(payload)) != _read_utc_day(cli_observation):
+        payload, cli_observation = read_endpoint(), read_cli()
+    return payload, cli_observation
+
+
 def test_economics_matches_inspect_turn_for_a_test_turn(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request: pytest.FixtureRequest
 ) -> None:
@@ -1065,7 +1097,7 @@ def test_economics_matches_inspect_turn_for_a_test_turn(
     provider = request.getfixturevalue("mock_openai_server")
     configure_test(tmp_path, provider, monkeypatch)
     doc = tomlkit.parse(config.read_text())
-    doc["storyteller"]["correspondence"]["floor_turns"] = 1
+    doc["storyteller"]["correspondence"]["floor_turns"] = 1  # type: ignore[index]
     config.write_text(tomlkit.dumps(doc))
     monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
     with disposable_slot_database("qa640_uib_turn") as dbname:
@@ -1093,9 +1125,21 @@ def test_economics_matches_inspect_turn_for_a_test_turn(
                         "SELECT session_id::text, parent_chunk_id FROM incubator"
                     )
                     pending_session, parent_chunk = cur.fetchone()
-                response = backstage.get("/api/dev/backstage/4/turn")
-                assert response.status_code == 200, response.text
-                payload = response.json()
+                payload, cli_observation = _same_utc_day_reads(
+                    lambda: _backstage_read(backstage),
+                    lambda read: read["economics"]["pending"]["observation"],
+                    lambda: json.loads(
+                        run_cli(
+                            monkeypatch,
+                            "inspect-turn",
+                            "--slot",
+                            "4",
+                            "--session",
+                            pending_session,
+                            "--json",
+                        )
+                    )["observation"],
+                )
                 pending = payload["economics"]["pending"]
                 assert pending["status"] == "observed"
                 assert pending["generation_session"] == pending_session
@@ -1106,17 +1150,6 @@ def test_economics_matches_inspect_turn_for_a_test_turn(
                     "skald_writer",
                     "gaia",
                 }
-                cli_observation = json.loads(
-                    run_cli(
-                        monkeypatch,
-                        "inspect-turn",
-                        "--slot",
-                        "4",
-                        "--session",
-                        pending_session,
-                        "--json",
-                    )
-                )["observation"]
                 assert _without_read_at(observation) == _without_read_at(
                     cli_observation
                 )
@@ -1155,9 +1188,21 @@ def test_economics_matches_inspect_turn_for_a_test_turn(
                     (accepted_chunk, parent_chunk),
                 )
                 elapsed_seconds = int(cur.fetchone()[0])
-            response = backstage.get("/api/dev/backstage/4/turn")
-            assert response.status_code == 200, response.text
-            payload = response.json()
+            payload, cli_observation = _same_utc_day_reads(
+                lambda: _backstage_read(backstage),
+                lambda read: read["economics"]["accepted"]["observation"],
+                lambda: json.loads(
+                    run_cli(
+                        monkeypatch,
+                        "inspect-turn",
+                        "--slot",
+                        "4",
+                        "--chunk",
+                        str(accepted_chunk),
+                        "--json",
+                    )
+                )["observation"],
+            )
             accepted = payload["economics"]["accepted"]
             assert payload["header"]["chunk_id"] == accepted_chunk
             assert payload["header"]["elapsed_seconds"] == elapsed_seconds
@@ -1165,17 +1210,6 @@ def test_economics_matches_inspect_turn_for_a_test_turn(
             assert accepted["generation_session"] == pending_session
             assert accepted["detail"] is None
             assert payload["economics"]["pending"] is None
-            cli_observation = json.loads(
-                run_cli(
-                    monkeypatch,
-                    "inspect-turn",
-                    "--slot",
-                    "4",
-                    "--chunk",
-                    str(accepted_chunk),
-                    "--json",
-                )
-            )["observation"]
             assert _without_read_at(accepted["observation"]) == _without_read_at(
                 cli_observation
             )

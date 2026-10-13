@@ -1,0 +1,23 @@
+17:56  up 6 days,  4:36, 5 users, load averages: 17.55 15.67 12.91
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+.ss........                                                              [100%]
+=============================== warnings summary ===============================
+tests/test_orrery/test_card_identity.py::test_ren_rank_commit_replay[False-False]
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_orrery/test_card_identity.py::test_ren_rank_commit_replay[False-False]
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 5 targets: postgres, qa640_885_ren_replay_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+9 passed, 2 skipped, 2 warnings in 11.66s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+EXIT=0

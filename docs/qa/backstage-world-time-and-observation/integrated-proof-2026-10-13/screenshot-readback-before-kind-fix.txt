@@ -1,0 +1,65 @@
+{
+  "observed-with-pending": {
+    "theme": "dark",
+    "drawerRect": {
+      "x": 60,
+      "y": 434.25,
+      "width": 1140,
+      "height": 465.75,
+      "top": 434.25,
+      "right": 1200,
+      "bottom": 900,
+      "left": 60
+    },
+    "headerLine": "slot 04 · t.17 · +7 min",
+    "economicsHeader": "⌄ECONOMICScritical 2,000/1,600 · background unknown/unknown · wall 11.1s · choices ready 11.1s",
+    "economicsLines": [
+      "#1 TEST · accepted · window 4,420 [attempt_manifest] · 1,000/800 [provider_usage_ledger]",
+      "#1 TEST · accepted · window 4,420 [attempt_manifest] · 1,000/800 [provider_usage_ledger]",
+      "#4 · queued · unknown/unknown [unknown]",
+      "read 2026-10-07T23:00:00Z",
+      "2026-10-07",
+      "critical 1,000/800 · background 0/0 · wall 6.2s · choices ready 6.2s",
+      "#1 TEST · open · window 4,420 [attempt_manifest] · 1,000/800 [provider_usage_ledger]",
+      "read 2026-10-07T23:05:10Z",
+      "2026-10-07"
+    ],
+    "overlaps": [
+      {
+        "kind": "correspondence_compaction",
+        "kindRight": 245.59375,
+        "copyLeft": 172
+      }
+    ],
+    "pendingStyle": {
+      "borderLeft": "1px dashed rgba(230, 115, 77, 0.5)",
+      "opacity": "0.7"
+    },
+    "pageErrors": []
+  },
+  "unavailable": {
+    "theme": "dark",
+    "drawerRect": {
+      "x": 60,
+      "y": 539.25,
+      "width": 1140,
+      "height": 360.75,
+      "top": 539.25,
+      "right": 1200,
+      "bottom": 900,
+      "left": 60
+    },
+    "headerLine": "slot 04 · t.17 · +1 h",
+    "economicsHeader": "⌄ECONOMICSunavailable",
+    "economicsLines": [
+      "chunk 203: no generation session (accepted before session binding)",
+      "session p-1: no generation session (staged before session binding)"
+    ],
+    "overlaps": [],
+    "pendingStyle": {
+      "borderLeft": "1px dashed rgba(230, 115, 77, 0.5)",
+      "opacity": "0.7"
+    },
+    "pageErrors": []
+  }
+}

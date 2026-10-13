@@ -24,7 +24,7 @@ are present; no migration was applied by this source assembly. The 776-S1b
 paid-probe decision remains gated behind concrete Phase 1 readiness. The final
 817 lane follows the other landed Wave B lanes.
 
-## UI-B source merge follow-up
+## UI-B Source Merge Follow-Up
 
 The fifteen-lane source assembly now includes UI-B at
 `9e61307194699f202ad226d1b3af6e1b9350c2cd`, normally merged at
