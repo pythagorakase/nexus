@@ -652,9 +652,10 @@ def _seed_capture_run(
     return run
 
 
-def _runs_after(seeded: str) -> list[str]:
+def _runs_after(dbname: str, seeded: str) -> list[str]:
     """Run ids (hex) started after ``seeded``, oldest first."""
     rows = _rows_query(
+        dbname,
         "SELECT run_id::text AS run_id FROM genesis_runs WHERE started_at > "
         "(SELECT started_at FROM genesis_runs WHERE run_id = %s::uuid) "
         "ORDER BY started_at",
@@ -663,19 +664,19 @@ def _runs_after(seeded: str) -> list[str]:
     return [uuid.UUID(row["run_id"]).hex for row in rows]
 
 
-def _rows_query(sql: str, params: Any = None) -> list[dict[str, Any]]:
-    from nexus.api.slot_utils import slot_dbname
-
-    with closing(connect(slot_dbname(4), cursor_factory=RealDictCursor)) as conn:
+def _rows_query(dbname: str, sql: str, params: Any = None) -> list[dict[str, Any]]:
+    with closing(connect(dbname, cursor_factory=RealDictCursor)) as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             return list(cur.fetchall())
 
 
-def _committed_summary_ids() -> list[int]:
+def _committed_summary_ids(dbname: str) -> list[int]:
     return [
         int(row["id"])
-        for row in _rows_query("SELECT id FROM retrograde_summaries ORDER BY id")
+        for row in _rows_query(
+            dbname, "SELECT id FROM retrograde_summaries ORDER BY id"
+        )
     ]
 
 
@@ -685,14 +686,14 @@ def test_retry_resumes_saved_outputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A matching failed run's four saved outputs replace every generator."""
-    _dbname, fingerprint = fingerprinted
+    dbname, fingerprint = fingerprinted
     boundaries = Boundaries(monkeypatch)
     seeded = _seed_capture_run(fingerprint, captured, CAPTURED_STAGES)
     answer = _post()
     assert boundaries.calls == []
     assert answer.retrograde["reused_stages"] == list(CAPTURED_STAGES)
     [history] = _rows_query(
-        "SELECT count(*) AS n FROM world_events WHERE source = 'retrograde'"
+        dbname, "SELECT count(*) AS n FROM world_events WHERE source = 'retrograde'"
     )
     assert history["n"] > 0
     record = load_genesis_run(4, answer.run)
@@ -701,7 +702,7 @@ def test_retry_resumes_saved_outputs(
         row = record.stages[stage]
         assert row.detail["reused_from"] == seeded
         assert row.output == captured["outputs"][stage]
-    assert answer.retrograde["embedded_summary_ids"] == _committed_summary_ids()
+    assert answer.retrograde["embedded_summary_ids"] == _committed_summary_ids(dbname)
 
 
 @pytest.mark.parametrize("change", ["weird_level", "slot_model"])
@@ -745,7 +746,7 @@ def test_changed_input_rebuilds_the_run(
         _post()
     assert raised.value.status_code == 400 and raised.value.detail == "rebuilt"
     assert boundaries.calls == ["derivation"]
-    [rebuild] = _runs_after(seeded)
+    [rebuild] = _runs_after(dbname, seeded)
     record = load_genesis_run(4, rebuild)
     assert record is not None and record.input_fingerprint != fingerprint
     assert all("reused_from" not in row.detail for row in record.stages.values())
@@ -762,7 +763,7 @@ def test_repeated_post_joins_the_running_run(
     from nexus.agents.orrery import retrograde_orchestrator
     from tests.genesis_owner_child import capture_boundaries
 
-    _dbname, fingerprint = fingerprinted
+    dbname, fingerprint = fingerprinted
     boundaries = Boundaries(monkeypatch)
     replay = capture_boundaries(captured)
     # A second owner would need these; the joiner must never call them.
@@ -824,7 +825,7 @@ def test_repeated_post_joins_the_running_run(
         if second.is_alive() or second.ident is not None:
             second.join(RUN_SECONDS)
     assert not first.is_alive() and not second.is_alive()
-    runs = _runs_after(seeded)
+    runs = _runs_after(dbname, seeded)
     assert (len(runs), boundaries.calls) == (1, ["expansion"]), (runs, answers)
     assert not isinstance(answers["first"], Exception), answers["first"]
     assert not isinstance(answers["second"], Exception), answers["second"]
@@ -902,7 +903,7 @@ def test_stopped_owner_run_is_closed_and_resumed(
     closed = load_genesis_run(4, owner.run)
     assert closed is not None
     assert (closed.status, closed.error) == ("failed", GENESIS_RUN_INTERRUPTED)
-    [resumed] = _runs_after(owner.run)
+    [resumed] = _runs_after(offline_gate_db, owner.run)
     assert resumed == answers["one"].run
     record = load_genesis_run(4, resumed)
     assert record is not None and record.status == "done"
@@ -918,7 +919,7 @@ def test_blocked_persistence_retry_calls_expansion_again(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A plan whose persistence was blocked is regenerated, never reused."""
-    _dbname, fingerprint = fingerprinted
+    dbname, fingerprint = fingerprinted
     boundaries = Boundaries(monkeypatch)
     seeded = _seed_capture_run(
         fingerprint,
@@ -937,7 +938,7 @@ def test_blocked_persistence_retry_calls_expansion_again(
     assert raised.value.status_code == 400
     assert raised.value.detail == "expansion rebuilt"
     assert boundaries.calls == ["expansion"]
-    [retry] = _runs_after(seeded)
+    [retry] = _runs_after(dbname, seeded)
     record = load_genesis_run(4, retry)
     assert record is not None
     for stage in ("derivation", "packet", "seed_candidates"):
@@ -946,12 +947,14 @@ def test_blocked_persistence_retry_calls_expansion_again(
 
 
 def _fail_embedding_after_commit(
-    fingerprint: str, captured: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    dbname: str,
+    fingerprint: str,
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> str:
     """Commit the captured world with the embedder down; return that run."""
     from nexus.agents.orrery.retrograde_orchestrator import load_genesis_run as load
     from nexus.api.new_story_cache import read_cache
-    from nexus.api.slot_utils import slot_dbname
 
     seeded = _seed_capture_run(fingerprint, captured, CAPTURED_STAGES)
     with monkeypatch.context() as down:
@@ -971,17 +974,17 @@ def _fail_embedding_after_commit(
         "not yet embedded; retry the transition to finish it (the wizard's "
         "Retry, or: nexus continue --slot 4)"
     )
-    assert read_cache(slot_dbname(4)) is None
-    [committed] = _rows_query("SELECT user_character FROM global_variables")
+    assert read_cache(dbname) is None
+    [committed] = _rows_query(dbname, "SELECT user_character FROM global_variables")
     assert committed["user_character"] is not None
-    [first] = _runs_after(seeded)
+    [first] = _runs_after(dbname, seeded)
     record = load(4, first)
     assert record is not None and record.status == "failed"
     assert record.stages["persistence"].output["embedding_pending_summary_ids"]
     return first
 
 
-def _assert_embedding_finished(answer: Any, committed_run: str) -> None:
+def _assert_embedding_finished(dbname: str, answer: Any, committed_run: str) -> None:
     record = load_genesis_run(4, answer.run)
     assert record is not None and record.status == "done"
     assert record.stages["persistence"].detail["reused_from"] == committed_run
@@ -990,11 +993,12 @@ def _assert_embedding_finished(answer: Any, committed_run: str) -> None:
     pending = committed.stages["persistence"].output["embedding_pending_summary_ids"]
     assert sorted(record.stages["embedding"].output) == sorted(pending)
     unstamped = _rows_query(
-        "SELECT id FROM retrograde_summaries WHERE embedding_generated_at IS NULL"
+        dbname,
+        "SELECT id FROM retrograde_summaries WHERE embedding_generated_at IS NULL",
     )
     assert unstamped == []
     assert sorted(answer.retrograde["embedded_summary_ids"]) == (
-        _committed_summary_ids()
+        _committed_summary_ids(dbname)
     )
 
 
@@ -1004,13 +1008,15 @@ def test_retry_after_embedding_failure_completes_from_the_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The committed world's pending embedding finishes without the cache."""
-    _dbname, fingerprint = fingerprinted
+    dbname, fingerprint = fingerprinted
     boundaries = Boundaries(monkeypatch)
-    committed_run = _fail_embedding_after_commit(fingerprint, captured, monkeypatch)
+    committed_run = _fail_embedding_after_commit(
+        dbname, fingerprint, captured, monkeypatch
+    )
     answer = _post()
     assert boundaries.calls == []
     assert answer.retrograde["reused_stages"] == [*CAPTURED_STAGES, "persistence"]
-    _assert_embedding_finished(answer, committed_run)
+    _assert_embedding_finished(dbname, answer, committed_run)
 
 
 def test_resume_that_failed_before_copying_persistence_still_finishes(
@@ -1021,9 +1027,11 @@ def test_resume_that_failed_before_copying_persistence_still_finishes(
     """A resume that stopped before its persistence copy keeps its anchor."""
     from nexus.api import new_story_flow
 
-    _dbname, fingerprint = fingerprinted
+    dbname, fingerprint = fingerprinted
     boundaries = Boundaries(monkeypatch)
-    committed_run = _fail_embedding_after_commit(fingerprint, captured, monkeypatch)
+    committed_run = _fail_embedding_after_commit(
+        dbname, fingerprint, captured, monkeypatch
+    )
     real_copy = new_story_flow._reuse_genesis_stage
 
     with monkeypatch.context() as broken:
@@ -1043,4 +1051,4 @@ def test_resume_that_failed_before_copying_persistence_still_finishes(
     assert stranded.status == "failed" and "persistence" not in stranded.stages
     answer = _post()
     assert boundaries.calls == []
-    _assert_embedding_finished(answer, committed_run)
+    _assert_embedding_finished(dbname, answer, committed_run)

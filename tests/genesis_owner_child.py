@@ -73,12 +73,6 @@ def capture_boundaries(capture: dict[str, Any]) -> dict[str, Callable[..., Any]]
     }
 
 
-def _install(target: str, replacement: Callable[..., Any]) -> None:
-    module_name, attribute = target.rsplit(".", 1)
-    module = __import__(module_name, fromlist=[attribute])
-    setattr(module, attribute, replacement)
-
-
 def main() -> None:
     """Stage, confirm and run the route; hold expansion until killed."""
     slot, dbname = route_slot_from_environment()
@@ -103,8 +97,23 @@ def main() -> None:
         **capture_boundaries(capture),
         "expansion": hold,
     }
-    for stage, target in BOUNDARY_TARGETS.items():
-        _install(target, boundaries[stage])
+    # The same call sites BOUNDARY_TARGETS names, imported after routing.
+    from nexus.agents.orrery import (
+        retrograde_expansion,
+        retrograde_packet,
+        retrograde_seed_candidates,
+    )
+    from nexus.api import trait_input_derivation
+
+    sites = {
+        "derivation": (trait_input_derivation, "ensure_trait_compile_inputs"),
+        "packet": (retrograde_packet, "build_retrograde_dry_run_packet"),
+        "seed_candidates": (retrograde_seed_candidates, "run_seed_stage"),
+        "expansion": (retrograde_expansion, "generate_expansion_with_skald"),
+    }
+    for stage, (module, attribute) in sites.items():
+        assert f"{module.__name__}.{attribute}" == BOUNDARY_TARGETS[stage]
+        setattr(module, attribute, boundaries[stage])
     asyncio.run(transition_to_narrative_endpoint(TransitionRequest(slot=slot)))
 
 
