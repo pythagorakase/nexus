@@ -115,14 +115,25 @@ def test_defaults_strictness_and_origin(
         path.parent / "relative"
     )
     _write(path, runtimeOrigin="ftp://x")
-    with pytest.raises(DesktopConfigError, match="http or https"):
+    with pytest.raises(DesktopConfigError) as scheme_error:
         load_effective_desktop_config(tmp_path)
+    assert str(scheme_error.value) == (
+        'runtimeOrigin must use http or https, got "ftp"'
+    )
     _write(path, runtimeOrigin="http://")
     with pytest.raises(DesktopConfigError, match="host"):
         load_effective_desktop_config(tmp_path)
     _write(path, authHeader=None)
-    with pytest.raises(DesktopConfigError, match="authHeader"):
+    with pytest.raises(DesktopConfigError) as field_error:
         load_effective_desktop_config(tmp_path)
+    assert str(field_error.value) == (
+        f"{path} is invalid: authHeader: Input should be a valid string"
+    )
+    _write(path, authHeader=1, statusPath=2, authTokenEnv=3, stopArgs="x")
+    with pytest.raises(DesktopConfigError) as many_errors:
+        load_effective_desktop_config(tmp_path)
+    assert str(many_errors.value).endswith(" (+1 more)")
+    assert "errors.pydantic.dev" not in str(many_errors.value)
 
 
 @pytest.mark.parametrize(
@@ -143,8 +154,8 @@ def test_timeout_fields_match_strict_rust_u64(
             ]
             == value
         )
-    for value in (-1, 2**64, "90", 90.0, True, None):
-        _write(path, **{field: value})
+    for bad in (-1, 2**64, "90", 90.0, True, None):
+        _write(path, **{field: bad})
         with pytest.raises(DesktopConfigError, match=field):
             load_effective_desktop_config(tmp_path)
 

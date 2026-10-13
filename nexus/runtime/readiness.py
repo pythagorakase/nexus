@@ -1228,7 +1228,8 @@ def _check_desktop_config(ctx: ReadinessContext) -> Outcome:
     if not _same_origin(effective.runtime_origin, gateway_url):
         return _failed(
             f"{effective.path} ({effective.source}): runtimeOrigin "
-            f"{effective.runtime_origin} differs from the profile's gateway {gateway_url}",
+            f"{effective.runtime_origin} differs from the profile's "
+            f"gateway {gateway_url}",
             f"Point runtimeOrigin at {gateway_url}: edit {effective.path}, "
             "or set NEXUS_DESKTOP_RUNTIME_ORIGIN.",
         )
@@ -1271,7 +1272,9 @@ def _check_desktop_credentials(ctx: ReadinessContext) -> Outcome:
             "The desktop shell sends no Cloudflare Access service-token headers; "
             "point runtimeOrigin at a runtime that does not sit behind Access.",
         )
-    auth = (ctx.runtime_status or {}).get("auth")
+    if ctx.runtime_status is None:
+        raise RuntimeError("gateway.reachable has not passed in this readiness run")
+    auth = ctx.runtime_status.get("auth")
     if (
         not isinstance(auth, dict)
         or not isinstance(auth.get("enforced"), bool)
