@@ -170,3 +170,51 @@ def test_horizon_setting_is_validated() -> None:
     assert orrery is not None
     assert orrery.binding.recent_event_horizon_hours == 24.0
     assert coerce_event_horizon_hours(None) == 24.0
+
+
+def _dry_run_kwargs() -> dict[str, Any]:
+    return {"window_chunks": 30, "epistemics_settings": {"enabled": False}}
+
+
+@pytest.mark.parametrize("entry_point", ("resolve", "explain", "coverage"))
+def test_dry_run_entry_points_thread_the_horizon(entry_point: str) -> None:
+    """A caller-supplied horizon reaches hydration through each dry-run path.
+
+    ``coerce_event_horizon_hours`` rejects 0 before any event query; the
+    shipped default (24.0) would hydrate normally, so a dropped keyword makes
+    the call succeed and this test fail.
+    """
+
+    from nexus.agents.orrery.audit import explain_dry_run
+    from nexus.agents.orrery.coverage import analyze_coverage
+    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+    from tests.test_orrery.test_resolver import FakeSession
+
+    session = FakeSession()
+    with pytest.raises(ValueError, match="recent_event_horizon_hours"):
+        if entry_point == "resolve":
+            resolve_dry_run(
+                session,
+                BUILTIN_TEMPLATES,
+                anchor_chunk_id=100,
+                event_horizon_hours=0,
+                **_dry_run_kwargs(),
+            )
+        elif entry_point == "explain":
+            explain_dry_run(
+                session,
+                BUILTIN_TEMPLATES,
+                anchor_chunk_id=100,
+                event_horizon_hours=0,
+                **_dry_run_kwargs(),
+            )
+        else:
+            analyze_coverage(
+                session,
+                BUILTIN_TEMPLATES,
+                anchor_chunk_ids=[100],
+                epoch_min_world_times=1,
+                event_horizon_hours=0,
+                **_dry_run_kwargs(),
+            )

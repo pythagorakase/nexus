@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 from contextlib import closing
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -236,6 +237,9 @@ FACTORY_SWEEP = [
     recent_event_within_hours(within_hours=3),
     knows_recent_event_within_hours(
         "threat_issued", within_hours=2, target_slot=Slot.TARGET
+    ),
+    knows_recent_event_within_hours(
+        "threat_issued", within_hours=2, target_slot=Slot.ACTOR
     ),
     since_last_event_hours_at_least("contact_made", 1.5),
     since_last_event_hours_at_least("contact_made", 1.5, target_slot=Slot.TARGET),
@@ -628,3 +632,30 @@ def test_hour_evidence_preserves_unknown_changed_fields_verdict(
     assert evidence["result"] is None
     assert RICH_STATE.world_time is not None
     assert evidence["observed"]["world_time"] == RICH_STATE.world_time.isoformat()
+
+
+@pytest.mark.parametrize("aware", (False, True))
+def test_knows_hour_evidence_matches_closure_under_epistemics(aware: bool) -> None:
+    """A bounded claim blocks the knows-hours form until the actor is aware."""
+
+    state = replace(
+        RICH_STATE,
+        epistemics_enabled=True,
+        claimed_event_scopes={91: "bounded"},
+        awareness_by_entity={ACTOR: frozenset({91})} if aware else {},
+        horizon_events=(
+            EventRecord(
+                event_type="threat_issued",
+                tick=99,
+                target_entity_id=ACTOR,
+                world_time=datetime(2073, 5, 3, 11, tzinfo=timezone.utc),
+                event_id=91,
+            ),
+        ),
+    )
+    predicate = knows_recent_event_within_hours(
+        "threat_issued", within_hours=2, target_slot=Slot.ACTOR
+    )
+    evidence = resolve_evidence(predicate.__name__, state, BINDINGS)
+    assert predicate(state, BINDINGS) is aware
+    assert evidence["result"] == predicate(state, BINDINGS)
