@@ -919,7 +919,12 @@ def test_domain_stub_without_point_is_refused_on_seeded_clone(
                 "resources",
                 "fame",
                 inputs=TraitCompileInputs(
-                    domain=DomainTraitInput(name=DOMAIN_PLACE_NAME),
+                    domain=DomainTraitInput(
+                        place_id=None,
+                        place_entity_id=None,
+                        name=DOMAIN_PLACE_NAME,
+                        coordinates=None,
+                    ),
                     resources=SingleEntityTraitInput(level="wealthy"),
                     fame=SingleEntityTraitInput(level="known"),
                 ),
