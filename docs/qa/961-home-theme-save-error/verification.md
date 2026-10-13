@@ -1,10 +1,10 @@
 # Home Theme Menu: Show a Rejected Theme Save (#961)
 
-Work order 961-HOME with coordinator amendments 1 and 2 (2026-10-09) and the resume amendment (2026-10-13). Branch `claude/961-home-theme-save-error`, cut from `claude/wave-b-integration` at `7eb9a10c`. The code head is `a8d45cce` (review fixes of 2026-10-13; see "Review Fixes"). No Python change, no migration, and no paid call.
+Work order 961-HOME with coordinator amendments 1 and 2 (2026-10-09) and the resume amendment (2026-10-13). Branch `claude/961-home-theme-save-error`, cut from `claude/wave-b-integration` at `7eb9a10c`. The code head is `7b66932f` (the second round of review fixes, 2026-10-13: one wizard test and one comment; see "Review Fixes, Round 2"). `a8d45cce` and `7b66932f` build the same production bundle, `index-Bjad2Pld.js`, because the only product-file change after `a8d45cce` is a comment. No Python change, no migration, and no paid call.
 
 ## Resumed on 2026-10-13
 
-The second builder stopped at the usage limit on 2026-10-09 at 03:23, after the five code commits and before this evidence directory was committed. On resume, `git status --short` showed only `?? docs/qa/961-home-theme-save-error/`, and `claude/wave-b-integration` was still at `7eb9a10c` (`git merge claude/wave-b-integration`: `Already up to date.`). The draft's claims were checked against the round-2 logs in `scratchpad/961-HOME-r2/` and against the current tree. They hold, and they are kept below. Every proof command was then run again on the code head (`scratchpad/961-HOME-r3/`), and the rendered check on lane 8025 was repeated. The fresh tails replace the 2026-10-09 tails below; the two rendered-check screenshots are the 2026-10-13 captures.
+The second builder stopped at the usage limit on 2026-10-09 at 03:23, after the five code commits and before this evidence directory was committed. On resume, `git status --short` showed only `?? docs/qa/961-home-theme-save-error/`, and `claude/wave-b-integration` was still at `7eb9a10c` (`git merge claude/wave-b-integration`: `Already up to date.`). The draft's claims were checked against the round-2 logs in `scratchpad/961-HOME-r2/` and against the current tree. They hold, and they are kept below. Every proof command was then run again (`scratchpad/961-HOME-r3/`), and the rendered check on lane 8025 was repeated. Under "Rendered Verification", each round names the bundle it served: rounds 2 and 3 served `4d8ea147`'s bundle, and rounds 4 (placement and tab order) and 5 (the rejected picks, the retry and the reload) served the code head's bundle. The committed rejection screenshots and the "After" placement column come from the code head's bundle. The fresh tails replace the 2026-10-09 tails below.
 
 | Commit | What it holds | Order item |
 | --- | --- | --- |
@@ -15,7 +15,9 @@ The second builder stopped at the usage limit on 2026-10-09 at 03:23, after the 
 | `4d8ea147` | The wizard's alert rendered beside `ThemeMenu`, which is unchanged, instead of through a new prop | Part B (ruling d); keeps `npm --prefix ui run check` green |
 | `a2ce08e9` | This evidence directory and `pr-body.md` | Item 5 and the proof section |
 | `a8d45cce` | Review fixes: the Home menu first in the tab order again; the second-rejection test holds its second answer | Item 3 (no other visible change); item 4 |
-| this commit | The evidence and `pr-body.md` updated for the review fixes | The proof section |
+| `417580a0` | The evidence and `pr-body.md` updated for the review fixes | The proof section |
+| `7b66932f` | Second review round: the wizard second-rejection test; the Settings THEME card comment names the Home and wizard menus | Part B tests (ruling d); a comment only |
+| this commit | The evidence and `pr-body.md` updated for the second review round: the rejected-pick run repeated on the head bundle, the head's "After" captures, the corrected residuals | Item 5; ruling (a); the proof section |
 
 Part B needed no structural change (see "What Changed"), so nothing from it is deferred.
 
@@ -37,14 +39,15 @@ Part B needed no structural change (see "What Changed"), so nothing from it is d
 - Test stubs: `WizardShell.test.tsx` and `ContinuePage.resume.test.tsx` stub `useTheme` module-wide. Their stub changed from `({})` to `({ saveError: null })` because `WizardShell` now reads `saveError`.
 - Tests:
   - `ui/client/src/pages/splash/SplashThemeMenu.test.tsx` renders `SplashPage` with the real `ThemeProvider` and query client (ruling b), so the variant swap and remount are part of each test. jsdom has no canvas, so the file gives the Veil spiral a 2D context that accepts every call. This is an environment shim like the `ResizeObserver` one in `tests/setup.ts`. The file has no bare-menu case, because every bare-menu assertion is covered through `SplashPage`.
-  - `ui/client/src/components/NewStoryWizard/WizardShell.theme.test.tsx` (new) holds the mirrored wizard tests. It renders `NewStoryWizard` with the real provider and query client, and spies `fetch` for the slot list and `PATCH /api/preferences` only.
+  - `ui/client/src/components/NewStoryWizard/WizardShell.theme.test.tsx` (new) holds the wizard tests: an HTTP 500, a network `TypeError`, a second rejection after a cleared one (added in the second review round), a retry after each kind of failure, a rejection that completed before the wizard opened, and the success path. Two Home tests have no wizard counterpart: the held rejection on a remount with Settings staying clean (the wizard's open-on-mount test covers the same `useOpenOnThemeSaveError` path), and the tab order (the wizard's trigger did not move). It renders `NewStoryWizard` with the real provider and query client, and spies `fetch` for the slot list and `PATCH /api/preferences` only.
 
 ## Behavior and the Residuals
 
 - If a pick from the Home menu is rejected, the menu closes on select and then opens again with the alert below the themes. The checkmark stays on the saved theme. A new pick starts a new save, and the alert clears when the shared mutation resets. A successful pick closes the menu as before and shows no alert.
 - The rejection is held in the theme context until a later save succeeds or the Settings THEME card mounts (that card still clears on mount). A Home menu or wizard menu that mounts while a rejection is held opens and shows it.
 - Residual from ruling (c): suppose the player picks a theme on Home and leaves Home within the same second, before the answer arrives. The rejection then appears on the next Home visit (or in the wizard menu), not in Settings, because the Settings card clears on mount.
-- Residual, for the coordinator to decide: nothing clears a held rejection except a successful save or a Settings visit. Suppose the player sees the alert on Home, closes the menu, and opens the wizard or returns to Home. The menu then opens again on the same rejection. This follows rulings (c) and (d) as written. Clearing on an explicit dismissal (Escape or an outside click, not an item select, because Radix runs the item's `onClick` before it closes the menu) would end the repeat. That clearing was not ordered, so it is not built.
+- Residual, for the coordinator to decide: nothing clears a held rejection except a new pick (while its save is pending), a successful save, or the Settings THEME card mounting. A Settings visit therefore clears only failures from before the visit. Suppose the player sees the alert on Home, closes the menu, and opens the wizard or returns to Home. The menu then opens again on the same rejection. This follows rulings (c) and (d) as written. Clearing on an explicit dismissal (Escape or an outside click, not an item select, because Radix runs the item's `onClick` before it closes the menu) would end the repeat. That clearing was not ordered, so it is not built.
+- Residual, for the coordinator to decide: a theme pick rejected inside Settings is shown in the THEME card, and the rejection is still held after the player leaves Settings, because the card clears only when it mounts. The next Home or wizard mount then opens its menu on that same rejection, which the player has already seen in Settings. Clearing on the card's unmount as well (`useEffect(() => { clearSaveError(); return clearSaveError; }, [clearSaveError])` in `ThemeSection`) would close this case, at a cost: `clearSaveError` is the mutation's `reset`, which detaches a save that is still pending, so a Settings pick followed by leaving Settings within the same second would then show its rejection nowhere. That change was not ordered, so it is not built; it can be weighed together with the dismissal clearing above.
 
 ## Red Runs Before the Product Change
 
@@ -141,36 +144,58 @@ Four review findings were applied. Logs and scripts are in `scratchpad/961-HOME-
 - The red-run report for `8451c2cb` above now lists each failure; one of the seven differs.
 - The placement claims below now cite a recorded pixel comparison.
 
-## Proof on the Code Head (`a8d45cce`, 2026-10-13)
+## Review Fixes, Round 2 (`7b66932f`, 2026-10-13)
 
-Every command ran from the worktree root, after `git merge claude/wave-b-integration` (`Already up to date.`; the integration branch is still at `7eb9a10c`). `PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus;print(nexus.__file__)'` printed `/Users/pythagor/nexus/.claude/worktrees/961-home-theme-save-error/nexus/__init__.py`. Logs are in `scratchpad/961-HOME-r3/fix/`.
+Logs and scripts are in `scratchpad/961-HOME-r3/fix2/`.
+
+- The wizard tests gain the second-rejection case the Home tests hold: the second `PATCH` answer is held, the context probe must read `none` while that save is pending, and then the 500 must reopen the menu on `wizard-theme-save-error`. Red run under the same temporary sticky-error change as round 1 (`scratchpad/961-HOME-r3/fix/red-sticky-error.patch`, applied and reverted; `wizard-red-sticky-error.log`):
+
+  ```
+     × wizard theme menu save failures (#961) > shows a second rejection after a new pick cleared the first 1069ms
+       → expect(element).toHaveTextContent()
+  Expected element to have text content:
+    none
+  Received:
+    500: PermissionError: [Errno 13] Permission denied
+   Test Files  1 failed (1)
+        Tests  1 failed | 6 passed (7)
+  ```
+
+  Green after the revert: `nice -n 15 npm --prefix ui test -- WizardShell.theme` printed `Tests  7 passed (7)` (`wizard-green.log`).
+- The comment above the Settings THEME card's clear-on-mount (`SettingsPane.tsx:134-136`) said the splash switcher renders no error. It now says that the Home and wizard theme menus show and hold their own rejection. Only a comment changed; the bundle hash is unchanged.
+- The residuals now say that a Settings visit clears only failures from before the visit, and they name the Settings → Home/wizard repeat ("Behavior and the Residuals"). No code change was ordered for it.
+- The rejected-pick, retry and reload run (item 5) was repeated on the code head's bundle (round 5 below), and its log, gateway lines and two screenshots replace round 3's. The "After" placement column is now the round-4 capture from the code head's bundle.
+
+## Proof on the Code Head (`7b66932f`, 2026-10-13)
+
+Every command ran from the worktree root, after `git merge claude/wave-b-integration` (`Already up to date.`; the integration branch is still at `7eb9a10c`). `PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus;print(nexus.__file__)'` printed `/Users/pythagor/nexus/.claude/worktrees/961-home-theme-save-error/nexus/__init__.py`. Logs are in `scratchpad/961-HOME-r3/fix2/`.
 
 `nice -n 15 npm --prefix ui test -- SplashThemeMenu SettingsPane shell-accessibility` (exit 0):
 
 ```
- ✓ src/shell-accessibility.test.ts (11 tests) 54ms
- ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 693ms
- ✓ src/pages/splash/SplashThemeMenu.test.tsx (9 tests) 605ms
+ ✓ src/shell-accessibility.test.ts (11 tests) 53ms
+ ✓ src/pages/splash/SplashThemeMenu.test.tsx (9 tests) 562ms
+ ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 672ms
  Test Files  3 passed (3)
       Tests  40 passed (40)
-   Start at  10:38:39
-   Duration  1.33s (transform 164ms, setup 107ms, collect 510ms, tests 1.35s, environment 612ms, prepare 111ms)
+   Start at  10:51:34
+   Duration  1.25s (transform 160ms, setup 97ms, collect 479ms, tests 1.29s, environment 574ms, prepare 151ms)
 ```
 
 `nice -n 15 npm --prefix ui test -- SplashThemeMenu SettingsPane shell-accessibility WizardShell ContinuePage` (Part B and the two files whose stubs changed; exit 0):
 
 ```
  ✓ src/shell-accessibility.test.ts (11 tests) 57ms
- ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 713ms
- ✓ src/pages/splash/SplashThemeMenu.test.tsx (9 tests) 630ms
- ✓ src/pages/ContinuePage.test.tsx (8 tests) 832ms
- ✓ src/components/NewStoryWizard/WizardShell.theme.test.tsx (6 tests) 476ms
- ✓ src/components/NewStoryWizard/WizardShell.test.tsx (24 tests) 1217ms
- ✓ src/pages/ContinuePage.resume.test.tsx (4 tests) 3559ms
+ ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 685ms
+ ✓ src/pages/splash/SplashThemeMenu.test.tsx (9 tests) 607ms
+ ✓ src/pages/ContinuePage.test.tsx (8 tests) 830ms
+ ✓ src/components/NewStoryWizard/WizardShell.theme.test.tsx (7 tests) 529ms
+ ✓ src/components/NewStoryWizard/WizardShell.test.tsx (24 tests) 1134ms
+ ✓ src/pages/ContinuePage.resume.test.tsx (4 tests) 3525ms
  Test Files  7 passed (7)
-      Tests  82 passed (82)
-   Start at  10:38:41
-   Duration  4.53s (transform 755ms, setup 284ms, collect 2.49s, tests 7.48s, environment 1.96s, prepare 503ms)
+      Tests  83 passed (83)
+   Start at  10:51:35
+   Duration  4.39s (transform 664ms, setup 299ms, collect 2.24s, tests 7.37s, environment 1.71s, prepare 374ms)
 ```
 
 The stderr of that run carries `Function components cannot be given refs` warnings from `InteractiveWizard` → `ResizablePanelGroup`, in `WizardShell.test.tsx` and `ContinuePage.resume.test.tsx`. This change does not touch those components.
@@ -181,9 +206,9 @@ The stderr of that run carries `Function components cannot be given refs` warnin
  FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
 Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
  Test Files  1 failed | 42 passed (43)
-      Tests  647 passed (647)
-   Start at  10:38:46
-   Duration  7.79s (transform 2.86s, setup 2.52s, collect 15.29s, tests 22.59s, environment 17.84s, prepare 2.41s)
+      Tests  648 passed (648)
+   Start at  10:51:40
+   Duration  7.25s (transform 3.27s, setup 2.64s, collect 13.55s, tests 20.42s, environment 15.36s, prepare 2.50s)
 ```
 
 `nice -n 15 npm --prefix ui run check` (exit 0):
@@ -193,12 +218,12 @@ Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-st
 > tsc -p .design-sync/tsconfig.previews.json
 ```
 
-`nice -n 15 npm --prefix ui run build` (exit 0). The bundle is `index-Bjad2Pld.js`. On `4d8ea147` it was `index--wbtCQTL.js`, the bundle that rounds 2 and 3 of the rendered check served:
+`nice -n 15 npm --prefix ui run build` (exit 0). The bundle is `index-Bjad2Pld.js`, the same as at `a8d45cce`. On `4d8ea147` it was `index--wbtCQTL.js`, the bundle that rounds 2 and 3 of the rendered check served:
 
 ```
 ✓ 2818 modules transformed.
 ../dist/public/assets/index-Bjad2Pld.js                         1,775.64 kB │ gzip: 529.87 kB
-✓ built in 3.01s
+✓ built in 2.77s
 ```
 
 Repository gates:
@@ -209,18 +234,19 @@ OK: exception disposition coverage and shrink-only baseline verified.
 $ PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_doc_front_matter.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
-66 passed, 5 warnings in 8.27s
+66 passed, 5 warnings in 7.63s
 ```
 
 No changed path is in the `sources:` list of a `status: canonical` document, so no `verified_commit` moves. There is no Python change, so mypy and flake8 have no changed files to check. No PostgreSQL test applies.
 
 ## Rendered Verification (Lane 8025)
 
-Every round ran the gateway the same way, from this worktree, with `NEXUS_HOME=scratchpad/961-HOME-r<n>/home` (round 4: `scratchpad/961-HOME-r3/fix/home`). That directory holds a copy of `nexus.toml` whose only change is `[runtime].state_dir` pointing to a private `state` directory beside it. The environment also had `NEXUS_GATEWAY_PORT=8025`, `NEXUS_API_URL=http://127.0.0.1:8025`, `NEXUS_TEST_PROVIDER_ONLY=1` and `NEXUS_KEYRING_DISABLE=1`, with `NEXUS_SLOT` unset. The process was `python -m uvicorn nexus.api.narrative:app --host 127.0.0.1 --port 8025`, not `nexus up`, because `nexus up` would also start the TEST provider's mock service on 5102, which must stay stopped. Driving was headless Chromium (Playwright from `ui/node_modules`) at 1200x900.
+Every round ran the gateway the same way, from this worktree, with `NEXUS_HOME=scratchpad/961-HOME-r<n>/home` (round 4: `scratchpad/961-HOME-r3/fix/home`; round 5: `scratchpad/961-HOME-r3/fix2/home`). That directory holds a copy of `nexus.toml` whose only change is `[runtime].state_dir` pointing to a private `state` directory beside it. The environment also had `NEXUS_GATEWAY_PORT=8025`, `NEXUS_API_URL=http://127.0.0.1:8025`, `NEXUS_TEST_PROVIDER_ONLY=1` and `NEXUS_KEYRING_DISABLE=1`, with `NEXUS_SLOT` unset. The process was `python -m uvicorn nexus.api.narrative:app --host 127.0.0.1 --port 8025`, not `nexus up`, because `nexus up` would also start the TEST provider's mock service on 5102, which must stay stopped. Driving was headless Chromium (Playwright from `ui/node_modules`) at 1200x900.
 
 - Round 2 (2026-10-09, PID 12001): the placement captures below and a first rejected-pick run. API calls: `GET /api/settings` (8), `GET /api/preferences` (8), `PATCH /api/preferences` (11, including the placement theme saves), `GET /api/dev/backstage/health` (8).
 - Round 3 (2026-10-13, PID 53673): the rejected-pick run below and a menu timeline. `lsof -nP -iTCP:8025 -sTCP:LISTEN` found no listener before the start. A seed `PATCH /api/preferences {"theme":"veil"}` answered 200 and wrote the private `preferences.toml`. API calls: `GET /api/settings` (3), `GET /api/preferences` (5), `PATCH /api/preferences` (6: the seed, three rejected picks, the retry, the timeline reset), `GET /api/dev/backstage/health` (3, all 404). After the run, PID 53673 was stopped, 8025 was free again, and `nexus down` with the same environment printed `nothing running`; 8002 and 5102 had no listener.
 - Round 4 (2026-10-13, PID 89498, `scratchpad/961-HOME-r3/fix/home`, bundle `index-Bjad2Pld.js` from `a8d45cce`): the placement and tab-order check below. `lsof` found no listener on 8025 before the start. API calls: `GET /api/settings` (3), `GET /api/preferences` (5), `PATCH /api/preferences` (4: one theme save per capture, then Veil restored), `GET /api/dev/backstage/health` (3). After the run, PID 89498 was stopped, 8025 was free again, `nexus down` with the same environment printed `nothing running`, and 8002 and 5102 had no listener.
+- Round 5 (2026-10-13, PID 15985, `scratchpad/961-HOME-r3/fix2/home`, bundle `index-Bjad2Pld.js` built at `7b66932f`): the rejected-pick, retry and reload run below. `lsof` found no listener on 8025 before the start, and `GET /` served `index-Bjad2Pld.js`. A seed `PATCH /api/preferences {"theme":"veil"}` answered 200. API calls: `GET /api/settings` (2), `GET /api/preferences` (3), `PATCH /api/preferences` (4: the seed, two rejected picks, the retry), `GET /api/dev/backstage/health` (2, both 404). After the run, PID 15985 was stopped, 8025 was free again, `nexus down` (`python -m nexus.cli down`) with the same environment printed `nothing running`, and 8002 and 5102 had no listener.
 
 None of these routes reads a slot database. No owner path and no port 8002, 8012 or 5102 was touched in any round.
 
@@ -264,46 +290,48 @@ vector  trigger differing px    200  bbox (8, 0, 19, 20)  peak luma of differenc
 - Gilded, whose Home has no animation, is identical pixel for pixel in all three captures, including the trigger.
 - Veil and Vector differ across the whole frame, because the spiral canvas and the Vector grid animate and each capture catches a different frame. Inside the trigger box, 77 to 86 (Veil) and 200 (Vector) of the 1296 pixels differ. The button is the `ghost` variant and has no background of its own, and its glyph is drawn in the primary color at 70% alpha (`text-primary/70`). So pixels in the box take on the animated background behind them. These differences do not show that the trigger itself moved or changed; the identical DOM box above shows that it did not.
 
-| Theme | Before | After |
+Before: the base bundle `index-C5o0njTX.js` (round 2). After: the code head's bundle `index-Bjad2Pld.js` (round 4, the `after2` captures). Round 2's captures of `4d8ea147`'s bundle stay in `scratchpad/961-HOME-r2/shots/`. The Gilded "After" file is byte-identical to round 2's, because the two PNG captures are identical pixel for pixel.
+
+| Theme | Before (base) | After (code head) |
 | --- | --- | --- |
 | Veil | ![](before-home-veil.jpg) | ![](after-home-veil.jpg) |
 | Gilded | ![](before-home-gilded.jpg) | ![](after-home-gilded.jpg) |
 | Vector | ![](before-home-vector.jpg) | ![](after-home-vector.jpg) |
 
-### Rejected Picks, Retry and Reload (Round 3)
+### Rejected Picks, Retry and Reload (Round 5, Code Head Bundle)
 
-This run used `4d8ea147`'s production bundle, with Veil saved. Only the private state directory was made read-only (`chmod 0555`). Driver: `scratchpad/961-HOME-r3/scripts/render.cjs` (round 2's driver, unchanged). Excerpt of its log (`scratchpad/961-HOME-r3/render.log`; the `outerHTML` field is cut):
+This run served the code head's production bundle (`index-Bjad2Pld.js`), with Veil saved. Only the private state directory was made read-only (`chmod 0555`). Driver: `scratchpad/961-HOME-r3/scripts/render.cjs` (round 2's driver, unchanged), run as `nice -n 15 node render.cjs ui/node_modules/playwright <state dir> <shots dir>`; it exited 0 and left the state directory at mode 755. Excerpt of its log (`scratchpad/961-HOME-r3/fix2/render.log`; the `outerHTML` field is cut):
 
 ```
-2026-10-13T15:25:57.198Z home loaded; html class: "dark" prefs sha256: 163b1afa7d2747c8e08b247a5f0eb1903c7920311cbdc1ebeb2e38ff0211e386
-2026-10-13T15:25:57.288Z menu items: Gilded | Vector | Veil ✓
-2026-10-13T15:25:57.569Z state dir mode now 555
-2026-10-13T15:25:57.604Z attempt 1: menu open before pick: true
-2026-10-13T15:25:57.655Z response: PATCH /api/preferences 500
-2026-10-13T15:26:02.606Z pick Gilded: menu closed after the pick: false
-2026-10-13T15:26:02.607Z failure 1: PATCH status 500
-2026-10-13T15:26:02.610Z failure 1: alert {"role":"alert","testid":"splash-theme-save-error","className":"alert danger mt-1 max-w-[280px] break-words","text":"WRITE REJECTED500: Internal Server Error","insideMenu":true,"borderLeftColor":"rgb(210, 45, 45)","titleColor":"rgb(210, 45, 45)","destructive":"0 65% 50%",...}
-2026-10-13T15:26:02.612Z failure 1: menu items: Gilded | Vector | Veil ✓ html class: "dark"
-2026-10-13T15:26:02.612Z failure 1: prefs sha256 unchanged: true
-2026-10-13T15:26:02.613Z attempt 2: menu open before pick: true
-2026-10-13T15:26:02.672Z response: PATCH /api/preferences 500
-2026-10-13T15:26:07.614Z pick Gilded: menu closed after the pick: false
-2026-10-13T15:26:07.615Z failure 2: PATCH status 500
-2026-10-13T15:26:07.617Z failure 2: alert {"role":"alert","testid":"splash-theme-save-error",...,"text":"WRITE REJECTED500: Internal Server Error","insideMenu":true,...}
-2026-10-13T15:26:07.618Z failure 2: menu items: Gilded | Vector | Veil ✓ html class: "dark"
-2026-10-13T15:26:07.618Z failure 2: prefs sha256 unchanged: true
-2026-10-13T15:26:07.651Z state dir mode now 755
-2026-10-13T15:26:07.705Z response: PATCH /api/preferences 200
-2026-10-13T15:26:07.930Z pick Gilded: menu closed after the pick: true
-2026-10-13T15:26:07.934Z retry: PATCH status 200 alert count: 0 menu visible: false html class: "dark theme-gilded"
-2026-10-13T15:26:07.934Z retry: preferences theme line: theme = "gilded"
-2026-10-13T15:26:08.600Z after reload: html class: "dark theme-gilded" menu items: Gilded ✓ | Vector | Veil alert count: 0
+2026-10-13T15:50:46.249Z home loaded; html class: "dark" prefs sha256: 163b1afa7d2747c8e08b247a5f0eb1903c7920311cbdc1ebeb2e38ff0211e386
+2026-10-13T15:50:46.354Z menu items: Gilded | Vector | Veil ✓
+2026-10-13T15:50:46.640Z state dir mode now 555
+2026-10-13T15:50:46.669Z attempt 1: menu open before pick: true
+2026-10-13T15:50:46.719Z response: PATCH /api/preferences 500
+2026-10-13T15:50:51.673Z pick Gilded: menu closed after the pick: false
+2026-10-13T15:50:51.674Z failure 1: PATCH status 500
+2026-10-13T15:50:51.679Z failure 1: alert {"role":"alert","testid":"splash-theme-save-error","className":"alert danger mt-1 max-w-[280px] break-words","text":"WRITE REJECTED500: Internal Server Error","insideMenu":true,"borderLeftColor":"rgb(210, 45, 45)","titleColor":"rgb(210, 45, 45)","destructive":"0 65% 50%",...}
+2026-10-13T15:50:51.680Z failure 1: menu items: Gilded | Vector | Veil ✓ html class: "dark"
+2026-10-13T15:50:51.680Z failure 1: prefs sha256 unchanged: true
+2026-10-13T15:50:51.681Z attempt 2: menu open before pick: true
+2026-10-13T15:50:51.737Z response: PATCH /api/preferences 500
+2026-10-13T15:50:56.682Z pick Gilded: menu closed after the pick: false
+2026-10-13T15:50:56.683Z failure 2: PATCH status 500
+2026-10-13T15:50:56.685Z failure 2: alert {"role":"alert","testid":"splash-theme-save-error",...,"text":"WRITE REJECTED500: Internal Server Error","insideMenu":true,...}
+2026-10-13T15:50:56.686Z failure 2: menu items: Gilded | Vector | Veil ✓ html class: "dark"
+2026-10-13T15:50:56.686Z failure 2: prefs sha256 unchanged: true
+2026-10-13T15:50:56.716Z state dir mode now 755
+2026-10-13T15:50:56.768Z response: PATCH /api/preferences 200
+2026-10-13T15:50:56.995Z pick Gilded: menu closed after the pick: true
+2026-10-13T15:50:56.998Z retry: PATCH status 200 alert count: 0 menu visible: false html class: "dark theme-gilded"
+2026-10-13T15:50:56.999Z retry: preferences theme line: theme = "gilded"
+2026-10-13T15:50:57.670Z after reload: html class: "dark theme-gilded" menu items: Gilded ✓ | Vector | Veil alert count: 0
 ```
 
-Round 2's run (`scratchpad/961-HOME-r2/render.log`, 2026-10-09T08:26) logged the same lines, with the same prefs hash, the same alert text and colors, and the same retry and reload results.
+Rounds 2 and 3 ran the same driver on `4d8ea147`'s bundle (`scratchpad/961-HOME-r2/render.log`, 2026-10-09T08:26; `scratchpad/961-HOME-r3/render.log`, 2026-10-13T15:25). They logged the same lines, with the same prefs hash, the same alert text and colors, and the same retry and reload results.
 
 Two log lines need explaining:
-- After each rejected pick the driver logged `menu closed after the pick: false`. The round-3 timeline (`scratchpad/961-HOME-r3/scripts/timeline.cjs`, a `MutationObserver` on the menu's `data-state`, the trigger's `aria-expanded` and the alert) shows what happens instead. The item select does close the menu. The 500 arrives about 25 ms later, and the menu opens again with the alert 7 ms after that. The closing menu stays in the page for its exit animation, so it never became hidden for the driver to see:
+- After each rejected pick the driver logged `menu closed after the pick: false`. The round-3 timeline (run on `4d8ea147`'s bundle; `a8d45cce` changed only where `SplashPage` renders the menu, not the menu's open logic in `shared.tsx`) (`scratchpad/961-HOME-r3/scripts/timeline.cjs`: a `MutationObserver` on the menu's `data-state`, the trigger's `aria-expanded` and the alert) shows what happens instead. The item select does close the menu. The 500 arrives about 25 ms later, and the menu opens again with the alert 7 ms after that. The closing menu stays in the page for its exit animation, so it never became hidden for the driver to see:
 
   ```
   {"ms":0,"why":"start","menus":["open"],"alert":false,"trigger":"true"}
@@ -317,32 +345,31 @@ Two log lines need explaining:
   (The 256 ms before the close is Playwright's own click handling.)
 - The console's `404` lines are `GET /api/dev/backstage/health` (the developer gate is off).
 
-Gateway log for the same window (`scratchpad/961-HOME-r3/gateway.log`, in order; the third 500 is the timeline run):
+Gateway log for the same window (`scratchpad/961-HOME-r3/fix2/gateway.log`, `PATCH` lines and their errors, in order):
 
 ```
-INFO:     127.0.0.1:61885 - "PATCH /api/preferences HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61890 - "PATCH /api/preferences HTTP/1.1" 500 Internal Server Error
-PermissionError: [Errno 13] Permission denied: '.../scratchpad/961-HOME-r3/home/state/tmpgu50tcbe'
-INFO:     127.0.0.1:61892 - "PATCH /api/preferences HTTP/1.1" 500 Internal Server Error
-PermissionError: [Errno 13] Permission denied: '.../scratchpad/961-HOME-r3/home/state/tmpoexfxi3f'
-INFO:     127.0.0.1:61911 - "PATCH /api/preferences HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61915 - "PATCH /api/preferences HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61918 - "PATCH /api/preferences HTTP/1.1" 500 Internal Server Error
-PermissionError: [Errno 13] Permission denied: '.../scratchpad/961-HOME-r3/home/state/tmpvtmcp0pb'
+INFO:     127.0.0.1:54854 - "PATCH /api/preferences HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54988 - "PATCH /api/preferences HTTP/1.1" 500 Internal Server Error
+PermissionError: [Errno 13] Permission denied: '.../scratchpad/961-HOME-r3/fix2/home/state/tmpt68t3kh8'
+INFO:     127.0.0.1:54992 - "PATCH /api/preferences HTTP/1.1" 500 Internal Server Error
+PermissionError: [Errno 13] Permission denied: '.../scratchpad/961-HOME-r3/fix2/home/state/tmp2qhqfvrt'
+INFO:     127.0.0.1:55063 - "PATCH /api/preferences HTTP/1.1" 200 OK
 ```
 
-The alert DOM after the second rejection:
+The first 200 is the seed; the last is the retry.
+
+The alert DOM after the second rejection (round 5; identical to round 3's):
 
 ```html
 <div class="alert danger mt-1 max-w-[280px] break-words" role="alert" data-testid="splash-theme-save-error" style="--danger: hsl(var(--destructive));"><svg ... class="lucide lucide-triangle-alert">...</svg><div class="min-w-0"><div class="alert-title">WRITE REJECTED</div><div class="alert-body">500: Internal Server Error</div></div></div>
 ```
 
-![Home menu after the second rejected Gilded pick](home-menu-write-rejected.jpg)
+![Home menu after the second rejected Gilded pick (round 5, code head bundle)](home-menu-write-rejected.jpg)
 
-![Home after the retry and a reload: Gilded saved, no alert](home-after-retry-and-reload.jpg)
+![Home after the retry and a reload: Gilded saved, no alert (round 5, code head bundle)](home-after-retry-and-reload.jpg)
 
 The wizard menu was not driven in the browser. Opening `/new-story` reads the slot list from the save databases, and the order assigns the rendered check to Home only. The wizard menu is covered by `WizardShell.theme.test.tsx`.
 
 ## Machine Load
 
-Round 2: the one-minute load was 6.6 to 19.3. Round 3: it was 8.1 at the start and 26.8 at the end, when another builder's work overlapped the offline `tests/test_doc_front_matter.py` run. Review fixes: it was 14.6 to 28.7. No PostgreSQL run took place in any round, so the load wait did not apply. Every test, build and Chromium command ran under `nice -n 15`.
+Round 2: the one-minute load was 6.6 to 19.3. Round 3: it was 8.1 at the start and 26.8 at the end, when another builder's work overlapped the offline `tests/test_doc_front_matter.py` run. Review fixes: it was 14.6 to 28.7. Second review round: it was 30.1 at the start (other builders) and 13.5 later. No PostgreSQL run took place in any round, so the load wait did not apply. Every test, build and Chromium command ran under `nice -n 15`.
