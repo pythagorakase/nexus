@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState, type ComponentProps } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import { readerDraftScope } from "@/lib/reader-draft";
@@ -43,7 +44,7 @@ function mount(
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  client.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   client.setQueryData(["/api/narrative/latest-chunk", state.slot], null);
   client.setQueryData(["/api/narrative/outline", state.slot], []);
   const tree = (current: SlotState) => {

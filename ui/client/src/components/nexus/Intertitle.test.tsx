@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Intertitle } from "./Intertitle";
 
@@ -12,7 +13,7 @@ function renderIntertitle(
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  queryClient.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  queryClient.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
 
   return render(
     <QueryClientProvider client={queryClient}>

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { geoEquirectangular } from "d3-geo";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useSettingsQuery } from "@/hooks/useSettings";
 import { LOCAL_MODELS_DOWNLOAD_KEY, LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
@@ -31,7 +32,7 @@ function client(status = STATUS) {
   c.setQueryData([...LOCAL_MODELS_DOWNLOAD_KEY], { state: "idle" });
   c.setQueryData(HEALTH_QUERY_KEY, { status: "healthy", service: "narrative_api", plane: "operator" });
   c.setQueryData(["/api/settings"], { ui: { local_models: KNOBS, theme: "veil" } });
-  c.setQueryData(["/api/preferences"], { ui: { theme: "veil" } });
+  c.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   clients.push(c); return c;
 }
 function withClient(c: QueryClient, node: React.ReactNode) {

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Toaster } from "@/components/ui/toaster";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { GENESIS_STAGES, InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
 
@@ -128,8 +129,7 @@ const TRANSITIONED = { status: "transitioned", retrograde: { enabled: true } };
 
 function renderReadyWizard(onComplete = vi.fn(), resumeData: WizardResumeData = readyWizard) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-    queryClient.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
-    queryClient.setQueryData(["/api/preferences"], { theme: "veil" });
+    queryClient.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
     const view = render(
         <QueryClientProvider client={queryClient}>
             <ThemeProvider>

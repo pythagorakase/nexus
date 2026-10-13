@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
@@ -139,7 +140,10 @@ function mountLayout() {
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   client.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 60000 } });
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  client.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
+  // NexusLayout reads its backstage knobs from the operator settings;
+  // the probe reports the operator plane, so the read stays seeded.
+  client.setQueryData(["/api/settings"], {});
   client.setQueryData([...LOCAL_MODELS_STATUS_KEY], {
     models_dir: "/models",
     system_ram_gb: 48,

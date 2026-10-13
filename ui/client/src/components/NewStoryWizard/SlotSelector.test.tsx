@@ -230,6 +230,9 @@ describe("SlotSelector on the player plane", () => {
         const { onSlotSelected } = renderSelector(FIVE_SLOTS, "player");
         expect(screen.getByRole("button", { name: "Resume story in Memory Slot 2" })).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Clear Memory Slot 2" })).not.toBeInTheDocument();
+        expect(card(2)).toHaveClass("cursor-default");
+        expect(card(2)).not.toHaveClass("cursor-pointer");
+        expect(card(5)).toHaveClass("cursor-pointer");
 
         fireEvent.click(card(2));
         fireEvent.keyDown(card(3), { key: "Enter" });

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import type { ChunkWithMetadata, SlotState } from "@/types/narrative";
@@ -71,7 +72,7 @@ function renderPane(
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   const latest = chunks[chunks.length - 1];
-  queryClient.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  queryClient.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   queryClient.setQueryData(["/api/narrative/latest-chunk", SLOT], latest);
   queryClient.setQueryData(
     ["/api/narrative/outline", SLOT],
