@@ -15,11 +15,11 @@ PR #962 gave the Settings THEME card an accessible WRITE REJECTED alert for a fa
 - New `ui/client/src/components/ThemeSaveRejected.tsx`:
   - `ThemeSaveRejected` renders the Settings card's `alert danger` element (`role="alert"`, `WRITE REJECTED` and the message). It maps `--danger` to `--destructive`, because `nexus-layout.css` scopes `--danger` to the Settings pane. This adds no new color.
   - `useOpenOnThemeSaveError` opens a menu when a save is rejected, and also when the menu mounts while a rejection is still held.
-- `SplashPage` renders exactly one `SplashThemeMenu`, outside the variant swap, and the three variants no longer render it. The trigger's box is `x 28, y 28, 36x36` in every theme, both before and after the change.
+- `SplashPage` renders exactly one `SplashThemeMenu`, outside the variant swap and before it, and the three variants no longer render it. The trigger's box is `x 28, y 28, 36x36` in every theme, both before and after the change, and it is still the first stop in the tab order. Its `z-index: 50` is above every variant layer (the highest is 10), so the paint order is unchanged.
 - `SplashThemeMenu` now controls its own open state and shows `data-testid="splash-theme-save-error"` below the themes. It no longer clears the error on unmount; the Settings THEME card still clears it on mount.
 - `WizardShell` (Part B) controls its menu's open state and opens on a rejection. It renders `data-testid="wizard-theme-save-error"` after `<ThemeMenu />`. `ThemeMenu.tsx` is unchanged, because the design-sync preview renders it with no props.
 - Tests:
-  - `SplashThemeMenu.test.tsx` now renders `SplashPage` with the real `ThemeProvider` and query client. It covers an HTTP 500, a network `TypeError`, a second rejection, a retry after each kind of failure, a held rejection on a later Home visit with Settings staying clean, a rejection that completes while the player is away, and the success path.
+  - `SplashThemeMenu.test.tsx` now renders `SplashPage` with the real `ThemeProvider` and query client. It covers an HTTP 500, a network `TypeError`, a second rejection (the second answer is held so the test sees the cleared rejection while that save is pending), a retry after each kind of failure, a held rejection on a later Home visit with Settings staying clean, a rejection that completes while the player is away, the success path, and the trigger as the first tab stop on Home.
   - The new `WizardShell.theme.test.tsx` mirrors these tests for the wizard.
   - The `useTheme` stubs in `WizardShell.test.tsx` and `ContinuePage.resume.test.tsx` now return `saveError: null`.
 - Evidence is in `docs/qa/961-home-theme-save-error/verification.md`, with screenshots.
@@ -28,38 +28,39 @@ PR #962 gave the Settings THEME card an accessible WRITE REJECTED alert for a fa
 
 The red runs came before the product change. Each one-test pass is the success path, which already holds on the base.
 - `SplashThemeMenu` against the base splash files: `Tests  7 failed | 1 passed (8)`.
-- `SplashThemeMenu` against the first-round, unhoisted menu (`8451c2cb`): the same 7 tests fail, each with `Unable to find an element by: [data-testid="splash-theme-save-error"]`.
+- `SplashThemeMenu` against the first-round, unhoisted menu (`8451c2cb`): 7 tests fail. Six fail with `Unable to find an element by: [data-testid="splash-theme-save-error"]`, because the remount loses the alert. The seventh, `shows on return a rejection that completed while the player was elsewhere`, fails on the context probe (expected `Failed to fetch`, received `none`). That failure comes from `8451c2cb`'s `clearSaveError` on unmount, which ruling (c) removed: `clearSaveError` is the mutation's `reset`, so leaving Home during the pending save detached the context from it.
 - `WizardShell.theme` against the base wizard: `Tests  5 failed | 1 passed (6)`.
+- Review fixes (`a8d45cce`): the new tab-order test against `4d8ea147`'s `SplashPage.tsx` fails (the Veil Continue button gets the first focus). The reworked second-rejection test fails under a temporary `ThemeContext.tsx` change that keeps the previous error while a new save is pending (expected `none`, received `500: PermissionError: ...`).
 
-Green runs on the code head (`4d8ea147`), rerun on 2026-10-13 after the resume (`git merge claude/wave-b-integration`: `Already up to date.`):
+Green runs on the code head (`a8d45cce`), on 2026-10-13 (`git merge claude/wave-b-integration`: `Already up to date.`):
 
 ```
 $ nice -n 15 npm --prefix ui test -- SplashThemeMenu SettingsPane shell-accessibility
- ✓ src/shell-accessibility.test.ts (11 tests) 67ms
- ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 656ms
- ✓ src/pages/splash/SplashThemeMenu.test.tsx (8 tests) 516ms
+ ✓ src/shell-accessibility.test.ts (11 tests) 54ms
+ ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 693ms
+ ✓ src/pages/splash/SplashThemeMenu.test.tsx (9 tests) 605ms
  Test Files  3 passed (3)
-      Tests  39 passed (39)
-   Start at  10:24:44
+      Tests  40 passed (40)
+   Start at  10:38:39
 
 $ nice -n 15 npm --prefix ui test -- SplashThemeMenu SettingsPane shell-accessibility WizardShell ContinuePage
- ✓ src/shell-accessibility.test.ts (11 tests) 61ms
- ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 700ms
- ✓ src/pages/splash/SplashThemeMenu.test.tsx (8 tests) 598ms
- ✓ src/pages/ContinuePage.test.tsx (8 tests) 834ms
- ✓ src/components/NewStoryWizard/WizardShell.theme.test.tsx (6 tests) 452ms
- ✓ src/components/NewStoryWizard/WizardShell.test.tsx (24 tests) 1162ms
- ✓ src/pages/ContinuePage.resume.test.tsx (4 tests) 3552ms
+ ✓ src/shell-accessibility.test.ts (11 tests) 57ms
+ ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 713ms
+ ✓ src/pages/splash/SplashThemeMenu.test.tsx (9 tests) 630ms
+ ✓ src/pages/ContinuePage.test.tsx (8 tests) 832ms
+ ✓ src/components/NewStoryWizard/WizardShell.theme.test.tsx (6 tests) 476ms
+ ✓ src/components/NewStoryWizard/WizardShell.test.tsx (24 tests) 1217ms
+ ✓ src/pages/ContinuePage.resume.test.tsx (4 tests) 3559ms
  Test Files  7 passed (7)
-      Tests  81 passed (81)
-   Start at  10:24:50
+      Tests  82 passed (82)
+   Start at  10:38:41
 
 $ nice -n 15 npm --prefix ui test
  FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
 Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
  Test Files  1 failed | 42 passed (43)
-      Tests  646 passed (646)
-   Start at  10:24:55
+      Tests  647 passed (647)
+   Start at  10:38:46
 ```
 
 In the full suite, the only failure is the `state-shades.test.ts` staleness, which is expected on the wave-B integration base. The coordinator regenerates state surfaces once on the final UI union.
@@ -71,8 +72,8 @@ $ nice -n 15 npm --prefix ui run check        # exit 0
 
 $ nice -n 15 npm --prefix ui run build        # exit 0
 ✓ 2818 modules transformed.
-../dist/public/assets/index--wbtCQTL.js                         1,775.64 kB │ gzip: 529.87 kB
-✓ built in 2.71s
+../dist/public/assets/index-Bjad2Pld.js                         1,775.64 kB │ gzip: 529.87 kB
+✓ built in 3.01s
 
 $ /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref claude/wave-b-integration
 OK: exception disposition coverage and shrink-only baseline verified.
@@ -80,20 +81,19 @@ OK: exception disposition coverage and shrink-only baseline verified.
 $ PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_doc_front_matter.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
-66 passed, 5 warnings in 8.00s
+66 passed, 5 warnings in 8.27s
 ```
 
 No Python change and no migration, so mypy, flake8 and PostgreSQL tests have nothing to run; no changed path is a `sources:` entry of a canonical document.
 
 ## Rendered Check (Lane 8025, Private `runtime.state_dir`, Production Bundle)
 
-Run on 2026-10-09 (round 2: placement and a first rejected-pick run) and again on 2026-10-13 (round 3: the rejected-pick run, the screenshots in the evidence, and a menu timeline). Both rounds served the same bundle, `index--wbtCQTL.js`.
+Run on 2026-10-09 (round 2: placement and a first rejected-pick run) and on 2026-10-13 (round 3: the rejected-pick run, the screenshots in the evidence, and a menu timeline). Both rounds served `4d8ea147`'s bundle, `index--wbtCQTL.js`. Round 4 (2026-10-13) served `a8d45cce`'s bundle, `index-Bjad2Pld.js`, and repeated the placement check with a first-`Tab` probe.
 
-
-- Placement: before and after the change, the Home menu trigger is the single trigger at `x 28, y 28, 36x36` in Veil, Gilded and Vector, and it is the topmost element at its center. Gilded's 1200x900 captures are identical pixel for pixel. Veil and Vector differ only in their animated background strands. The screenshot pairs are in the evidence file.
+- Placement: before the change, after it, and after the tab-order fix, the Home menu trigger is the single trigger at `x 28, y 28, 36x36` in Veil, Gilded and Vector, with the same wrapper style, and it is the topmost element at its center. In round 4 the first `Tab` focuses it in all three themes. A recorded pixel comparison (Pillow `ImageChops.difference`; script and output in the evidence) finds Gilded, which does not animate, identical pixel for pixel. Veil and Vector differ across the whole frame because their backgrounds animate. Inside the trigger box, 77-86 (Veil) and 200 (Vector) of 1296 pixels differ. The button has no background of its own and its glyph is drawn at 70% alpha, so the animated background shows through it; the identical DOM box shows the trigger did not move. The screenshot pairs are in the evidence file.
 - Failure: with the private state directory set to `chmod 0555`, two Gilded picks returned `PATCH /api/preferences 500` (gateway: `PermissionError: [Errno 13] Permission denied`). The item select closes the menu, and it opens again with the alert about 30 ms later, when the 500 arrives (round-3 `data-state` timeline). After each pick, the open menu showed `role="alert"` `WRITE REJECTED` / `500: Internal Server Error`, Veil stayed checked, and the preferences file hash did not change.
 - Recovery: after `chmod 0755`, the same pick returned 200, the menu closed, the alert was gone, and Gilded survived a reload.
-- Cleanup: the gateway ran as a direct uvicorn process with `NEXUS_TEST_PROVIDER_ONLY=1` and `NEXUS_KEYRING_DISABLE=1`, so the mock provider on 5102 never started. The process was stopped afterwards, 8025 was free again, and `nexus down` with the same environment printed `nothing running`. No owner path and no port 8002, 8012 or 5102 was touched.
+- Cleanup: the gateway ran as a direct uvicorn process with `NEXUS_TEST_PROVIDER_ONLY=1` and `NEXUS_KEYRING_DISABLE=1` and `NEXUS_SLOT` unset, so the mock provider on 5102 never started. After each round the process was stopped, 8025 was free again, and `nexus down` with the same environment printed `nothing running`. No owner path and no port 8002, 8012 or 5102 was touched.
 
 ## Deferred
 

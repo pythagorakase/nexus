@@ -1,6 +1,6 @@
 # Home Theme Menu: Show a Rejected Theme Save (#961)
 
-Work order 961-HOME with coordinator amendments 1 and 2 (2026-10-09) and the resume amendment (2026-10-13). Branch `claude/961-home-theme-save-error`, cut from `claude/wave-b-integration` at `7eb9a10c`. The code head is `4d8ea147`. No Python change, no migration, and no paid call.
+Work order 961-HOME with coordinator amendments 1 and 2 (2026-10-09) and the resume amendment (2026-10-13). Branch `claude/961-home-theme-save-error`, cut from `claude/wave-b-integration` at `7eb9a10c`. The code head is `a8d45cce` (review fixes of 2026-10-13; see "Review Fixes"). No Python change, no migration, and no paid call.
 
 ## Resumed on 2026-10-13
 
@@ -13,7 +13,9 @@ The second builder stopped at the usage limit on 2026-10-09 at 03:23, after the 
 | `1ab1b773` | Tests rewritten to render `SplashPage` with the real provider and query client; new `WizardShell.theme.test.tsx` | Item 4 with ruling (b); Part B tests (ruling d) |
 | `9521d2b9` | One `SplashThemeMenu` hoisted into `SplashPage`; `ThemeSaveRejected` and `useOpenOnThemeSaveError`; open on mount, no clear on unmount; wizard menu opens on a rejection | Items 1-3 with rulings (a) and (c); Part B (ruling d) |
 | `4d8ea147` | The wizard's alert rendered beside `ThemeMenu`, which is unchanged, instead of through a new prop | Part B (ruling d); keeps `npm --prefix ui run check` green |
-| this commit | This evidence directory and `pr-body.md` | Item 5 and the proof section |
+| `a2ce08e9` | This evidence directory and `pr-body.md` | Item 5 and the proof section |
+| `a8d45cce` | Review fixes: the Home menu first in the tab order again; the second-rejection test holds its second answer | Item 3 (no other visible change); item 4 |
+| this commit | The evidence and `pr-body.md` updated for the review fixes | The proof section |
 
 Part B needed no structural change (see "What Changed"), so nothing from it is deferred.
 
@@ -29,7 +31,7 @@ Part B needed no structural change (see "What Changed"), so nothing from it is d
   - `ThemeSaveRejected({ testId })` renders the Settings card's alert. It is one `role="alert"` element with the classes `alert danger`, the title `WRITE REJECTED` and the message. It renders nothing while `saveError` is null.
   - `nexus-layout.css` defines `--danger` only inside `.settings-pane-v2` (lines 1326-1327), and the menu portal sits outside that pane. The element therefore sets `--danger: hsl(var(--destructive))`, which is the same mapping the pane uses. This adds no new color or hue. The rendered border and title read `rgb(210, 45, 45)`, which is `--destructive` `0 65% 50%`.
   - `useOpenOnThemeSaveError(setOpen)` opens a menu when `saveError` changes from null to a message. It also opens a menu that mounts while a rejection is still held (ruling c).
-- `ui/client/src/pages/SplashPage.tsx` renders exactly one `<SplashThemeMenu />`, outside the variant swap (ruling a). `VeilSplash.tsx`, `GildedSplash.tsx` and `VectorSplash.tsx` no longer render it. The wrapper keeps `position: absolute; top: 28px; left: 28px; z-index: 50`.
+- `ui/client/src/pages/SplashPage.tsx` renders exactly one `<SplashThemeMenu />`, outside the variant swap (ruling a). `VeilSplash.tsx`, `GildedSplash.tsx` and `VectorSplash.tsx` no longer render it. The wrapper keeps `position: absolute; top: 28px; left: 28px; z-index: 50`. The menu is rendered before the variant, so its trigger stays the first focusable element on Home, as it was when each variant rendered it first (`VeilSplash.tsx:160-161` on the base). The paint order does not change: the highest `zIndex` inside a variant is 10 (`VectorSplash.tsx:378`), below the wrapper's 50.
 - `ui/client/src/pages/splash/shared.tsx`: `SplashThemeMenu` now controls its own `open` state with `useState` and keeps the same user-driven open and close behavior. It calls `useOpenOnThemeSaveError(setOpen)` and renders `<ThemeSaveRejected testId="splash-theme-save-error" />` below the theme items. It no longer clears the error on unmount (ruling c).
 - `ui/client/src/components/NewStoryWizard/WizardShell.tsx` (Part B, ruling d): the hamburger `DropdownMenu` is controlled with `menuOpen`. It calls `useOpenOnThemeSaveError(setMenuOpen)` and renders `<ThemeSaveRejected testId="wizard-theme-save-error" />` right after `<ThemeMenu />`. `ThemeMenu.tsx` itself is unchanged: a required prop on it failed `npm --prefix ui run check`, because `.design-sync/previews/ThemeMenu.tsx` renders `<ThemeMenu />` bare. The wizard did not need a structural change and does not remount on a theme change: `NewStoryPage` renders `<NewStoryWizard />` without a theme key.
 - Test stubs: `WizardShell.test.tsx` and `ContinuePage.resume.test.tsx` stub `useTheme` module-wide. Their stub changed from `({})` to `({ saveError: null })` because `WizardShell` now reads `saveError`.
@@ -62,15 +64,34 @@ The first round's red run of the bare-menu tests (`7727ccef` against the base) i
       Tests  7 failed | 1 passed (8)
 ```
 
-The same command with `8451c2cb`'s `shared.tsx` (the menu change as first ordered, not hoisted, clearing on unmount) and the base `SplashPage.tsx` and variants. This shows that the remount defeats the unhoisted design:
+The same command with `8451c2cb`'s `shared.tsx` (the menu change as first ordered, not hoisted, clearing on unmount) and the base `SplashPage.tsx` and variants (`scratchpad/961-HOME-r2/red-unhoisted.log`). Six tests fail because the remount loses the alert. The seventh fails on the context probe instead:
 
 ```
    × ... shows an online HTTP rejection inside the open menu and keeps Veil checked 1094ms
      → Unable to find an element by: [data-testid="splash-theme-save-error"]
-   (the same seven tests fail, each with the same message)
+   × ... shows a network failure inside the open menu 1030ms
+     → Unable to find an element by: [data-testid="splash-theme-save-error"]
+   × ... shows a second rejection after a new pick cleared the first 1027ms
+     → Unable to find an element by: [data-testid="splash-theme-save-error"]
+   × ... a successful retry after an HTTP 500 clears the alert, closes the menu and checks Gilded 1026ms
+     → Unable to find an element by: [data-testid="splash-theme-save-error"]
+   × ... a successful retry after a network failure clears the alert, closes the menu and checks Gilded 1026ms
+     → Unable to find an element by: [data-testid="splash-theme-save-error"]
+   × ... shows a held rejection when Home mounts again, and Settings shows none 1026ms
+     → Unable to find an element by: [data-testid="splash-theme-save-error"]
+   × ... shows on return a rejection that completed while the player was elsewhere 1035ms
+     → expect(element).toHaveTextContent()
+Expected element to have text content:
+  Failed to fetch
+Received:
+  none
  Test Files  1 failed (1)
       Tests  7 failed | 1 passed (8)
 ```
+
+The seventh failure comes from `8451c2cb`'s `clearSaveError` on unmount, which ruling (c) removed. `clearSaveError` is the mutation's `reset` (`ThemeContext.tsx:95`). Leaving Home while the save is still pending unmounts the menu, and the reset detaches the context from the pending mutation. The rejection that arrives later therefore never reaches `saveError`, and the probe reads `none`.
+
+(This run predates the two tests that `a8d45cce` added or changed; see "Review Fixes".)
 
 `nice -n 15 npm --prefix ui test -- WizardShell.theme` with the base `WizardShell.tsx` and `ThemeMenu.tsx`:
 
@@ -87,36 +108,69 @@ The same command with `8451c2cb`'s `shared.tsx` (the menu change as first ordere
 
 In each red run, the one passing test is the success path, which the base already satisfies.
 
-## Proof on the Code Head (`4d8ea147`, Rerun 2026-10-13)
+## Review Fixes (`a8d45cce`, 2026-10-13)
 
-Every command ran from the worktree root, after `git merge claude/wave-b-integration` (`Already up to date.`). `PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus;print(nexus.__file__)'` printed `/Users/pythagor/nexus/.claude/worktrees/961-home-theme-save-error/nexus/__init__.py`. Logs are in `scratchpad/961-HOME-r3/`.
+Four review findings were applied. Logs and scripts are in `scratchpad/961-HOME-r3/fix/`.
+
+- Tab order. After the hoist, `SplashPage` rendered the menu after the variant, so the trigger moved from the first to the last focusable element on Home (behind Continue, Load and Settings). `SplashPage` now renders it before the variant. The new test `keeps the theme menu trigger first in the tab order on Home` tabs once from the page (`@testing-library/user-event`) and expects the trigger to have focus. Red run with `4d8ea147`'s `SplashPage.tsx` (`red-taborder.log`):
+
+  ```
+     × Home theme menu save failures (#961) > keeps the theme menu trigger first in the tab order on Home 16ms
+       → expect(element).toHaveFocus()
+  Received element with focus:
+    <button class="" style="position: relative; width: 280px; ... border: 2px solid var(--brass); ...">   (the Veil Continue button)
+   Test Files  1 failed (1)
+        Tests  1 failed | 8 passed (9)
+  ```
+
+  The rendered check below repeats this in Chromium for all three themes (`firstTabIsTrigger`).
+- The second-rejection test. Its assertion that the alert was gone after the second pick passed on the menu closing alone, because closing unmounts `DropdownMenuContent` whatever `saveError` holds. The test now holds the second `PATCH` answer, waits until the context probe reads `none` while that save is pending, then answers with the 500 and expects the alert inside the reopened menu. Red run with a temporary `ThemeContext.tsx` change that keeps the previous error while a new save is pending (`red-sticky-error.patch`, reverted; `red-sticky-error.log`):
+
+  ```
+     × Home theme menu save failures (#961) > shows a second rejection after a new pick cleared the first 1063ms
+       → expect(element).toHaveTextContent()
+  Expected element to have text content:
+    none
+  Received:
+    500: PermissionError: [Errno 13] Permission denied
+   Test Files  1 failed (1)
+        Tests  1 failed | 8 passed (9)
+  ```
+
+  Under the same temporary change, the previous version of the test also fails (`old-test-sticky-error.log`), but later and for a different reason: `Unable to find an element by: [data-testid="splash-theme-save-error"]` at the old file's line 165, because a held error never changes from null to a message, so the menu does not open again. Its "cleared" assertion (line 163) passed.
+- The red-run report for `8451c2cb` above now lists each failure; one of the seven differs.
+- The placement claims below now cite a recorded pixel comparison.
+
+## Proof on the Code Head (`a8d45cce`, 2026-10-13)
+
+Every command ran from the worktree root, after `git merge claude/wave-b-integration` (`Already up to date.`; the integration branch is still at `7eb9a10c`). `PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus;print(nexus.__file__)'` printed `/Users/pythagor/nexus/.claude/worktrees/961-home-theme-save-error/nexus/__init__.py`. Logs are in `scratchpad/961-HOME-r3/fix/`.
 
 `nice -n 15 npm --prefix ui test -- SplashThemeMenu SettingsPane shell-accessibility` (exit 0):
 
 ```
- ✓ src/shell-accessibility.test.ts (11 tests) 67ms
- ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 656ms
- ✓ src/pages/splash/SplashThemeMenu.test.tsx (8 tests) 516ms
+ ✓ src/shell-accessibility.test.ts (11 tests) 54ms
+ ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 693ms
+ ✓ src/pages/splash/SplashThemeMenu.test.tsx (9 tests) 605ms
  Test Files  3 passed (3)
-      Tests  39 passed (39)
-   Start at  10:24:44
-   Duration  1.57s (transform 182ms, setup 185ms, collect 591ms, tests 1.24s, environment 1.05s, prepare 508ms)
+      Tests  40 passed (40)
+   Start at  10:38:39
+   Duration  1.33s (transform 164ms, setup 107ms, collect 510ms, tests 1.35s, environment 612ms, prepare 111ms)
 ```
 
 `nice -n 15 npm --prefix ui test -- SplashThemeMenu SettingsPane shell-accessibility WizardShell ContinuePage` (Part B and the two files whose stubs changed; exit 0):
 
 ```
- ✓ src/shell-accessibility.test.ts (11 tests) 61ms
- ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 700ms
- ✓ src/pages/splash/SplashThemeMenu.test.tsx (8 tests) 598ms
- ✓ src/pages/ContinuePage.test.tsx (8 tests) 834ms
- ✓ src/components/NewStoryWizard/WizardShell.theme.test.tsx (6 tests) 452ms
- ✓ src/components/NewStoryWizard/WizardShell.test.tsx (24 tests) 1162ms
- ✓ src/pages/ContinuePage.resume.test.tsx (4 tests) 3552ms
+ ✓ src/shell-accessibility.test.ts (11 tests) 57ms
+ ✓ src/components/nexus/SettingsPane.test.tsx (20 tests) 713ms
+ ✓ src/pages/splash/SplashThemeMenu.test.tsx (9 tests) 630ms
+ ✓ src/pages/ContinuePage.test.tsx (8 tests) 832ms
+ ✓ src/components/NewStoryWizard/WizardShell.theme.test.tsx (6 tests) 476ms
+ ✓ src/components/NewStoryWizard/WizardShell.test.tsx (24 tests) 1217ms
+ ✓ src/pages/ContinuePage.resume.test.tsx (4 tests) 3559ms
  Test Files  7 passed (7)
-      Tests  81 passed (81)
-   Start at  10:24:50
-   Duration  4.54s (transform 686ms, setup 286ms, collect 2.63s, tests 7.36s, environment 1.72s, prepare 362ms)
+      Tests  82 passed (82)
+   Start at  10:38:41
+   Duration  4.53s (transform 755ms, setup 284ms, collect 2.49s, tests 7.48s, environment 1.96s, prepare 503ms)
 ```
 
 The stderr of that run carries `Function components cannot be given refs` warnings from `InteractiveWizard` → `ResizablePanelGroup`, in `WizardShell.test.tsx` and `ContinuePage.resume.test.tsx`. This change does not touch those components.
@@ -127,9 +181,9 @@ The stderr of that run carries `Function components cannot be given refs` warnin
  FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
 Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
  Test Files  1 failed | 42 passed (43)
-      Tests  646 passed (646)
-   Start at  10:24:55
-   Duration  9.15s (transform 3.42s, setup 3.05s, collect 15.63s, tests 24.20s, environment 18.09s, prepare 2.83s)
+      Tests  647 passed (647)
+   Start at  10:38:46
+   Duration  7.79s (transform 2.86s, setup 2.52s, collect 15.29s, tests 22.59s, environment 17.84s, prepare 2.41s)
 ```
 
 `nice -n 15 npm --prefix ui run check` (exit 0):
@@ -139,12 +193,12 @@ Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-st
 > tsc -p .design-sync/tsconfig.previews.json
 ```
 
-`nice -n 15 npm --prefix ui run build` (exit 0). The bundle hash is the same as round 2's, so the rendered checks of both rounds ran the same code:
+`nice -n 15 npm --prefix ui run build` (exit 0). The bundle is `index-Bjad2Pld.js`. On `4d8ea147` it was `index--wbtCQTL.js`, the bundle that rounds 2 and 3 of the rendered check served:
 
 ```
 ✓ 2818 modules transformed.
-../dist/public/assets/index--wbtCQTL.js                         1,775.64 kB │ gzip: 529.87 kB
-✓ built in 2.71s
+../dist/public/assets/index-Bjad2Pld.js                         1,775.64 kB │ gzip: 529.87 kB
+✓ built in 3.01s
 ```
 
 Repository gates:
@@ -155,23 +209,24 @@ OK: exception disposition coverage and shrink-only baseline verified.
 $ PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_doc_front_matter.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
-66 passed, 5 warnings in 8.00s
+66 passed, 5 warnings in 8.27s
 ```
 
 No changed path is in the `sources:` list of a `status: canonical` document, so no `verified_commit` moves. There is no Python change, so mypy and flake8 have no changed files to check. No PostgreSQL test applies.
 
 ## Rendered Verification (Lane 8025)
 
-Both rounds ran the gateway the same way, from this worktree, with `NEXUS_HOME=scratchpad/961-HOME-r<n>/home`. That directory holds a copy of `nexus.toml` whose only change is `[runtime].state_dir` pointing to a private `scratchpad/961-HOME-r<n>/home/state`. The environment also had `NEXUS_GATEWAY_PORT=8025`, `NEXUS_API_URL=http://127.0.0.1:8025`, `NEXUS_TEST_PROVIDER_ONLY=1` and `NEXUS_KEYRING_DISABLE=1`, with `NEXUS_SLOT` unset. The process was `python -m uvicorn nexus.api.narrative:app --host 127.0.0.1 --port 8025`, not `nexus up`, because `nexus up` would also start the TEST provider's mock service on 5102, which must stay stopped. Driving was headless Chromium (Playwright from `ui/node_modules`) at 1200x900.
+Every round ran the gateway the same way, from this worktree, with `NEXUS_HOME=scratchpad/961-HOME-r<n>/home` (round 4: `scratchpad/961-HOME-r3/fix/home`). That directory holds a copy of `nexus.toml` whose only change is `[runtime].state_dir` pointing to a private `state` directory beside it. The environment also had `NEXUS_GATEWAY_PORT=8025`, `NEXUS_API_URL=http://127.0.0.1:8025`, `NEXUS_TEST_PROVIDER_ONLY=1` and `NEXUS_KEYRING_DISABLE=1`, with `NEXUS_SLOT` unset. The process was `python -m uvicorn nexus.api.narrative:app --host 127.0.0.1 --port 8025`, not `nexus up`, because `nexus up` would also start the TEST provider's mock service on 5102, which must stay stopped. Driving was headless Chromium (Playwright from `ui/node_modules`) at 1200x900.
 
 - Round 2 (2026-10-09, PID 12001): the placement captures below and a first rejected-pick run. API calls: `GET /api/settings` (8), `GET /api/preferences` (8), `PATCH /api/preferences` (11, including the placement theme saves), `GET /api/dev/backstage/health` (8).
 - Round 3 (2026-10-13, PID 53673): the rejected-pick run below and a menu timeline. `lsof -nP -iTCP:8025 -sTCP:LISTEN` found no listener before the start. A seed `PATCH /api/preferences {"theme":"veil"}` answered 200 and wrote the private `preferences.toml`. API calls: `GET /api/settings` (3), `GET /api/preferences` (5), `PATCH /api/preferences` (6: the seed, three rejected picks, the retry, the timeline reset), `GET /api/dev/backstage/health` (3, all 404). After the run, PID 53673 was stopped, 8025 was free again, and `nexus down` with the same environment printed `nothing running`; 8002 and 5102 had no listener.
+- Round 4 (2026-10-13, PID 89498, `scratchpad/961-HOME-r3/fix/home`, bundle `index-Bjad2Pld.js` from `a8d45cce`): the placement and tab-order check below. `lsof` found no listener on 8025 before the start. API calls: `GET /api/settings` (3), `GET /api/preferences` (5), `PATCH /api/preferences` (4: one theme save per capture, then Veil restored), `GET /api/dev/backstage/health` (3). After the run, PID 89498 was stopped, 8025 was free again, `nexus down` with the same environment printed `nothing running`, and 8002 and 5102 had no listener.
 
-None of these routes reads a slot database. No owner path and no port 8002, 8012 or 5102 was touched in either round.
+None of these routes reads a slot database. No owner path and no port 8002, 8012 or 5102 was touched in any round.
 
 ### Placement Before and After the Hoist
 
-The base bundle (`index-C5o0njTX.js`, built from the `claude/wave-b-integration` splash and wizard files) and this branch's bundle (`index--wbtCQTL.js`) were each served in turn. Each theme was saved through `PATCH /api/preferences` and Home was loaded:
+The base bundle (`index-C5o0njTX.js`, built from the `claude/wave-b-integration` splash and wizard files) and `4d8ea147`'s bundle (`index--wbtCQTL.js`) were each served in turn in round 2, and `a8d45cce`'s bundle (`index-Bjad2Pld.js`) in round 4. Each theme was saved through `PATCH /api/preferences` and Home was loaded. Round 4's driver (`scratchpad/961-HOME-r3/fix/placement.cjs`, round 2's driver plus one `Tab` press after the screenshot) also records whether the first `Tab` focuses the trigger:
 
 ```
 before veil   {"htmlClass":"dark","triggers":1,"box":{"x":28,"y":28,"width":36,"height":36},"topmostIsTrigger":true,"wrapper":"position: absolute; top: 28px; left: 28px; z-index: 50;"}
@@ -180,11 +235,34 @@ before vector {"htmlClass":"dark theme-vector","triggers":1,"box":{"x":28,"y":28
 after veil    {"htmlClass":"dark","triggers":1,"box":{"x":28,"y":28,"width":36,"height":36},"topmostIsTrigger":true,"wrapper":"position: absolute; top: 28px; left: 28px; z-index: 50;"}
 after gilded  {"htmlClass":"dark theme-gilded","triggers":1,"box":{"x":28,"y":28,"width":36,"height":36},"topmostIsTrigger":true,...}
 after vector  {"htmlClass":"dark theme-vector","triggers":1,"box":{"x":28,"y":28,"width":36,"height":36},"topmostIsTrigger":true,...}
+after2 veil   {"htmlClass":"dark","triggers":1,"box":{"x":28,"y":28,"width":36,"height":36},"topmostIsTrigger":true,"wrapper":"position: absolute; top: 28px; left: 28px; z-index: 50;","firstTabIsTrigger":true}
+after2 gilded {"htmlClass":"dark theme-gilded","triggers":1,"box":{"x":28,"y":28,"width":36,"height":36},"topmostIsTrigger":true,...,"firstTabIsTrigger":true}
+after2 vector {"htmlClass":"dark theme-vector","triggers":1,"box":{"x":28,"y":28,"width":36,"height":36},"topmostIsTrigger":true,...,"firstTabIsTrigger":true}
 ```
 
-The pixel comparison of the PNG captures:
-- Gilded: the two captures are identical (no differing pixel).
-- Veil and Vector: the captures differ only where the animated spiral strands and the Vector grid's scan beam happened to be at capture time. The trigger's box and its rendered glyph are the same in both captures.
+The trigger's DOM box, its wrapper and its place on top are therefore the same before the hoist, after it, and after the tab-order fix.
+
+Pixel comparison of the original 1200x900 PNG captures (the JPEGs below are compressed copies). The script is `scratchpad/961-HOME-r3/fix/compare_placement.py`. It uses Pillow's `ImageChops.difference`, and for the full frame and for the trigger box (x 28, y 28, 36x36) it reports the count of differing pixels, their bounding box, and the peak luma of the difference image. Output (`compare_placement.log`):
+
+```
+$ python -I compare_placement.py ../../961-HOME-r2/shots ../../961-HOME-r2/shots after
+veil    frame   differing px  68407  bbox (0, 0, 1200, 900)  peak luma of difference 190
+veil    trigger differing px     86  bbox (16, 0, 26, 36)  peak luma of difference 15
+gilded  frame   differing px      0  bbox None  peak luma of difference 0
+gilded  trigger differing px      0  bbox None  peak luma of difference 0
+vector  frame   differing px  51858  bbox (2, 0, 1200, 899)  peak luma of difference 187
+vector  trigger differing px    200  bbox (8, 0, 19, 20)  peak luma of difference 36
+$ python -I compare_placement.py ../../961-HOME-r2/shots shots after2
+veil    frame   differing px  63252  bbox (0, 0, 1200, 900)  peak luma of difference 190
+veil    trigger differing px     77  bbox (16, 0, 26, 36)  peak luma of difference 10
+gilded  frame   differing px      0  bbox None  peak luma of difference 0
+gilded  trigger differing px      0  bbox None  peak luma of difference 0
+vector  frame   differing px  50344  bbox (0, 0, 1200, 900)  peak luma of difference 187
+vector  trigger differing px    200  bbox (8, 0, 19, 20)  peak luma of difference 36
+```
+
+- Gilded, whose Home has no animation, is identical pixel for pixel in all three captures, including the trigger.
+- Veil and Vector differ across the whole frame, because the spiral canvas and the Vector grid animate and each capture catches a different frame. Inside the trigger box, 77 to 86 (Veil) and 200 (Vector) of the 1296 pixels differ. The button is the `ghost` variant and has no background of its own, and its glyph is drawn in the primary color at 70% alpha (`text-primary/70`). So pixels in the box take on the animated background behind them. These differences do not show that the trigger itself moved or changed; the identical DOM box above shows that it did not.
 
 | Theme | Before | After |
 | --- | --- | --- |
@@ -194,7 +272,7 @@ The pixel comparison of the PNG captures:
 
 ### Rejected Picks, Retry and Reload (Round 3)
 
-This run used this branch's production bundle, with Veil saved. Only the private state directory was made read-only (`chmod 0555`). Driver: `scratchpad/961-HOME-r3/scripts/render.cjs` (round 2's driver, unchanged). Excerpt of its log (`scratchpad/961-HOME-r3/render.log`; the `outerHTML` field is cut):
+This run used `4d8ea147`'s production bundle, with Veil saved. Only the private state directory was made read-only (`chmod 0555`). Driver: `scratchpad/961-HOME-r3/scripts/render.cjs` (round 2's driver, unchanged). Excerpt of its log (`scratchpad/961-HOME-r3/render.log`; the `outerHTML` field is cut):
 
 ```
 2026-10-13T15:25:57.198Z home loaded; html class: "dark" prefs sha256: 163b1afa7d2747c8e08b247a5f0eb1903c7920311cbdc1ebeb2e38ff0211e386
@@ -267,4 +345,4 @@ The wizard menu was not driven in the browser. Opening `/new-story` reads the sl
 
 ## Machine Load
 
-Round 2: the one-minute load was 6.6 to 19.3. Round 3: it was 8.1 at the start and 26.8 at the end, when another builder's work overlapped the offline `tests/test_doc_front_matter.py` run. No PostgreSQL run took place in either round, so the load wait did not apply. Every test, build and Chromium command ran under `nice -n 15`.
+Round 2: the one-minute load was 6.6 to 19.3. Round 3: it was 8.1 at the start and 26.8 at the end, when another builder's work overlapped the offline `tests/test_doc_front_matter.py` run. Review fixes: it was 14.6 to 28.7. No PostgreSQL run took place in any round, so the load wait did not apply. Every test, build and Chromium command ran under `nice -n 15`.
