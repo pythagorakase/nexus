@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NarrativePane } from "@/components/nexus/NarrativePane";
 import type { RecapSlotStates } from "@/components/nexus/ReturnRecapCard";
@@ -71,7 +72,7 @@ afterEach(() => vi.unstubAllGlobals());
 function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   currentClient = client;
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  client.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   function Reader() {
     engine = useNarrativeEngine(4);
     const recapState = useState<RecapSlotStates>({});

@@ -66,7 +66,7 @@ beforeEach(() => {
   vi.stubGlobal("WebSocket", class { close() {} });
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://reader.test");
-    if (url.pathname === "/api/settings") return new Response(null, { status: 200 });
+    if (url.pathname === "/health") return json({ status: "healthy", service: "narrative_api", plane: "operator" });
     if (url.pathname === "/api/preferences") return json({ narrative_generation: settings });
     if (url.pathname === "/api/slot/4/state") return json(slotState);
     if (url.pathname === "/api/narrative/latest-chunk") return new Response("", { status: 404 });

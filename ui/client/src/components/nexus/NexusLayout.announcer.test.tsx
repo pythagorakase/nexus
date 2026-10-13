@@ -107,8 +107,16 @@ beforeEach(() => {
     narrative_generation: settings,
   });
   vi.stubGlobal("WebSocket", class { close() {} });
-  // Connectivity probe reachable; developer gate closed.
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 404 })));
+  // Connectivity probe reads /health on the operator plane; every other
+  // request, the developer gate included, answers 404 (gate closed).
+  vi.stubGlobal("fetch", vi.fn(async (input: unknown) =>
+    String(input) === "/health"
+      ? {
+          ok: true,
+          status: 200,
+          json: async () => ({ status: "healthy", service: "narrative_api", plane: "operator" }),
+        }
+      : { ok: true, status: 404 }));
 });
 afterEach(() => vi.unstubAllGlobals());
 
