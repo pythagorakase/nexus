@@ -550,6 +550,11 @@ async def test_transition_rejects_missing_diegetic_timestamp(monkeypatch) -> Non
         "read_cache",
         lambda _dbname: CompleteCacheWithoutTimestamp(),
     )
+    # The genesis claim and ledger live in the slot database; only the route's
+    # own prepare() guards are under test here, so no database is opened.
+    monkeypatch.setattr(
+        wizard_chat, "run_genesis_transition", lambda slot, prepare: prepare()
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await wizard_chat.transition_to_narrative_endpoint(TransitionRequest(slot=5))

@@ -501,7 +501,10 @@ def test_skipped_run_reports_reused_derivation_in_direct_and_ledger_answers(
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config_path))
     dbname, _ = staged
     _confirm_staged_world(dbname)
-    assert load_settings().wizard.trait_inputs.derive_at_transition
+    overridden = load_settings()
+    # The override this test depends on: Retrograde is off, derivation is on.
+    assert overridden.orrery is not None and overridden.orrery.enabled is False
+    assert overridden.wizard.trait_inputs.derive_at_transition
 
     def first_derivation(*args: Any, **kwargs: Any) -> None:
         raise ValueError("capture skip fingerprint")

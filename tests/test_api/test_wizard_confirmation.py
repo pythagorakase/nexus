@@ -219,6 +219,11 @@ async def test_final_transition_cannot_bypass_artifact_acceptance(
     setattr(cache, unconfirmed, False)
     monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
     monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
+    # The genesis claim and ledger live in the slot database; only the route's
+    # own prepare() guards are under test here, so no database is opened.
+    monkeypatch.setattr(
+        wizard_chat, "run_genesis_transition", lambda slot, prepare: prepare()
+    )
     with pytest.raises(HTTPException) as caught:
         await wizard_chat.transition_to_narrative_endpoint(TransitionRequest(slot=4))
     assert caught.value.status_code == 409

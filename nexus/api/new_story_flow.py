@@ -406,6 +406,26 @@ def _validate_genesis_output(stage: str, output: Any, run: str) -> Any:
     return output
 
 
+def _derivation_outcome(output: Any, run: str) -> dict[str, Any] | None:
+    """Read only the saved derivation ``outcome`` that a completed answer reports.
+
+    A committed world never calls the deriver again, so its saved trait
+    inputs are not validated against the current contract here.
+    """
+    if not isinstance(output, dict) or "outcome" not in output:
+        raise GenesisStageOutputInvalid(
+            f"Saved derivation output of genesis run {run} no longer validates: "
+            "expected an outcome"
+        )
+    outcome = output["outcome"]
+    if outcome is not None and not isinstance(outcome, dict):
+        raise GenesisStageOutputInvalid(
+            f"Saved derivation output of genesis run {run} no longer validates: "
+            "outcome must be a dict or None"
+        )
+    return outcome
+
+
 def reusable_genesis_outputs(
     prior: GenesisRunRecord | None, fingerprint: str
 ) -> dict[str, Any]:
@@ -812,8 +832,9 @@ def transition_result_from_ledger(slot: int, run: str) -> dict[str, Any]:
     derivation = record.stages.get("derivation")
     trait_inputs: dict[str, Any] = {"derived": False}
     if derivation is not None and derivation.output is not None:
-        _validate_genesis_output("derivation", derivation.output, record.run)
-        trait_inputs = derivation.output["outcome"] or trait_inputs
+        trait_inputs = _derivation_outcome(derivation.output, record.run) or (
+            trait_inputs
+        )
     return {
         "character_id": row[0],
         "place_id": row[1],
@@ -844,12 +865,15 @@ def resume_committed_genesis_run(slot: int, prior: GenesisRunRecord) -> dict[str
         persistence = prior.stages.get("persistence")
         output = None if persistence is None else persistence.output
         output = _validate_genesis_output("persistence", output, prior.run)
+        # The world is committed and no generator runs again, so only what
+        # this resume reads is validated: the persistence output and the
+        # derivation outcome the answer reports. The packet, seed-candidate
+        # and expansion rows are copied verbatim; a contract that tightened
+        # since they were saved cannot block finishing the embedding.
+        derivation = prior.stages.get("derivation")
+        if derivation is not None and derivation.output is not None:
+            _derivation_outcome(derivation.output, prior.run)
         stages = (*_REUSABLE_GENESIS_STAGES, "persistence")
-        # Validate the full saved set before copying any row or doing embedding.
-        for stage in stages:
-            saved = prior.stages.get(stage)
-            if saved is not None and saved.output is not None:
-                _validate_genesis_output(stage, saved.output, prior.run)
         for stage in stages:
             saved = prior.stages.get(stage)
             if saved is not None and saved.output is not None:
@@ -912,6 +936,36 @@ def _joined_genesis_result(
     return None
 
 
+def _committed_genesis_run_to_resume(slot: int) -> GenesisRunRecord | None:
+    """Find the newest failed run whose world committed and is not yet finished.
+
+    The latest run is that run itself, or a later post-commit resume that
+    failed before it copied the persistence output (an invalid saved output, a
+    database error, or a gateway stopped mid-copy). A later ``done`` run means
+    the world was finished. A later run with another non-NULL fingerprint is
+    a fresh build from new wizard inputs, never a resume of the old world.
+    """
+    from nexus.agents.orrery.retrograde_orchestrator import load_genesis_run
+    from nexus.api.db_pool import get_connection
+
+    with get_connection(slot_dbname(slot)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT r.run_id FROM genesis_runs r "
+            "JOIN genesis_run_stages s ON s.run_id = r.run_id "
+            "AND s.stage = 'persistence' AND s.output IS NOT NULL "
+            "WHERE r.status = 'failed' AND NOT EXISTS ("
+            "SELECT 1 FROM genesis_runs later "
+            "WHERE later.started_at > r.started_at AND (later.status = 'done' "
+            "OR later.input_fingerprint IS DISTINCT FROM r.input_fingerprint "
+            "AND later.input_fingerprint IS NOT NULL)) "
+            "ORDER BY r.started_at DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return load_genesis_run(slot, str(row[0]))
+
+
 def _own_transition(
     slot: int,
     prepare: Callable[[], tuple[TransitionData, Optional[WeirdLevel]]],
@@ -926,9 +980,9 @@ def _own_transition(
         record_genesis_failure(slot, latest.run, GENESIS_RUN_INTERRUPTED)
         latest = load_genesis_run(slot, latest.run)
     if latest is not None and latest.status == "failed":
-        persistence = latest.stages.get("persistence")
-        if persistence is not None and persistence.output is not None:
-            return resume_committed_genesis_run(slot, latest)
+        committed = _committed_genesis_run_to_resume(slot)
+        if committed is not None:
+            return resume_committed_genesis_run(slot, committed)
     data, level = prepare()
     return perform_transition_with_retrograde(slot, data, weird_level=level)
 
