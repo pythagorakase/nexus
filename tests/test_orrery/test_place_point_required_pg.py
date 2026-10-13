@@ -8,7 +8,7 @@ from typing import Iterator
 from psycopg2.errors import NotNullViolation
 import pytest
 
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import connect, disposable_slot_database, seed_zone
 
 pytestmark = pytest.mark.requires_postgres
