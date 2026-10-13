@@ -118,7 +118,7 @@ def _moved_imports(tree: ast.Module, *, named_imports: bool) -> list[int]:
 
 def test_runtime_imports_no_moved_script_module() -> None:
     """Fails if any runtime path, including a lazy import, retains a wrapper."""
-    findings = []
+    findings: list[str] = []
     for path in sorted((ROOT / "nexus").rglob("*.py")):
         findings.extend(
             f"{path.relative_to(ROOT)}:{line}"
@@ -137,7 +137,7 @@ def test_no_tracked_file_binds_a_wrapper_module() -> None:
         check=True,
         timeout=30,
     ).stdout.split("\0")
-    findings = []
+    findings: list[str] = []
     for relative in tracked:
         if not relative.endswith(".py") or relative in WRAPPER_PATHS:
             continue
