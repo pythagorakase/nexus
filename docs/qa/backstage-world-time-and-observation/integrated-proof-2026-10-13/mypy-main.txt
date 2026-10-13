@@ -1,0 +1,13 @@
+nexus/agents/orrery/backstage.py:280: error: Unexpected keyword argument "cursor_factory" for "cursor" of "PoolProxiedConnection"  [call-arg]
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/sqlalchemy/pool/base.py:1078: note: "cursor" of "PoolProxiedConnection" defined here
+nexus/agents/orrery/backstage.py:280: error: Item "DBAPICursor" of "Any | DBAPICursor" has no attribute "__enter__"  [union-attr]
+nexus/agents/orrery/backstage.py:280: error: Item "DBAPICursor" of "Any | DBAPICursor" has no attribute "__exit__"  [union-attr]
+nexus/agents/orrery/backstage.py:310: error: Argument "seat" to "BackstageLetter" has incompatible type "str"; expected "Literal['writer', 'gaia', 'single_pass']"  [arg-type]
+nexus/agents/orrery/backstage.py:345: error: Argument "kind" to "BackstageWrite" has incompatible type "Any | str"; expected "Literal['character', 'relation', 'place', 'faction']"  [arg-type]
+nexus/agents/orrery/backstage.py:590: error: List comprehension has incompatible type List[dict[str, Any]]; expected List[RowMapping]  [misc]
+nexus/agents/orrery/backstage.py:601: error: No overload variant of "get" of "dict" matches argument type "str"  [call-overload]
+nexus/agents/orrery/backstage.py:601: note: Possible overload variants:
+nexus/agents/orrery/backstage.py:601: note:     def get(self, Never, /) -> None
+nexus/agents/orrery/backstage.py:601: note:     def get(self, Never, Never, /) -> Never
+nexus/agents/orrery/backstage.py:601: note:     def [_T] get(self, Never, _T, /) -> _T
+Found 7 errors in 1 file (checked 3 source files)

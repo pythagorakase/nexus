@@ -1,0 +1,43 @@
+18:04  up 6 days,  4:44, 5 users, load averages: 11.39 14.46 13.61
+..............ssssssssssssss............................................ [  7%]
+...................ss...............s..............sssssssssssssssssssss [ 15%]
+sssssssssssssssssssssssssssssss.....s....s..........ss..s..............s [ 23%]
+...sssssssssss........................................s................. [ 30%]
+............s..sssssssssss.......................ss..................... [ 38%]
+...............................sss.................ss.....ssssss........ [ 46%]
+.......................................................s.ss............. [ 53%]
+........................................................................ [ 61%]
+.......................s.....s.ssssssssssssssssssssssss..ssssssss....... [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 84%]
+..........s.........ss...............................sssssssss.......... [ 92%]
+........................................................................ [ 99%]
+...                                                                      [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_memnon_cross_encoder_artifact.py::test_qwen3_loads_its_local_folder_and_scores
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/tokenization_utils_base.py:2718: UserWarning: `max_length` is ignored when `padding`=`True` and there is no truncation strategy. To pad to max length, use `padding='max_length'`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+778 passed, 161 skipped, 8 warnings in 200.63s (0:03:20)
+EXIT=0

@@ -1,0 +1,82 @@
+18:10  up 6 days,  4:50, 5 users, load averages: 11.38 13.40 13.57
+ssssssssssssssssssssssss..................ss............................ [  4%]
+.......sssssssssssssssssssss......sssssssssssssssssss...ssssss.......... [  9%]
+....ss.........................sss...s..sss......s..ssssssssssssssssss.. [ 13%]
+.............sss..........................................sss........... [ 18%]
+...............sssss.....sssssssss.......F.............................. [ 22%]
+.........................sssssssssssssssssss.sssssssssssss.............. [ 27%]
+........................................................................ [ 31%]
+....................s...............................ssssssssssssssssssss [ 36%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 41%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 45%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 50%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 54%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 59%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 63%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 68%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss........ [ 73%]
+....ssssssssss..s.........ss.....ssssss...................ssssssssssssss [ 77%]
+ssssssssssssssssssssssssssss............................................ [ 82%]
+.ssssssss...........................sssssssssssssssssssss............... [ 86%]
+........................................................................ [ 91%]
+...sss....sss........................................................... [ 95%]
+.............................................sssssssssssssssssssss       [100%]
+=================================== FAILURES ===================================
+_________ test_epistemics_rejects_event_type_without_birth_role_policy _________
+
+    def test_epistemics_rejects_event_type_without_birth_role_policy() -> None:
+        """Known vocabulary cannot opt into claims without an audience policy."""
+    
+        with pytest.raises(
+            ValidationError,
+            match="without birth-role policies.*ate",
+        ):
+>           OrreryEpistemicsSettings(claim_event_types=["ate"])
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for OrreryEpistemicsSettings
+E           claim_event_types
+E             Value error, claim_event_types contains event types emitted by background branches: ['ate'] [type=value_error, input_value=['ate'], input_type=list]
+E               For further information visit https://errors.pydantic.dev/2.11/v/value_error
+
+tests/test_orrery/test_config.py:228: ValidationError
+
+During handling of the above exception, another exception occurred:
+
+    def test_epistemics_rejects_event_type_without_birth_role_policy() -> None:
+        """Known vocabulary cannot opt into claims without an audience policy."""
+    
+>       with pytest.raises(
+            ValidationError,
+            match="without birth-role policies.*ate",
+        ):
+E       AssertionError: Regex pattern did not match.
+E        Regex: 'without birth-role policies.*ate'
+E        Input: "1 validation error for OrreryEpistemicsSettings\nclaim_event_types\n  Value error, claim_event_types contains event types emitted by background branches: ['ate'] [type=value_error, input_value=['ate'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error"
+
+tests/test_orrery/test_config.py:224: AssertionError
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_config.py::test_epistemics_rejects_event_type_without_birth_role_policy
+1 failed, 719 passed, 858 skipped, 7 warnings in 7.59s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+EXIT=1

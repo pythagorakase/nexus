@@ -1,0 +1,38 @@
+
+> nexus-ui@1.0.0 test
+> vitest run TopBar
+
+
+ RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/fix-ui-b/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ❯ src/components/nexus/TopBar.test.tsx (18 tests | 1 failed) 109ms
+   × TopBar generation announcer > clears the region after the configured hold 8ms
+     → expect(element).toBeEmptyDOMElement()
+
+Received:
+  "Generation complete"
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/nexus/TopBar.test.tsx > TopBar generation announcer > clears the region after the configured hold
+Error: expect(element).toBeEmptyDOMElement()
+
+Received:
+  "Generation complete"
+ ❯ src/components/nexus/TopBar.test.tsx:422:27
+    420|       setStatus("READY");
+    421|       act(() => vi.advanceTimersByTime(4321));
+    422|       expect(announcer()).toBeEmptyDOMElement();
+       |                           ^
+    423|       setStatus("TRANSMITTING");
+    424|       expect(announcer()).toHaveTextContent("Generation started");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 passed (18)
+   Start at  18:12:20
+   Duration  523ms (transform 32ms, setup 26ms, collect 83ms, tests 109ms, environment 152ms, prepare 33ms)
+
+EXIT=1
