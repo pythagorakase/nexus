@@ -215,11 +215,19 @@ def test_player_projection_keeps_reading_and_play_routes(
 def test_health_reports_the_serving_plane(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: bool
 ) -> None:
-    """One shared ``/health`` route reports the plane of the app serving it."""
+    """One shared ``/health`` route reports the plane of the app serving it.
+
+    Both projections exist before any request, so a plane kept in one shared
+    place (a module global, the source app's state) answers every request
+    with the last declaration and fails the player case.
+    """
     gateway = _gateway(tmp_path, monkeypatch, built=built)
-    player = TestClient(build_player_app(gateway)).get("/health")
-    operator = TestClient(build_operator_app(gateway)).get("/health")
-    unprojected = TestClient(narrative.app).get("/health")
+    player_app = build_player_app(gateway)
+    operator_app = build_operator_app(gateway)
+    player, operator, unprojected = (
+        TestClient(app).get("/health")
+        for app in (player_app, operator_app, narrative.app)
+    )
 
     for response in (player, operator, unprojected):
         assert response.status_code == 200, response.text
