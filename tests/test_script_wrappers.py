@@ -83,6 +83,17 @@ def test_wrapper_reexports_every_defined_name(
         ),
     }
     wrapper, module = modules[wrapper_name], modules[module_name]
+    wrapper_tree = ast.parse(
+        (ROOT / (wrapper_name.replace(".", "/") + ".py")).read_text()
+    )
+    reexports = [
+        node
+        for node in ast.walk(wrapper_tree)
+        if isinstance(node, ast.ImportFrom) and node.module == module_name
+    ]
+    assert len(reexports) == 1, [node.lineno for node in reexports]
+    imported = [alias.asname or alias.name for alias in reexports[0].names]
+    assert sorted(imported) == sorted(expected)
     assert wrapper.__all__ == sorted(expected)
     for name in expected:
         assert getattr(wrapper, name) is getattr(module, name), name
