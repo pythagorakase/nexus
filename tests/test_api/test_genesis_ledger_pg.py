@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -40,6 +41,7 @@ from nexus.api.wizard_chat import (
     transition_to_narrative_endpoint,
 )
 from fastapi import HTTPException
+from tests.genesis_owner_child import BOUNDARY_TARGETS
 from tests.pg_fixtures import connect, routed_slot_environment
 from tests.settings_helpers import settings_with
 from tests.test_orrery.test_retrograde_wizard_live import stage_fixture_world
@@ -501,7 +503,10 @@ def test_skipped_run_reports_reused_derivation_in_direct_and_ledger_answers(
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config_path))
     dbname, _ = staged
     _confirm_staged_world(dbname)
-    assert load_settings().wizard.trait_inputs.derive_at_transition
+    overridden = load_settings()
+    # The override this test depends on: Retrograde is off, derivation is on.
+    assert overridden.orrery is not None and overridden.orrery.enabled is False
+    assert overridden.wizard.trait_inputs.derive_at_transition
 
     def first_derivation(*args: Any, **kwargs: Any) -> None:
         raise ValueError("capture skip fingerprint")
@@ -542,3 +547,508 @@ def test_skipped_run_reports_reused_derivation_in_direct_and_ledger_answers(
     completed = load_genesis_run(4, answer.run)
     assert completed is not None and completed.status == "done"
     assert completed.stages["derivation"].detail["reused_from"] == seeded
+
+
+# -- Phase 2: replay of the real captured genesis bundle ----------------------
+#
+# tests/fixtures/genesis_776_real_bundle.json holds the four stage outputs one
+# paid genesis run saved (tests/test_api/test_genesis_resume_live.py). Every
+# provider boundary raises AssertionError("<stage> provider called") unless a
+# test says otherwise; persistence and embedding run for real, embedding with
+# the configured MEMNON models as tests/test_orrery/test_retrograde_embedding_pg.py
+# does.
+
+CAPTURE_PATH = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "genesis_776_real_bundle.json"
+)
+CAPTURED_STAGES = ("derivation", "packet", "seed_candidates", "expansion")
+# Proof parameters, not runtime settings: how long a held boundary, a child
+# owner or a full persisted run may take on a loaded machine.
+HOLD_SECONDS = 60
+CHILD_SECONDS = 120
+RUN_SECONDS = 420
+
+
+class Boundaries:
+    """Replace the four provider boundaries and record every call."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.monkeypatch = monkeypatch
+        self.calls: list[str] = []
+        self._lock = threading.Lock()
+        for stage in CAPTURED_STAGES:
+            self.set(stage, self._refuse(stage))
+
+    @staticmethod
+    def _refuse(stage: str) -> Callable[..., Any]:
+        def refuse(*args: Any, **kwargs: Any) -> None:
+            raise AssertionError(f"{stage} provider called")
+
+        return refuse
+
+    def set(self, stage: str, replacement: Callable[..., Any]) -> None:
+        """Route ``stage``'s boundary to ``replacement``, recording each call."""
+
+        def recorded(*args: Any, **kwargs: Any) -> Any:
+            with self._lock:
+                self.calls.append(stage)
+            return replacement(*args, **kwargs)
+
+        self.monkeypatch.setattr(BOUNDARY_TARGETS[stage], recorded)
+
+
+@pytest.fixture
+def captured() -> dict[str, Any]:
+    """The real bundle the live probe captured."""
+    capture: dict[str, Any] = json.loads(CAPTURE_PATH.read_text())
+    assert set(capture["outputs"]) == set(CAPTURED_STAGES)
+    return capture
+
+
+@pytest.fixture
+def fingerprinted(
+    staged: tuple[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> tuple[str, str]:
+    """Confirm the staged world and read the production fingerprint F.
+
+    The first POST's derivation boundary raises, so its failed run carries the
+    fingerprint the route computes for this world; seeded runs copy it.
+    """
+    dbname, _ = staged
+    _confirm_staged_world(dbname)
+
+    def stop_derivation(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("fingerprint probe")
+
+    monkeypatch.setattr(BOUNDARY_TARGETS["derivation"], stop_derivation)
+    with pytest.raises(HTTPException, match="fingerprint probe"):
+        _post()
+    first = load_genesis_run(4)
+    assert first is not None and first.input_fingerprint is not None
+    return dbname, first.input_fingerprint
+
+
+def _post() -> Any:
+    return asyncio.run(transition_to_narrative_endpoint(TransitionRequest(slot=4)))
+
+
+def _seed_capture_run(
+    fingerprint: str,
+    capture: dict[str, Any],
+    stages: tuple[str, ...],
+    *,
+    error: str = "ValueError: seeded failure",
+    open_persistence: bool = False,
+) -> str:
+    """Seed a failed run through the production writers from the capture."""
+    run = start_genesis_run(4)
+    record_genesis_input_fingerprint(4, run, fingerprint)
+    for stage in stages:
+        record_retrograde_progress(4, run, stage, capture["details"][stage])
+        record_genesis_stage_output(4, run, stage, capture["outputs"][stage])
+    if open_persistence:
+        record_retrograde_progress(4, run, "persistence", {})
+    record_genesis_failure(4, run, error)
+    return run
+
+
+def _runs_after(dbname: str, seeded: str) -> list[str]:
+    """Run ids (hex) started after ``seeded``, oldest first."""
+    rows = _rows_query(
+        dbname,
+        "SELECT run_id::text AS run_id FROM genesis_runs WHERE started_at > "
+        "(SELECT started_at FROM genesis_runs WHERE run_id = %s::uuid) "
+        "ORDER BY started_at",
+        (seeded,),
+    )
+    return [uuid.UUID(row["run_id"]).hex for row in rows]
+
+
+def _rows_query(dbname: str, sql: str, params: Any = None) -> list[dict[str, Any]]:
+    with closing(connect(dbname, cursor_factory=RealDictCursor)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return list(cur.fetchall())
+
+
+def _committed_summary_ids(dbname: str) -> list[int]:
+    return [
+        int(row["id"])
+        for row in _rows_query(
+            dbname, "SELECT id FROM retrograde_summaries ORDER BY id"
+        )
+    ]
+
+
+def test_retry_resumes_saved_outputs(
+    fingerprinted: tuple[str, str],
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A matching failed run's four saved outputs replace every generator."""
+    dbname, fingerprint = fingerprinted
+    boundaries = Boundaries(monkeypatch)
+    seeded = _seed_capture_run(fingerprint, captured, CAPTURED_STAGES)
+    answer = _post()
+    assert boundaries.calls == []
+    assert answer.retrograde["reused_stages"] == list(CAPTURED_STAGES)
+    [history] = _rows_query(
+        dbname, "SELECT count(*) AS n FROM world_events WHERE source = 'retrograde'"
+    )
+    assert history["n"] > 0
+    record = load_genesis_run(4, answer.run)
+    assert record is not None and record.status == "done"
+    for stage in CAPTURED_STAGES:
+        row = record.stages[stage]
+        assert row.detail["reused_from"] == seeded
+        assert row.output == captured["outputs"][stage]
+    assert answer.retrograde["embedded_summary_ids"] == _committed_summary_ids(dbname)
+
+
+@pytest.mark.parametrize("change", ["weird_level", "slot_model"])
+def test_changed_input_rebuilds_the_run(
+    fingerprinted: tuple[str, str],
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+) -> None:
+    """Any changed whole-run input rebuilds every stage (Decision 776-Q4)."""
+    from nexus.api.narrative_schemas import WeirdLevel
+    from nexus.api.new_story_cache import read_cache, write_weird_level
+    from nexus.api.save_slots import get_slot_model
+    from nexus.config import load_settings
+
+    dbname, fingerprint = fingerprinted
+    boundaries = Boundaries(monkeypatch)
+    seeded = _seed_capture_run(fingerprint, captured, CAPTURED_STAGES)
+    if change == "weird_level":
+        cache = read_cache(dbname)
+        assert cache is not None
+        levels: tuple[WeirdLevel, ...] = ("low", "medium", "high")
+        level = next(level for level in levels if level != cache.weird_level)
+        write_weird_level(dbname, level)
+    else:
+        current = get_slot_model(4, dbname=dbname)
+        other = next(
+            entry.id
+            for provider, config in load_settings().global_.model.api_models.items()
+            if provider != "test"
+            for entry in config.models
+            if entry.id != current and "wizard.fallback_model" in entry.uses
+        )
+        upsert_slot(4, model=other, dbname=dbname)
+
+    def rebuilt(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("rebuilt")
+
+    boundaries.set("derivation", rebuilt)
+    with pytest.raises(HTTPException) as raised:
+        _post()
+    assert raised.value.status_code == 400 and raised.value.detail == "rebuilt"
+    assert boundaries.calls == ["derivation"]
+    [rebuild] = _runs_after(dbname, seeded)
+    record = load_genesis_run(4, rebuild)
+    assert record is not None and record.input_fingerprint != fingerprint
+    assert all("reused_from" not in row.detail for row in record.stages.values())
+
+
+def test_repeated_post_joins_the_running_run(
+    fingerprinted: tuple[str, str],
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second POST while a run holds the claim joins it (Decision 776-Q5)."""
+    from contextlib import contextmanager
+
+    from nexus.agents.orrery import retrograde_orchestrator
+    from tests.genesis_owner_child import capture_boundaries
+
+    dbname, fingerprint = fingerprinted
+    boundaries = Boundaries(monkeypatch)
+    replay = capture_boundaries(captured)
+    # A second owner would need these; the joiner must never call them.
+    for stage in ("derivation", "packet", "seed_candidates"):
+        boundaries.set(stage, replay[stage])
+    release, joiner_lost = threading.Event(), threading.Event()
+
+    def held_expansion(**kwargs: Any) -> Any:
+        if not release.wait(2 * HOLD_SECONDS):
+            raise RuntimeError("expansion release timed out")
+        return replay["expansion"](**kwargs)
+
+    boundaries.set("expansion", held_expansion)
+    real_claim = retrograde_orchestrator.genesis_slot_claim
+
+    @contextmanager
+    def observed_claim(slot: int) -> Any:
+        # Only the second POST can find the claim held (the route runs each
+        # POST in an executor thread, so the caller's thread name is lost).
+        with real_claim(slot) as won:
+            if not won:
+                joiner_lost.set()
+            yield won
+
+    monkeypatch.setattr(retrograde_orchestrator, "genesis_slot_claim", observed_claim)
+    seeded = _seed_capture_run(
+        fingerprint, captured, ("derivation", "packet", "seed_candidates")
+    )
+    answers: dict[str, Any] = {}
+
+    def post(name: str) -> None:
+        try:
+            answers[name] = _post()
+        except Exception as exc:
+            answers[name] = exc
+
+    first = threading.Thread(target=post, args=("first",), name="first")
+    second = threading.Thread(target=post, args=("second",), name="second")
+    first.start()
+    try:
+        deadline = time.monotonic() + HOLD_SECONDS
+        while time.monotonic() < deadline:
+            latest = load_genesis_run(4)
+            if latest is not None and latest.run != seeded:
+                if "expansion" in latest.stages:
+                    break
+            time.sleep(0.05)
+        else:
+            pytest.fail("The owner never reached expansion")
+        second.start()
+        deadline = time.monotonic() + HOLD_SECONDS
+        while time.monotonic() < deadline and not joiner_lost.is_set():
+            if boundaries.calls.count("expansion") > 1:
+                break
+            time.sleep(0.05)
+    finally:
+        release.set()
+        first.join(RUN_SECONDS)
+        if second.is_alive() or second.ident is not None:
+            second.join(RUN_SECONDS)
+    assert not first.is_alive() and not second.is_alive()
+    runs = _runs_after(dbname, seeded)
+    assert (len(runs), boundaries.calls) == (1, ["expansion"]), (runs, answers)
+    assert not isinstance(answers["first"], Exception), answers["first"]
+    assert not isinstance(answers["second"], Exception), answers["second"]
+    assert answers["first"] == answers["second"]
+    assert runs == [answers["first"].run]
+
+
+def test_stopped_owner_run_is_closed_and_resumed(
+    offline_gate_db: str,
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A SIGKILLed owner's run is closed as interrupted; one POST resumes it."""
+    from nexus.agents.orrery.retrograde_orchestrator import GENESIS_RUN_INTERRUPTED
+    from tests.genesis_owner_child import capture_boundaries
+
+    monkeypatch.delenv("NEXUS_RETROGRADE_WIZARD_MODEL", raising=False)
+    capture_file = tmp_path / "capture.json"
+    capture_file.write_text(json.dumps(captured))
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+        **routed_slot_environment(4, offline_gate_db),
+    }
+    with (tmp_path / "owner-child.log").open("w") as output:
+        child = subprocess.Popen(
+            [sys.executable, "-m", "tests.genesis_owner_child", str(capture_file)],
+            env=environment,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + CHILD_SECONDS
+            owner = None
+            while time.monotonic() < deadline and child.poll() is None:
+                owner = load_genesis_run(4)
+                if owner is not None and "expansion" in owner.stages:
+                    break
+                time.sleep(0.05)
+            assert owner is not None and "expansion" in owner.stages, (
+                tmp_path / "owner-child.log"
+            ).read_text()
+            child.send_signal(signal.SIGKILL)
+            child.wait(timeout=CHILD_SECONDS)
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=CHILD_SECONDS)
+    stopped = load_genesis_run(4, owner.run)
+    assert stopped is not None and stopped.status == "running"
+
+    boundaries = Boundaries(monkeypatch)
+    boundaries.set("expansion", capture_boundaries(captured)["expansion"])
+    answers: dict[str, Any] = {}
+
+    def post(name: str) -> None:
+        try:
+            answers[name] = _post()
+        except Exception as exc:
+            answers[name] = exc
+
+    threads = [
+        threading.Thread(target=post, args=(name,), name=name)
+        for name in ("one", "two")
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(RUN_SECONDS)
+    assert not any(thread.is_alive() for thread in threads)
+    assert not isinstance(answers["one"], Exception), answers["one"]
+    assert not isinstance(answers["two"], Exception), answers["two"]
+    assert answers["one"] == answers["two"]
+    closed = load_genesis_run(4, owner.run)
+    assert closed is not None
+    assert (closed.status, closed.error) == ("failed", GENESIS_RUN_INTERRUPTED)
+    [resumed] = _runs_after(offline_gate_db, owner.run)
+    assert resumed == answers["one"].run
+    record = load_genesis_run(4, resumed)
+    assert record is not None and record.status == "done"
+    for stage in ("derivation", "packet", "seed_candidates"):
+        assert record.stages[stage].detail["reused_from"] == owner.run
+    assert "reused_from" not in record.stages["expansion"].detail
+    assert boundaries.calls == ["expansion"]
+
+
+def test_blocked_persistence_retry_calls_expansion_again(
+    fingerprinted: tuple[str, str],
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A plan whose persistence was blocked is regenerated, never reused."""
+    dbname, fingerprint = fingerprinted
+    boundaries = Boundaries(monkeypatch)
+    seeded = _seed_capture_run(
+        fingerprint,
+        captured,
+        CAPTURED_STAGES,
+        error="RetrogradePersistenceBlockedError: seeded block",
+        open_persistence=True,
+    )
+
+    def rebuilt(**kwargs: Any) -> None:
+        raise ValueError("expansion rebuilt")
+
+    boundaries.set("expansion", rebuilt)
+    with pytest.raises(HTTPException) as raised:
+        _post()
+    assert raised.value.status_code == 400
+    assert raised.value.detail == "expansion rebuilt"
+    assert boundaries.calls == ["expansion"]
+    [retry] = _runs_after(dbname, seeded)
+    record = load_genesis_run(4, retry)
+    assert record is not None
+    for stage in ("derivation", "packet", "seed_candidates"):
+        assert record.stages[stage].detail["reused_from"] == seeded
+    assert "reused_from" not in record.stages["expansion"].detail
+
+
+def _fail_embedding_after_commit(
+    dbname: str,
+    fingerprint: str,
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> str:
+    """Commit the captured world with the embedder down; return that run."""
+    from nexus.agents.orrery.retrograde_orchestrator import load_genesis_run as load
+    from nexus.api.new_story_cache import read_cache
+
+    seeded = _seed_capture_run(fingerprint, captured, CAPTURED_STAGES)
+    with monkeypatch.context() as down:
+
+        def embedder_down(*args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("embedder down")
+
+        down.setattr(
+            "nexus.agents.orrery.retrograde_embedding.embed_retrograde_summaries",
+            embedder_down,
+        )
+        with pytest.raises(HTTPException) as raised:
+            _post()
+    assert raised.value.status_code == 500
+    assert raised.value.detail == (
+        "Transition failed: embedder down -- Retrograde history is committed but "
+        "not yet embedded; retry the transition to finish it (the wizard's "
+        "Retry, or: nexus continue --slot 4)"
+    )
+    assert read_cache(dbname) is None
+    [committed] = _rows_query(dbname, "SELECT user_character FROM global_variables")
+    assert committed["user_character"] is not None
+    [first] = _runs_after(dbname, seeded)
+    record = load(4, first)
+    assert record is not None and record.status == "failed"
+    assert record.stages["persistence"].output["embedding_pending_summary_ids"]
+    return first
+
+
+def _assert_embedding_finished(dbname: str, answer: Any, committed_run: str) -> None:
+    record = load_genesis_run(4, answer.run)
+    assert record is not None and record.status == "done"
+    assert record.stages["persistence"].detail["reused_from"] == committed_run
+    committed = load_genesis_run(4, committed_run)
+    assert committed is not None
+    pending = committed.stages["persistence"].output["embedding_pending_summary_ids"]
+    assert sorted(record.stages["embedding"].output) == sorted(pending)
+    unstamped = _rows_query(
+        dbname,
+        "SELECT id FROM retrograde_summaries WHERE embedding_generated_at IS NULL",
+    )
+    assert unstamped == []
+    assert sorted(answer.retrograde["embedded_summary_ids"]) == (
+        _committed_summary_ids(dbname)
+    )
+
+
+def test_retry_after_embedding_failure_completes_from_the_run(
+    fingerprinted: tuple[str, str],
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The committed world's pending embedding finishes without the cache."""
+    dbname, fingerprint = fingerprinted
+    boundaries = Boundaries(monkeypatch)
+    committed_run = _fail_embedding_after_commit(
+        dbname, fingerprint, captured, monkeypatch
+    )
+    answer = _post()
+    assert boundaries.calls == []
+    assert answer.retrograde["reused_stages"] == [*CAPTURED_STAGES, "persistence"]
+    _assert_embedding_finished(dbname, answer, committed_run)
+
+
+def test_resume_that_failed_before_copying_persistence_still_finishes(
+    fingerprinted: tuple[str, str],
+    captured: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A resume that stopped before its persistence copy keeps its anchor."""
+    from nexus.api import new_story_flow
+
+    dbname, fingerprint = fingerprinted
+    boundaries = Boundaries(monkeypatch)
+    committed_run = _fail_embedding_after_commit(
+        dbname, fingerprint, captured, monkeypatch
+    )
+    real_copy = new_story_flow._reuse_genesis_stage
+
+    with monkeypatch.context() as broken:
+
+        def copy_interrupted(slot: int, run: str, prior: Any, stage: str) -> None:
+            if stage == "packet":
+                raise RuntimeError("copy interrupted")
+            real_copy(slot, run, prior, stage)
+
+        broken.setattr(new_story_flow, "_reuse_genesis_stage", copy_interrupted)
+        with pytest.raises(HTTPException) as raised:
+            _post()
+    assert raised.value.status_code == 500
+    assert "copy interrupted" in raised.value.detail
+    stranded = load_genesis_run(4)
+    assert stranded is not None and stranded.run != committed_run
+    assert stranded.status == "failed" and "persistence" not in stranded.stages
+    answer = _post()
+    assert boundaries.calls == []
+    _assert_embedding_finished(dbname, answer, committed_run)

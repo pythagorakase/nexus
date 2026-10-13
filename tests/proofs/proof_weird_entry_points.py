@@ -64,7 +64,11 @@ GATEWAY_START_SECONDS = 30
 GATEWAY_STOP_SECONDS = 60
 UI_WAIT_MS = 60_000
 TRANSITION_WAIT_SECONDS = 120
-SKIPPED_RETROGRADE = {"enabled": False, "skip_reason": "mock_wizard_model"}
+SKIPPED_RETROGRADE = {
+    "enabled": False,
+    "skip_reason": "mock_wizard_model",
+    "reused_stages": [],
+}
 RECORDED_ROUTES = frozenset(
     {("PUT", "/api/story/new/weird"), ("POST", "/api/story/new/transition")}
 )

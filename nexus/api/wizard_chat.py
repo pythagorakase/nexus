@@ -55,6 +55,7 @@ from nexus.api.new_story_schemas import (
     StorySeed,
     TraitSelection,
     TraitRationales,
+    TransitionData,
 )
 from nexus.api.pydantic_ai_utils import (
     build_message_history,
@@ -833,7 +834,7 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
     require_writable_slot(request.slot)
     dbname = slot_dbname(request.slot)
 
-    def prepare():
+    def prepare() -> tuple[TransitionData, Optional[WeirdLevel]]:
         # Read the setup cache
         cache = read_cache(dbname)
         if not cache:
