@@ -88,8 +88,8 @@ poetry run python scripts/qa_shift/qa_shift.py finish temp/qa_night_... --exit-c
 
 `begin` creates the archive, captures the UTC-day baseline, copies the report
 and ledger templates, and generates an isolated runtime config. That config
-pins both the default and Gaia OpenAI roles to the configured target model and
-sets the slot default to the same model. It never edits `nexus.toml`.
+pins both the default and Gaia OpenAI roles, and the wizard default, to the
+configured target model. It never edits `nexus.toml`.
 
 The ledger is exact for API responses recorded by this NEXUS checkout; it is
 not the OpenAI organization-wide usage meter. Concurrent NEXUS traffic is
