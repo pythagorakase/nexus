@@ -20,7 +20,7 @@ from nexus.config import load_settings
 from nexus.runtime.contract import HOME_ENV, RUNTIME_CONFIG_ENV
 from nexus.runtime.init_plan import build_init_plan, render_plan
 from nexus.runtime.readiness import REGISTRY, CheckSpec, ReadinessContext
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests import pg_fixtures
 
 pytestmark = pytest.mark.requires_postgres
