@@ -1,0 +1,2 @@
+❌ Error validating /Users/pythagor/nexus/.claude/worktrees/fix-803-s1/nexus.toml:
+   No module named 'opentelemetry._events'

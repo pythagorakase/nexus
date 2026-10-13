@@ -1,0 +1,81 @@
+{
+  "checks": [
+    {
+      "depends_on": [],
+      "id": "config.valid",
+      "observed": "/Users/pythagor/nexus/.claude/worktrees/fix-803-s1/nexus.toml (checkout)",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-host",
+        "owner-client",
+        "ci-runner"
+      ]
+    },
+    {
+      "depends_on": [
+        "config.valid"
+      ],
+      "id": "gateway.reachable",
+      "observed": "http://127.0.0.1:8002/runtime/status: [Errno 61] Connection refused",
+      "remediation": "Start the runtime: nexus up",
+      "status": "fail",
+      "targets": [
+        "owner-client"
+      ]
+    },
+    {
+      "depends_on": [
+        "gateway.reachable"
+      ],
+      "id": "gateway.version",
+      "observed": "gateway.reachable failed",
+      "remediation": "Resolve gateway.reachable first.",
+      "status": "skip",
+      "targets": [
+        "owner-client"
+      ]
+    },
+    {
+      "depends_on": [
+        "config.valid"
+      ],
+      "id": "desktop.config",
+      "observed": "/Users/pythagor/nexus/.claude/worktrees/fix-803-s1/ui/src-tauri/nexus.desktop.json (checkout): http://127.0.0.1:8002/runtime/status",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-client"
+      ]
+    },
+    {
+      "depends_on": [
+        "desktop.config",
+        "gateway.reachable"
+      ],
+      "id": "desktop.credentials",
+      "observed": "gateway.reachable failed",
+      "remediation": "Resolve gateway.reachable first.",
+      "status": "skip",
+      "targets": [
+        "owner-client"
+      ]
+    },
+    {
+      "depends_on": [
+        "desktop.config"
+      ],
+      "id": "desktop.runtime_command",
+      "observed": "/Users/pythagor/.local/bin/poetry (via PATH) in /Users/pythagor/nexus/.claude/worktrees/fix-803-s1/ui/src-tauri/../..",
+      "remediation": null,
+      "status": "pass",
+      "targets": [
+        "owner-client"
+      ]
+    }
+  ],
+  "ok": false,
+  "omitted": [],
+  "schema_version": 1,
+  "target": "owner-client"
+}
