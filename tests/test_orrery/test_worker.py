@@ -133,6 +133,8 @@ def _settings() -> Settings:
     return settings_with(
         {
             "orrery.narration": table(OrreryNarrationSettings),
+            # Project milestones must stay at or above the promotion threshold.
+            "orrery.projects.milestone_magnitude": 0.5,
             "orrery.promote": table(
                 OrreryPromoteSettings,
                 {
@@ -306,6 +308,8 @@ def test_promote_pending_resolutions_uses_configured_thresholds() -> None:
     row = dict(_promotion_row(), priority=80, magnitude=0.7)
     settings = settings_with(
         {
+            # Project milestones must stay at or above the promotion threshold.
+            "orrery.projects.milestone_magnitude": 0.9,
             "orrery.promote": table(
                 OrreryPromoteSettings,
                 {
