@@ -9,6 +9,15 @@
 -- setup_endpoints.py:73-79 likewise splits the welcome message from choices.
 -- assets.new_story_creator.thread_id is free text; there is no transcript
 -- table on the pre-150 schema. This table replaces every provider store.
+-- Also at bf229051: the hosted path built an OpenAIProvider client
+-- (conversations.py:22, :109-123); the file store wrote state_dir
+-- wizard_threads (:41-44, created at :444; temp/wizard_threads before 820).
+-- Readers settled unfinished claims at setup_endpoints.py:109-116 and
+-- slot_endpoints.py:45-55, :100-104; the claim machinery was
+-- new_story_cache.py:315-326, :344, :412-427, :709, :719 and :1808-1888.
+-- Dev-mode replies split transcript and choices at wizard_chat.py:648-651.
+-- The thread_id comment (127_schema_documentation.sql:62) read "Wizard
+-- conversation thread identifier stored when the cache is initialized."
 --
 -- Historical read-only survey, 2026-10-07: only save_05 had a hosted conv_
 -- cache, with unconfirmed setting and character, updated 2026-09-23. It had

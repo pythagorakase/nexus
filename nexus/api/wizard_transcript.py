@@ -1,6 +1,6 @@
 """Typed slot-database wizard messages and their player-visible projection."""
 
-from typing import Literal, Mapping, NotRequired, Sequence, TypedDict
+from typing import Literal, NotRequired, Sequence, TypedDict
 
 MessageOrigin = Literal["user", "wizard_control"]
 
@@ -15,7 +15,7 @@ class WizardMessage(TypedDict):
 
 
 def visible_wizard_messages(
-    messages: Sequence[Mapping[str, str]],
+    messages: Sequence[WizardMessage],
 ) -> list[dict[str, str]]:
     """Project chronological history for the player without changing storage."""
     return [

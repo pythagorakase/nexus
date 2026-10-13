@@ -117,7 +117,8 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     Start a new setup conversation for a slot.
 
     - Clears cache in the slot DB
-    - Creates a conversations thread and stores thread_id
+    - Mints a conversation UUID (new_conversation_id) and stores it as thread_id;
+      the slot database holds its transcript
     - Marks slot as active (and clears other actives)
 
     Args:

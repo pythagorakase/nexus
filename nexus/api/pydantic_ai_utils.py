@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, List, Mapping, Optional, Sequence
 
 from openai import AsyncOpenAI
 from pydantic_ai.messages import (
@@ -129,7 +129,7 @@ def build_pydantic_ai_model(model: str) -> Model:
 
 
 def build_message_history(
-    messages: Sequence[Dict[str, Any]],
+    messages: Sequence[Mapping[str, Any]],
 ) -> List[ModelMessage]:
     """
     Convert stored chat history into Pydantic AI message objects.
