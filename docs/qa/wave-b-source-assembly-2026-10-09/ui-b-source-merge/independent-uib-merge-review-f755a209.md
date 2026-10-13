@@ -1,4 +1,4 @@
-# UI-B merge: independent source review
+# UI-B Merge: Independent Source Review
 
 Reviewed immutable merge `f755a209b64cd67f8feaaa774dbcd0679863452b`, tree
 `6571e0ea7100ced95c1c7eb71939b2a1541a05a8`, against first parent `894d8c88`
@@ -43,7 +43,7 @@ are in `independent-uib-reachability-command-f755a209.json`, the matching `.txt`
 and graph `.json`. HEAD and tracked/untracked status were clean before/after.
 No pytest, application import, database read, UI process or heavy gate ran.
 
-## Canonical source closure
+## Canonical Source Closure
 
 The freshly derived declared closure is
 `independent-uib-closure-f755a209.json`:24 documents against main `f073b371`,
