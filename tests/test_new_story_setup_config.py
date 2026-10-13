@@ -13,8 +13,8 @@ from pydantic import ValidationError
 import pytest
 import tomlkit
 
-from nexus.runtime.home import resolve_config_path
 from nexus.maintenance import new_story_setup
+from nexus.runtime.home import resolve_config_path
 
 
 def test_default_slot_model_raises_when_the_configuration_is_invalid(

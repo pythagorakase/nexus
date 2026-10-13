@@ -21,6 +21,7 @@ import pytest
 
 from nexus.api.db_pool import MaintenanceTarget, get_maintenance_connection
 from nexus.api.story_identity import record_fork
+from nexus.maintenance import migrate, new_story_setup
 from nexus.runtime.slot_operations import (
     MaintenanceTargetError,
     SlotOperation,
@@ -31,8 +32,6 @@ from nexus.runtime.slot_operations import (
     sweep_staging,
 )
 from scripts import rebuild_memory_idf
-from nexus.maintenance import migrate
-from nexus.maintenance import new_story_setup
 from tests.pg_fixtures import (
     connect,
     disposable_database,
