@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterator
 
 import pytest
 from psycopg2.extras import RealDictCursor
