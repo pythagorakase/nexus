@@ -28,6 +28,7 @@ Part B (809-S7a):
 - `nexus/maintenance/new_story_setup.py` (where 811-S3a moved the implementation): `_get_default_slot_model` is deleted. `ensure_global_variables` inserts `(TRUE, TRUE, NULL)` and logs `(no model pin)`. `scripts/new_story_setup.py` no longer re-exports the deleted function.
 - `nexus/api/new_story_flow.py`: `resolve_setup_model` and the placeholder block in `start_setup` are deleted, so any non-NULL slot model is a pin. The `read_cache_raw` import is removed and the docstring is updated.
 - `scripts/qa_shift/qa_shift.py`: the key write is removed. The loop that follows it already pins `wizard.default_model`.
+- `scripts/qa_shift/README.md`: the generated config is now described as pinning the default and Gaia OpenAI roles, and the wizard default, to the target model. It no longer claims to set a slot default. Item 13 does not list this file; the edit was applied from a confirmed review finding.
 - `docs/settings_scopes.md`: one sentence is added: "A new or reset slot stores NULL in `model`: no pin."
 - `docs/decisions/0021-killed-c063.md`: `verified_commit` is moved to `f073b371`, because its declared source `qa_shift.py` changed.
 
@@ -112,7 +113,14 @@ $ PYTHONPATH=$PWD $PY -m pytest -q tests/test_api tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 11 failed, 1895 passed, 1518 skipped, 7 warnings in 47.94s
 ```
-All 16 offline failures, and the `test_script_wrappers` failure, also fail on a `claude/wave-b-integration` export, and none of them is in a file this branch changes. The verification file lists their ids and reasons. They include:
+All 16 offline failures also fail on a committed export of `claude/wave-b-integration` at `7eb9a10c`. The `test_script_wrappers` failure, which also appeared in the PostgreSQL extended set, is one of them. None of them is in a file this branch changes. The verification file pastes the full command, which runs the 16 ids plus one control test, and gives each failure's reason. The base tail:
+```
+$ cd <scratch>/809-S3b-resume/base-7eb9a10c && env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider <the 16 ids> tests/test_orrery/test_config.py::test_orrery_settings_load_queue_and_resolution_defaults
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+16 failed, 1 passed, 5 warnings in 2.87s
+```
+The 16 failures are:
 - `test_assembled_writer_and_gaia_requests_are_unchanged` and `test_gaia_prompt_is_concise_and_self_contained`
 - `test_no_tracked_file_binds_a_wrapper_module`: from `test_place_point_required_pg.py:11` and `test_init_plan_pg.py:23`
 - `test_wire_schema_size_and_description_budget`
@@ -129,10 +137,16 @@ FAILED tests/test_api/test_settings_endpoints.py::test_absent_optional_section_i
 ```
 
 Static checks:
-- Black: 18 files unchanged.
-- flake8: 22 on the branch against 24 on the base, with none on a changed line.
-- mypy `--explicit-package-bases`: the per-file counts are equal on the branch and on the base for all 18 files.
-- `check_exception_dispositions.py --baseline-base-ref origin/main`: `OK`.
+`FILES` is the 18 changed Python files the branch keeps. The verification file pastes both full outputs of each command and lists every diagnostic under "Pre-existing Diagnostics" with its base location.
+```
+$ nice -n 15 $PY -m black --check $FILES
+18 files would be left unchanged.
+$ nice -n 15 $PY -m flake8 $FILES      # branch 22, base 24 (on the 7eb9a10c export)
+$ for f in $FILES; do PYTHONPATH=$PWD nice -n 15 $PY -m mypy --explicit-package-bases "$f"; done      # branch 45 errors, base 45
+$ PYTHONPATH=$PWD $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+Every branch diagnostic has a matching base diagnostic with the same file and message, and none is on a changed line. The base's two extra flake8 diagnostics are on lines this branch removed (`nexus/maintenance/new_story_setup.py:125`, the old INSERT) or now uses (`typing.Any` in `test_wizard_model_resolution.py`).
 
 UI:
 - `npm --prefix ui ci`, `run check` and `run build` exited 0.
