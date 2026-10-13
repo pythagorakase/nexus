@@ -1,33 +1,83 @@
 -- Migration 151: Entity IDs on Relationship Tables (issue #836)
 --
 -- Decision 836-Q3 maps the six subtype keys to entities once, preserving the
--- original relationship rows and every existing ledger key/value. The mapping
--- must be sound: refuse missing or reused subtype identities before any DDL.
--- fn_version_relationship_row records NEW for INSERT and OLD otherwise
--- (migrations/115_relationship_write_provenance.sql:52-85). The runner supplies
--- producer migration (scripts/migrate.py:334), so ordinary backfill UPDATEs
--- would otherwise add ledger rows. The wizard reset clears relationship and
--- subtype rows and restarts character IDs without clearing this ledger
--- (nexus/api/new_story_db_mapper.py:577-592). created_at detects reused keys,
--- including DELETE/recreation within one transaction where now() is constant.
--- Checkpoints retain whole rows (nexus/agents/orrery/reconstruction.py:115-126);
--- replay treats absent new entity columns as unknown, not historical NULL.
+-- original relationship rows and every existing ledger key and value. The
+-- mapping must be sound, so the guard below refuses missing or reused subtype
+-- identities before any DDL. File:line citations are against the wave-B
+-- integration tree this migration lands on (a563203a).
 --
--- Historical read-only fleet survey, 2026-10-07 at migration143: character
--- relationships numbered84/84/11/15/0 across save_01..save_05 (NEXUS_template: 0);
--- faction tables were empty. Ledger counts were84/84/176/215/0 (NEXUS_template: 0),
--- all updates under unattributed_pre_115, with sound subtype creation times.
--- save_03/save_04 each had checkpoints1 and28; replay reported no drift and
---106 skipped columns. Current fleet and disposable parity are landing evidence,
--- not assertions made from those historical counts.
+-- What is wrong today:
+--
+-- No relationship table holds an entities.id. character_relationships is
+-- keyed (character1_id, character2_id), faction_relationships
+-- (faction1_id, faction2_id) with CHECK (faction1_id < faction2_id), and
+-- faction_character_relationships (faction_id, character_id). Each of the six
+-- id columns is bigint NOT NULL with a foreign key to characters(id) or
+-- factions(id) and no action clause (the six *_id_fkey constraints, which
+-- stay). characters.entity_id and factions.entity_id are bigint NOT NULL
+-- UNIQUE references to entities(id); factions.id has no default.
+--
+-- fn_version_relationship_row
+-- (migrations/115_relationship_write_provenance.sql:52-85) writes
+-- to_jsonb(NEW) for INSERT and to_jsonb(OLD) otherwise into
+-- relationship_versions.old_row (:76) and raises without
+-- nexus.write_producer (:56, :65). It fires AFTER INSERT, UPDATE and DELETE
+-- on all three tables (:89-99). The runner sets the producer to migration
+-- (nexus/maintenance/migrate.py:333, behind scripts/migrate.py), so an
+-- ordinary backfill UPDATE would write one ledger row per updated row.
+--
+-- The wizard reset deletes the three tables under producer manual
+-- (nexus/api/new_story_db_mapper.py:580-582), then the subtype rows
+-- (:583-584), and restarts characters_id_seq at 1 (:594), all in one
+-- transaction. It never deletes relationship_versions, so its delete rows
+-- name subtype ids that new characters then take. created_at detects such
+-- reused keys, including deletion and re-creation inside one transaction,
+-- where now() is constant.
+--
+-- Ledger readers join old_row subtype ids to the current subtype rows:
+-- nexus/agents/orrery/backstage.py:457-488 and
+-- nexus/agents/orrery/relationship_provenance.py:162-163. Replay keys by
+-- subtype ids (nexus/agents/orrery/replay.py:161-165) and unwinds from
+-- to_jsonb of the live tables (:3250-3288).
+--
+-- Writers name explicit columns and pass no entity id:
+-- nexus/api/trait_compiler.py:1978, nexus/agents/orrery/events.py:4080
+-- (seven more inserts through :4740),
+-- nexus/agents/orrery/retrograde_persistence.py:2522,
+-- nexus/agents/orrery/drift.py:610 and :658,
+-- nexus/api/commit_handler_sync.py:1160 and
+-- scripts/faction_relationship_analyst.py:537, :561, :626, :653. No writer
+-- changes a key column, so the fill trigger below supplies the entity ids.
+-- RelationshipTargetInput already accepts character_entity_id
+-- (nexus/api/trait_compiler_schemas.py:85-87); RelationshipUpdateDelta is
+-- name-first (nexus/agents/logon/skald_wire.py:300-306).
+--
+-- Checkpoints store whole relationship rows
+-- (nexus/agents/orrery/reconstruction.py:115-126). _diff_section compares
+-- every column found in either row (replay.py:3416), so a column absent from
+-- a stored document would read as NULL and drift. The characters.name skip
+-- (:3419-3427) is the precedent; replay now skips an entity-id column absent
+-- from either document the same way (:3428-3434).
+--
+-- Historical read-only fleet survey, 2026-10-07, all at migration 143:
+-- character_relationships held 84/84/11/15/0 rows on save_01..save_05
+-- (NEXUS_template: 0); both faction tables were empty everywhere.
+-- relationship_versions held 84/84/176/215/0 rows (NEXUS_template: 0), all
+-- character_relationships updates under unattributed_pre_115, with sound
+-- subtype creation times. save_03 and save_04 each had checkpoints 1 and 28;
+-- replay reported no drift and 106 skipped columns. Current fleet and
+-- disposable parity are landing evidence
+-- (docs/qa/836-relationship-entity-ids/verification.md), not assertions made
+-- from those historical counts.
 --
 -- Locks: ADD COLUMN and ADD CONSTRAINT hold ACCESS EXCLUSIVE on the three
 -- relationship tables, characters and factions until commit. The historical
--- survey bounded backfill at84 rows and ledger rewrite at215 rows per database;
--- recheck before landing. lock_timeout5s bounds each lock request, not the whole
--- transaction. Apply when no turn is in flight or relevant idle transaction
--- holds a lock. Only the three version triggers are disabled during backfill;
--- an exception rolls back schema, data, trigger state and the runner's stamp.
+-- survey bounded the backfill at 84 rows and the ledger rewrite at 215 rows
+-- per database; recheck before landing. lock_timeout 5s bounds each lock
+-- request, not the whole transaction. Apply when no turn is in flight and no
+-- idle transaction holds a lock on these tables. Only the three version
+-- triggers are disabled during the backfill; an exception rolls back schema,
+-- data, trigger state and the runner's stamp.
 
 SET LOCAL lock_timeout = '5s';
 
