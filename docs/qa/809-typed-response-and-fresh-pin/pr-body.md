@@ -96,16 +96,20 @@ The 2 skips are the `requires_corpus` card-exposure tests (`NEXUS_RUN_CORPUS` un
 
 Item 14 PostgreSQL runs, covering every file that initializes a slot directly:
 - `test_character_experiences_pg.py` after the pin: `28 passed`.
-- The other candidate files and the remaining direct initializers: `82 passed` (with the one failure fixed above), `47 passed`, `23 passed`, and `198 passed` with one failure that is also on the base.
-- Every run printed `dbname audit: owner targets: none` and `secret-store guard: active; nexus-api: denied`.
+- The first run of all six candidate files, before the pin: `1 failed, 82 passed` (the failure is the one fixed above). The five other candidate files, rerun alone at `310229ea`: `55 passed`.
+- The remaining direct initializers: `47 passed`, `23 passed`, and `198 passed` with one failure that is also on the base.
+- Every PostgreSQL run printed `secret-store guard: active; nexus-api: denied` and `dbname audit: owner targets: none`; `verification.md` pastes each run's full command and full tail.
 
 Offline:
 ```
 $ PYTHONPATH=$PWD $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tests/config tests/test_api/test_settings_endpoints.py tests/test_api/test_route_capabilities.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
 300 passed, 1 skipped, 7 warnings in 30.62s
 $ PYTHONPATH=$PWD $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
 5 failed, 3189 passed, 672 skipped, 8 warnings in 648.91s (0:10:48)
 $ PYTHONPATH=$PWD $PY -m pytest -q tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
 11 failed, 1895 passed, 1518 skipped, 7 warnings in 47.94s
 ```
 All 16 offline failures, and the `test_script_wrappers` failure, also fail on a `claude/wave-b-integration` export, and none of them is in a file this branch changes. The verification file lists their ids and reasons. They include:

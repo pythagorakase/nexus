@@ -22,7 +22,7 @@ The order's line numbers came from `364fef4b`; these are the base locations.
 
 - `nexus/api/settings_endpoints.py:56` `_build_settings_meta(...) -> Dict[str, Any]`; `:94` `_build_payload(...) -> Dict[str, Any]`; `:118-119` `@router.get("")` / `async def get_settings() -> Dict[str, Any]`. No Pydantic model declared the response.
 - `ui/client/src/types/settings.ts:3` names the retired Express proxy; `:56` `apex.provider`; `:58` `wizard`; `:62` `lore.token_budget.system_prompt_tokens`; `:65` `memnon`; `:94` `SettingsPatch.wizard_model`; `:88` `Preferences.wizard_model` (kept).
-- `ui/client/src/hooks/useSettings.ts:36-39` the `wizard` projection; `:54` the `wizard_model` cache copy; `:64-67` the `wizard_model` key-status invalidation. `SECRETS_QUERY_KEY` stays imported: `:90` (`useSlotSettingsMutation`) still uses it.
+- `ui/client/src/hooks/useSettings.ts:36-39` the `wizard` projection; `:54` the `wizard_model` cache copy; `:64-67` the `wizard_model` key-status invalidation. `SECRETS_QUERY_KEY` stays imported: `useStorySettingsMutation` (`:90` on the base, `:79` on the branch) still uses it.
 - `nexus/api/preferences_endpoints.py:33` accepts `wizard_model`; `nexus/config/story_model.py:184-185` reads it for the wizard seat (unchanged, Decision 809-Q5).
 - `nexus/config/settings_models.py:35` `MODEL_SELECTION_PATHS` entry; `:346` the field (default `"TEST"`); `:373` the known-ID loop; `:4514` the registry-check tuple.
 - `nexus.toml:14` "TEST supplies the default for new/reset save slots."; `:48` the TEST entry's `uses = ["global.model.default_slot_model"]`.
@@ -145,15 +145,25 @@ dbname audit: owner targets: none
 
 The two skips are `tests/test_orrery/test_card_identity.py::test_card_exposure_rank_joint_and_backstage_parity[False]` and `[True]`, the only `requires_corpus` tests in the set (`NEXUS_RUN_CORPUS` unset).
 
-Item 14 runs (same environment and plugin):
+Item 14 runs. Each block shows the full command and the full summary tail (the pytest warnings section above the guard line is omitted):
+
+Before the fix in `80c4321a`. The failure is `tests/test_orrery/test_character_experiences_pg.py::test_real_commit_forms_verified_seeds_and_boundary_batch` (`tests/test_orrery/test_character_experiences_pg.py:3493: AssertionError: assert 'gpt-6-astra' != 'gpt-6-astra'`):
 
 ```
-$ ... -rs -p tests.dbname_audit tests/test_orrery/test_character_experiences_pg.py tests/test_orrery/test_recall_disclosure_pg.py tests/test_orrery/test_acquisition_scan_pg.py tests/test_orrery/test_experience_enqueue_gin_pg.py tests/test_player_identity_consumers_pg.py tests/test_record_revelation_cli_pg.py
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_orrery/test_character_experiences_pg.py tests/test_orrery/test_recall_disclosure_pg.py tests/test_orrery/test_acquisition_scan_pg.py tests/test_orrery/test_experience_enqueue_gin_pg.py tests/test_player_identity_consumers_pg.py tests/test_record_revelation_cli_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 42 targets: postgres, qa640_wizard_drain_* x3, qa_identity_surface_16223b3a6f, qa_identity_surface_39bf18b908, qa_identity_surface_55f27b8080, qa_identity_surface_9806948139, qa_identity_surface_c4069a35eb, qa_identity_surface_d2e5457d27, qa_identity_surface_fa6c88726e, qa_player_identity_e8130b2712, qa_wt664_*, qa_wt720_*, qa_wt723_*, qa_wt724_experience_* x26, qa_wt724_recall_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 1 failed, 82 passed, 2 warnings in 98.45s (0:01:38)
-(before the fix: test_real_commit_forms_verified_seeds_and_boundary_batch, assert 'gpt-6-astra' != 'gpt-6-astra')
+```
 
-$ ... -rs -p tests.dbname_audit tests/test_orrery/test_character_experiences_pg.py
+After `80c4321a`, the failing file alone:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_orrery/test_character_experiences_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 dbname audit: 30 targets: postgres, qa640_wizard_drain_* x3, qa_wt724_experience_* x26
@@ -161,24 +171,58 @@ dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 28 passed, 2 warnings in 71.04s (0:01:11)
+```
 
-$ ... -rs -p tests.dbname_audit tests/test_commit_choice_presence_pg.py tests/test_orrery/test_geo_reference_pg.py tests/test_story_identity_pg.py tests/test_wizard_opening_presence_pg.py
+The five other candidate files, rerun at `310229ea` (55 passed; with the 28 above this accounts for all 83 tests of the first run):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_orrery/test_recall_disclosure_pg.py tests/test_orrery/test_acquisition_scan_pg.py tests/test_orrery/test_experience_enqueue_gin_pg.py tests/test_player_identity_consumers_pg.py tests/test_record_revelation_cli_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
+dbname audit: 13 targets: postgres, qa_identity_surface_0dba6cc079, qa_identity_surface_5dbcc26608, qa_identity_surface_63a90947b3, qa_identity_surface_783070e7a1, qa_identity_surface_d43a82373a, qa_identity_surface_e7e740b3fd, qa_identity_surface_f191cbef03, qa_player_identity_e67b51087f, qa_wt664_*, qa_wt720_*, qa_wt723_*, qa_wt724_recall_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+55 passed, 2 warnings in 33.34s
+```
+
+Consumers of the slot setup and new-story paths:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_commit_choice_presence_pg.py tests/test_orrery/test_geo_reference_pg.py tests/test_story_identity_pg.py tests/test_wizard_opening_presence_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 59 targets: postgres, qa640_822_backfill_a_*, qa640_822_backfill_b_*, qa640_822_backfill_t_*, qa640_822_clone_*, qa640_822_clone_bare_*, qa640_822_clone_invalid_*, qa640_822_clone_pre146_*, qa640_822_clone_src_*, qa640_822_constraints_*, qa640_822_detach_*, qa640_822_detach_bare_*, qa640_822_detach_src_*, qa640_822_doctor_s_*, qa640_822_doctor_t_*, qa640_822_init_*, qa640_822_migration_*, qa640_822_preflight_a_* x9, qa640_822_preflight_b_* x9, qa640_822_preflight_parent_* x9, qa640_822_reset_*, qa640_822_reset_src_*, qa640_822_transition_*, qa640_840_commit_*, qa640_840_empty_*, qa640_840_fresh_* x2, qa640_840_geo_*, qa655_wizard_139736c488, qa655_wizard_46d714a71c, qa655_wizard_90275767fc, qa655_wizard_b51cabedcf, qa655_wizard_cbea057c43, qa655_wizard_ff03f7c728, qa_wt715_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 47 passed, 4 warnings in 224.63s (0:03:44)
+```
 
-$ ... -rs -p tests.dbname_audit tests/test_rebuild_memory_idf_pg.py tests/test_schema_documentation_pg.py tests/test_slot_operations_pg.py tests/test_slot_operations_journal.py tests/test_database_contract.py tests/test_script_wrappers.py tests/test_slot_routed_entrypoints.py tests/test_scheduler_helpers_routing.py tests/test_schema_ownership.py tests/test_new_story_cli.py
+Slot operations and wrapper checks; the one failure is `tests/test_script_wrappers.py::test_no_tracked_file_binds_a_wrapper_module`, present on the base (see below):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_rebuild_memory_idf_pg.py tests/test_schema_documentation_pg.py tests/test_slot_operations_pg.py tests/test_slot_operations_journal.py tests/test_database_contract.py tests/test_script_wrappers.py tests/test_slot_routed_entrypoints.py tests/test_scheduler_helpers_routing.py tests/test_schema_ownership.py tests/test_new_story_cli.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
+dbname audit: 81 targets: postgres, qa640_1013_absent_*, qa640_1013_idf_* x7, qa640_810s3_ann_* x2, qa640_810s3_ann_high_* x2, qa640_810s3_ann_precheck_* x12, qa640_810s3_assets_*, qa640_810s3_importer_*, qa640_810s3_provider_*, qa640_810s3_regen_*, qa640_810s3_scene_* x2, qa640_810s3_season_*, qa640_823s1_dest_* x14, qa640_823s1_dest_02bebdc7226d_staging_*, qa640_823s1_dest_16ed7c99a20d_staging_*, qa640_823s1_dest_1ad65c9872c9_staging_*, qa640_823s1_dest_341d8277fe09_staging_*, qa640_823s1_dest_882aa781954d_staging_*, qa640_823s1_dest_917e067b2fc8_staging_*, qa640_823s1_dest_9c054b8d3a28_staging_*, qa640_823s1_dest_a172845f4aaf_staging_*, qa640_823s1_dest_b16d07f6c432_staging_*, qa640_823s1_dest_b951aa4367f6_staging_*, qa640_823s1_dest_eb79289d3752_staging_*, qa640_823s1_dest_f6967673c76e_staging_*, qa640_823s1_src_* x14, qa640_823s1_tpl_*, qa640_connection_contract, qa640_docs_refresh_*, qa640_lane_close_*, qa640_raw_url_contract, qa640_schema_docs_* x3, qa885_entrypoints_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:52642 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[1] at local:52675 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[0] at local:52690 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard; two_clusters[1] at local:52693 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard
 dbname audit: owner names admitted on registered clusters: none
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 1 failed, 198 passed, 2 warnings in 233.81s (0:03:53)
-(the failure is tests/test_script_wrappers.py::test_no_tracked_file_binds_a_wrapper_module, pre-existing; see below)
+```
 
-$ ... -rs -p tests.dbname_audit tests/test_api/test_conversations.py tests/test_api/test_wizard_messages_migration_pg.py tests/test_api/test_wizard_model_switch.py tests/test_live_gate_clones_pg.py
+Wizard and live-gate consumers:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_api/test_conversations.py tests/test_api/test_wizard_messages_migration_pg.py tests/test_api/test_wizard_model_switch.py tests/test_live_gate_clones_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
+dbname audit: 25 targets: postgres, qa640_776_hosted_*, qa640_776_uuid_*, qa640_offline_gate_* x16, qa640_test_golden_path_staging_*, qa640_test_issue_600_staging_c_*, qa640_test_issue_601_staging_p_*, qa640_test_live_cycle_seed_rou_*, qa640_test_maturation_enqueue__*, qa640_test_retrograde_wizard_s_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 23 passed, 7 warnings in 65.24s (0:01:05)
 ```
@@ -192,6 +236,8 @@ receipt isolation: checkout and user receipts untouched
 300 passed, 1 skipped, 7 warnings in 30.62s
 
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
 FAILED tests/test_lore/test_assembled_prompt_fingerprint.py::test_assembled_writer_and_gaia_requests_are_unchanged
 FAILED tests/test_lore/test_two_pass_pipeline.py::test_gaia_prompt_is_concise_and_self_contained
 FAILED tests/test_script_wrappers.py::test_no_tracked_file_binds_a_wrapper_module
@@ -200,6 +246,8 @@ FAILED tests/test_wizard_agent.py::test_transition_rejects_missing_diegetic_time
 5 failed, 3189 passed, 672 skipped, 8 warnings in 648.91s (0:10:48)
 
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
 FAILED tests/test_api/test_wizard_confirmation.py::test_final_transition_cannot_bypass_artifact_acceptance[setting_confirmed]
 FAILED tests/test_api/test_wizard_confirmation.py::test_final_transition_cannot_bypass_artifact_acceptance[character_confirmed]
 FAILED tests/test_orrery/test_config.py::test_epistemics_rejects_event_type_without_birth_role_policy
@@ -234,6 +282,8 @@ $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:cacheprovider tests/test_api
 >       assert "api" not in payload
 E       AssertionError: assert 'api' not in {'apex': {'anthropic_storyteller_transport': 'prompted', 'gaia': {'max_output_tokens': 25000, 'reasoning_effort': 'med....}, 'default_model': 'gpt-5.6-terra', 'default_model_policy': 'fixed', 'tokenizer_probe_timeout_seconds': 120.0}}, ...}
 tests/test_api/test_settings_endpoints.py:121: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
 FAILED tests/test_api/test_settings_endpoints.py::test_absent_optional_section_is_omitted
 1 failed, 5 warnings in 0.29s
 ```
