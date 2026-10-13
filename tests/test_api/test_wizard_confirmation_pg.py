@@ -8,6 +8,7 @@ from contextlib import closing
 import json
 from pathlib import Path
 import time
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -607,7 +608,7 @@ def _wait_for_waiters(dbname: str, holder_pid: int, count: int) -> None:
                 time.sleep(0.05)
 
 
-def _hold_cache_row(dbname: str) -> tuple[object, int]:
+def _hold_cache_row(dbname: str) -> tuple[Any, int]:
     """Open a transaction that holds the wizard cache row lock; return its pid."""
     holder = connect(dbname)
     with holder.cursor() as cur:
