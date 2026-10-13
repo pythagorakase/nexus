@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Combined #803 init/desktop, #823 journal, #840 point policy and #811 maintenance-module closure; final assembled AST admission pending",
+  "reason": "Wave B (2026-10-09): 823-S1 slot operation journal and staging; 840-S2 required place points; 803-S1 readiness import and desktop checks; 811-S3a maintenance module moves; 777 shell UI-config route",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
