@@ -40,6 +40,14 @@ this evidence file and `pr-body.md`. No product code changed in the resume.
   `verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"`, which is the
   merge base with `origin/main` (`git merge-base HEAD origin/main`), so the
   stamp does not move (the 2026-10-09 amendment says the same).
+  Three canonical decision records also declare files this branch changes:
+  `docs/decisions/0008-the-story-clock-in-chrome.md` (`TopBar.tsx`),
+  `docs/decisions/0051-time-lens.md` and `docs/decisions/0054-responsive-shell.md`
+  (`NexusLayout.tsx`). All three were re-read and stay true: the branch
+  withholds the memory meter and gates two operator queries, and touches
+  neither the top-bar story clock (0008), the time lens (0051) nor the narrow
+  shell's bottom rail (0054). Each already carries `verified_commit`
+  `f073b371` (the merge base), so no stamp moves.
   `tests/test_doc_front_matter.py` passes (below).
 
 ## Cited Lines, Verified on the Base (`claude/wave-b-integration` at `7eb9a10c`)
@@ -287,7 +295,7 @@ only; nothing in the main checkout changed, nothing symlinked).
 
 The one Vitest failure is `src/state-shades.test.ts`, "Stale browser-resolved
 state surfaces", the expected stale receipt on this base (coordinator
-amendment, point 4). Every one of the 639 tests passes, including the eight
+amendment, point 4). Every one of the 639 tests passes, including the seven
 named in the order: `PreferenceProviders.test.tsx` (applies saved theme and
 fonts from preferences alone), `SettingsPane.test.tsx` (player plane shows
 only theme, typography and app icon), `TopBar.test.tsx` (player plane renders
@@ -698,6 +706,63 @@ RESULT: PASS
 the dev dashboard is committed disabled (`[orrery.dashboard] enabled = false`),
 so the Backstage router is not registered; the client reads 404 as a closed
 gate (`DeveloperModeContext.tsx`), as before this branch.
+
+## Review Fixes (2026-10-13)
+
+Applied in `2a97d5fa` (test stubs) and the evidence commit that adds this
+section. No product code changed.
+
+- `NexusLayout.announcer.test.tsx` and `NarrativePane.regenerate.test.tsx`
+  mount the real engine but still answered the retired `HEAD /api/settings`
+  probe, so the `/health` probe failed and only a later slot read restored
+  reachability. Both stubs now answer `GET /health` with
+  `{ status: "healthy", service: "narrative_api", plane: "operator" }`
+  (the order's rule: stubs that answered `HEAD /api/settings` answer
+  `GET /health` with a JSON body). The optional "never OFFLINE" assertion was
+  not added.
+- `useNarrativeEngine.recovery.test.tsx` `mount()` seeded the retired
+  `["/api/settings"]` theme source; it now seeds `["/api/preferences"]` with
+  `{ theme: "veil", fonts: KEEPERS, wizard_model: "TEST" }`, the key
+  `ThemeProvider` reads (the first alternative the finding offered).
+- Evidence: "the eight named in the order" is now "the seven"; Item 15 and
+  the PR body name the three decision records (0008, 0051, 0054) re-read for
+  freshness.
+
+Tails, run on `2a97d5fa`:
+
+```
+$ nice -n 15 npx --prefix ui vitest run --root ui client/src/hooks/useNarrativeEngine.recovery.test.tsx client/src/components/nexus/NexusLayout.announcer.test.tsx client/src/components/nexus/NarrativePane.regenerate.test.tsx
+ ✓ client/src/hooks/useNarrativeEngine.recovery.test.tsx (14 tests) 266ms
+ ✓ client/src/components/nexus/NarrativePane.regenerate.test.tsx (10 tests) 314ms
+ ✓ client/src/components/nexus/NexusLayout.announcer.test.tsx (3 tests) 271ms
+
+ Test Files  3 passed (3)
+      Tests  27 passed (27)
+
+$ nice -n 15 npm --prefix ui test
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ Test Files  1 failed | 41 passed (42)
+      Tests  639 passed (639)
+
+$ nice -n 15 npm --prefix ui run check
+> nexus-ui@1.0.0 check
+> tsc && npm run check:design-sync
+> nexus-ui@1.0.0 check:design-sync
+> tsc -p .design-sync/tsconfig.previews.json
+(exit 0)
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+66 passed, 5 warnings in 7.33s
+
+$ $PY -m black --check <the 8 changed Python files>
+All done! ✨ 🍰 ✨
+8 files would be left unchanged.
+```
+
+The only Vitest failure is still the expected stale state-surface receipt.
 
 ## Landing Notes for the Coordinator
 

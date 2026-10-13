@@ -35,7 +35,7 @@ Base: `claude/wave-b-integration` at `7eb9a10c` (merge base with `origin/main`: 
 ### Tests
 
 - Python (`tests/test_api/test_route_capabilities.py`, real dispatch through `TestClient`): `test_health_reports_the_serving_plane` (player, operator and unprojected, both static branches), `test_serving_plane_requires_a_declaration`, `test_retired_slot_select_is_not_served`; `slot/select` removed from `OPERATOR_REQUESTS` and from `tests/test_api/test_slot_mutation_guard.py`.
-- Vitest: `PreferenceProviders.test.tsx` (applies saved theme and fonts from preferences alone), and player-plane cases in `SettingsPane.test.tsx`, `TopBar.test.tsx`, `CharactersPane.test.tsx`, `SlotSelector.test.tsx`, `NexusLayout.test.tsx`, `useNarrativeEngine.recovery.test.tsx`. Suites that render operator controls seed the operator plane.
+- Vitest: `PreferenceProviders.test.tsx` (applies saved theme and fonts from preferences alone), and player-plane cases in `SettingsPane.test.tsx`, `TopBar.test.tsx`, `CharactersPane.test.tsx`, `SlotSelector.test.tsx`, `NexusLayout.test.tsx`, `useNarrativeEngine.recovery.test.tsx`. Suites that render operator controls seed the operator plane. The live-engine stubs in `NexusLayout.announcer.test.tsx` and `NarrativePane.regenerate.test.tsx` answer `GET /health` with a JSON body (they answered the retired `HEAD /api/settings` probe), and the recovery suite seeds `/api/preferences`, the key `ThemeProvider` reads.
 
 ## Proof
 
@@ -124,7 +124,7 @@ RESULT: PASS
 
 Static checks on the changed Python files: Black clean; flake8 and `mypy --explicit-package-bases` show no new diagnostic against the base versions (each removes the diagnostics that lived in the deleted `activate_slot` and its imports). `scripts/check_exception_dispositions.py --baseline-base-ref origin/main`: `OK: exception disposition coverage and shrink-only baseline verified.`
 
-Document freshness: `narrative.py` and `useNarrativeEngine.ts` are declared sources of `AGENTS.md` and `docs/turn_flow_sequence.md`. Both documents were re-read and stay true (`turn_flow_sequence.md:62-63`: OFFLINE reflects gateway reachability alone). Both already carry `verified_commit` `f073b371`, the merge base with `origin/main`; `tests/test_doc_front_matter.py` passes.
+Document freshness: `narrative.py` and `useNarrativeEngine.ts` are declared sources of `AGENTS.md` and `docs/turn_flow_sequence.md`. Both documents were re-read and stay true (`turn_flow_sequence.md:62-63`: OFFLINE reflects gateway reachability alone). Three canonical decision records also declare changed files: `docs/decisions/0008-the-story-clock-in-chrome.md` (`TopBar.tsx`), `docs/decisions/0051-time-lens.md` and `docs/decisions/0054-responsive-shell.md` (`NexusLayout.tsx`); all three were re-read and stay true (the branch touches neither the story clock, the time lens nor the bottom rail). All five already carry `verified_commit` `f073b371`, the merge base with `origin/main`, so no stamp moves; `tests/test_doc_front_matter.py` passes.
 
 ## Deferred and Out of Scope
 
