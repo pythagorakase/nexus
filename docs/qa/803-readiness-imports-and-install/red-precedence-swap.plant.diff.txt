@@ -1,0 +1,21 @@
+diff --git a/nexus/runtime/desktop_config.py b/nexus/runtime/desktop_config.py
+index cf6228d4..b11b95d8 100644
+--- a/nexus/runtime/desktop_config.py
++++ b/nexus/runtime/desktop_config.py
+@@ -156,12 +156,12 @@ def load_effective_desktop_config(package_root: Path) -> EffectiveDesktopConfig:
+     checkout = discover_checkout(cwd)
+     bundled = package_root / _CONFIG_PATH
+     source: Literal["NEXUS_DESKTOP_CONFIG", "checkout", "bundled"]
+-    if "NEXUS_DESKTOP_CONFIG" in os.environ:
+-        path = Path(os.environ["NEXUS_DESKTOP_CONFIG"])
+-        source = "NEXUS_DESKTOP_CONFIG"
+-    elif checkout is not None and (checkout / _CONFIG_PATH).exists():
++    if checkout is not None and (checkout / _CONFIG_PATH).exists():
+         path = checkout / _CONFIG_PATH
+         source = "checkout"
++    elif "NEXUS_DESKTOP_CONFIG" in os.environ:
++        path = Path(os.environ["NEXUS_DESKTOP_CONFIG"])
++        source = "NEXUS_DESKTOP_CONFIG"
+     elif bundled.exists():
+         path = bundled
+         source = "bundled"

@@ -3,6 +3,11 @@
 Change both readers together: defaults, discovery order, origins and command
 lookup are a shared contract. Python cannot discover the running shell's
 executable or its build checkout; the bundled copy is beside this package.
+
+Known residual: for the bundled copy, a relative ``workingDirectory`` is
+anchored here at the bundled file's directory, while the shell anchors its
+compiled copy at the build checkout (``NEXUS_BUILD_CONFIG_DIR``) and refuses to
+start when that checkout is absent. This module does not model that yet.
 """
 
 from __future__ import annotations
@@ -14,7 +19,14 @@ import sys
 from typing import Literal, Optional
 from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+)
 
 _U64_MAX = 2**64 - 1
 _CONFIG_PATH = Path("ui/src-tauri/nexus.desktop.json")
@@ -80,19 +92,49 @@ def discover_checkout(start: Path) -> Optional[Path]:
     )
 
 
+def _condense(exc: Exception) -> str:
+    """Condense an error to one line, as readiness's ``one_line`` does.
+
+    Pydantic errors become ``loc: msg`` pairs, at most three, with a count of
+    the rest. This module cannot import ``nexus.runtime.readiness`` (which
+    imports it), so the format is repeated here; keep the two in step.
+    """
+    if isinstance(exc, ValidationError):
+        errors = exc.errors()
+        shown = "; ".join(
+            ": ".join(
+                part
+                for part in (
+                    ".".join(str(item) for item in error["loc"]),
+                    error["msg"],
+                )
+                if part
+            )
+            for error in errors[:3]
+        )
+        extra = len(errors) - 3
+        return shown + (f" (+{extra} more)" if extra > 0 else "")
+    return " ".join(str(exc).split()) or type(exc).__name__
+
+
 def normalize_runtime_origin(origin: str) -> str:
     """Validate an HTTP(S) origin and discard its path, query and fragment."""
     try:
         scheme = urlsplit(origin).scheme
-        if scheme not in {"http", "https"}:
-            raise DesktopConfigError(
-                f"runtimeOrigin must use http or https, got {scheme!r}"
-            )
+    except ValueError as exc:
+        raise DesktopConfigError(
+            f"invalid runtime origin {origin}: {_condense(exc)}"
+        ) from exc
+    if scheme not in {"http", "https"}:
+        raise DesktopConfigError(
+            f'runtimeOrigin must use http or https, got "{scheme}"'
+        )
+    try:
         normalized = TypeAdapter(AnyHttpUrl).validate_python(origin)
         parts = urlsplit(str(normalized))
     except ValueError as exc:
         raise DesktopConfigError(
-            f"invalid runtime origin {origin}: {' '.join(str(exc).split())}"
+            f"invalid runtime origin {origin}: {_condense(exc)}"
         ) from exc
     return urlunsplit((parts.scheme, parts.netloc, "", "", ""))
 
@@ -101,13 +143,11 @@ def _read_config(path: Path) -> DesktopConfig:
     try:
         raw = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        raise DesktopConfigError(f"failed to read {path}: {exc}") from exc
+        raise DesktopConfigError(f"failed to read {path}: {_condense(exc)}") from exc
     try:
         return DesktopConfig.model_validate_json(raw)
-    except ValueError as exc:
-        raise DesktopConfigError(
-            f"{path} is invalid: {' '.join(str(exc).split())}"
-        ) from exc
+    except ValidationError as exc:
+        raise DesktopConfigError(f"{path} is invalid: {_condense(exc)}") from exc
 
 
 def load_effective_desktop_config(package_root: Path) -> EffectiveDesktopConfig:

@@ -1,0 +1,36 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________________ test_lookup_follows_the_shell_order ______________________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-773/test_lookup_follows_the_shell_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c61bb50>
+
+    def test_lookup_follows_the_shell_order(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An explicit bad file never falls through to a healthy checkout or bundle."""
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        (checkout / "pyproject.toml").touch()
+        (checkout / "nexus.toml").touch()
+        checkout_config = _write(checkout / RELATIVE_CONFIG)
+        inside = checkout / "inside"
+        inside.mkdir()
+        monkeypatch.chdir(inside)
+        package_root = tmp_path / "package"
+        bundled = _write(package_root / RELATIVE_CONFIG)
+        explicit = _write(tmp_path / "chosen.json", runtimeOrigin="http://localhost:8031")
+        monkeypatch.setenv("NEXUS_DESKTOP_CONFIG", str(explicit))
+        effective = load_effective_desktop_config(package_root)
+>       assert (effective.source, effective.path) == ("NEXUS_DESKTOP_CONFIG", explicit)
+E       AssertionError: assert ('checkout', ...esktop.json')) == ('NEXUS_DESKT...chosen.json'))
+E         
+E         At index 0 diff: 'checkout' != 'NEXUS_DESKTOP_CONFIG'
+E         Use -v to get more diff
+
+/Users/pythagor/nexus/.claude/worktrees/fix-803-s1/tests/test_runtime/test_desktop_config.py:54: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_desktop_config.py::test_lookup_follows_the_shell_order
+1 failed in 0.29s

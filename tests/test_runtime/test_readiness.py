@@ -788,6 +788,8 @@ def _desktop_config(
         "header-mismatch",
         "no-auth-block",
         "missing-program",
+        "bare-missing-program",
+        "bare-program-on-path",
         "not-executable",
         "empty-command",
         "missing-working-directory",
@@ -827,6 +829,17 @@ def test_desktop_checks_against_a_runtime(
         overrides["statusPath"] = "/not-runtime-status"
     elif case == "missing-program":
         overrides["runtimeCommand"] = [str(tmp_path / "absent")]
+    elif case == "bare-missing-program":
+        empty_path = tmp_path / "empty-path"
+        empty_path.mkdir()
+        monkeypatch.setenv("PATH", str(empty_path))
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        overrides["runtimeCommand"] = ["qa803-absent-cli"]
+    elif case == "bare-program-on-path":
+        on_path = _executable(tmp_path / "on-path", "qa803-path-cli")
+        monkeypatch.setenv("PATH", str(on_path.parent))
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        overrides["runtimeCommand"] = [on_path.name]
     elif case == "not-executable":
         path = tmp_path / "not-executable"
         path.write_text("not executable")
@@ -862,6 +875,7 @@ def test_desktop_checks_against_a_runtime(
         }
         command_fail = case in {
             "missing-program",
+            "bare-missing-program",
             "not-executable",
             "empty-command",
             "missing-working-directory",
@@ -873,7 +887,13 @@ def test_desktop_checks_against_a_runtime(
             "fail" if command_fail else "pass"
         )
     assert report.ok is (
-        case in {"all-pass", "relative-status-path", "enforced-token-set"}
+        case
+        in {
+            "all-pass",
+            "relative-status-path",
+            "enforced-token-set",
+            "bare-program-on-path",
+        }
     )
     assert token not in report.model_dump_json()
     if case == "enforced-no-token":
@@ -890,6 +910,24 @@ def test_desktop_checks_against_a_runtime(
         assert (
             checks["desktop.credentials"].observed
             == "the runtime's /runtime/status carries no auth block"
+        )
+    command = checks["desktop.runtime_command"]
+    if case == "missing-program":
+        assert command.observed == (
+            f"{tmp_path / 'absent'} is missing or not executable"
+        )
+    elif case == "not-executable":
+        assert command.observed == (
+            f"{tmp_path / 'not-executable'} is missing or not executable"
+        )
+    elif case == "bare-missing-program":
+        assert command.observed == (
+            "qa803-absent-cli not found on PATH or the shell's fixed directories"
+        )
+        assert str(tmp_path / "desktop.json") in (command.remediation or "")
+    elif case == "bare-program-on-path":
+        assert command.observed == (
+            f"{tmp_path / 'on-path' / 'qa803-path-cli'} (via PATH) in {tmp_path}"
         )
 
 
@@ -1003,7 +1041,8 @@ def test_doctor_owner_client_fails_on_a_version_mismatch(
     assert lines[1].startswith(f"pass  {'gateway.reachable':<23}  ")
     assert lines[1].endswith("answered (profile local, runtime not ok)")
     assert lines[2] == (
-        f"fail  {'gateway.version':<23}  client {runtime_version()}, runtime 0.0.0-other"
+        f"fail  {'gateway.version':<23}  client {runtime_version()}, "
+        "runtime 0.0.0-other"
         "  -> Update the older side (git pull, poetry install), then restart the "
         "runtime with nexus restart."
     )
