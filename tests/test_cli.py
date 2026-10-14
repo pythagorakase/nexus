@@ -80,6 +80,33 @@ def test_terminal_generation_statuses_include_api_and_incubator_values() -> None
     assert not _is_terminal_generation_status("error")
 
 
+@pytest.mark.parametrize(
+    ("stage", "run_status", "detail", "expected"),
+    [
+        ("derivation", "running", {}, "derivation"),
+        ("failed", "failed", {"stage": "derivation"}, "failed (derivation)"),
+    ],
+    ids=["running", "failed"],
+)
+def test_retrograde_status_stage_names_derivation(
+    stage: str,
+    run_status: str,
+    detail: dict[str, str],
+    expected: str,
+) -> None:
+    """The CLI reports derivation and its failure using the shared vocabulary."""
+    status = {
+        "slot": 4,
+        "run": "1" * 32,
+        "run_status": run_status,
+        "stage": stage,
+        "detail": detail,
+        "error": "ValueError: derivation refused" if run_status == "failed" else None,
+        "stages": [{"stage": "derivation", "detail": {}}],
+    }
+    assert cli._retrograde_status_stage(status) == expected
+
+
 def test_every_subcommand_registers_post_command_output_flags() -> None:
     """Every runtime subparser shares exact post-command output options."""
 
@@ -462,6 +489,18 @@ def test_continue_posts_choice_to_backend_without_preapproving(
             )
         if "/api/narrative/status/" in url:
             return DummyResponse({"status": "completed", "chunk_id": 2})
+        if url.endswith("/api/story/new/retrograde/status"):
+            assert kwargs["params"] == {"slot": 5}
+            return DummyResponse(
+                {
+                    "slot": 5,
+                    "run": None,
+                    "run_status": None,
+                    "error": None,
+                    "stage": "idle",
+                    "stages": [],
+                }
+            )
         raise AssertionError(f"Unexpected GET {url}")
 
     def fake_post(url: str, json: dict[str, Any], **kwargs: Any) -> DummyResponse:
@@ -1956,12 +1995,13 @@ def test_continue_weird_accepts_only_the_three_levels(capsys) -> None:
     assert "invalid choice: 'extreme'" in capsys.readouterr().err
 
 
-# The nine legacy HTTP handlers: each reports its own failures or lets them
+# The ten legacy HTTP handlers: each reports its own failures or lets them
 # reach main(), never through a broad except.
 _HTTP_HANDLERS = (
     "run_load",
     "run_continue",
     "run_retry",
+    "run_accept",
     "run_undo",
     "run_regenerate",
     "run_model",
