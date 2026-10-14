@@ -21,3 +21,4 @@ tests/test_owner_target_guard.py
 tests/test_orrery/test_card_identity.py
 tests/test_connection_lifecycle.py
 tests/test_orrery/test_character_name_replay.py
+tests/test_lore/test_character_dossier_tags_pg.py
