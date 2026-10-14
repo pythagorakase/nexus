@@ -31,7 +31,30 @@ sources:
   - nexus/agents/orrery/worker.py
   - nexus/agents/orrery/experience_embedding.py
   - nexus.toml
-verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"
+  - ui/client/src/components/nexus/NarrativePane.tsx
+  - nexus/api/slot_endpoints.py
+  - ui/client/src/hooks/useInputDraft.ts
+  - nexus/cli.py
+  - nexus/memory/entity_detector.py
+  - nexus/memory/incremental.py
+  - nexus/agents/lore/utils/entity_queries.py
+  - nexus/agents/lore/utils/entity_inclusion.py
+  - nexus/agents/memnon/utils/search.py
+  - nexus/agents/memnon/utils/db_access.py
+  - nexus/agents/memnon/utils/cross_encoder.py
+  - nexus/agents/memnon/utils/embedding_manager.py
+  - nexus/agents/orrery/resolver.py
+  - nexus/agents/lore/utils/scene_order.py
+  - nexus/agents/logon/apex_schema.py
+  - scripts/api_openai.py
+  - scripts/api_anthropic.py
+  - nexus/agents/orrery/retrograde_maturation.py
+  - nexus/agents/memnon/utils/artifact_manifest.py
+  - nexus/runtime/readiness.py
+  - nexus/agents/memnon/utils/source_embeddings.py
+  - nexus/agents/orrery/job_queues.py
+  - ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx
+verified_commit: "a01c162f1e4daaf5009a9bba7397ae4065a8614b"
 ---
 
 # The Turn Cycle
@@ -44,7 +67,7 @@ authoritative; this document is their map.
 
 ## 1. The Player Acts
 
-The IRIS Narrative pane (`ui/client/src/hooks/useNarrativeEngine.ts`) polls
+The IRIS Narrative pane (`ui/client/src/hooks/useNarrativeEngine.ts`) reads
 `GET /api/slot/{slot}/state` for the newest passage, which is the pending draft
 when one exists, and its choices. Selecting a choice, by click or number key,
 only loads its text into the reader's draft, which remembers the choice while
@@ -87,7 +110,7 @@ reflects gateway reachability alone.
    `user_text` (`nexus/api/choice_handling.py`) records and generates from that
    edited text instead, and its `choice_object` keeps the number with
    `"edited": true`; unchanged text resolves as the bare choice. Freeform
-   `user_text` is recorded as written.
+   `user_text` is recorded verbatim after surrounding whitespace is stripped.
 5. Binds the session to its parent chunk and claims the parent's embedding
    trigger, which enqueues every playable chunk older than the parent that
    lacks embeddings (`nexus/jobs/embeddings.py`). Embedding therefore trails
@@ -114,11 +137,11 @@ LOGON resolves the storyteller route (model, wire class, provider), which fixes
 the effective context window and the token budget. `handle_user_input` in
 `nexus/memory/manager.py` then runs Pass 2: deterministic entity detection
 reports every known character, place, and faction named in the input as a
-divergence gap. Unless the input is a bare choice number or letter
-(`[memory] skip_simple_choices`) or no budget remains, a raw vector search over
-the input keeps the results that fit the Pass-2 budget (`[memory]
-phase2_fraction` of the context window). An embedder, reranker or search error
-in that query fails the turn; it is never logged and skipped.
+divergence gap. Unless the input is a bare choice number or letter (`[memory]
+skip_simple_choices`) or no budget remains, a raw hybrid search over the input
+(MEMNON's `query_memory`) keeps the results that fit the Pass-2 budget
+(`[memory] phase2_fraction` of the context window). An embedder, reranker or
+search error in that query fails the turn; it is never logged and skipped.
 
 ### Warm Slice
 
@@ -236,8 +259,8 @@ The pending draft appears in the Narrative pane. From there:
 `commit_incubator_to_database_sync` (`nexus/api/commit_handler_sync.py`) runs
 one transaction:
 
-1. Locks the incubator row, reruns draft validation, and binds staged
-   name-reveal identities.
+1. Locks the incubator row, binds staged name-reveal identities, and reruns
+   draft validation.
 2. Derives chronology from the parent's `chunk_metadata`: the scene number
    advances, and an episode or season transition plans summary jobs.
 3. Checks declared characters against the identity index.
@@ -274,9 +297,9 @@ through `nexus models verify` and the doctor's `models.artifacts` check.
 A gateway started with `NEXUS_SLOT` runs one `SlotScheduler`
 (`nexus/jobs/scheduler.py`) for that slot. It holds the durable
 `deferred_work_scheduler` lease, observes locked slots without draining them,
-and before every job and provider call waits until no generation lease is
-live, so background inference never competes with a turn. Each pass drains, in
-order:
+and before every job and provider call waits until no generation lease is live.
+The wait gates dispatch only: a background request already dispatched when a
+turn starts can still be in flight during the turn. Each pass drains, in order:
 
 1. Orrery promotion (`promote_pending_resolutions_sync` in
    `nexus/agents/orrery/worker.py`), by the deterministic thresholds in
@@ -300,10 +323,10 @@ order:
    `experience_embedding_limit`, and `0` skips the lane without loading a
    model, as the Orrery queue limits cap their own lanes.
 
-The scheduler lease and the compaction, summary, and embedding queues are
-configured in `[runtime.scheduler]`; the Orrery queues take their limits from
-their own `[orrery]` tables. `python -m nexus.agents.orrery.worker` runs one
-pass under the same ownership.
+The scheduler lease, the promotion limit, and the compaction, summary, and
+embedding queues are configured in `[runtime.scheduler]`; the Orrery
+queues take their limits from their own `[orrery]` tables.
+`python -m nexus.agents.orrery.worker` runs one pass under the same ownership.
 
 ## Bootstrap Turns
 
