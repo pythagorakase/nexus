@@ -1,5 +1,6 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { usePlane } from "@/hooks/usePlane";
 
 interface DeveloperModeContextType {
   gateOpen: boolean;
@@ -30,6 +31,8 @@ export function DeveloperModeProvider({ children }: { children: ReactNode }) {
     },
     retry: false,
     staleTime: Infinity,
+    // The backstage gate is an operator route (#824); closed until it answers.
+    enabled: usePlane() === "operator",
   });
 
   useEffect(() => {

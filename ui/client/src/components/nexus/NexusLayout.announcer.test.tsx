@@ -1,12 +1,16 @@
+import { UI_CONFIG_KEY } from "@/hooks/useUiConfig";
 /**
  * The generation announcer driven by the real narrative engine through the
  * real layout: only the narrative HTTP fetchers (the network boundary) and
  * the panes that do not take part are replaced.
  */
+import { useEffect, useRef } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
@@ -104,16 +108,42 @@ beforeEach(() => {
     narrative_generation: settings,
   });
   vi.stubGlobal("WebSocket", class { close() {} });
-  // Connectivity probe reachable; developer gate closed.
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 404 })));
+  // Connectivity probe reads /health on the operator plane; every other
+  // request, the developer gate included, answers 404 (gate closed).
+  vi.stubGlobal("fetch", vi.fn(async (input: unknown) =>
+    String(input) === "/health"
+      ? {
+          ok: true,
+          status: 200,
+          json: async () => ({ status: "healthy", service: "narrative_api", plane: "operator" }),
+        }
+      : { ok: true, status: 404 }));
 });
 afterEach(() => vi.unstubAllGlobals());
 
 function mountLayout() {
+  const reportedToasts: Array<{ id: string; title: unknown }> = [];
+  function ToastProbe() {
+    const { toasts } = useToast();
+    const seen = useRef(new Set(toasts.map((toast) => toast.id)));
+    useEffect(() => {
+      for (const toast of toasts) {
+        if (!seen.current.has(toast.id)) {
+          seen.current.add(toast.id);
+          reportedToasts.push({ id: toast.id, title: toast.title });
+        }
+      }
+    }, [toasts]);
+    return null;
+  }
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  client.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 60000 } });
+  client.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
+  // NexusLayout reads its backstage knobs from the operator settings;
+  // the probe reports the operator plane, so the read stays seeded.
+  client.setQueryData(["/api/settings"], {});
   client.setQueryData([...LOCAL_MODELS_STATUS_KEY], {
     models_dir: "/models",
     system_ram_gb: 48,
@@ -125,6 +155,7 @@ function mountLayout() {
     <QueryClientProvider client={client}>
       <ThemeProvider>
         <DeveloperModeProvider>
+          <ToastProbe />
           <NexusLayout />
         </DeveloperModeProvider>
       </ThemeProvider>
@@ -137,7 +168,7 @@ function mountLayout() {
     const text = screen.getByRole("status").textContent ?? "";
     if (text && text !== spoken[spoken.length - 1]) spoken.push(text);
   };
-  return { spoken, settle };
+  return { spoken, settle, reportedToasts };
 }
 
 /** A read the engine makes on any boundary (tab visible, socket open). */
@@ -197,8 +228,8 @@ describe("generation announcer on the live engine", () => {
     expect(spoken).toEqual(["Generation started", "Generation complete"]);
   });
 
-  it("reports the engine's durable failure of the observed turn once", async () => {
-    const { spoken, settle } = mountLayout();
+  it("reports a durable failure once, through its toast", async () => {
+    const { spoken, settle, reportedToasts } = mountLayout();
     await waitFor(() => expect(reader.engine?.isRecoveryLoading).toBe(false));
 
     const release = await submitPending();
@@ -220,7 +251,10 @@ describe("generation announcer on the live engine", () => {
     );
     await settle("READY");
 
-    expect(spoken).toEqual(["Generation started", "Generation failed"]);
+    expect(spoken).toEqual(["Generation started"]);
+    expect(
+      reportedToasts.filter((toast) => toast.title === "Generation Failed"),
+    ).toHaveLength(1);
   });
 
   it("stays silent for the failure the engine replays on load", async () => {

@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { HEALTH_QUERY_KEY, type HealthPayload } from "@/hooks/usePlane";
 import {
   continueNarrative,
   regenerateNarrative,
@@ -50,6 +51,8 @@ export interface NarrativeEngine {
   generationError: string | null;
   /** The latest durable attempt ended in error and nothing has replaced it. */
   failedGeneration: GenerationSession | null;
+  /** The durable failure already reported by the assertive toast. */
+  toastedFailureSessionId: string | null;
   /** True until the first durable read, and while the frontier is re-read
    * after a terminal transition, so stale slot state never accepts input. */
   isRecoveryLoading: boolean;
@@ -70,6 +73,9 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
   const [phase, setPhase] = useState<NarrativePhase | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [failedGeneration, setFailedGeneration] = useState<GenerationSession | null>(null);
+  const [toastedFailureSessionId, setToastedFailureSessionId] = useState<
+    string | null
+  >(null);
   const [isRecoveryLoading, setIsRecoveryLoading] = useState(true);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [backendReachable, setBackendReachable] = useState(true);
@@ -160,6 +166,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     setPhase(null);
     setGenerationError(null);
     setFailedGeneration(null);
+    setToastedFailureSessionId(null);
     setIsRecoveryLoading(true);
     setReceiving(false);
     stopClock();
@@ -286,6 +293,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
                 state.error || state.error_class || "Narrative generation failed";
               setGenerationError(message);
               if (!parentArrived) {
+                setToastedFailureSessionId(state.session_id);
                 toast({
                   title: "Generation Failed",
                   description: message,
@@ -389,12 +397,17 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     invalidateNarrativeQueries, startClock, stopClock,
   ]);
 
-  // Backend connectivity probe - drives the OFFLINE status.
+  // Backend connectivity probe - drives the OFFLINE status and keeps the
+  // serving plane (#824). A failed probe leaves the cached plane unchanged.
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
       try {
-        const res = await fetch("/api/settings", { method: "HEAD" });
+        const res = await fetch("/health");
+        if (res.ok) {
+          const health: HealthPayload = await res.json();
+          if (!cancelled) queryClient.setQueryData(HEALTH_QUERY_KEY, health);
+        }
         if (!cancelled) setBackendReachable(res.ok);
       } catch {
         if (!cancelled) setBackendReachable(false);
@@ -406,7 +419,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [queryClient]);
 
   // Every generation request - continue, retry, regenerate - shares one
   // in-flight guard, the optimistic phase and clock, and the durable
@@ -522,6 +535,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     elapsedMs,
     generationError: generationError ?? recoverySettingsError?.message ?? null,
     failedGeneration,
+    toastedFailureSessionId,
     isRecoveryLoading: isRecoveryLoading || slotStateUpdatedAt < frontierChangedAt,
     retryGeneration,
     isGenerating: isActivePhase(phase),

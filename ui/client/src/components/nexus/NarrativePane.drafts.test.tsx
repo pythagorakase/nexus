@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState, type ComponentProps } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import { readerDraftScope } from "@/lib/reader-draft";
@@ -43,13 +44,14 @@ function mount(
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  client.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   client.setQueryData(["/api/narrative/latest-chunk", state.slot], null);
   client.setQueryData(["/api/narrative/outline", state.slot], []);
   const tree = (current: SlotState) => {
     const engine: NarrativeEngine = {
       slotState: current, slotStateError: null, isSlotStateLoading: false,
       phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
+      toastedFailureSessionId: null,
       isGenerating: false, completedGenerations: 0, submitTurn: send,
       regenerateTurn: vi.fn(async () => true),
     };

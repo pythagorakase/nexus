@@ -6,7 +6,7 @@
  */
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useTheme } from './ThemeContext';
-import { useSettingsMutation, useSettingsQuery } from '@/hooks/useSettings';
+import { usePreferencesQuery, useSettingsMutation } from '@/hooks/useSettings';
 import type { FontMatrix, FontSlotId, ThemeId } from '@/types/settings';
 
 /**
@@ -58,19 +58,19 @@ function seedFromStorage(): FontMatrix {
 
 export function FontProvider({ children }: { children: ReactNode }) {
   const { theme } = useTheme();
-  const { data: settings } = useSettingsQuery();
+  const savedFonts = usePreferencesQuery().data?.fonts;
   const mutation = useSettingsMutation();
 
   const [seed] = useState<FontMatrix>(seedFromStorage);
-  const fonts: FontMatrix = settings?.ui?.fonts ?? seed;
+  const fonts: FontMatrix = savedFonts ?? seed;
 
   // Mirror the server matrix into localStorage so the next first paint
   // matches the persisted state.
   useEffect(() => {
-    if (settings?.ui?.fonts) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings.ui.fonts));
+    if (savedFonts) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedFonts));
     }
-  }, [settings?.ui?.fonts]);
+  }, [savedFonts]);
 
   useEffect(() => {
     const root = document.documentElement;

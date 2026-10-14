@@ -36,7 +36,8 @@ around it:
 
 - `cfg.provider = DesignThemeRoot` (in `.design-sync/ds-provider.tsx`, exported
   through the Vite entry). It mounts `QueryClientProvider` (retries off — the
-  headless `/api/settings` fetch fails and falls back to Veil keeper defaults) →
+  fetch stub answers `/health` with the operator plane and `/api/settings` and
+  `/api/preferences` with Veil keeper defaults unless a preview sets its theme) →
   `ThemeProvider` → `FontProvider` → a `.dark` div. So every card renders in the
   **Veil** theme with brand fonts, and components that call
   `useTheme`/`useFonts`/`useSettings` mount instead of throwing.
@@ -258,9 +259,11 @@ the GET-only `DesignThemeRoot` fetch stub (`ds-provider.tsx`):
   (→ `[]`). The images route MUST match the `<id>` segment; a stub that only matches
   `/api/characters/images` falls through to the cast mock and crashes on
   `portraitSrc(undefined)` — that was the original blank-card cause.
-- **SettingsPane** — mocks `/api/settings` with a full payload (model roles, slider
-  bounds, keeper fonts). The theme it returns ECHOES the preview's own
-  `localStorage["nexus-theme"]`, NOT a hardcoded `"veil"` — otherwise the Theme/Font
+- **SettingsPane** — mocks `/health` (`plane: "operator"`, so the operator sections
+  render), `/api/settings` with a full payload (model roles, slider bounds, keeper
+  fonts), and `/api/preferences` (theme, keeper fonts, wizard model). The theme both
+  return ECHOES the preview's own `localStorage["nexus-theme"]`, NOT a hardcoded
+  `"veil"` — otherwise the Theme/Font
   providers adopt the mock's theme and override every deco/splash card. Per-component
   capture isolation keeps this from bleeding across cards. Its preview wrapper keeps
   the `nexus-shell` class (overriding 100vh + the 52px TopBar grid row) so the

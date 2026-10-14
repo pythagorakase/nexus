@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from starlette.routing import BaseRoute, Mount, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 
-from nexus.api import narrative, static_ui
+from nexus.api import narrative, narrative_schemas, new_story_flow, static_ui
 from nexus.api.route_capabilities import (
     ROUTE_CAPABILITIES,
     RouteCapabilityError,
@@ -51,7 +51,6 @@ OPERATOR_REQUESTS = [
     ("POST", "/api/slot/1/unlock"),
     ("PATCH", "/api/slot/1/settings"),
     ("POST", "/api/story/new/setup/reset"),
-    ("POST", "/api/story/new/slot/select"),
     ("POST", "/api/characters/1/images"),
     ("DELETE", "/api/characters/1/images/1"),
     ("PUT", "/api/places/1/images/1/main"),
@@ -210,6 +209,45 @@ def test_player_projection_keeps_reading_and_play_routes(
     else:
         assert shell.status_code == 503
         assert "UI build not found" in shell.text
+
+
+@pytest.mark.parametrize("built", [False, True], ids=["dist-missing", "dist-built"])
+def test_health_reports_the_serving_plane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: bool
+) -> None:
+    """One shared ``/health`` route reports the plane of the app serving it.
+
+    Both projections exist before any request, so a plane kept in one shared
+    place (a module global, the source app's state) answers every request
+    with the last declaration and fails the player case.
+    """
+    gateway = _gateway(tmp_path, monkeypatch, built=built)
+    player_app = build_player_app(gateway)
+    operator_app = build_operator_app(gateway)
+    player, operator, unprojected = (
+        TestClient(app).get("/health")
+        for app in (player_app, operator_app, narrative.app)
+    )
+
+    for response in (player, operator, unprojected):
+        assert response.status_code == 200, response.text
+    assert player.json() == {
+        "status": "healthy",
+        "service": "narrative_api",
+        "plane": "player",
+    }
+    assert operator.json()["plane"] == "operator"
+    assert unprojected.json()["plane"] == "operator"
+
+
+def test_serving_plane_requires_a_declaration() -> None:
+    """An app that never declared its plane fails loudly, with no default."""
+    bare = FastAPI()
+    bare.add_api_route("/health", narrative.health_check, methods=["GET"])
+    client = TestClient(bare, raise_server_exceptions=True)
+
+    with pytest.raises(RouteCapabilityError, match="declares no serving plane"):
+        client.get("/health")
 
 
 @pytest.mark.requires_postgres
@@ -428,6 +466,22 @@ def test_retired_chunk_state_route_is_not_served() -> None:
     assert response.status_code == 404, response.text
     assert ("GET", "/api/chunks/states") not in _keys(narrative.app)
     assert ("GET", "/api/chunks/states") not in ROUTE_CAPABILITIES
+
+
+def test_retired_slot_select_is_not_served() -> None:
+    """The no-op slot activation route is retired with its helpers (#824).
+
+    Its handler called two no-op slot writers, and its only client was the
+    unmounted ``LocationPhase`` fetch.
+    """
+    response = TestClient(narrative.app).post(
+        "/api/story/new/slot/select", json={"slot": 5}
+    )
+    assert response.status_code in (404, 405), response.text
+    assert ("POST", "/api/story/new/slot/select") not in _keys(narrative.app)
+    assert ("POST", "/api/story/new/slot/select") not in ROUTE_CAPABILITIES
+    assert not hasattr(new_story_flow, "activate_slot")
+    assert not hasattr(narrative_schemas, "SelectSlotRequest")
 
 
 def test_retired_wizard_stream_route_is_not_served() -> None:

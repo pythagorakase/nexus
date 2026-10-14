@@ -274,10 +274,6 @@ class ResetSetupRequest(BaseModel):
     slot: StrictInt = Field(ge=1, le=5)
 
 
-class SelectSlotRequest(BaseModel):
-    slot: StrictInt = Field(ge=1, le=5)
-
-
 # =============================================================================
 # Slot State Schemas
 # =============================================================================
@@ -506,6 +502,13 @@ class WeirdLevelRequest(BaseModel):
 class TransitionResponse(BaseModel):
     """Response from successful transition."""
 
+    run: str = Field(
+        ...,
+        description=(
+            "Genesis run (32-character hex) this answer reports, "
+            "the run GET /api/story/new/retrograde/status reads."
+        ),
+    )
     status: str
     character_id: int
     place_id: int
