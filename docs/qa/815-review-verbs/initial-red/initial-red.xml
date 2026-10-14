@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="9" skipped="0" tests="9" time="14.577" timestamp="2026-10-08T19:54:33.753226-05:00" hostname="ECHO.local"><testcase classname="tests.test_cli_contract" name="test_http_command_unanswered_request_exits_four[accept]" time="0.649"><failure message="assert 2 == &lt;ExitCode.UNREACHABLE: 4&gt;&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode&#10; +  and   &lt;ExitCode.UNREACHABLE: 4&gt; = ExitCode.UNREACHABLE">tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-458/test_http_command_unanswered_r0')
+argv = ('accept', '--slot', '5'), sent = ('POST', '/api/narrative/approve')
+
+    @pytest.mark.parametrize(
+        ("argv", "sent"),
+        [
+            (("inspect", "slot", "--slot", "5"), ("GET", "/api/slot/5/state")),
+            (("load", "--slot", "5"), ("GET", "/api/slot/5/state")),
+            (("lock", "--slot", "5"), ("POST", "/api/slot/5/lock")),
+            (
+                ("model", "--slot", "5", "--set", "slot-pinned-model"),
+                ("PATCH", "/api/slot/5/settings"),
+            ),
+            (("regenerate", "--slot", "5"), ("POST", "/api/narrative/regenerate")),
+            (("accept", "--slot", "5"), ("POST", "/api/narrative/approve")),
+        ],
+        ids=["inspect-slot", "load", "lock", "model-set", "regenerate", "accept"],
+    )
+    def test_http_command_unanswered_request_exits_four(
+        tmp_path: Path, argv: tuple[str, ...], sent: tuple[str, str]
+    ) -&gt; None:
+        """A gateway that accepts the request but never answers is api_unreachable.
+    
+        The legacy handlers once caught the read timeout as a domain failure
+        (exit 1); every HTTP command now reports it like an unreachable API.
+        ``regenerate``'s scheduling POST is bounded by
+        ``[runtime.cli].turn_request_timeout_seconds``, once a 120 s literal. Its
+        short-request budgets stay at 30 s, so only the turn budget can produce
+        ``read timeout=0.5``.
+        ``accept``'s commit POST takes the turn budget too.
+        """
+        cli_settings = {"request_timeout_seconds": 0.5, "inspect_timeout_seconds": 0.5}
+        if argv[0] in ("regenerate", "accept"):
+            cli_settings = {
+                "request_timeout_seconds": 30.0,
+                "inspect_timeout_seconds": 30.0,
+                "turn_request_timeout_seconds": 0.5,
+            }
+        config = _config(tmp_path, profile="local", cli_settings=cli_settings)
+        gateway = Gateway(stall=True)
+        with _serve(gateway) as base_url:
+            completed = _run(
+                *argv,
+                "--json",
+                env={"NEXUS_API_URL": base_url, "NEXUS_RUNTIME_CONFIG": str(config)},
+            )
+    
+&gt;       assert completed.returncode == ExitCode.UNREACHABLE
+E       assert 2 == &lt;ExitCode.UNREACHABLE: 4&gt;
+E        +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+E        +  and   &lt;ExitCode.UNREACHABLE: 4&gt; = ExitCode.UNREACHABLE
+
+tests/test_cli_contract.py:433: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_cli_contract" name="test_http_handler_error_answer_is_an_api_error[accept-502]" time="0.504"><failure message="assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode&#10; +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE">handler = 'accept', status = 502
+answer = Raw(body='&lt;html&gt;&lt;body&gt;&lt;h1&gt;502 Bad Gateway&lt;/h1&gt;&lt;/body&gt;&lt;/html&gt;', content_type='text/html', headers={})
+body = '&lt;html&gt;&lt;body&gt;&lt;h1&gt;502 Bad Gateway&lt;/h1&gt;&lt;/body&gt;&lt;/html&gt;'
+
+    @pytest.mark.parametrize(
+        ("handler", "status", "answer", "body"),
+        [
+            *(
+                (handler, 502, Raw(_BAD_GATEWAY_PAGE), _BAD_GATEWAY_PAGE)
+                for handler in _HANDLER_FIRST_REQUESTS
+            ),
+            ("load", 404, {"detail": "Not Found"}, '{"detail": "Not Found"}'),
+        ],
+        ids=[*(f"{handler}-502" for handler in _HANDLER_FIRST_REQUESTS), "load-404"],
+    )
+    def test_http_handler_error_answer_is_an_api_error(
+        handler: str, status: int, answer: Any, body: str
+    ) -&gt; None:
+        """A non-2xx answer is api_error with its body and status, in every handler.
+    
+        The handlers once caught it as a domain failure with an empty partial.
+        """
+        argv, first = _HANDLER_FIRST_REQUESTS[handler]
+        gateway = Gateway(routes={first: (status, answer)})
+        with _serve(gateway) as base_url:
+            completed = _run(*argv, "--json", env={"NEXUS_API_URL": base_url})
+    
+&gt;       assert completed.returncode == ExitCode.DOMAIN_FAILURE
+E       assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;
+E        +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+E        +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE
+
+tests/test_cli_contract.py:747: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_cli_contract" name="test_http_handler_non_json_success_is_an_invalid_response[accept-html]" time="0.509"><failure message="assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode&#10; +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE">handler = 'accept'
+answer = Raw(body='&lt;html&gt;&lt;body&gt;Signed in.&lt;/body&gt;&lt;/html&gt;', content_type='text/html', headers={})
+message = 'returned a body that is not JSON: '
+
+    @pytest.mark.parametrize(
+        ("handler", "answer", "message"),
+        [
+            *(
+                (handler, Raw(_SUCCESS_PAGE), "returned a body that is not JSON: ")
+                for handler in (
+                    "load",
+                    "continue",
+                    "retry",
+                    "undo",
+                    "accept",
+                    "regenerate",
+                    "model-set",
+                )
+            ),
+            *(
+                (
+                    handler,
+                    Raw("[]", content_type="application/json"),
+                    "returned a body that is not a JSON object",
+                )
+                for handler in ("load", "continue")
+            ),
+        ],
+        ids=[
+            *(
+                f"{handler}-html"
+                for handler in (
+                    "load",
+                    "continue",
+                    "retry",
+                    "undo",
+                    "accept",
+                    "regenerate",
+                    "model-set",
+                )
+            ),
+            "load-array",
+            "continue-array",
+        ],
+    )
+    def test_http_handler_non_json_success_is_an_invalid_response(
+        handler: str, answer: Raw, message: str
+    ) -&gt; None:
+        """A 2xx body that is not a JSON object is invalid_response, not a traceback.
+    
+        The handlers once reported it as a domain failure, and ``retry`` raised.
+        """
+        argv, first = _HANDLER_FIRST_REQUESTS[handler]
+        gateway = Gateway(routes={first: (200, answer)})
+        with _serve(gateway) as base_url:
+            completed = _run(*argv, "--json", env={"NEXUS_API_URL": base_url})
+    
+&gt;       assert completed.returncode == ExitCode.DOMAIN_FAILURE
+E       assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;
+E        +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+E        +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE
+
+tests/test_cli_contract.py:808: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_cli_contract" name="test_accept_sends_slot_and_commit_and_reports_the_chunk" time="0.506"><failure message="AssertionError: {&#10;    &quot;code&quot;: &quot;usage_error&quot;,&#10;    &quot;error&quot;: &quot;argument command: invalid choice: 'accept' (choose from 'up', 'down', 'restart', 'status', 'logs', 'home', 'doctor', 'usage', 'receipts', 'window-replay', 'jobs', 'inspect-turn', 'prune-manifests', 'inspect', 'tags', 'load', 'continue', 'retry', 'undo', 'regenerate', 'model', 'models', 'clear', 'trait-audit', 'retrograde-packet', 'retrograde-seed-candidates', 'retrograde-expand-seeds', 'retrograde-apply-expansion', 'retrograde-embed-history', 'record-revelation', 'faction-audit', 'faction-manifest', 'faction-apply', 'character-manifest', 'character-apply', 'place-manifest', 'place-apply', 'backfill-review-packet', 'lock', 'unlock')&quot;,&#10;    &quot;ok&quot;: false,&#10;    &quot;partial&quot;: {}&#10;  }&#10;  &#10;assert 2 == &lt;ExitCode.OK: 0&gt;&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode&#10; +  and   &lt;ExitCode.OK: 0&gt; = ExitCode.OK">def test_accept_sends_slot_and_commit_and_reports_the_chunk() -&gt; None:
+        """Accept commits the pending draft without adding a session or choice."""
+        gateway = Gateway(
+            routes={
+                ("POST", "/api/narrative/approve"): (
+                    200,
+                    {
+                        "status": "committed",
+                        "message": "Narrative committed as chunk 42",
+                        "chunk_id": 42,
+                    },
+                )
+            }
+        )
+        with _serve(gateway) as base_url:
+            completed = _run(
+                "accept", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+            )
+    
+&gt;       assert completed.returncode == ExitCode.OK, completed.stderr
+E       AssertionError: {
+E           "code": "usage_error",
+E           "error": "argument command: invalid choice: 'accept' (choose from 'up', 'down', 'restart', 'status', 'logs', 'home', 'doctor', 'usage', 'receipts', 'window-replay', 'jobs', 'inspect-turn', 'prune-manifests', 'inspect', 'tags', 'load', 'continue', 'retry', 'undo', 'regenerate', 'model', 'models', 'clear', 'trait-audit', 'retrograde-packet', 'retrograde-seed-candidates', 'retrograde-expand-seeds', 'retrograde-apply-expansion', 'retrograde-embed-history', 'record-revelation', 'faction-audit', 'faction-manifest', 'faction-apply', 'character-manifest', 'character-apply', 'place-manifest', 'place-apply', 'backfill-review-packet', 'lock', 'unlock')",
+E           "ok": false,
+E           "partial": {}
+E         }
+E         
+E       assert 2 == &lt;ExitCode.OK: 0&gt;
+E        +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+E        +  and   &lt;ExitCode.OK: 0&gt; = ExitCode.OK
+
+tests/test_cli_contract.py:835: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_cli_contract" name="test_accept_refuses_an_answer_without_a_chunk_id[not-committed]" time="0.505"><failure message="assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode&#10; +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE">answer = {'chunk_id': 42, 'status': 'reviewed'}
+
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            {"status": "reviewed", "chunk_id": 42},
+            {"status": "committed", "chunk_id": None},
+            {"status": "committed", "chunk_id": True},
+        ],
+        ids=["not-committed", "missing-id", "bool-id"],
+    )
+    def test_accept_refuses_an_answer_without_a_chunk_id(answer: dict[str, Any]) -&gt; None:
+        """A reviewed, absent or boolean chunk ID is not evidence of a commit."""
+        gateway = Gateway(routes={("POST", "/api/narrative/approve"): (200, answer)})
+        with _serve(gateway) as base_url:
+            completed = _run(
+                "accept", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+            )
+    
+&gt;       assert completed.returncode == ExitCode.DOMAIN_FAILURE
+E       assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;
+E        +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+E        +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE
+
+tests/test_cli_contract.py:864: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_cli_contract" name="test_accept_refuses_an_answer_without_a_chunk_id[missing-id]" time="0.508"><failure message="assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode&#10; +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE">answer = {'chunk_id': None, 'status': 'committed'}
+
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            {"status": "reviewed", "chunk_id": 42},
+            {"status": "committed", "chunk_id": None},
+            {"status": "committed", "chunk_id": True},
+        ],
+        ids=["not-committed", "missing-id", "bool-id"],
+    )
+    def test_accept_refuses_an_answer_without_a_chunk_id(answer: dict[str, Any]) -&gt; None:
+        """A reviewed, absent or boolean chunk ID is not evidence of a commit."""
+        gateway = Gateway(routes={("POST", "/api/narrative/approve"): (200, answer)})
+        with _serve(gateway) as base_url:
+            completed = _run(
+                "accept", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+            )
+    
+&gt;       assert completed.returncode == ExitCode.DOMAIN_FAILURE
+E       assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;
+E        +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+E        +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE
+
+tests/test_cli_contract.py:864: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_cli_contract" name="test_accept_refuses_an_answer_without_a_chunk_id[bool-id]" time="0.504"><failure message="assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode&#10; +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE">answer = {'chunk_id': True, 'status': 'committed'}
+
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            {"status": "reviewed", "chunk_id": 42},
+            {"status": "committed", "chunk_id": None},
+            {"status": "committed", "chunk_id": True},
+        ],
+        ids=["not-committed", "missing-id", "bool-id"],
+    )
+    def test_accept_refuses_an_answer_without_a_chunk_id(answer: dict[str, Any]) -&gt; None:
+        """A reviewed, absent or boolean chunk ID is not evidence of a commit."""
+        gateway = Gateway(routes={("POST", "/api/narrative/approve"): (200, answer)})
+        with _serve(gateway) as base_url:
+            completed = _run(
+                "accept", "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+            )
+    
+&gt;       assert completed.returncode == ExitCode.DOMAIN_FAILURE
+E       assert 2 == &lt;ExitCode.DOMAIN_FAILURE: 1&gt;
+E        +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'accept', '--slot', '5', '--json']...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+E        +  and   &lt;ExitCode.DOMAIN_FAILURE: 1&gt; = ExitCode.DOMAIN_FAILURE
+
+tests/test_cli_contract.py:864: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_cli_review_pg" name="test_accept_commits_the_draft_and_keeps_the_parent_choice" time="5.820"><failure message="AssertionError: {&#10;    &quot;code&quot;: &quot;usage_error&quot;,&#10;    &quot;error&quot;: &quot;argument command: invalid choice: 'accept' (choose from 'up', 'down', 'restart', 'status', 'logs', 'home', 'doctor', 'usage', 'receipts', 'window-replay', 'jobs', 'inspect-turn', 'prune-manifests', 'inspect', 'tags', 'load', 'continue', 'retry', 'undo', 'regenerate', 'model', 'models', 'clear', 'trait-audit', 'retrograde-packet', 'retrograde-seed-candidates', 'retrograde-expand-seeds', 'retrograde-apply-expansion', 'retrograde-embed-history', 'record-revelation', 'faction-audit', 'faction-manifest', 'faction-apply', 'character-manifest', 'character-apply', 'place-manifest', 'place-apply', 'backfill-review-packet', 'lock', 'unlock')&quot;,&#10;    &quot;ok&quot;: false,&#10;    &quot;partial&quot;: {}&#10;  }&#10;  &#10;assert 2 == 0&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'tests.slot_routed_cli', 'accept', '--slot', '4...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode">tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-458/test_accept_commits_the_draft_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x10a644050&gt;
+
+    def test_accept_commits_the_draft_and_keeps_the_parent_choice(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -&gt; None:
+        """Acceptance retains the parent's selection and leaves the new menu unanswered."""
+        private_runtime_config(tmp_path, monkeypatch)
+        monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
+        with disposable_slot_database("qa640_815_review") as dbname:
+            route_slot(monkeypatch, dbname)
+            parent = seed_played_story(dbname, turns=2, slot=4)[-1]
+            # Stage before startup: recovery must see the draft and keep its parent choice.
+            session = seed_pending_turn(
+                dbname,
+                user_text=FIXTURE_TURN_CHOICES[0],
+                storyteller_text=PENDING_TEXT,
+                choices=list(FIXTURE_TURN_CHOICES),
+            )
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT choice_text, choice_object, raw_text "
+                    "FROM narrative_chunks WHERE id = %s",
+                    (parent,),
+                )
+                parent_before = cur.fetchone()
+            assert parent_before[0] == FIXTURE_TURN_CHOICES[0]
+    
+            with gateway_lane(monkeypatch) as scheduler:
+                scheduler.stop()
+                accepted = _cli("accept", "--slot", "4", "--json")
+&gt;               assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+E               AssertionError: {
+E                   "code": "usage_error",
+E                   "error": "argument command: invalid choice: 'accept' (choose from 'up', 'down', 'restart', 'status', 'logs', 'home', 'doctor', 'usage', 'receipts', 'window-replay', 'jobs', 'inspect-turn', 'prune-manifests', 'inspect', 'tags', 'load', 'continue', 'retry', 'undo', 'regenerate', 'model', 'models', 'clear', 'trait-audit', 'retrograde-packet', 'retrograde-seed-candidates', 'retrograde-expand-seeds', 'retrograde-apply-expansion', 'retrograde-embed-history', 'record-revelation', 'faction-audit', 'faction-manifest', 'faction-apply', 'character-manifest', 'character-apply', 'place-manifest', 'place-apply', 'backfill-review-packet', 'lock', 'unlock')",
+E                   "ok": false,
+E                   "partial": {}
+E                 }
+E                 
+E               assert 2 == 0
+E                +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'tests.slot_routed_cli', 'accept', '--slot', '4...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+
+tests/test_cli_review_pg.py:82: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+WARNING  nexus.api.static_ui:static_ui.py:97 UI build not found at /Users/pythagor/.codex/worktrees/resume-review-verbs/nexus/ui/dist/public - the gateway will serve APIs only. Run `npm --prefix ui run build` (or use the Vite dev server).
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase><testcase classname="tests.test_cli_review_pg" name="test_accept_without_a_draft_is_an_api_error" time="4.661"><failure message="assert 2 == 1&#10; +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'tests.slot_routed_cli', 'accept', '--slot', '4...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')&quot;,\n  &quot;ok&quot;: false,\n  &quot;partial&quot;: {}\n}\n').returncode">tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-458/test_accept_without_a_draft_is0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x10d7f6650&gt;
+
+    def test_accept_without_a_draft_is_an_api_error(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -&gt; None:
+        """Missing drafts report the existing route's 404 without adding a chunk."""
+        private_runtime_config(tmp_path, monkeypatch)
+        monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
+        with disposable_slot_database("qa640_815_review") as dbname:
+            route_slot(monkeypatch, dbname)
+            seed_played_story(dbname, turns=2, slot=4)
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute("SELECT count(*) FROM narrative_chunks")
+                before = cur.fetchone()[0]
+    
+            with gateway_lane(monkeypatch) as scheduler:
+                scheduler.stop()
+                accepted = _cli("accept", "--slot", "4", "--json")
+&gt;               assert accepted.returncode == 1
+E               assert 2 == 1
+E                +  where 2 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'tests.slot_routed_cli', 'accept', '--slot', '4...anifest\', \'place-apply\', \'backfill-review-packet\', \'lock\', \'unlock\')",\n  "ok": false,\n  "partial": {}\n}\n').returncode
+
+tests/test_cli_review_pg.py:156: AssertionError</failure><system-out>--------------------------------- Captured Log ---------------------------------
+WARNING  nexus.api.choice_recovery:choice_recovery.py:101 Startup recovery cleared orphaned player choice on chunk 2
+--------------------------------- Captured Out ---------------------------------
+
+</system-out><system-err>--------------------------------- Captured Err ---------------------------------
+
+</system-err></testcase></testsuite></testsuites>
