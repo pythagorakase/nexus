@@ -16,7 +16,7 @@ Settled core-mean assignments certified by exact same-value witnesses and per-gr
 | Veil | --state-mem-over | --bronze | hsl(15 75% 60%) | hsl(15 75% 60%) |
 | Veil | --state-delete-unarmed | --fg-muted | hsl(42 30% 65%) | hsl(42 30% 70%) |
 | Veil | --state-delete-armed | --destructive | hsl(0 65% 50%) | hsl(0 100% 50%) |
-| Gilded | --state-map-rest | --bronze | hsl(30 50% 45%) | hsl(30 60% 60%) |
+| Gilded | --state-map-rest | --bronze | hsl(30 50% 45%) | hsl(30 70% 50%) |
 | Gilded | --state-map-current | --brass-bright | hsl(45 55% 60%) | hsl(45 55% 70%) |
 | Gilded | --state-map-selected | --brass | hsl(43 74% 47%) | hsl(43 74% 30%) |
 | Gilded | --state-map-hovered | --brass-bright | hsl(45 55% 60%) | hsl(45 75% 50%) |
@@ -31,7 +31,7 @@ Settled core-mean assignments certified by exact same-value witnesses and per-gr
 | Vector | --state-map-rest | --bronze | hsl(200 90% 55%) | hsl(200 90% 55%) |
 | Vector | --state-map-current | --brass-bright | hsl(190 80% 60%) | hsl(190 100% 50%) |
 | Vector | --state-map-selected | --brass | hsl(185 100% 50%) | hsl(185 100% 70%) |
-| Vector | --state-map-hovered | --brass-bright | hsl(190 80% 60%) | hsl(190 90% 40%) |
+| Vector | --state-map-hovered | --brass-bright | hsl(190 80% 60%) | hsl(190 80% 40%) |
 | Vector | --state-key-absent | --fg-dim | hsl(185 30% 40%) | hsl(185 30% 30%) |
 | Vector | --state-key-missing | --bronze | hsl(200 90% 55%) | hsl(200 90% 55%) |
 | Vector | --state-key-present | --fg-muted | hsl(185 40% 55%) | hsl(185 40% 50%) |
