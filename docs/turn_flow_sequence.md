@@ -31,8 +31,8 @@ sources:
   - nexus/agents/orrery/worker.py
   - nexus/agents/orrery/experience_embedding.py
   - nexus.toml
-  - nexus/api/slot_endpoints.py
   - ui/client/src/components/nexus/NarrativePane.tsx
+  - nexus/api/slot_endpoints.py
   - ui/client/src/hooks/useInputDraft.ts
   - nexus/cli.py
   - nexus/memory/entity_detector.py
@@ -52,6 +52,7 @@ sources:
   - nexus/agents/memnon/utils/artifact_manifest.py
   - nexus/runtime/readiness.py
   - nexus/agents/memnon/utils/source_embeddings.py
+  - nexus/agents/orrery/job_queues.py
   - ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx
 verified_commit: "a01c162f1e4daaf5009a9bba7397ae4065a8614b"
 ---
@@ -67,9 +68,8 @@ authoritative; this document is their map.
 ## 1. The Player Acts
 
 The IRIS Narrative pane (`ui/client/src/hooks/useNarrativeEngine.ts`) reads
-`GET /api/slot/{slot}/state`, again after each submission and whenever a
-generation ends, for the newest passage, which is the pending draft when one
-exists, and its choices. Selecting a choice, by click or number key,
+`GET /api/slot/{slot}/state` for the newest passage, which is the pending draft
+when one exists, and its choices. Selecting a choice, by click or number key,
 only loads its text into the reader's draft, which remembers the choice while
 the player edits the text and forgets it once the text is cleared. Enter or the
 send glyph commits: `continueNarrative` (`ui/client/src/lib/narrative-api.ts`)

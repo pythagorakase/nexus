@@ -95,9 +95,9 @@ state route is now `nexus/api/slot_endpoints.py:43`, not `:58`, and
 
 **Convention.** "Line" is the line in `docs/turn_flow_sequence.md` at `M`,
 before this branch's edits. A `corrected` row adds the line after the edit
-("47-49 → 69-72"). This branch grows the front matter by 22 lines and the
-first correction adds one body line, so an unchanged body line `L` now sits at
-`L + 22` up to line 46 and at `L + 23` from line 50 on. Evidence is `file:line`
+("47-49 → 70-72"). This branch grows the front matter by 23 lines and keeps
+the body's line count, so an unchanged body line `L` now sits at `L + 23`.
+Evidence is `file:line`
 at `M`. A clause that names a function, class, type, route, CLI command or
 `nexus.toml` key cites its definition; a behavior or order clause cites the
 line that performs it, in a declared source where one shows it. A clause
@@ -120,7 +120,7 @@ UI clauses cite the handler or render condition, never a doc comment.
 | Line | Clause | Evidence at M | Verdict |
 |---|---|---|---|
 | 47 | The IRIS Narrative pane runs on `ui/client/src/hooks/useNarrativeEngine.ts`. | Locator: `ui/client/src/components/nexus/NarrativePane.tsx:89` (the pane's `engine` is a `NarrativeEngine`), `:413`; `ui/client/src/hooks/useNarrativeEngine.ts:70` | true |
-| 47-49 → 69-72 | The pane polls `GET /api/slot/{slot}/state`. Now: the pane reads it, again after each submission and whenever a generation ends. | `ui/client/src/hooks/useNarrativeEngine.ts:123-127` (one `useQuery`, no refetch interval); `:455` (invalidated after a submission starts); `:280` (invalidated on a terminal transition) | corrected |
+| 47-49 → 70-72 | The pane polls `GET /api/slot/{slot}/state`. Now: the pane reads it. | `ui/client/src/hooks/useNarrativeEngine.ts:123-127` (one `useQuery`, no refetch interval); `:133-134` (`invalidateNarrativeQueries` invalidates it, so each invalidation re-reads it: after a submission starts `:455` or fails `:469`, on a terminal transition `:247`, `:280`, when a superseded owner is observed `:224`, and at each boundary `:336-337`, which runs on mount `:379`, after a wake gap `:350`, on a return to the tab `:355-356` and on each socket open or reconnect `:364`) | corrected |
 | 48 | The route `GET /api/slot/{slot}/state`. | `nexus/api/slot_endpoints.py:43` (route decorator); `nexus/api/slot_state.py:106` `get_slot_state` | true |
 | 48-49 | The state carries the newest passage, which is the pending draft when one exists, and its choices. | `nexus/api/slot_state.py:333-343` (an incubator row is returned with `has_pending=True` and its choices); `:346` (otherwise the committed frontier) | true |
 | 49-50 | Selecting a choice, by click or number key, only loads its text into the reader's draft. | `ui/client/src/components/nexus/NarrativePane.tsx:840` (click), `:507-511` (number key), both to `handleSelect` `:435-442`, which calls `draft.select`; `ui/client/src/hooks/useInputDraft.ts:124-126` (`select` writes the draft and never submits) | true |
@@ -323,7 +323,7 @@ inversion was inside step 1, corrected above.
 | 294-295 | Up to `[orrery.experiences].max_embeddings_per_drain` per pass. | `nexus.toml:430`, `:448`; `nexus/jobs/scheduler.py:34-57`, `:616` | true |
 | 295-296 | Each stamps `embedding_generated_at` only after every active model's vector lands. | `nexus/agents/orrery/experience_embedding.py:112`; `nexus/agents/memnon/utils/source_embeddings.py:338-345` (all vectors generated, then upserted and stamped together) | true |
 | 296-297 | A failure leaves it unstamped for the next pass. | `nexus/agents/memnon/utils/source_embeddings.py:338-345` (generation precedes the write transaction) | true |
-| 297-298 | `nexus jobs` reports the backlog as `unembedded_rendered_experiences`. | `nexus/cli.py:5504-5507` (`add_parser("jobs")`), `:5201-5209`; `nexus/agents/orrery/experience_embedding.py:70` | true |
+| 297-298 | `nexus jobs` reports the backlog as `unembedded_rendered_experiences`. | `nexus/cli.py:5504-5507` (`add_parser("jobs")`), `:5201-5209`; `nexus/agents/orrery/job_queues.py:116` (the backlog count), `:135` (returned under the `unembedded_rendered_experiences` key); `nexus/agents/orrery/experience_embedding.py:70` | true |
 | 298-301 | An operator pass (`SlotScheduler.run_pass`) lowers that bound with `experience_embedding_limit`, and `0` skips the lane without loading a model. | `nexus/jobs/scheduler.py:433-440`, `:51-56` (`0` returns before the table is read) | true |
 | 301 | As the Orrery queue limits cap their own lanes. | `nexus/jobs/scheduler.py:536-541` (`min(maximum, requested)`) | true |
 | 303-304 → 326-327 | The scheduler lease and the compaction, summary, and embedding queues are configured in `[runtime.scheduler]`. Now: the scheduler lease, the promotion limit, and the compaction, summary, and embedding queues. | `nexus.toml:1400-1426`; `nexus/jobs/scheduler.py:76`, `:506` (`self.cfg.promotion_limit`, `nexus.toml:1409`), `:555`, `:601`; `nexus/jobs/narrative_jobs.py:37`, `:59`, `:78` (attempts and lease from the same tables) | corrected |
@@ -362,20 +362,24 @@ drains leaves out no drain and puts none out of order. No clause was added.
 
 ## Corrections (Item 3)
 
-1. **Section 1, lines 47-49 (now 69-72).** Before: "The IRIS Narrative pane
+1. **Section 1, lines 47-49 (now 70-72).** Before: "The IRIS Narrative pane
    (`ui/client/src/hooks/useNarrativeEngine.ts`) polls `GET
    /api/slot/{slot}/state` for the newest passage, ...". After: "... reads
-   `GET /api/slot/{slot}/state`, again after each submission and whenever a
-   generation ends, for the newest passage, ...". The pane does not poll that
-   route: it is one `useQuery` with no refetch interval
-   (`useNarrativeEngine.ts:123-127`; the application client disables
-   interval refetch, `ui/client/src/lib/queryClient.ts:48`). It is re-read when
-   the narrative queries are invalidated: after a submission starts (`:455`)
-   and on each terminal transition (`:280`), and also at socket and visibility
-   boundaries (`:337`). What the pane polls on an interval is
-   `/api/narrative/active` and `/api/narrative/status/{session_id}` (line 61,
-   true). The corrected clause claims only the re-reads, so `queryClient.ts`
-   is not evidence for it and is not a source.
+   `GET /api/slot/{slot}/state` for the newest passage, ...". Only the verb
+   changes. The pane does not poll that route: it is one `useQuery` with no
+   refetch interval (`useNarrativeEngine.ts:123-127`; the application client
+   disables interval refetch, `ui/client/src/lib/queryClient.ts:48`). It is
+   re-read whenever the narrative queries are invalidated (`:133-134`): after
+   a submission starts (`:455`) or fails (`:469`), on a terminal transition
+   (`:247`, `:280`), when a superseded owner is observed (`:224`), and at each
+   boundary (`:336-337`), which runs on mount (`:379`), after a wake gap
+   (`:350`), on a return to the tab (`:355-356`) and on each socket open or
+   reconnect (`:364`). The corrected clause names none of these occasions, so
+   it cannot list some and leave out others. What the pane polls on an
+   interval is `/api/narrative/active` and
+   `/api/narrative/status/{session_id}` (line 61, true). The corrected clause
+   claims no interval, so `queryClient.ts` is not evidence for it and is not a
+   source.
 2. **Section 7, step 1, lines 239-240 (now 262-263).** Before: "Locks the
    incubator row, reruns draft validation, and binds staged name-reveal
    identities." After: "Locks the incubator row, binds staged name-reveal
@@ -401,13 +405,13 @@ are unchanged.
 No declared source was removed: each of the 30 is cited by a kept row
 (`nexus/jobs/gate.py` by line 277-278, `nexus/jobs/narrative_jobs.py` by line
 303-304, `nexus/memory/correspondence.py` by line 161-162,
-`nexus/api/draft_validation.py` by line 201-203). 22 paths were appended in
+`nexus/api/draft_validation.py` by line 201-203). 23 paths were appended in
 the order the body first cites them:
 
 | Added path | Rows that cite it (line at M) |
 |---|---|
-| `nexus/api/slot_endpoints.py` | 48 |
 | `ui/client/src/components/nexus/NarrativePane.tsx` | 47, 49-50, 51-52, 52-55, 215, 223-224, 225-227 |
+| `nexus/api/slot_endpoints.py` | 48 |
 | `ui/client/src/hooks/useInputDraft.ts` | 49-50, 50-51 |
 | `nexus/cli.py` | 55-56, 56-57, 57, 271-272, 297-298 |
 | `nexus/memory/entity_detector.py` | 115-117 |
@@ -427,20 +431,22 @@ the order the body first cites them:
 | `nexus/agents/memnon/utils/artifact_manifest.py` | 269-270, 270, 271-272 |
 | `nexus/runtime/readiness.py` | 272 |
 | `nexus/agents/memnon/utils/source_embeddings.py` | 295-296, 296-297 |
+| `nexus/agents/orrery/job_queues.py` | 297-298 |
 | `ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx` | 310-311 |
 
 The order predicted six of these (`slot_endpoints.py`, `NarrativePane.tsx`,
-`useInputDraft.ts`, `cli.py`, `resolver.py`, `apex_schema.py`). The other 16
+`useInputDraft.ts`, `cli.py`, `resolver.py`, `apex_schema.py`). The other 17
 come from clauses that state how a callee outside the declared set behaves
 (the coverage of the entity baseline and of entity detection, the
 no-swallowing chain through the retrieval layers, the retry loop, the
-artifact boot check, all-or-nothing embedding stamps) and from the
+artifact boot check, all-or-nothing embedding stamps, the `nexus jobs`
+backlog key) and from the
 boot-check paragraph and the bootstrap clause, whose performing lines no
 declared source holds.
 
 **In-flight orders.** `grep -l <path> /Users/pythagor/nexus/temp/orders_2026_10_07/*.md`
-for the 16 unpredicted paths names these orders: 817-S3 (`entity_queries.py`,
-a ledger row only, landed); 812-S3 (`cross_encoder.py`,
+for the 17 unpredicted paths names these orders: 817-S3 (`entity_queries.py`,
+`retrograde_maturation.py`; ledger rows only, landed); 812-S3 (`cross_encoder.py`,
 `embedding_manager.py`, `artifact_manifest.py`, `readiness.py`; landed, and
 it re-verifies this document); 812-S4a (`cross_encoder.py`, `db_access.py`,
 `embedding_manager.py`, `artifact_manifest.py`, `source_embeddings.py`; its
@@ -451,10 +457,18 @@ and 822-S1 (`readiness.py`; all landed, 822-S1 re-verifies); 809-S1, 838-S1,
 840-S2, 783-S1a (`retrograde_maturation.py`; all landed); 802-S1b and 811-S3a
 (`api_anthropic.py`, `api_openai.py`; landed, and 811-S3a names the provider
 shims out of scope); 776-S1b and 776-S6 (`InteractiveWizard.tsx`; landed).
-`entity_detector.py`, `incremental.py`, `entity_inclusion.py`, `search.py`
-and `scene_order.py` appear in no order. The only open order that edits an
+`search.py` appears only in `812-S4a.md:86`, as out-of-scope work deferred to
+812-S4b, an order not yet drafted. `entity_detector.py`, `incremental.py`,
+`entity_inclusion.py`, `scene_order.py` and `job_queues.py` appear in no
+order. The only open order that edits an
 added path without re-verifying this document is 820-S2, already listed.
 `gh pr list --state open` was empty when this was written.
+
+**Landing note: the future 812-S4b.** `812-S4a.md:86` defers to 812-S4b
+edits to `search.py`, `db_access.py` and `source_embeddings.py`, and to
+`embedding_manager.py` beyond 812-S4a's one docstring. All four are now
+declared turn-flow sources, so the 812-S4b draft must carry the duty to
+re-verify this document and then `AGENTS.md`.
 
 ## Stamps (Item 5)
 
@@ -564,7 +578,7 @@ Sentence" table of `docs/qa/817-freshness-gate/verification.md`), checked at
 | 44 | `orrery` is the deterministic off-screen world engine. | `worker.py` | `nexus/agents/orrery/worker.py:1-5` ("deterministic off-screen record worker"), `:178`, `:236` | true |
 | 44 | The FastAPI gateway and its turn routes live in `nexus/api/` (`narrative.py`). | `narrative.py` | `nexus/api/narrative.py:146` (`app = FastAPI(...)`), `:851-852` (`/api/narrative/continue`), `:1080` (`/api/narrative/retry`) | true |
 | 44 | Deferred work runs under `nexus/jobs/`. | `scheduler.py` | `nexus/jobs/scheduler.py:1` ("One durable, preemptible recovery owner for each slot database"), `:59` `SlotScheduler` | true |
-| 44 | `docs/turn_flow_sequence.md` traces the turn cycle through the code. | `docs/turn_flow_sequence.md` | Re-read against the corrected document: `docs/turn_flow_sequence.md:59` "# The Turn Cycle", its 52 file-level sources, and the clause table above (every clause true or corrected at `M`) | true |
+| 44 | `docs/turn_flow_sequence.md` traces the turn cycle through the code. | `docs/turn_flow_sequence.md` | Re-read against the corrected document: `docs/turn_flow_sequence.md:60` "# The Turn Cycle", its 53 file-level sources, and the clause table above (every clause true or corrected at `M`) | true |
 | 44 | Runtime settings live in `nexus.toml`. | `nexus.toml`, `CLAUDE.md` | `CLAUDE.md:18`; `nexus.toml` exists | true |
 | 47 | `CLAUDE.md` is the canonical command reference, including the PostgreSQL test gate, migrations and pre-commit hooks. | `CLAUDE.md` | `CLAUDE.md:9` (full gate), `:20-34` (pre-commit hooks), `:64-90` (migrations) | true |
 | 47 | Run the suite with `poetry run pytest`; format, type-check and lint with Black, mypy and flake8. | `CLAUDE.md` | `CLAUDE.md:8`, `:12-14` | true |
