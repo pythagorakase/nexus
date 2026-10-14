@@ -1,0 +1,16 @@
+
+> nexus-ui@1.0.0 test
+> vitest run MapPane LocalModelRows
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ src/components/nexus/LocalModelRows.test.tsx (20 tests) 159ms
+ ✓ src/components/nexus/MapPane.test.tsx (5 tests) 170ms
+
+ Test Files  2 passed (2)
+      Tests  25 passed (25)
+   Start at  14:21:58
+   Duration  958ms (transform 200ms, setup 94ms, collect 449ms, tests 329ms, environment 568ms, prepare 80ms)
+

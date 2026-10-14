@@ -1,0 +1,62 @@
+
+> nexus-ui@1.0.0 test
+> vitest run shell-accessibility
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ❯ src/shell-accessibility.test.ts (11 tests | 2 failed) 50ms
+   × narrow shell rail > uses one column and a safe-area bottom rail at the hook breakpoint 4ms
+     → expected {} to match object { …(2) }
+   × narrow shell rail > yields the coarse-pointer rail to focused content and hides hover tips 0ms
+     → expected undefined to be 'none' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/shell-accessibility.test.ts > narrow shell rail > uses one column and a safe-area bottom rail at the hook breakpoint
+AssertionError: expected {} to match object { …(2) }
+
+- Expected
++ Received
+
+- Object {
+-   "grid-template-columns": "minmax(0, 1fr)",
+-   "grid-template-rows": "minmax(0, 1fr) auto",
+- }
++ Object {}
+
+ ❯ src/shell-accessibility.test.ts:331:58
+    329|   it("uses one column and a safe-area bottom rail at the hook breakpoi…
+    330|     for (const selector of [".nexus-main", ".nexus-main.no-ledger"]) {
+    331|       expect(declarations(NARROW_SHELL_QUERY, selector)).toMatchObject…
+       |                                                          ^
+    332|         "grid-template-columns": "minmax(0, 1fr)",
+    333|         "grid-template-rows": "minmax(0, 1fr) auto",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/shell-accessibility.test.ts > narrow shell rail > yields the coarse-pointer rail to focused content and hides hover tips
+AssertionError: expected undefined to be 'none' // Object.is equality
+
+- Expected: 
+"none"
+
++ Received: 
+undefined
+
+ ❯ src/shell-accessibility.test.ts:344:51
+    342|     const query = `${NARROW_SHELL_QUERY} and (pointer: coarse)`;
+    343|     const selector = '.nexus-main:has(.nexus-content :is(input, textar…
+    344|     expect(declarations(query, selector).display).toBe("none");
+       |                                                   ^
+    345|     expect(declarations(query, ".rail-btn .rail-tip").display).toBe("n…
+    346|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 9 passed (11)
+   Start at  13:43:59
+   Duration  423ms (transform 23ms, setup 26ms, collect 31ms, tests 50ms, environment 153ms, prepare 56ms)
+

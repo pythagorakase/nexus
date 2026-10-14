@@ -312,6 +312,12 @@ to the far side of the world. Re-centering on the current place fires
 on a slot, current-place or charted-extent change, never on a bare
 resize.
 
+A tab switch is neither a resize nor a recenter trigger. `MapViewProvider`,
+mounted by `NexusLayout` above every pane, holds the canvas size, viewBox,
+selection, expanded zones and last-centered place, so a return to the map
+restores the last view and the refit above carries any layout change made
+meanwhile.
+
 ---
 
 ## 5. State Management
@@ -319,19 +325,23 @@ resize.
 ### 5.1 Local state
 
 ```ts
-const [hoveredLocation, setHoveredLocation] = useState<number | null>(null);
-const [selectedLocation, setSelectedLocation] = useState<number | null>(null);
-const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-const [galleryOpen, setGalleryOpen] = useState(false);
-const [expandedZones, setExpandedZones] = useState<Set<number>>(new Set());
+// MapViewProvider owns these values for the shell's lifetime.
 const [mapDimensions, setMapDimensions] = useState({ width: 800, height: 600 });
-const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
-const [isDragging, setIsDragging] = useState(false);
 const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 800, height: 600 });
-const [zoom, setZoom] = useState(1);
+const [selectedId, setSelectedId] = useState<number | null>(null);
+const [expandedZones, setExpandedZones] = useState<Set<number>>(new Set());
+const centeredOnRef = useRef<MapCenteredOn | null>(null);
 ```
 
-Refs: `svgRef`, `activePointerId`, `dragStartRef`.
+```ts
+// MapPane keeps only transient interaction state.
+const [hoveredId, setHoveredId] = useState<number | null>(null);
+const [dialogOpen, setDialogOpen] = useState(false);
+const [isDragging, setIsDragging] = useState(false);
+```
+
+MapPane refs: `svgRef`, `canvasRef`, `dragSessionRef`, `downTargetRef`,
+`dimensionsRef`, `panBoundsRef`, `fitFrameRef`.
 
 ### 5.2 Server state (React Query)
 

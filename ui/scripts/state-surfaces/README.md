@@ -94,12 +94,19 @@ rendered `style` attributes and stylesheets injected at run time (neither is
 emitted CSS text, so an inline conditional placed in a React `style` prop is
 outside the scan), and user-agent or extension stylesheets. These are
 residuals: the generator does not inventory or refuse them.
-The shipped CSS has **9 width
-bands × 2 motion values = 18 vectors**, expanded into **27 condition renders**
-by motion start/trough phases. IDs name band and motion, for example
-`w1101-1279/reduce` and `w1101-1279/motion/{start,trough}`. Pair scoring takes
+The shipped CSS has **22 representative vectors**, expanded into **33 condition
+renders** by motion start/trough phases. The nine fine-pointer width bands keep
+their 27 renders; the two bands through 760px add six coarse-pointer renders.
+IDs name band, pointer and motion, for example
+`w1101-1279/pointer=fine/reduce` and
+`w1101-1279/pointer=fine/motion/{start,trough}`. Pair scoring takes
 the minimum over all four independent phase pairs within each motion band. Mouse hover
-and keyboard Tab produce the recorded contexts. Hover tooltips await their expected final state; click/leave contexts await
+and keyboard Tab produce the recorded contexts. Key-row hover moves the mouse
+to a visible background point whose hit target is the row itself, then requires
+row hover with neither the sampled glyph nor any control hovered. An absent
+point or mismatched readback refuses capture; the row's center can land on its
+glyph at narrow widths and does not establish this context.
+Hover tooltips await their expected final state; click/leave contexts await
 closure. Exceeds-RAM delete focus-visible contexts measure the trash button
 with the tooltip dismissed for both unarmed and armed states: after Tab, press
 Escape once if a tooltip is present. A DOM signature (excluding only the
@@ -120,12 +127,18 @@ enter an acceptance receipt or redefine the expected state at a narrow width.
 The inventory holds reachable states only. Hovered glyphs in sidebar row-hover contexts, absent
 keys in required rows, missing keys in optional rows, and the absent/missing
 pair without a shared context are excluded and documented in the evidence.
-The focus-visible-with-tooltip-open delete variant is unmeasured: Radix row
-focus/blur makes it nondeterministic as Tab moves to the nested trash button.
-Across the 114 varying samples in the two regenerations compared at `61fb421c`,
-its painted-core effect was at most 0.0097 Euclidean in linear sRGB (well under
-1 deutan ΔE). The coordinator owns the component issue; this oracle change
-leaves the production component intact.
+The focus-visible-with-tooltip-open delete variant is unmeasured. Since #1102,
+moving focus within the row keeps the tooltip open; Escape and ancestor
+scrolling retain Radix's dismissal behavior. The focus trace makes the row
+fully visible and settles scrolling while the preceding family toggle has
+focus, then uses real Tab and one reading at each focus position. It proves
+focus transitions in a stationary viewport only. Natural Tab auto-scroll is
+ancestor scrolling, so it still dismisses the tooltip. The oracle still
+measures the dismissed state.
+Before #1102, Radix row focus/blur made that
+variant nondeterministic; across the 114 varying samples in the two
+regenerations compared at `61fb421c`, its painted-core effect was at most
+0.0097 Euclidean in linear sRGB.
 
 Freshness hashes every esbuild metafile input, recursive CSS imports, tooling,
 configs, lockfile, browser versions, production font files and the full

@@ -1,3 +1,4 @@
+import { NARROW_SHELL_QUERY } from "@/hooks/useNarrowShell";
 /**
  * Shell accessibility invariants that live in static assets (#777): the
  * viewport must let readers pinch-zoom, content names render in natural
@@ -307,5 +308,40 @@ describe("reduced motion (app-wide animate-* guard)", () => {
       const covered = selector.startsWith(".animate-") || stilled.has(selector);
       expect(covered, selector).toBe(true);
     }
+  });
+});
+
+
+describe("narrow shell rail", () => {
+  const root = postcss.parse(read("components", "nexus", "nexus-layout.css"));
+  function declarations(query: string, selector: string) {
+    const values: Record<string, string> = {};
+    root.walkAtRules("media", media => {
+      if (media.params !== query) return;
+      media.walkRules(rule => {
+        if (!rule.selectors.map(normalize).includes(selector)) return;
+        rule.walkDecls(decl => { values[decl.prop] = decl.value; });
+      });
+    });
+    return values;
+  }
+
+  it("uses one column and a safe-area bottom rail at the hook breakpoint", () => {
+    for (const selector of [".nexus-main", ".nexus-main.no-ledger"]) {
+      expect(declarations(NARROW_SHELL_QUERY, selector)).toMatchObject({
+        "grid-template-columns": "minmax(0, 1fr)",
+        "grid-template-rows": "minmax(0, 1fr) auto",
+      });
+    }
+    const rail = declarations(NARROW_SHELL_QUERY, ".rail-left");
+    expect(rail["flex-direction"]).toBe("row");
+    expect(rail.padding).toContain("env(safe-area-inset-bottom)");
+  });
+
+  it("yields the coarse-pointer rail to focused content and hides hover tips", () => {
+    const query = `${NARROW_SHELL_QUERY} and (pointer: coarse)`;
+    const selector = '.nexus-main:has(.nexus-content :is(input, textarea, [contenteditable="true"]):focus) > .rail-left';
+    expect(declarations(query, selector).display).toBe("none");
+    expect(declarations(query, ".rail-btn .rail-tip").display).toBe("none");
   });
 });

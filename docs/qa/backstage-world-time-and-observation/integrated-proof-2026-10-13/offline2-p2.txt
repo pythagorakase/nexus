@@ -1,0 +1,39 @@
+18:10  up 6 days,  4:50, 5 users, load averages: 10.09 13.06 13.45
+sssss.......................................sssssssssssss............... [  8%]
+.................................s......ssssssssssssssssssss.....sssssss [ 16%]
+............................................sssssssssssssss............. [ 24%]
+..................................................................s...ss [ 32%]
+ss...sssssssssssssssssssss....sss....................sssssssssssssssssss [ 40%]
+sssssssssssssssssssssssssssssssssssssssssssssssssssssssssss............. [ 49%]
+.....sssssssss..ssssssssssssssssssssssssssss.................sssssssssss [ 57%]
+ss.....s...........ss........................ssssssssssssssssssssss..ss. [ 65%]
+........................................................................ [ 73%]
+............................sssss..........sssssssssssssssssss.......... [ 81%]
+.................................s......s...................ssssssssssss [ 89%]
+ssssssssss...................................sss................ssssssss [ 98%]
+sssssssssssssssss                                                        [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+560 passed, 321 skipped, 7 warnings in 15.20s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+EXIT=0

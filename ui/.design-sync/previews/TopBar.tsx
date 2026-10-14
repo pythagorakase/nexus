@@ -26,6 +26,7 @@ export const Active = () => (
       characterName="Mira Vale"
       skaldStatus="READY"
       failedGeneration={null}
+      toastedFailureSessionId={null}
       frontierClock={frontierClock}
     />
   </Shell>
@@ -40,6 +41,7 @@ export const NoCharacter = () => (
       characterName={null}
       skaldStatus="READY"
       failedGeneration={null}
+      toastedFailureSessionId={null}
       frontierClock={null}
     />
   </Shell>
@@ -54,6 +56,7 @@ export const Offline = () => (
       characterName="Mira Vale"
       skaldStatus="OFFLINE"
       failedGeneration={null}
+      toastedFailureSessionId={null}
       frontierClock={frontierClock}
     />
   </Shell>

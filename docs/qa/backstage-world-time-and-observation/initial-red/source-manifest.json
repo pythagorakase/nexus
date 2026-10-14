@@ -1,0 +1,117 @@
+{
+  "initial-red/python-initial-red/clone-after-read-only.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/clone-after-read-only.txt",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "bytes": 3
+  },
+  "initial-red/python-initial-red/clone-before-read-only.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/clone-before-read-only.txt",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "bytes": 3
+  },
+  "initial-red/python-initial-red/coordinator-proof.py.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/coordinator-proof.py.txt",
+    "sha256": "e7ff4a62399132d041e54039edc0ec5b926f34c719e292e9871dd90c81cfd27d",
+    "bytes": 22798
+  },
+  "initial-red/python-initial-red/import-path.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/import-path.txt",
+    "sha256": "a906a05b8e4b195d42313646c8ace6f9b35f4e22623703bfe174363d74b46d39",
+    "bytes": 156
+  },
+  "initial-red/python-initial-red/python-red.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/python-red.txt",
+    "sha256": "8648e287f7895ca1e556abbbf3b6288aa02377dfdbefacacdf34204a37aeea62",
+    "bytes": 75299
+  },
+  "initial-red/python-initial-red/python-red.xml": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/python-red.xml",
+    "sha256": "6e6836660e34ee4771d632185f730fb62203bc5483a63f3c8cf39c65ce80ce8b",
+    "bytes": 20284
+  },
+  "initial-red/python-initial-red/results.json": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/results.json",
+    "sha256": "098188146672eeefd5c8d483c92ec12159c3914506f315312cbc40c5462fa0a0",
+    "bytes": 15783
+  },
+  "initial-red/python-initial-red/runner.py.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-python-initial-red-20261009T015153Z-02cc3f2c/runner.py.txt",
+    "sha256": "1cbfadcd366240b9797d19f34459039452512e754607f998604e21dc96a5368c",
+    "bytes": 20110
+  },
+  "initial-red/ui-npm-failed-attempt/coordinator-proof.py.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015239Z-a9cd0c86/coordinator-proof.py.txt",
+    "sha256": "e7ff4a62399132d041e54039edc0ec5b926f34c719e292e9871dd90c81cfd27d",
+    "bytes": 22798
+  },
+  "initial-red/ui-npm-failed-attempt/import-path.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015239Z-a9cd0c86/import-path.txt",
+    "sha256": "a906a05b8e4b195d42313646c8ace6f9b35f4e22623703bfe174363d74b46d39",
+    "bytes": 156
+  },
+  "initial-red/ui-npm-failed-attempt/npm-ci.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015239Z-a9cd0c86/npm-ci.txt",
+    "sha256": "250e369d730a46c4d41df37449a5c58c169b4b1d2ab546951a8bed0285805a95",
+    "bytes": 117
+  },
+  "initial-red/ui-npm-failed-attempt/results.json": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015239Z-a9cd0c86/results.json",
+    "sha256": "cc21a75035f6116ebac683e95e7d46a38e998b511f412802a7b3de11fc72f65d",
+    "bytes": 4831
+  },
+  "initial-red/ui-npm-failed-attempt/runner.py.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015239Z-a9cd0c86/runner.py.txt",
+    "sha256": "1cbfadcd366240b9797d19f34459039452512e754607f998604e21dc96a5368c",
+    "bytes": 20110
+  },
+  "initial-red/ui-initial-red/coordinator-adjudication.json": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/coordinator-adjudication.json",
+    "sha256": "5d8347eea532be8e8c5f5d4b580b161a3547d346833d1ec8c9848dac53565b1e",
+    "bytes": 1387
+  },
+  "initial-red/ui-initial-red/coordinator-proof.py.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/coordinator-proof.py.txt",
+    "sha256": "e7ff4a62399132d041e54039edc0ec5b926f34c719e292e9871dd90c81cfd27d",
+    "bytes": 22798
+  },
+  "initial-red/ui-initial-red/import-path.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/import-path.txt",
+    "sha256": "a906a05b8e4b195d42313646c8ace6f9b35f4e22623703bfe174363d74b46d39",
+    "bytes": 156
+  },
+  "initial-red/ui-initial-red/npm-ci.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/npm-ci.txt",
+    "sha256": "b7088429a10f5551736b71ab0c160d1ab6f4651ae2abfef8750774ca3755987e",
+    "bytes": 987
+  },
+  "initial-red/ui-initial-red/results.json": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/results.json",
+    "sha256": "9a6286f2fd4240cf9b9ca60c1aef5b941e832ae73426732af620a6395bdc3577",
+    "bytes": 78594
+  },
+  "initial-red/ui-initial-red/runner.py.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/runner.py.txt",
+    "sha256": "f3b7a85b2b8451ccba4d372aa56d9e694e62724b782c32602958ea737648f0fa",
+    "bytes": 20188
+  },
+  "initial-red/ui-initial-red/ui-red.json": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/ui-red.json",
+    "sha256": "a9a6d2504b79feb8ad5a5e356c5bf701ad57bf42f6e5f86321c2679bade6169f",
+    "bytes": 70878
+  },
+  "initial-red/ui-initial-red/ui-red.txt": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/ui-red.txt",
+    "sha256": "84fc4777987f5fce7c4e4a8ffb0cd49b30a4b988a1b3cd7eeed10425b4217d4d",
+    "bytes": 107448
+  },
+  "initial-red/ui-initial-red/npm-user.npmrc": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/npm-user.npmrc",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "initial-red/ui-initial-red/npm-global.npmrc": {
+    "source": "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/focused-proof/uib-ui-initial-red-20261009T015258Z-eb0d6b21/npm-global.npmrc",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  }
+}

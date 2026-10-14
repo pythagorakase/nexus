@@ -1,0 +1,947 @@
+
+> nexus-ui@1.0.0 test
+> vitest run TopBar NexusLayout MapPane LocalModelRows shell-accessibility
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ❯ src/shell-accessibility.test.ts (0 test)
+ ❯ src/components/nexus/NexusLayout.test.tsx (0 test)
+ ❯ src/components/nexus/MapPane.test.tsx (0 test)
+ ✓ src/components/nexus/TopBar.test.tsx (18 tests) 110ms
+ ❯ src/components/nexus/LocalModelRows.test.tsx (20 tests | 1 failed) 176ms
+   × exceeds-RAM tooltip > stays open as focus moves from the row to its trash button 60ms
+     → Unable to find an accessible element with the role "tooltip"
+
+Here are the accessible roles:
+
+  list:
+
+  Name "":
+  [36m<ul />[39m
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"lm-group"[39m
+    [33mdata-state[39m=[32m"open"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"lm-group"[39m
+    [33mdata-state[39m=[32m"closed"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"lm-group lm-actions"[39m
+    [33mdata-testid[39m=[32m"lm-actions"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Hermes 4.3 36B quantizations":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"true"[39m
+    [33maria-label[39m=[32m"Hermes 4.3 36B quantizations"[39m
+    [33mclass[39m=[32m"lm-chevron open"[39m
+    [33mdata-testid[39m=[32m"lm-toggle-hermes-4.3-36b"[39m
+  [36m/>[39m
+
+  Name "Delete Hermes 4.3 36B Q4_K_M":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Delete Hermes 4.3 36B Q4_K_M"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"lm-trash "[39m
+    [33mdata-testid[39m=[32m"lm-trash-hermes-4.3-36b-Q4_K_M"[39m
+    [33mdisabled[39m=[32m""[39m
+  [36m/>[39m
+
+  Name "Delete Hermes 4.3 36B Q6_K":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Delete Hermes 4.3 36B Q6_K"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"lm-trash "[39m
+    [33mdata-testid[39m=[32m"lm-trash-hermes-4.3-36b-Q6_K"[39m
+  [36m/>[39m
+
+  Name "Hermes 4 70B quantizations":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-label[39m=[32m"Hermes 4 70B quantizations"[39m
+    [33mclass[39m=[32m"lm-chevron "[39m
+    [33mdata-testid[39m=[32m"lm-toggle-hermes-4-70b"[39m
+  [36m/>[39m
+
+  Name "Unload the serving local model":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Unload the serving local model"[39m
+    [33mclass[39m=[32m"btn-soft"[39m
+    [33mdata-testid[39m=[32m"lm-eject"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  radiogroup:
+
+  Name "Hermes 4.3 36B quantizations":
+  [36m<div[39m
+    [33maria-label[39m=[32m"Hermes 4.3 36B quantizations"[39m
+    [33mclass[39m=[32m"lm-quant-list"[39m
+    [33mrole[39m=[32m"radiogroup"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  radio:
+
+  Name "q4_k_m 21.8 gb":
+  [36m<div[39m
+    [33maria-checked[39m=[32m"true"[39m
+    [33mclass[39m=[32m"lm-quant ready active"[39m
+    [33mdata-testid[39m=[32m"lm-quant-hermes-4.3-36b-Q4_K_M"[39m
+    [33mrole[39m=[32m"radio"[39m
+    [33mtabindex[39m=[32m"0"[39m
+  [36m/>[39m
+
+  Name "q6_k 29.7 gb":
+  [36m<div[39m
+    [33maria-checked[39m=[32m"false"[39m
+    [33maria-disabled[39m=[32m"true"[39m
+    [33mclass[39m=[32m"lm-quant ready exceeds"[39m
+    [33mdata-state[39m=[32m"closed"[39m
+    [33mdata-testid[39m=[32m"lm-quant-hermes-4.3-36b-Q6_K"[39m
+    [33mrole[39m=[32m"radio"[39m
+    [33mtabindex[39m=[32m"0"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<ul>[39m
+      [36m<li[39m
+        [33mclass[39m=[32m"lm-group"[39m
+        [33mdata-state[39m=[32m"open"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"model-row lm-fam "[39m
+          [33mdata-testid[39m=[32m"model-local-hermes-4.3-36b"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"model-radio"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-circle"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"12"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"12"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mr[39m=[32m"10"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"model-name lm-name"[39m
+          [36m>[39m
+            [0mHermes 4.3 36B[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"caption dim lm-sum"[39m
+            [33mdata-testid[39m=[32m"lm-sum-hermes-4.3-36b"[39m
+          [36m>[39m
+            [0mq4_k_m · 21.8 gb[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"lm-spacer"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"true"[39m
+            [33maria-label[39m=[32m"Hermes 4.3 36B quantizations"[39m
+            [33mclass[39m=[32m"lm-chevron open"[39m
+            [33mdata-testid[39m=[32m"lm-toggle-hermes-4.3-36b"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"13"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"13"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"lm-quants"[39m
+          [33mdata-state[39m=[32m"open"[39m
+          [33mid[39m=[32m"radix-:r17:"[39m
+          [33mstyle[39m=[32m""[39m
+        [36m>[39m
+          [36m<div[39m
+            [33maria-label[39m=[32m"Hermes 4.3 36B quantizations"[39m
+            [33mclass[39m=[32m"lm-quant-list"[39m
+            [33mrole[39m=[32m"radiogroup"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33maria-checked[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lm-quant ready active"[39m
+              [33mdata-testid[39m=[32m"lm-quant-hermes-4.3-36b-Q4_K_M"[39m
+              [33mrole[39m=[32m"radio"[39m
+              [33mtabindex[39m=[32m"0"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"lm-state"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"lm-dot "[39m
+                [36m/>[39m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"caption lm-quant-label"[39m
+              [36m>[39m
+                [0mq4_k_m[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"caption dim lm-size"[39m
+              [36m>[39m
+                [0m21.8[0m
+                [0m gb[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"lm-action"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Delete Hermes 4.3 36B Q4_K_M"[39m
+                  [33maria-pressed[39m=[32m"false"[39m
+                  [33mclass[39m=[32m"lm-trash "[39m
+                  [33mdata-testid[39m=[32m"lm-trash-hermes-4.3-36b-Q4_K_M"[39m
+                  [33mdisabled[39m=[32m""[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33mclass[39m=[32m"lucide lucide-trash2"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"11"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"11"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M3 6h18"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"[39m
+                    [36m/>[39m
+                    [36m<line[39m
+                      [33mx1[39m=[32m"10"[39m
+                      [33mx2[39m=[32m"10"[39m
+                      [33my1[39m=[32m"11"[39m
+                      [33my2[39m=[32m"17"[39m
+                    [36m/>[39m
+                    [36m<line[39m
+                      [33mx1[39m=[32m"14"[39m
+                      [33mx2[39m=[32m"14"[39m
+                      [33my1[39m=[32m"11"[39m
+                      [33my2[39m=[32m"17"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</button>[39m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33maria-checked[39m=[32m"false"[39m
+              [33maria-disabled[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lm-quant ready exceeds"[39m
+              [33mdata-state[39m=[32m"closed"[39m
+              [33mdata-testid[39m=[32m"lm-quant-hermes-4.3-36b-Q6_K"[39m
+              [33mrole[39m=[32m"radio"[39m
+              [33mtabindex[39m=[32m"0"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"lm-state"[39m
+              [36m/>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"caption lm-quant-label"[39m
+              [36m>[39m
+                [0mq6_k[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"caption dim lm-size"[39m
+              [36m>[39m
+                [0m29.7[0m
+                [0m gb[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"lm-action"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Delete Hermes 4.3 36B Q6_K"[39m
+                  [33maria-pressed[39m=[32m"false"[39m
+                  [33mclass[39m=[32m"lm-trash "[39m
+                  [33mdata-testid[39m=[32m"lm-trash-hermes-4.3-36b-Q6_K"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33mclass[39m=[32m"lucide lucide-trash2"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"11"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"11"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M3 6h18"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"[39m
+                    [36m/>[39m
+                    [36m<line[39m
+                      [33mx1[39m=[32m"10"[39m
+                      [33mx2[39m=[32m"10"[39m
+                      [33my1[39m=[32m"11"[39m
+                      [33my2[39m=[32m"17"[39m
+                    [36m/>[39m
+                    [36m<line[39m
+                      [33mx1[39m=[32m"14"[39m
+                      [33mx2[39m=[32m"14"[39m
+                      [33my1[39m=[32m"11"[39m
+                      [33my2[39m=[32m"17"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</button>[39m
+              [36m</span>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</li>[39m
+      [36m<li[39m
+        [33mclass[39m=[32m"lm-group"[39m
+        [33mdata-state[39m=[32m"closed"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"model-row lm-fam "[39m
+          [33mdata-testid[39m=[32m"model-local-hermes-4-70b"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"model-radio"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-circle"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"12"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"12"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mr[39m=[32m"10"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"model-name lm-name"[39m
+          [36m>[39m
+            [0mHermes 4 70B[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"lm-spacer"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33maria-label[39m=[32m"Hermes 4 70B quantizations"[39m
+            [33mclass[39m=[32m"lm-chevron "[39m
+            [33mdata-testid[39m=[32m"lm-toggle-hermes-4-70b"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"13"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"13"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"lm-quants"[39m
+          [33mdata-state[39m=[32m"closed"[39m
+          [33mhidden[39m=[32m""[39m
+          [33mid[39m=[32m"radix-:r18:"[39m
+          [33mstyle[39m=[32m""[39m
+        [36m/>[39m
+      [36m</li>[39m
+      [36m<li[39m
+        [33mclass[39m=[32m"lm-group lm-actions"[39m
+        [33mdata-testid[39m=[32m"lm-actions"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"lm-spacer"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Unload the serving local model"[39m
+          [33mclass[39m=[32m"btn-soft"[39m
+          [33mdata-testid[39m=[32m"lm-eject"[39m
+        [36m>[39m
+          [0mEJECT[0m
+        [36m</button>[39m
+      [36m</li>[39m
+    [36m</ul>[39m
+  [36m</div>[39m
+[36m</body>[39m
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/components/nexus/NexusLayout.announcer.test.tsx (3 tests) 260ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/shell-accessibility.test.ts [ src/shell-accessibility.test.ts ]
+Error: Failed to resolve import "@/hooks/useNarrowShell" from "client/src/shell-accessibility.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/shell-accessibility.test.ts:1:35
+  1  |  import { NARROW_SHELL_QUERY } from "@/hooks/useNarrowShell";
+     |                                      ^
+  2  |  import postcss from "postcss";
+  3  |  import { readdirSync, readFileSync } from "node:fs";
+ ❯ TransformPluginContext._formatError ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49258:41
+ ❯ TransformPluginContext.error ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49253:16
+ ❯ normalizeUrl ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64306:23
+ ❯ ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64438:39
+ ❯ TransformPluginContext.transform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64365:7
+ ❯ PluginContainer.transform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49099:18
+ ❯ loadAndTransform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:51977:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/components/nexus/MapPane.test.tsx [ src/components/nexus/MapPane.test.tsx ]
+Error: Failed to resolve import "./MapViewContext" from "client/src/components/nexus/MapPane.test.tsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/components/nexus/MapPane.test.tsx:27:32
+  12 |  } from "@/lib/map-geometry";
+  13 |  import { MapPane } from "./MapPane";
+  14 |  import { MapViewProvider } from "./MapViewContext";
+     |                                   ^
+  15 |  const SLOT = 5;
+  16 |  function makePlace(id, name, point) {
+ ❯ TransformPluginContext._formatError ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49258:41
+ ❯ TransformPluginContext.error ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49253:16
+ ❯ normalizeUrl ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64306:23
+ ❯ ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64438:39
+ ❯ TransformPluginContext.transform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64365:7
+ ❯ PluginContainer.transform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49099:18
+ ❯ loadAndTransform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:51977:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/components/nexus/NexusLayout.test.tsx [ src/components/nexus/NexusLayout.test.tsx ]
+Error: Failed to resolve import "./MapViewContext" from "client/src/components/nexus/NexusLayout.test.tsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/components/nexus/NexusLayout.test.tsx:91:38
+  89 |  const __vi_import_0__ = await import('react/jsx-dev-runtime')
+  90 |  const __vi_import_1__ = await import('react')
+  91 |  const __vi_import_2__ = await import('./MapViewContext')
+     |                                       ^
+  92 |  const __vi_import_3__ = await import('@tanstack/react-query')
+  93 |  const __vi_import_4__ = await import('@testing-library/react')
+ ❯ TransformPluginContext._formatError ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49258:41
+ ❯ TransformPluginContext.error ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49253:16
+ ❯ normalizeUrl ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64306:23
+ ❯ ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64438:39
+ ❯ TransformPluginContext.transform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:64365:7
+ ❯ PluginContainer.transform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:49099:18
+ ❯ loadAndTransform ../node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:51977:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/nexus/LocalModelRows.test.tsx > exceeds-RAM tooltip > stays open as focus moves from the row to its trash button
+TestingLibraryElementError: Unable to find an accessible element with the role "tooltip"
+
+Here are the accessible roles:
+
+  list:
+
+  Name "":
+  [36m<ul />[39m
+
+  --------------------------------------------------
+  listitem:
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"lm-group"[39m
+    [33mdata-state[39m=[32m"open"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"lm-group"[39m
+    [33mdata-state[39m=[32m"closed"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<li[39m
+    [33mclass[39m=[32m"lm-group lm-actions"[39m
+    [33mdata-testid[39m=[32m"lm-actions"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Hermes 4.3 36B quantizations":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"true"[39m
+    [33maria-label[39m=[32m"Hermes 4.3 36B quantizations"[39m
+    [33mclass[39m=[32m"lm-chevron open"[39m
+    [33mdata-testid[39m=[32m"lm-toggle-hermes-4.3-36b"[39m
+  [36m/>[39m
+
+  Name "Delete Hermes 4.3 36B Q4_K_M":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Delete Hermes 4.3 36B Q4_K_M"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"lm-trash "[39m
+    [33mdata-testid[39m=[32m"lm-trash-hermes-4.3-36b-Q4_K_M"[39m
+    [33mdisabled[39m=[32m""[39m
+  [36m/>[39m
+
+  Name "Delete Hermes 4.3 36B Q6_K":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Delete Hermes 4.3 36B Q6_K"[39m
+    [33maria-pressed[39m=[32m"false"[39m
+    [33mclass[39m=[32m"lm-trash "[39m
+    [33mdata-testid[39m=[32m"lm-trash-hermes-4.3-36b-Q6_K"[39m
+  [36m/>[39m
+
+  Name "Hermes 4 70B quantizations":
+  [36m<button[39m
+    [33maria-expanded[39m=[32m"false"[39m
+    [33maria-label[39m=[32m"Hermes 4 70B quantizations"[39m
+    [33mclass[39m=[32m"lm-chevron "[39m
+    [33mdata-testid[39m=[32m"lm-toggle-hermes-4-70b"[39m
+  [36m/>[39m
+
+  Name "Unload the serving local model":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Unload the serving local model"[39m
+    [33mclass[39m=[32m"btn-soft"[39m
+    [33mdata-testid[39m=[32m"lm-eject"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  radiogroup:
+
+  Name "Hermes 4.3 36B quantizations":
+  [36m<div[39m
+    [33maria-label[39m=[32m"Hermes 4.3 36B quantizations"[39m
+    [33mclass[39m=[32m"lm-quant-list"[39m
+    [33mrole[39m=[32m"radiogroup"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  radio:
+
+  Name "q4_k_m 21.8 gb":
+  [36m<div[39m
+    [33maria-checked[39m=[32m"true"[39m
+    [33mclass[39m=[32m"lm-quant ready active"[39m
+    [33mdata-testid[39m=[32m"lm-quant-hermes-4.3-36b-Q4_K_M"[39m
+    [33mrole[39m=[32m"radio"[39m
+    [33mtabindex[39m=[32m"0"[39m
+  [36m/>[39m
+
+  Name "q6_k 29.7 gb":
+  [36m<div[39m
+    [33maria-checked[39m=[32m"false"[39m
+    [33maria-disabled[39m=[32m"true"[39m
+    [33mclass[39m=[32m"lm-quant ready exceeds"[39m
+    [33mdata-state[39m=[32m"closed"[39m
+    [33mdata-testid[39m=[32m"lm-quant-hermes-4.3-36b-Q6_K"[39m
+    [33mrole[39m=[32m"radio"[39m
+    [33mtabindex[39m=[32m"0"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<ul>[39m
+      [36m<li[39m
+        [33mclass[39m=[32m"lm-group"[39m
+        [33mdata-state[39m=[32m"open"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"model-row lm-fam "[39m
+          [33mdata-testid[39m=[32m"model-local-hermes-4.3-36b"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"model-radio"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-circle"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"12"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"12"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mr[39m=[32m"10"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"model-name lm-name"[39m
+          [36m>[39m
+            [0mHermes 4.3 36B[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"caption dim lm-sum"[39m
+            [33mdata-testid[39m=[32m"lm-sum-hermes-4.3-36b"[39m
+          [36m>[39m
+            [0mq4_k_m · 21.8 gb[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"lm-spacer"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"true"[39m
+            [33maria-label[39m=[32m"Hermes 4.3 36B quantizations"[39m
+            [33mclass[39m=[32m"lm-chevron open"[39m
+            [33mdata-testid[39m=[32m"lm-toggle-hermes-4.3-36b"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"13"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"13"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"lm-quants"[39m
+          [33mdata-state[39m=[32m"open"[39m
+          [33mid[39m=[32m"radix-:r17:"[39m
+          [33mstyle[39m=[32m""[39m
+        [36m>[39m
+          [36m<div[39m
+            [33maria-label[39m=[32m"Hermes 4.3 36B quantizations"[39m
+            [33mclass[39m=[32m"lm-quant-list"[39m
+            [33mrole[39m=[32m"radiogroup"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33maria-checked[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lm-quant ready active"[39m
+              [33mdata-testid[39m=[32m"lm-quant-hermes-4.3-36b-Q4_K_M"[39m
+              [33mrole[39m=[32m"radio"[39m
+              [33mtabindex[39m=[32m"0"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"lm-state"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m"lm-dot "[39m
+                [36m/>[39m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"caption lm-quant-label"[39m
+              [36m>[39m
+                [0mq4_k_m[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"caption dim lm-size"[39m
+              [36m>[39m
+                [0m21.8[0m
+                [0m gb[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"lm-action"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Delete Hermes 4.3 36B Q4_K_M"[39m
+                  [33maria-pressed[39m=[32m"false"[39m
+                  [33mclass[39m=[32m"lm-trash "[39m
+                  [33mdata-testid[39m=[32m"lm-trash-hermes-4.3-36b-Q4_K_M"[39m
+                  [33mdisabled[39m=[32m""[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33mclass[39m=[32m"lucide lucide-trash2"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"11"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"11"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M3 6h18"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"[39m
+                    [36m/>[39m
+                    [36m<line[39m
+                      [33mx1[39m=[32m"10"[39m
+                      [33mx2[39m=[32m"10"[39m
+                      [33my1[39m=[32m"11"[39m
+                      [33my2[39m=[32m"17"[39m
+                    [36m/>[39m
+                    [36m<line[39m
+                      [33mx1[39m=[32m"14"[39m
+                      [33mx2[39m=[32m"14"[39m
+                      [33my1[39m=[32m"11"[39m
+                      [33my2[39m=[32m"17"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</button>[39m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33maria-checked[39m=[32m"false"[39m
+              [33maria-disabled[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lm-quant ready exceeds"[39m
+              [33mdata-state[39m=[32m"closed"[39m
+              [33mdata-testid[39m=[32m"lm-quant-hermes-4.3-36b-Q6_K"[39m
+              [33mrole[39m=[32m"radio"[39m
+              [33mtabindex[39m=[32m"0"[39m
+            [36m>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"lm-state"[39m
+              [36m/>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"caption lm-quant-label"[39m
+              [36m>[39m
+                [0mq6_k[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"caption dim lm-size"[39m
+              [36m>[39m
+                [0m29.7[0m
+                [0m gb[0m
+              [36m</span>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m"lm-action"[39m
+              [36m>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Delete Hermes 4.3 36B Q6_K"[39m
+                  [33maria-pressed[39m=[32m"false"[39m
+                  [33mclass[39m=[32m"lm-trash "[39m
+                  [33mdata-testid[39m=[32m"lm-trash-hermes-4.3-36b-Q6_K"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33mclass[39m=[32m"lucide lucide-trash2"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"11"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"11"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M3 6h18"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"[39m
+                    [36m/>[39m
+                    [36m<line[39m
+                      [33mx1[39m=[32m"10"[39m
+                      [33mx2[39m=[32m"10"[39m
+                      [33my1[39m=[32m"11"[39m
+                      [33my2[39m=[32m"17"[39m
+                    [36m/>[39m
+                    [36m<line[39m
+                      [33mx1[39m=[32m"14"[39m
+                      [33mx2[39m=[32m"14"[39m
+                      [33my1[39m=[32m"11"[39m
+                      [33my2[39m=[32m"17"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</button>[39m
+              [36m</span>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</li>[39m
+      [36m<li[39m
+        [33mclass[39m=[32m"lm-group"[39m
+        [33mdata-state[39m=[32m"closed"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"model-row lm-fam "[39m
+          [33mdata-testid[39m=[32m"model-local-hermes-4-70b"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"model-radio"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-circle"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"12"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"12"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mr[39m=[32m"10"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"model-name lm-name"[39m
+          [36m>[39m
+            [0mHermes 4 70B[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"lm-spacer"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33maria-label[39m=[32m"Hermes 4 70B quantizations"[39m
+            [33mclass[39m=[32m"lm-chevron "[39m
+            [33mdata-testid[39m=[32m"lm-toggle-hermes-4-70b"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-down"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"13"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"13"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m6 9 6 6 6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"lm-quants"[39m
+          [33mdata-state[39m=[32m"closed"[39m
+          [33mhidden[39m=[32m""[39m
+          [33mid[39m=[32m"radix-:r18:"[39m
+          [33mstyle[39m=[32m""[39m
+        [36m/>[39m
+      [36m</li>[39m
+      [36m<li[39m
+        [33mclass[39m=[32m"lm-group lm-actions"[39m
+        [33mdata-testid[39m=[32m"lm-actions"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"lm-spacer"[39m
+        [36m/>[39m
+        [36m<button[39m
+          [33maria-label[39m=[32m"Unload the serving local model"[39m
+          [33mclass[39m=[32m"btn-soft"[39m
+          [33mdata-testid[39m=[32m"lm-eject"[39m
+        [36m>[39m
+          [0mEJECT[0m
+        [36m</button>[39m
+      [36m</li>[39m
+    [36m</ul>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ❯ Object.getElementError ../node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/components/nexus/LocalModelRows.test.tsx:440:19
+    438|     expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    439|     act(() => { fireEvent.focusOut(row, { relatedTarget: trash }); });
+    440|     expect(screen.getByRole("tooltip")).toBeInTheDocument();
+       |                   ^
+    441|     await user.tab();
+    442|     expect(trash).toHaveFocus();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  4 failed | 2 passed (6)
+      Tests  1 failed | 40 passed (41)
+   Start at  13:42:38
+   Duration  1.17s (transform 403ms, setup 209ms, collect 760ms, tests 546ms, environment 1.27s, prepare 313ms)
+

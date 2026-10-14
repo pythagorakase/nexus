@@ -1,0 +1,29 @@
+
+> nexus-ui@1.0.0 test
+> vitest run TopBar NexusLayout MapPane LocalModelRows shell-accessibility StateGlyphs RightLedger ReturnRecapCard NarrativePane
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ src/shell-accessibility.test.ts (11 tests) 55ms
+ ✓ src/components/nexus/RightLedger.test.tsx (4 tests) 21ms
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/components/nexus/TopBar.test.tsx (18 tests) 111ms
+ ✓ src/components/nexus/LocalModelRows.test.tsx (20 tests) 170ms
+ ✓ src/components/nexus/NarrativePane.test.tsx (3 tests) 74ms
+ ✓ src/components/nexus/NexusLayout.test.tsx (5 tests) 142ms
+ ✓ src/components/nexus/MapPane.test.tsx (5 tests) 225ms
+ ✓ src/components/nexus/ReturnRecapCard.test.tsx (16 tests) 281ms
+ ✓ src/components/nexus/NexusLayout.announcer.test.tsx (3 tests) 267ms
+ ✓ src/components/nexus/NarrativePane.regenerate.test.tsx (10 tests) 318ms
+ ✓ src/components/nexus/NarrativePane.drafts.test.tsx (36 tests) 382ms
+ ✓ src/components/nexus/StateGlyphs.test.tsx (6 tests) 423ms
+
+ Test Files  12 passed (12)
+      Tests  137 passed (137)
+   Start at  13:44:43
+   Duration  1.50s (transform 1.05s, setup 595ms, collect 4.54s, tests 2.47s, environment 4.47s, prepare 615ms)
+

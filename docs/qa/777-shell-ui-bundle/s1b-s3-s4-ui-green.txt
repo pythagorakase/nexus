@@ -1,0 +1,22 @@
+
+> nexus-ui@1.0.0 test
+> vitest run TopBar NexusLayout MapPane shell-accessibility
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ src/shell-accessibility.test.ts (11 tests) 54ms
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/components/nexus/TopBar.test.tsx (18 tests) 108ms
+ ✓ src/components/nexus/NexusLayout.test.tsx (5 tests) 128ms
+ ✓ src/components/nexus/MapPane.test.tsx (5 tests) 194ms
+ ✓ src/components/nexus/NexusLayout.announcer.test.tsx (3 tests) 257ms
+
+ Test Files  5 passed (5)
+      Tests  42 passed (42)
+   Start at  13:44:30
+   Duration  1.12s (transform 597ms, setup 157ms, collect 1.36s, tests 741ms, environment 979ms, prepare 217ms)
+

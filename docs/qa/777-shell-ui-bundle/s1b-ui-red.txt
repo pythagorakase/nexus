@@ -1,0 +1,84 @@
+
+> nexus-ui@1.0.0 test
+> vitest run TopBar NexusLayout.announcer
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ❯ src/components/nexus/TopBar.test.tsx (18 tests | 2 failed) 104ms
+   × TopBar generation announcer > stays silent for a failure its toast reported 5ms
+     → expect(element).toBeEmptyDOMElement()
+
+Received:
+  "Generation failed"
+   × TopBar generation announcer > clears the region after the configured hold 3ms
+     → expect(element).toBeEmptyDOMElement()
+
+Received:
+  "Generation started"
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/nexus/NexusLayout.announcer.test.tsx (3 tests | 1 failed) 261ms
+   × generation announcer on the live engine > reports a durable failure once, through its toast 75ms
+     → expected [ 'Generation started', …(1) ] to deeply equal [ 'Generation started' ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/nexus/NexusLayout.announcer.test.tsx > generation announcer on the live engine > reports a durable failure once, through its toast
+AssertionError: expected [ 'Generation started', …(1) ] to deeply equal [ 'Generation started' ]
+
+- Expected
++ Received
+
+  Array [
+    "Generation started",
++   "Generation failed",
+  ]
+
+ ❯ src/components/nexus/NexusLayout.announcer.test.tsx:241:20
+    239|     await settle("READY");
+    240| 
+    241|     expect(spoken).toEqual(["Generation started"]);
+       |                    ^
+    242|     expect(reportedToasts.filter((toast) => toast.title === "Generatio…
+    243|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/components/nexus/TopBar.test.tsx > TopBar generation announcer > stays silent for a failure its toast reported
+Error: expect(element).toBeEmptyDOMElement()
+
+Received:
+  "Generation failed"
+ ❯ src/components/nexus/TopBar.test.tsx:397:25
+    395|       toastedFailureSessionId: "failed-toast",
+    396|     });
+    397|     expect(announcer()).toBeEmptyDOMElement();
+       |                         ^
+    398|     expect(spoken).toEqual(["Generation started"]);
+    399|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/components/nexus/TopBar.test.tsx > TopBar generation announcer > clears the region after the configured hold
+Error: expect(element).toBeEmptyDOMElement()
+
+Received:
+  "Generation started"
+ ❯ src/components/nexus/TopBar.test.tsx:409:27
+    407|       expect(announcer()).toHaveTextContent("Generation started");
+    408|       act(() => vi.advanceTimersByTime(1));
+    409|       expect(announcer()).toBeEmptyDOMElement();
+       |                           ^
+    410|       setStatus("RECEIVING");
+    411|       setStatus("READY");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 18 passed (21)
+   Start at  13:30:50
+   Duration  1.08s (transform 339ms, setup 52ms, collect 554ms, tests 365ms, environment 324ms, prepare 102ms)
+

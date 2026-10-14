@@ -1,0 +1,243 @@
+{
+  "base": "f073b3711a3bd0273943c9defad85913452fd00b",
+  "state": "15-lane source checkpoint committed; UI-B brings original777 parent; all runtime acceptance pending",
+  "worktree": "/Users/pythagor/.codex/worktrees/resume-wave-b-integration/nexus",
+  "inputs": {
+    "809-S1": "6f30c3b1100fa34355a3807dee63d9233d03d771",
+    "803-S6": "3e1f537accb8fcc8de5820d59d97413d2888d49a",
+    "815-S3": "7fc11e50d1887696d9affe6190e8aa3f1b0cdd24",
+    "815-S5": "ad89b357c096ac46334e8ad14dd24da9ac13c1ba",
+    "778-S3": "fd35896d961ff1e9d2728ccf3255218d8bc5d5e0",
+    "784-S2": "bf053542a1007b7fea768c13a06b768136df4aa8",
+    "823-S1": "a8cc15c43bf33cf370cd07567604980152db1318",
+    "803-S1-S7": "609a7cae2f178dbc1547f4aa173a345057601e9d",
+    "776-S1b": "95a45ca107f8fe93e9fc617f7964cbf932c239d2",
+    "840-S2": "ed5ce5a48409c77b65f0502467ee0c09be4b4a3e",
+    "776-S3": "d0e9d848b6c83b4e469d4b1de26fdd0b59d56827",
+    "836-S6a": "fe4f7e8f49138c0bffe4609c75e8a4a7e42bdc9d",
+    "811-S3a": "dc2c27ae4999b61d228c2d9981dbd69b843ce2a7",
+    "776-S6": "5fa11d5463c43e8c97d0cc3a323421dd078273f4",
+    "UI-B": "9e61307194699f202ad226d1b3af6e1b9350c2cd"
+  },
+  "merged": [
+    {
+      "lane": "809-S1",
+      "head": "0cc63fa961fc49d89d1bfc2acbfca1a65618a8c2"
+    },
+    {
+      "lane": "803-S6",
+      "head": "a3d271fa45de1ae0a871a7a890a39411365e50bb"
+    },
+    {
+      "lane": "815-S3",
+      "head": "917cc1d58e3ffcdcf39bce6c5c9b112c0a30b9a2"
+    },
+    {
+      "lane": "815-S5",
+      "head": "8d2e4999db67fc6f7334bf717660585469120c40"
+    },
+    {
+      "lane": "778-S3",
+      "head": "c8abc33faca16283bb9e99acf55bf4af135e3d96"
+    },
+    {
+      "lane": "784-S2",
+      "head": "71f2b4f93f852fd7f4fe003318307a18d4cf4e89"
+    },
+    {
+      "lane": "823-S1",
+      "head": "6b0adff6e33c4fc2ef2e3cf9618fff6d367c5bde"
+    },
+    {
+      "lane": "803-S1-S7",
+      "head": "a13681af82f661d9728239bb030b314d44472292"
+    },
+    {
+      "lane": "776-S1b",
+      "head": "c38df3b1ba4def8aea4b894503fb1bbece998886"
+    },
+    {
+      "lane": "840-S2",
+      "head": "d59b2fca2442f3e2ad758a534c8fb84506056519"
+    },
+    {
+      "lane": "776-S3",
+      "head": "2b11b96197a15e43153f8d2adad50162644a81e2"
+    },
+    {
+      "lane": "836-S6a",
+      "head": "a4842c66627417268a20c96d8f86cc40f9f2088c"
+    },
+    {
+      "lane": "811-S3a",
+      "head": "7f2d36ad6d2d5c650ec6f8a4804296c6d03ff31f"
+    },
+    {
+      "lane": "776-S6",
+      "head": "825c9fd997c1d75a47acd9f5ea6fbb06e3465b2a"
+    },
+    {
+      "lane": "UI-B",
+      "head": "f755a209b64cd67f8feaaa774dbcd0679863452b"
+    }
+  ],
+  "deferred": [
+    "777final",
+    "809WaveA",
+    "824WaveA",
+    "817last",
+    "all assembled proof"
+  ],
+  "resolutions": [
+    {
+      "lane": "809-S1",
+      "path": "AGENTS.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "809-S1",
+      "path": "docs/turn_flow_sequence.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "803-S6",
+      "path": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "803-S6",
+      "paths": [
+        "docs/cli.md",
+        "docs/cli_reference.md"
+      ],
+      "rule": "Union models plan/fetch runtime profile list and doctor/init diagnostic exemption. Regenerate reference from combined parser."
+    },
+    {
+      "lane": "815-S3",
+      "path": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "815-S5",
+      "path": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "815-S5",
+      "paths": [
+        "docs/cli.md",
+        "nexus/cli_contract.py",
+        "tests/test_cli_inspect_pg.py",
+        "docs/cli_reference.md"
+      ],
+      "rule": "Union existinginit diagnostic exemption with operator_api transport; retain815S2 player-DTO parity loop plus new maskedoperator test and requests/tomlkit imports. Preserve spoiler warning, replace obsolete no-settings-inspection sentence. Regenerate combinedreference."
+    },
+    {
+      "lane": "778-S3",
+      "path": "AGENTS.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "778-S3",
+      "path": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "778-S3",
+      "path": "docs/turn_flow_sequence.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "823-S1",
+      "path": "config/reachability_baseline.json",
+      "rule": "Union descriptive reason only; merged production inventory untouched, final exact AST admission pending."
+    },
+    {
+      "lane": "803-S1-S7",
+      "path": "config/reachability_baseline.json",
+      "rule": "Union descriptive reason for desktop_config with prior init/journal closure; production arrays unchanged and final AST admission pending."
+    },
+    {
+      "lane": "776-S1b",
+      "path": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "840-S2",
+      "path": "AGENTS.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "840-S2",
+      "paths": [
+        "config/reachability_baseline.json",
+        "tests/test_orrery/test_retrograde_maturation.py"
+      ],
+      "rule": "Remove retired geo-only test per840 order, including809s typed-settings adaptation inside it. Keep all other809 consumers. Union descriptive production closure reason; final AST check pending."
+    },
+    {
+      "lane": "776-S3",
+      "path": "docs/database.md",
+      "rule": "Retain S1b claim/reuse paragraph followed by S3 WizardTranscript section; product files merged without conflicts."
+    },
+    {
+      "lane": "811-S3a",
+      "path": "AGENTS.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "811-S3a",
+      "path": "docs/turn_flow_sequence.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "811-S3a",
+      "paths": [
+        "config/reachability.toml",
+        "config/reachability_baseline.json",
+        "tests/test_orrery/test_acquisition_scan_pg.py",
+        "tests/test_orrery/test_experience_enqueue_gin_pg.py",
+        "tests/test_api/test_wizard_messages_migration_pg.py",
+        "tests/test_relationship_entity_ids_pg.py"
+      ],
+      "rule": "Preserve840 retired costscript deletion and add811summaryoperator; keep809 typedload_settings with moved maintenance imports. Port newS3/836 migration callers absent from811base to maintenance implementation. Descriptive reason united; final baselineAST admission pending."
+    },
+    {
+      "lane": "776-S6",
+      "path": "docs/turn_flow_sequence.md",
+      "rule": "Retained current-side stamp only; all source/body re-verification and final stamps remain pending."
+    },
+    {
+      "lane": "776-S6",
+      "path": "docs/orrery_retrograde_spec.md",
+      "rule": "Retain S1b embedding-resume sentence and add S6 derivation vocabulary and settled-read wording. All product/test files merged without conflicts, source checks and runtime proof pending."
+    },
+    {
+      "lane": "UI-B",
+      "paths": [
+        "AGENTS.md",
+        "docs/decisions/0009-dollars-in-the-ledger.md",
+        "docs/decisions/0010-the-gaia-seat.md",
+        "docs/decisions/0024-killed-c102.md",
+        "docs/decisions/0034-conspiracy-channel.md",
+        "docs/decisions/0054-responsive-shell.md",
+        "docs/turn_flow_sequence.md"
+      ],
+      "rule": "Retained current stamps and preserved0054 useNarrowShell source union. Original777149704 source arrives through UI-B parent; newcapture harness/final777 and WaveA809/824 still pending. All final semantic canonical review/runtime acceptance remain pending."
+    }
+  ],
+  "head": "f755a209b64cd67f8feaaa774dbcd0679863452b",
+  "tree": "6571e0ea7100ced95c1c7eb71939b2a1541a05a8",
+  "review_followups": [
+    {
+      "reviewer": "inventory_prs",
+      "path": "docs/orrery_retrograde_spec.md",
+      "finding": "S6 prose union accidentally dropped packet from stage list",
+      "fix": "Restore derivation -> packet -> seed_candidates; retain embedding resume and settled read",
+      "runtime_change": false
+    }
+  ],
+  "checkpoint_head": "f755a209b64cd67f8feaaa774dbcd0679863452b",
+  "canonical_stamps": "f073b3711a3bd0273943c9defad85913452fd00b",
+  "ast_syntax_files": 188
+}
