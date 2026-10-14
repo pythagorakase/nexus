@@ -126,6 +126,18 @@ def test_continue_narrative_turn_forwards_only_explicit_model(monkeypatch) -> No
     posts: list[tuple[str, dict[str, Any]]] = []
 
     def fake_get(url: str, **kwargs: Any) -> DummyResponse:
+        if url.endswith("/api/story/new/retrograde/status"):
+            assert kwargs["params"] == {"slot": 4}
+            return DummyResponse(
+                {
+                    "slot": 4,
+                    "run": None,
+                    "run_status": None,
+                    "error": None,
+                    "stage": "idle",
+                    "stages": [],
+                }
+            )
         assert url.endswith("/api/slot/4/state")
         return DummyResponse(
             {
