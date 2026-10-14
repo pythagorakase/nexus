@@ -1,0 +1,52 @@
+{
+  "source_base": "a8cc15c43bf33cf370cd07567604980152db1318",
+  "merge_base": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "status": "Source review only; final main merge and document proof pending.",
+  "source_relocation": {
+    "docs/decisions/0040-story-bundles.md": [
+      "scripts/new_story_setup.py",
+      "nexus/maintenance/new_story_setup.py"
+    ]
+  },
+  "documents": [
+    {
+      "document": "AGENTS.md",
+      "changed_sources": [
+        "CLAUDE.md",
+        "docs/turn_flow_sequence.md",
+        "tests/pg_fixtures.py"
+      ],
+      "previous_stamp": "9c8f10501389ffe14388b6d684ea060b2058781b",
+      "reviewed_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0010-the-gaia-seat.md",
+      "changed_sources": [
+        "nexus/config/story_model.py"
+      ],
+      "previous_stamp": "d70a1991210ce16aef5d6f9b57b0ec563ee1d164",
+      "reviewed_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0040-story-bundles.md",
+      "changed_sources": [
+        "nexus/maintenance/new_story_setup.py"
+      ],
+      "previous_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "reviewed_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/turn_flow_sequence.md",
+      "changed_sources": [
+        "nexus/config/story_model.py",
+        "nexus/jobs/summaries.py"
+      ],
+      "previous_stamp": "9c8f10501389ffe14388b6d684ea060b2058781b",
+      "reviewed_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "body_unchanged": true
+    }
+  ]
+}

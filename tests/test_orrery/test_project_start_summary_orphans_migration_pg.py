@@ -11,7 +11,7 @@ import uuid
 import pytest
 
 from nexus.agents.orrery.retrograde_persistence import PROJECT_STARTED_EVENT_TYPES
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import connect, disposable_slot_database
 
 

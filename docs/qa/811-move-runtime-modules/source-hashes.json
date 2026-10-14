@@ -1,0 +1,33 @@
+{
+  "base": "a8cc15c43bf33cf370cd07567604980152db1318",
+  "moves": {
+    "scripts/migrate.py": {
+      "implementation": "nexus/maintenance/migrate.py",
+      "original_sha256": "f82a32ef3e9025508dd49f8ebc67b24fe2d31343413aff3ab4af394bfe74d810",
+      "implementation_sha256": "87472353cedf8b9c287b4bd77bd833ef772210dc163404d069375687b784b2a4",
+      "wrapper_sha256": "ae59888363faa337dd0417a403215b5ce119c8fcec0165e19bf1767782aab4ae",
+      "bounded_ast_comparison": "equal after ordered mechanical transformations; source-only, no imported execution"
+    },
+    "scripts/new_story_setup.py": {
+      "implementation": "nexus/maintenance/new_story_setup.py",
+      "original_sha256": "5d4a6dd18aeee8efc721d5e82843ce60bedc4929ab0f715787aed64b31833f37",
+      "implementation_sha256": "29d5b3bce6c83511a5ada6285e454e87bb034e7d5b1f11ccdb8b781de6b91d5c",
+      "wrapper_sha256": "9c630cda3e4856add3d04135214924e4ef774fdb57aafcb455bf3de0684699d4",
+      "bounded_ast_comparison": "equal after ordered mechanical transformations; source-only, no imported execution"
+    },
+    "scripts/database_targets.py": {
+      "implementation": "nexus/maintenance/database_targets.py",
+      "original_sha256": "cafe8850c929e7a7b17b3189e7ef3f524edce9e02e2ad55ba55e34eae545ed9d",
+      "implementation_sha256": "cafe8850c929e7a7b17b3189e7ef3f524edce9e02e2ad55ba55e34eae545ed9d",
+      "wrapper_sha256": "e5e6a3a70758fb42396f49e513a4e31434d37d97bf54e4022d1684d65dd3927e",
+      "bounded_ast_comparison": "equal after ordered mechanical transformations; source-only, no imported execution"
+    },
+    "scripts/summarize_narrative.py": {
+      "implementation": "nexus/jobs/summarize_narrative.py",
+      "original_sha256": "3dd02e815486fc2ca98ab05d9205141a4dcdd48c6139932ecb81b8860cb7370a",
+      "implementation_sha256": "874670fd6b5a8d036d0b7e282e68108a7e03813196b2aac12e9932280b65f86d",
+      "wrapper_sha256": "f8a1edb4de404ea454b42a7750542a0c2c591ed8e4b48d840e855ec1bb2570d2",
+      "bounded_ast_comparison": "equal after ordered mechanical transformations; source-only, no imported execution"
+    }
+  }
+}

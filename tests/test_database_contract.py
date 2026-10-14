@@ -282,7 +282,7 @@ def start_private_clusters(root: Path, count: int) -> Iterator[list[dict]]:
     cluster with the connection audit when it will open owner-named
     databases there (``two_clusters``).
     """
-    from scripts.new_story_setup import _postgres_tools
+    from nexus.maintenance.new_story_setup import _postgres_tools
 
     binaries = _postgres_tools("initdb", "pg_ctl")
     clusters: list[dict] = []

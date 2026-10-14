@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from nexus import config
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 
 
 @pytest.mark.parametrize("available", [(), ("dropdb", "createdb", "pg_dump")])

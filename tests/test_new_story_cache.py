@@ -317,7 +317,7 @@ def _migrated_slot_clone(prefix: str) -> Iterator[str]:
     writers' ``require_slot_dbname`` admits it; every other slot raises.
     """
     from nexus.api import slot_utils
-    from scripts import migrate
+    from nexus.maintenance import migrate
     from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
 
     with (
