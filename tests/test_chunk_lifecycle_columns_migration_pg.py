@@ -17,7 +17,7 @@ from typing import Any
 import psycopg2
 import pytest
 
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import connect, disposable_slot_database
 
 pytestmark = pytest.mark.requires_postgres

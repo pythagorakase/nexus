@@ -26,7 +26,7 @@ import pytest
 
 from nexus.api.db_pool import close_all_pools
 from nexus.config.story_model import StorySettings, write_story_settings
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import (
     connect,
     disposable_database,

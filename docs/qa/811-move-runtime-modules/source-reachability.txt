@@ -1,0 +1,36 @@
+{
+  "maintained": 404,
+  "reachable_by_kind": {
+    "production": 223,
+    "operator": 264,
+    "migration": 202,
+    "test": 300
+  },
+  "test_only": 42,
+  "existing_unreachable": 61,
+  "newly_unreachable": [],
+  "lost_production_reachability": [],
+  "baseline_add_production_paths": [],
+  "baseline_remove_orphan_exemptions": [],
+  "baseline_remove_deleted_production_paths": [],
+  "forbidden_dependencies": [],
+  "tombstone_violations": [],
+  "unresolved_internal_imports": [],
+  "unregistered_dynamic_import_sites": [],
+  "unclassified_paths": [],
+  "classified_paths_not_in_repository": [],
+  "class_graph_mismatches": [],
+  "classification_counts": {
+    "dead": 33,
+    "documented": 8,
+    "openrouter-shim": 1,
+    "operator": 48,
+    "pending-ruling:811-Q1": 3,
+    "pending-ruling:811-Q3": 78,
+    "pending-ruling:811-Q4": 2,
+    "pending-ruling:811-Q5": 38,
+    "runtime": 3,
+    "test-only": 24
+  },
+  "route_reachability": "not_proven"
+}

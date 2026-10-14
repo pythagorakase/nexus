@@ -62,8 +62,8 @@ ENTRY_POINTS = (
 # fixtures and the scripts they load as libraries (issue #1037).
 ROUTING_IMPORTS = (
     "tests.pg_fixtures",
-    "scripts.migrate",
-    "scripts.new_story_setup",
+    "nexus.maintenance.migrate",
+    "nexus.maintenance.new_story_setup",
     "scripts.utils.embedding_utils",
 )
 # Command-line scripts that took their logging from an import (the setup script,
@@ -71,6 +71,9 @@ ROUTING_IMPORTS = (
 # logging on its command-line path, so importing one as a module must configure
 # nothing.
 COMMAND_LINE_SCRIPTS = (
+    "scripts.migrate",
+    "scripts.new_story_setup",
+    "scripts.summarize_narrative",
     "scripts.benchmark_experience_enqueue_fence",
     "scripts.qa_shift.ann_gate",
     "scripts.qa_shift.historical_passage_limit",

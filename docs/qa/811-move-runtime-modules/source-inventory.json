@@ -1,0 +1,557 @@
+{
+  "base": "a8cc15c43bf33cf370cd07567604980152db1318",
+  "modules": {
+    "scripts.migrate": {
+      "implementation": "nexus.maintenance.migrate",
+      "exports": [
+        "BOOTSTRAP_MIGRATIONS",
+        "IGNORED_MIGRATION_ENTRIES",
+        "LOG",
+        "MIGRATIONS_DIR",
+        "MIGRATION_FILENAME",
+        "PYTHON_MIGRATION_ALLOWLIST",
+        "SCRIPT_ONLY_MIGRATIONS",
+        "SLOT_DBS",
+        "TEMPLATE_DB",
+        "_load_python_migration",
+        "apply_migration",
+        "bootstrap_migrations",
+        "db_exists",
+        "discover_migrations",
+        "ensure_tracking_table",
+        "get_applied_migrations",
+        "get_connection",
+        "is_db_locked",
+        "main",
+        "migrate_database",
+        "migrate_targets",
+        "needs_bootstrap",
+        "show_status"
+      ],
+      "count": 23
+    },
+    "scripts.new_story_setup": {
+      "implementation": "nexus.maintenance.new_story_setup",
+      "exports": [
+        "LOG",
+        "TEMPLATE_SEED_TABLES",
+        "USE_POOL",
+        "_STAGING_FAILURE_GUIDANCE",
+        "_align_slot_number",
+        "_build_from_template",
+        "_clone_source_identity",
+        "_connect",
+        "_copy_template_data",
+        "_get_default_slot_model",
+        "_initialize_empty_idf_corpora",
+        "_locked_target_message",
+        "_post_clone_cleanup",
+        "_postgres_tools",
+        "_refuse_locked_target",
+        "_require_migration_stamps",
+        "_restore_clone",
+        "_restore_plain_dump",
+        "_target_name",
+        "clone_slot_with_data",
+        "create_slot_schema_only",
+        "ensure_global_variables",
+        "initialize_slot_database",
+        "main",
+        "require_assets_tables",
+        "stage_slot_clone",
+        "stage_slot_from_template"
+      ],
+      "count": 27
+    },
+    "scripts.database_targets": {
+      "implementation": "nexus.maintenance.database_targets",
+      "exports": [
+        "evaluation_dbname",
+        "metrics_dbname"
+      ],
+      "count": 2
+    },
+    "scripts.summarize_narrative": {
+      "implementation": "nexus.jobs.summarize_narrative",
+      "exports": [
+        "CONTEXT_CHUNK_AFTER",
+        "CONTEXT_CHUNK_BEFORE",
+        "DEFAULT_MODEL",
+        "DatabaseManager",
+        "EpisodeSlugParser",
+        "EpisodeSummary",
+        "FALLBACK_MODEL",
+        "SeasonSummary",
+        "SummaryGenerator",
+        "_resolve_default_summary_model",
+        "logger",
+        "main"
+      ],
+      "count": 12
+    }
+  },
+  "import_edits": [
+    {
+      "path": "nexus/api/new_story_flow.py",
+      "line": 35,
+      "before": "from scripts.new_story_setup import create_slot_schema_only",
+      "after": "from nexus.maintenance.new_story_setup import create_slot_schema_only"
+    },
+    {
+      "path": "nexus/config/story_model.py",
+      "line": 34,
+      "before": "from scripts.database_targets import evaluation_dbname",
+      "after": "from nexus.maintenance.database_targets import evaluation_dbname"
+    },
+    {
+      "path": "nexus/config/story_model.py",
+      "line": 35,
+      "before": "from scripts.migrate import get_connection as get_evaluation_connection",
+      "after": "from nexus.maintenance.migrate import get_connection as get_evaluation_connection"
+    },
+    {
+      "path": "nexus/jobs/summaries.py",
+      "line": 22,
+      "before": "from scripts.summarize_narrative import DatabaseManager, SummaryGenerator",
+      "after": "from nexus.jobs.summarize_narrative import DatabaseManager, SummaryGenerator"
+    },
+    {
+      "path": "nexus/runtime/readiness.py",
+      "line": 342,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "nexus/runtime/readiness.py",
+      "line": 432,
+      "before": "from scripts.migrate import TEMPLATE_DB",
+      "after": "from nexus.maintenance.migrate import TEMPLATE_DB"
+    },
+    {
+      "path": "nexus/runtime/readiness.py",
+      "line": 459,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "nexus/runtime/readiness.py",
+      "line": 471,
+      "before": "from scripts.migrate import TEMPLATE_DB",
+      "after": "from nexus.maintenance.migrate import TEMPLATE_DB"
+    },
+    {
+      "path": "nexus/runtime/readiness.py",
+      "line": 718,
+      "before": "from scripts.migrate import TEMPLATE_DB",
+      "after": "from nexus.maintenance.migrate import TEMPLATE_DB"
+    },
+    {
+      "path": "nexus/runtime/readiness.py",
+      "line": 840,
+      "before": "from scripts.migrate import TEMPLATE_DB",
+      "after": "from nexus.maintenance.migrate import TEMPLATE_DB"
+    },
+    {
+      "path": "nexus/runtime/slot_operations.py",
+      "line": 380,
+      "before": "from scripts.migrate import SCRIPT_ONLY_MIGRATIONS, discover_migrations",
+      "after": "from nexus.maintenance.migrate import SCRIPT_ONLY_MIGRATIONS, discover_migrations"
+    },
+    {
+      "path": "scripts/backfill_story_identity.py",
+      "line": 34,
+      "before": "import scripts.migrate as migrate",
+      "after": "import nexus.maintenance.migrate as migrate"
+    },
+    {
+      "path": "scripts/benchmark_experience_enqueue_fence.py",
+      "line": 26,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "scripts/rebuild_memory_idf.py",
+      "line": 65,
+      "before": "from scripts.database_targets import evaluation_dbname",
+      "after": "from nexus.maintenance.database_targets import evaluation_dbname"
+    },
+    {
+      "path": "scripts/rebuild_memory_idf.py",
+      "line": 66,
+      "before": "from scripts.migrate import (  # noqa: E402\n    SLOT_DBS,\n    TEMPLATE_DB,\n    db_exists,\n    get_connection,\n    is_db_locked,\n)",
+      "after": "from nexus.maintenance.migrate import (  # noqa: E402\n    SLOT_DBS,\n    TEMPLATE_DB,\n    db_exists,\n    get_connection,\n    is_db_locked,\n)"
+    },
+    {
+      "path": "tests/pg_fixtures.py",
+      "line": 65,
+      "before": "from scripts import migrate, new_story_setup",
+      "after": "from nexus.maintenance import migrate\nfrom nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_api/test_maintenance_locked_pg.py",
+      "line": 16,
+      "before": "from scripts.migrate import is_db_locked",
+      "after": "from nexus.maintenance.migrate import is_db_locked"
+    },
+    {
+      "path": "tests/test_api/test_narrative_summary_paid_pg.py",
+      "line": 22,
+      "before": "from scripts.summarize_narrative import SummaryGenerator",
+      "after": "from nexus.jobs.summarize_narrative import SummaryGenerator"
+    },
+    {
+      "path": "tests/test_api/test_seat_policy_backfill_pg.py",
+      "line": 20,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_character_relationship_id_types_pg.py",
+      "line": 21,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_chunk_entity_references_pg.py",
+      "line": 34,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_chunk_lifecycle_columns_migration_pg.py",
+      "line": 20,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_commit_choice_presence_pg.py",
+      "line": 32,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_connection_lifecycle.py",
+      "line": 165,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_connection_lifecycle.py",
+      "line": 166,
+      "before": "from scripts.new_story_setup import (\n        TEMPLATE_SEED_TABLES,\n        _initialize_empty_idf_corpora,\n        _postgres_tools,\n        ensure_global_variables,\n    )",
+      "after": "from nexus.maintenance.new_story_setup import (\n        TEMPLATE_SEED_TABLES,\n        _initialize_empty_idf_corpora,\n        _postgres_tools,\n        ensure_global_variables,\n    )"
+    },
+    {
+      "path": "tests/test_database_contract.py",
+      "line": 285,
+      "before": "from scripts.new_story_setup import _postgres_tools",
+      "after": "from nexus.maintenance.new_story_setup import _postgres_tools"
+    },
+    {
+      "path": "tests/test_new_story_cache.py",
+      "line": 320,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_new_story_setup.py",
+      "line": 39,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_new_story_setup.py",
+      "line": 40,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_new_story_setup_config.py",
+      "line": 17,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_orrery/test_acquisition_scan_pg.py",
+      "line": 21,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_orrery/test_character_experiences_pg.py",
+      "line": 62,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_orrery/test_claim_birth_coverage_pg.py",
+      "line": 45,
+      "before": "from scripts.migrate import migrate_database",
+      "after": "from nexus.maintenance.migrate import migrate_database"
+    },
+    {
+      "path": "tests/test_orrery/test_experience_enqueue_gin_pg.py",
+      "line": 20,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_orrery/test_geo_reference_pg.py",
+      "line": 30,
+      "before": "from scripts import load_natural_earth, new_story_setup",
+      "after": "from scripts import load_natural_earth\nfrom nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_orrery/test_migrate.py",
+      "line": 13,
+      "before": "import scripts.migrate as migrate",
+      "after": "import nexus.maintenance.migrate as migrate"
+    },
+    {
+      "path": "tests/test_orrery/test_migration_dead_strata_pg.py",
+      "line": 29,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_orrery/test_narration_job_fencing_pg.py",
+      "line": 95,
+      "before": "from scripts.migrate import migrate_database",
+      "after": "from nexus.maintenance.migrate import migrate_database"
+    },
+    {
+      "path": "tests/test_orrery/test_need_clock_anchor_pg.py",
+      "line": 36,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_orrery/test_project_start_summary_orphans_migration_pg.py",
+      "line": 14,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_orrery/test_recall_disclosure_pg.py",
+      "line": 50,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_orrery/test_retrograde_summary_migration_contract.py",
+      "line": 11,
+      "before": "import scripts.migrate as migrate",
+      "after": "import nexus.maintenance.migrate as migrate"
+    },
+    {
+      "path": "tests/test_orrery/test_retrograde_summary_migration_pg.py",
+      "line": 19,
+      "before": "import scripts.migrate as migrate",
+      "after": "import nexus.maintenance.migrate as migrate"
+    },
+    {
+      "path": "tests/test_orrery/test_world_event_time_pg.py",
+      "line": 21,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_pg_fixtures_corpus_clone.py",
+      "line": 25,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_player_identity_consumers_pg.py",
+      "line": 44,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_postgres_tools.py",
+      "line": 9,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_prose_metrics.py",
+      "line": 13,
+      "before": "from scripts.database_targets import evaluation_dbname, metrics_dbname",
+      "after": "from nexus.maintenance.database_targets import evaluation_dbname, metrics_dbname"
+    },
+    {
+      "path": "tests/test_rebuild_memory_idf_pg.py",
+      "line": 41,
+      "before": "from scripts.migrate import is_db_locked",
+      "after": "from nexus.maintenance.migrate import is_db_locked"
+    },
+    {
+      "path": "tests/test_record_revelation_cli_pg.py",
+      "line": 20,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_runtime/test_readiness_pg.py",
+      "line": 33,
+      "before": "from scripts import migrate, rebuild_memory_idf",
+      "after": "from scripts import rebuild_memory_idf\nfrom nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_runtime/test_readiness_pg.py",
+      "line": 110,
+      "before": "from scripts.migrate import TEMPLATE_DB",
+      "after": "from nexus.maintenance.migrate import TEMPLATE_DB"
+    },
+    {
+      "path": "tests/test_scheduler_helpers_routing.py",
+      "line": 31,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_schema_documentation_pg.py",
+      "line": 25,
+      "before": "from scripts import migrate, new_story_setup",
+      "after": "from nexus.maintenance import migrate\nfrom nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_schema_ownership.py",
+      "line": 41,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_slot_operations_journal.py",
+      "line": 22,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_slot_operations_pg.py",
+      "line": 33,
+      "before": "from scripts import migrate, new_story_setup, rebuild_memory_idf",
+      "after": "from scripts import rebuild_memory_idf\nfrom nexus.maintenance import migrate\nfrom nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_story_identity_pg.py",
+      "line": 33,
+      "before": "from scripts import migrate, new_story_setup",
+      "after": "from nexus.maintenance import migrate\nfrom nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_summary_triggers.py",
+      "line": 67,
+      "before": "from scripts.summarize_narrative import SummaryGenerator",
+      "after": "from nexus.jobs.summarize_narrative import SummaryGenerator"
+    },
+    {
+      "path": "tests/test_summary_triggers.py",
+      "line": 112,
+      "before": "from scripts.summarize_narrative import SummaryGenerator",
+      "after": "from nexus.jobs.summarize_narrative import SummaryGenerator"
+    },
+    {
+      "path": "tests/test_summary_triggers.py",
+      "line": 123,
+      "before": "from scripts.summarize_narrative import SummaryGenerator",
+      "after": "from nexus.jobs.summarize_narrative import SummaryGenerator"
+    },
+    {
+      "path": "tests/test_summary_triggers.py",
+      "line": 148,
+      "before": "from scripts.summarize_narrative import SummaryGenerator",
+      "after": "from nexus.jobs.summarize_narrative import SummaryGenerator"
+    },
+    {
+      "path": "tests/test_summary_triggers.py",
+      "line": 216,
+      "before": "from scripts.summarize_narrative import SummaryGenerator",
+      "after": "from nexus.jobs.summarize_narrative import SummaryGenerator"
+    },
+    {
+      "path": "tests/test_unowned_index_adoption_pg.py",
+      "line": 28,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    },
+    {
+      "path": "tests/test_wizard_opening_presence_pg.py",
+      "line": 35,
+      "before": "from scripts import new_story_setup",
+      "after": "from nexus.maintenance import new_story_setup"
+    },
+    {
+      "path": "tests/test_world_clock_contract_pg.py",
+      "line": 26,
+      "before": "from scripts import migrate",
+      "after": "from nexus.maintenance import migrate"
+    }
+  ],
+  "test_importer_files": [
+    "tests/pg_fixtures.py",
+    "tests/test_api/test_maintenance_locked_pg.py",
+    "tests/test_api/test_narrative_summary_paid_pg.py",
+    "tests/test_api/test_seat_policy_backfill_pg.py",
+    "tests/test_character_relationship_id_types_pg.py",
+    "tests/test_chunk_entity_references_pg.py",
+    "tests/test_chunk_lifecycle_columns_migration_pg.py",
+    "tests/test_commit_choice_presence_pg.py",
+    "tests/test_connection_lifecycle.py",
+    "tests/test_database_contract.py",
+    "tests/test_new_story_cache.py",
+    "tests/test_new_story_setup.py",
+    "tests/test_new_story_setup_config.py",
+    "tests/test_orrery/test_acquisition_scan_pg.py",
+    "tests/test_orrery/test_character_experiences_pg.py",
+    "tests/test_orrery/test_claim_birth_coverage_pg.py",
+    "tests/test_orrery/test_experience_enqueue_gin_pg.py",
+    "tests/test_orrery/test_geo_reference_pg.py",
+    "tests/test_orrery/test_migrate.py",
+    "tests/test_orrery/test_migration_dead_strata_pg.py",
+    "tests/test_orrery/test_narration_job_fencing_pg.py",
+    "tests/test_orrery/test_need_clock_anchor_pg.py",
+    "tests/test_orrery/test_project_start_summary_orphans_migration_pg.py",
+    "tests/test_orrery/test_recall_disclosure_pg.py",
+    "tests/test_orrery/test_retrograde_summary_migration_contract.py",
+    "tests/test_orrery/test_retrograde_summary_migration_pg.py",
+    "tests/test_orrery/test_world_event_time_pg.py",
+    "tests/test_pg_fixtures_corpus_clone.py",
+    "tests/test_player_identity_consumers_pg.py",
+    "tests/test_postgres_tools.py",
+    "tests/test_prose_metrics.py",
+    "tests/test_rebuild_memory_idf_pg.py",
+    "tests/test_record_revelation_cli_pg.py",
+    "tests/test_runtime/test_readiness_pg.py",
+    "tests/test_scheduler_helpers_routing.py",
+    "tests/test_schema_documentation_pg.py",
+    "tests/test_schema_ownership.py",
+    "tests/test_slot_operations_journal.py",
+    "tests/test_slot_operations_pg.py",
+    "tests/test_story_identity_pg.py",
+    "tests/test_summary_triggers.py",
+    "tests/test_unowned_index_adoption_pg.py",
+    "tests/test_wizard_opening_presence_pg.py",
+    "tests/test_world_clock_contract_pg.py"
+  ],
+  "removed_exception_entries": [
+    "scripts/migrate.py|apply_migration|6996ecb3e1bff1228e38febb5d1e8b590b3d821ea706c7d2664f85297b22dcd6|1",
+    "scripts/migrate.py|show_status|67e96e92fb2860baa1ced0bd3a877db4585da661467715a47337f29f06b9a2a9|1",
+    "scripts/new_story_setup.py|<module>|59e1a4ba7492a02efae120e4085d91ec13dd0b9602208de19b2ad7d95987142b|1",
+    "scripts/new_story_setup.py|_copy_template_data|bf33d5d59a3b5a5379a1c583da99df80bc6e68a07c0f0abdad1c379b5cd6d625|1",
+    "scripts/summarize_narrative.py|DatabaseManager.episode_summary_exists|17bf33b790244cd3e2b5b94ab033a1c4840c2890616b891347f263aa947ceb67|1",
+    "scripts/summarize_narrative.py|DatabaseManager.get_previous_episode_summaries|96ec8a2500cd2c1d5d428182f52781385cda10f180ad0c7eb57107aec9e9c225|1",
+    "scripts/summarize_narrative.py|DatabaseManager.get_previous_season_summaries|01a9f6a260a0118dbadb82f65168d5d5366585dc4998c184912b4ab72214a65f|1",
+    "scripts/summarize_narrative.py|DatabaseManager.get_season_summary|69cb2081ddcbb795e6cfd72d1ae5a9680f496ca57d33865f8fd33b79f34727c7|1",
+    "scripts/summarize_narrative.py|DatabaseManager.save_episode_summary|f5b2671106a87c8ff70ab6d07ccc2ca1cf7c1c68f06a3c6089dfa366b6200d54|1",
+    "scripts/summarize_narrative.py|DatabaseManager.save_season_summary|e2391892019ab110aa3abba94dd004a91280eb08e4b3e70bf22cca8ee6bc5537|1",
+    "scripts/summarize_narrative.py|DatabaseManager.season_summary_exists|c653432151e7e98124e9acd3fa30a14614877d4a19939b77836c1d7c30507f77|1",
+    "scripts/summarize_narrative.py|SummaryGenerator._get_last_episode_of_season|9c06cca0208765fa589b9a5d8fcaf5d71182459301e869abfb7432abf5c548b4|1",
+    "scripts/summarize_narrative.py|SummaryGenerator._save_prompt_to_file|d0f676d5c1f07ba3ff9f6f75ba5df648b61a7a36fc643bde7f9e897c8d4e3b38|1",
+    "scripts/summarize_narrative.py|SummaryGenerator.generate_chunk_range_summary|399ba3eda846b8961f2795dac5687b340fe4ebeeedc4b0452ef92438239954c5|1",
+    "scripts/summarize_narrative.py|SummaryGenerator.generate_episode_summary|c47877c9c1f4e89b9afa0fafe7c8cd88cf227db9a8a07498363537ff92158972|1",
+    "scripts/summarize_narrative.py|SummaryGenerator.generate_season_summary|f0c69c9780cadf2b990d0503c3da6348db956fcbd924b618b13dfb2b5ed14762|1",
+    "scripts/summarize_narrative.py|main|105fdad30a1f04b28f8046b98244b30c0cde96c1d943f2419a9723c14b75e006|1",
+    "scripts/summarize_narrative.py|main|b28583a04829ce2e1f425cad0b488e1b19b777ca06503631e1fb79d06a453f9a|1"
+  ]
+}

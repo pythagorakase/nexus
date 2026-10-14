@@ -1,0 +1,255 @@
+--- a8cc15c4:scripts/migrate.py
++++ nexus/maintenance/migrate.py
+@@ -29,16 +29,14 @@
+ 
+ import psycopg2
+ 
+-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+-
+-from nexus.api.db_pool import MaintenanceTarget  # noqa: E402
+-from nexus.database import connection_kwargs, maintenance_connection  # noqa: E402
+-from scripts.database_targets import evaluation_dbname  # noqa: E402
++from nexus.api.db_pool import MaintenanceTarget
++from nexus.database import connection_kwargs, maintenance_connection
++from nexus.maintenance.database_targets import evaluation_dbname
+ 
+ LOG = logging.getLogger("nexus.migrate")
+ 
+-# Migration directory relative to this script
+-MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
++# The repository's migrations/ directory.
++MIGRATIONS_DIR = Path(__file__).parents[2] / "migrations"
+ # Every migration is a file named NNN_name.sql or NNN_name.py.
+ MIGRATION_FILENAME = re.compile(r"^([0-9]{3})_([a-z0-9_]+)\.(sql|py)$")
+ # Interpreter and operating-system artifacts tolerated beside the migrations.
+@@ -358,7 +356,9 @@
+         conn.commit()
+         LOG.info("  Applied: %s_%s", version, name)
+         return True
+-    except Exception as e:
++    except (
++        Exception
++    ) as e:  # nexus-exception-disposition: fail; reason=rollback; safety=exit 1
+         if getattr(conn, "autocommit", False):
+             conn.autocommit = False
+         conn.rollback()
+@@ -559,7 +559,9 @@
+                 marker = "[x]" if version in applied else "[ ]"
+                 print(f"  {marker} {version}_{name}")
+ 
+-        except psycopg2.Error as e:
++        except (
++            psycopg2.Error
++        ) as e:  # nexus-exception-disposition: fail; reason=status read; safety=printed
+             print(f"  Error: {e}")
+         print()  # Blank line between databases
+ 
+--- a8cc15c4:scripts/new_story_setup.py
++++ nexus/maintenance/new_story_setup.py
+@@ -42,7 +42,7 @@
+     sweep_staging,
+     validate_staging,
+ )
+-from scripts.migrate import migrate_database
++from nexus.maintenance.migrate import migrate_database
+ 
+ LOG = logging.getLogger("nexus.new_story_setup")
+ 
+@@ -51,7 +51,9 @@
+     from nexus.api.db_pool import get_connection
+ 
+     USE_POOL = True
+-except ImportError:
++except (
++    ImportError
++):  # nexus-exception-disposition: safe-continuation; reason=no pool; safety=direct
+     USE_POOL = False
+ 
+ 
+@@ -447,7 +449,9 @@
+     finally:
+         try:
+             os.remove(tmp_path)
+-        except OSError:
++        except (
++            OSError
++        ):  # nexus-exception-disposition: safe-continuation; reason=cleanup; safety=tmp
+             pass
+ 
+ 
+--- a8cc15c4:scripts/summarize_narrative.py
++++ nexus/jobs/summarize_narrative.py
+@@ -39,7 +39,6 @@
+ import argparse
+ import json
+ import logging
+-import os
+ import re
+ import sys
+ import time
+@@ -47,11 +46,6 @@
+ from typing import Any, Dict, List, Optional, Tuple, Type
+ 
+ from pydantic import BaseModel, Field
+-
+-# Add parent directory to system path
+-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+-if parent_dir not in sys.path:
+-    sys.path.insert(0, parent_dir)
+ 
+ # Import shared API utilities
+ from nexus.api.native_structured_output import build_native_structured_provider
+@@ -722,7 +716,9 @@
+                     summaries.append({"season": row.id, "summary": row.summary})
+ 
+             return summaries
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: degrade-read-only; reason=db; safety=log
+             logger.error(f"Error retrieving previous season summaries: {e}")
+             return []
+ 
+@@ -773,7 +769,9 @@
+                     )
+ 
+             return summaries
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: degrade-read-only; reason=db; safety=log
+             logger.error(f"Error retrieving previous episode summaries: {e}")
+             return []
+ 
+@@ -807,7 +805,9 @@
+                     },
+                 ).scalar()
+                 return result is not None
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: degrade-read-only; reason=db; safety=log
+             logger.error(
+                 f"Error checking for existing summary for S{season:02d}E{episode:02d}: {e}"
+             )
+@@ -842,7 +842,9 @@
+                 if result:
+                     return {"season": result.id, "summary": result.summary}
+                 return None
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: degrade-read-only; reason=db; safety=log
+             logger.error(f"Error retrieving season summary: {e}")
+             return None
+ 
+@@ -871,7 +873,9 @@
+                     {"season": season},
+                 ).scalar()
+                 return result is not None
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: degrade-read-only; reason=db; safety=log
+             logger.error(
+                 f"Error checking for existing summary for Season {season}: {e}"
+             )
+@@ -987,7 +991,9 @@
+                     logger.info(f"Inserted new summary for season {season}")
+                     return True
+ 
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: fail; reason=db write; safety=False
+             logger.error(f"Error saving season summary: {e}")
+             return False
+ 
+@@ -1151,7 +1157,9 @@
+                     logger.info(f"Inserted new summary for S{season:02d}E{episode:02d}")
+                     return True
+ 
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: fail; reason=db write; safety=False
+             logger.error(f"Error saving episode summary: {e}")
+             return False
+ 
+@@ -1491,7 +1499,9 @@
+                 f.write(prompt)
+ 
+             logger.info(f"Saved prompt to {filename}")
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: safe-continuation; reason=io; safety=log
+             logger.error(f"Error saving prompt to file: {e}")
+ 
+     def generate_season_summary(self, season: int) -> Optional[dict]:
+@@ -1614,7 +1624,9 @@
+ 
+         except (SummaryInputTooLong, SummaryOutputTruncated):
+             raise
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: fail; reason=generate; safety=last_error
+             self.last_error = str(e)
+             logger.error(f"Error generating season summary: {e}")
+             return None
+@@ -1802,7 +1814,9 @@
+ 
+         except (SummaryInputTooLong, SummaryOutputTruncated):
+             raise
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: fail; reason=generate; safety=last_error
+             self.last_error = str(e)
+             logger.error(f"Error generating episode summary: {e}")
+             return None
+@@ -2147,7 +2161,9 @@
+ 
+         except (SummaryInputTooLong, SummaryOutputTruncated):
+             raise
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: fail; reason=generate; safety=last_error
+             self.last_error = str(e)
+             logger.error(f"Error generating chunk range summary: {e}")
+             return None
+@@ -2173,7 +2189,9 @@
+                     return result[0]
+                 return 1  # Default to 1 if no episodes found
+ 
+-        except Exception as e:
++        except (
++            Exception
++        ) as e:  # nexus-exception-disposition: degrade-read-only; reason=db; safety=log
+             logger.error(f"Error getting last episode of season {season}: {e}")
+             return 1  # Default to 1 on error
+ 
+@@ -2382,7 +2400,9 @@
+                         f"Failed to generate summary for S{season:02d}E{episode:02d}"
+                     )
+ 
+-            except ValueError as e:
++            except (
++                ValueError
++            ) as e:  # nexus-exception-disposition: fail; reason=slug; safety=exit 1
+                 logger.error(f"Error parsing episode slug: {e}")
+                 return 1
+ 
+@@ -2422,7 +2442,9 @@
+                         f"Failed to generate summaries for range {start_slug} to {end_slug}"
+                     )
+ 
+-            except ValueError as e:
++            except (
++                ValueError
++            ) as e:  # nexus-exception-disposition: fail; reason=slug; safety=exit 1
+                 logger.error(f"Error parsing episode slugs: {e}")
+                 return 1
+ 
