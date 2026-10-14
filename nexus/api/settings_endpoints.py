@@ -104,7 +104,8 @@ def _build_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 @router.head("")
 async def head_settings() -> Response:
-    """Connectivity probe (useNarrativeEngine polls HEAD /api/settings).
+    """HEAD on the settings route; the client's connectivity probe reads
+    GET /health since #824.
 
     FastAPI's APIRoute does not auto-serve HEAD from GET handlers (unlike
     bare Starlette routes), so the probe needs this explicit handler.

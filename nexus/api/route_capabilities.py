@@ -20,6 +20,7 @@ Two planes project from the one shared app:
 :func:`build_player_app` and :func:`build_operator_app` construct those
 projections over the same route objects, lifespan, middleware, and exception
 handlers. Binding each projection to its own listener is a later slice.
+``/health`` reports the serving plane (:func:`serving_plane`).
 """
 
 from __future__ import annotations
@@ -186,8 +187,6 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         ("POST", "/api/story/new/setup/reset"): _operator(
             "slot.reset", "write", destructive=True
         ),
-        # A nonmutating compatibility activation with no live player client.
-        ("POST", "/api/story/new/slot/select"): _operator("slot.select"),
         ("GET", "/api/story/new/slots"): _player("slot.read", "read"),
         # wizard_chat
         ("POST", "/api/story/new/chat"): _WIZARD_TURN,
@@ -287,6 +286,31 @@ _PROJECTION_PLANES: Mapping[Plane, FrozenSet[Plane]] = MappingProxyType(
 
 # Set on the source app's state while a projection runs its lifespan.
 _ACTIVE_PROJECTION_ATTR = "route_projection_lifespan"
+
+# Set on each serving app's state: the plane whose routes it serves.
+_SERVING_PLANE_ATTR = "serving_plane"
+
+
+def set_serving_plane(app: FastAPI, plane: Plane) -> None:
+    """Declare that ``app`` serves the ``plane`` route set."""
+    setattr(app.state, _SERVING_PLANE_ATTR, plane)
+
+
+def serving_plane(app: Any) -> Plane:
+    """Return the plane ``app`` declared with :func:`set_serving_plane`.
+
+    Raises:
+        RouteCapabilityError: ``app`` declares no plane, or not ``player``
+            or ``operator``.
+    """
+    plane = getattr(app.state, _SERVING_PLANE_ATTR, None)
+    if plane == "player":
+        return "player"
+    if plane == "operator":
+        return "operator"
+    raise RouteCapabilityError(
+        "App declares no serving plane; serve a projection or call set_serving_plane"
+    )
 
 
 def route_keys(route: BaseRoute) -> Tuple[RouteKey, ...]:
@@ -447,6 +471,7 @@ def _build_projection(source_app: FastAPI, plane: Plane) -> FastAPI:
             continue
         if route_plane(route) in admitted:
             projection.router.routes.append(route)
+    set_serving_plane(projection, plane)
     return projection
 
 

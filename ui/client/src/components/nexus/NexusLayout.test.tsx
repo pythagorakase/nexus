@@ -5,7 +5,9 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { HEALTH_QUERY_KEY } from "@/hooks/usePlane";
 import { SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
+import { getQueryFn } from "@/lib/queryClient";
 import type { BackstageTurnObservation, BackstageTurnResponse } from "@/types/backstage";
 import type { GenerationSession } from "@/types/narrative";
 import type { SettingsPayload } from "@/types/settings";
@@ -219,6 +221,11 @@ function renderLayout(settings: SettingsPayload) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
+  queryClient.setQueryData(HEALTH_QUERY_KEY, {
+    status: "healthy",
+    service: "narrative_api",
+    plane: "operator",
+  });
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   render(
     <QueryClientProvider client={queryClient}>
@@ -326,6 +333,47 @@ describe("NexusLayout Backstage", () => {
       expect(screen.queryByTestId("backstage-drawer")).not.toBeInTheDocument(),
     );
     input.remove();
+  });
+});
+
+describe("NexusLayout planes", () => {
+  it("player plane sends no operator request", async () => {
+    localStorage.clear();
+    localStorage.setItem("activeSlot", "4");
+    localStorage.setItem("nexus-developer-mode", "true");
+    const fetchStub = vi.fn(async () =>
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { queryFn: getQueryFn({ on401: "throw" }), retry: false, staleTime: Infinity },
+      },
+    });
+    queryClient.setQueryData(HEALTH_QUERY_KEY, {
+      status: "healthy",
+      service: "narrative_api",
+      plane: "player",
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <DeveloperModeProvider>
+            <NexusLayout />
+          </DeveloperModeProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    const urls = () => fetchStub.mock.calls.map((call) => String((call as unknown[])[0]));
+
+    await waitFor(() => expect(urls()).toContain("/api/preferences"));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(urls()).not.toContain("/api/settings");
+    expect(urls()).not.toContain("/api/dev/backstage/health");
+    vi.unstubAllGlobals();
   });
 });
 

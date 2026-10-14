@@ -4,9 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { geoEquirectangular } from "d3-geo";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useSettingsQuery } from "@/hooks/useSettings";
 import { LOCAL_MODELS_DOWNLOAD_KEY, LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
+import { HEALTH_QUERY_KEY } from "@/hooks/usePlane";
 import { boundsToFitObject, COINCIDENT_PIN_EPSILON_PX, COINCIDENT_PIN_RING_PX, computeMapBounds, offsetCoincidentPins, PIN_RADIUS_PX } from "@/lib/map-geometry";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type { Place } from "@shared/schema";
@@ -28,8 +30,9 @@ function client(status = STATUS) {
   c.setQueryData([...LOCAL_MODELS_STATUS_KEY], status);
   c.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
   c.setQueryData([...LOCAL_MODELS_DOWNLOAD_KEY], { state: "idle" });
+  c.setQueryData(HEALTH_QUERY_KEY, { status: "healthy", service: "narrative_api", plane: "operator" });
   c.setQueryData(["/api/settings"], { ui: { local_models: KNOBS, theme: "veil" } });
-  c.setQueryData(["/api/preferences"], { ui: { theme: "veil" } });
+  c.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   clients.push(c); return c;
 }
 function withClient(c: QueryClient, node: React.ReactNode) {

@@ -14,6 +14,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { HEALTH_QUERY_KEY, type Plane } from "@/hooks/usePlane";
 import { CharactersPane, portraitSrc } from "./CharactersPane";
 import type { CharacterImage, CharacterListEntry } from "@shared/schema";
 
@@ -42,10 +43,15 @@ function makeCharacter(
 function renderPane(
   characters: CharacterListEntry[],
   imagesByCharacter: Record<number, CharacterImage[]> = {},
-  { precededBy }: { precededBy?: string } = {},
+  { precededBy, plane = "operator" }: { precededBy?: string; plane?: Plane } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  queryClient.setQueryData(HEALTH_QUERY_KEY, {
+    status: "healthy",
+    service: "narrative_api",
+    plane,
   });
   const slot = 1;
   queryClient.setQueryData(["/api/characters", slot], characters);
@@ -231,6 +237,15 @@ describe("CharactersPane", () => {
     expect(
       screen.getByRole("button", { name: "Upload portrait" }),
     ).toBeInTheDocument();
+  });
+
+  it("player plane offers no portrait upload", () => {
+    renderPane([makeCharacter({ id: 3, name: "Pete" })], {}, { plane: "player" });
+    expect(screen.getByTestId("text-dossier-name")).toHaveTextContent("Pete");
+    expect(
+      screen.queryByRole("button", { name: "Upload portrait" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("input-portrait-file")).not.toBeInTheDocument();
   });
 });
 

@@ -28,6 +28,7 @@
 import { useEffect, useReducer } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { usePlane } from "@/hooks/usePlane";
 import { useUiConfig } from "@/hooks/useUiConfig";
 import {
   LOCAL_MODELS_KNOB_DEFAULTS,
@@ -271,6 +272,7 @@ export function TopBar({
   toastedFailureSessionId,
   frontierClock,
 }: TopBarProps) {
+  const plane = usePlane();
   return (
     <header className="topbar" data-testid="nexus-topbar">
       <div className="topbar-left">
@@ -297,7 +299,7 @@ export function TopBar({
             {frontierClock.face}
           </time>
         )}
-        <MemoryMeter />
+        {plane === "operator" && <MemoryMeter />}
         {skaldStatus === "OFFLINE" && (
           <span className="field">
             <span className="v offline" data-testid="text-skald-status">

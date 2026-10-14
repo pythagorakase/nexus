@@ -33,7 +33,7 @@ from nexus.api.new_story_cache import (
 )
 from nexus.api.new_story_schemas import StorySeed
 from nexus.api.save_slots import clear_active, get_slot_model, upsert_slot
-from nexus.api.slot_utils import slot_dbname, all_slots
+from nexus.api.slot_utils import slot_dbname
 from nexus.maintenance.new_story_setup import create_slot_schema_only
 
 if TYPE_CHECKING:
@@ -1083,34 +1083,3 @@ def reset_setup(slot_number: int) -> None:
     upsert_slot(slot_number, is_active=False, dbname=dbname)
     dispose_database(dbname)
     logger.info("Reset complete for slot %s", slot_number)
-
-
-def activate_slot(target_slot: int) -> Dict[str, str]:
-    """
-    Mark a slot as active and clear active flags in other slots.
-
-    Skips slots whose databases do not exist.
-
-    Args:
-        target_slot: Slot number to activate (1-5)
-
-    Returns:
-        Dictionary mapping slot numbers to status strings ("active", "cleared", "unavailable")
-    """
-    results = {}
-    for slot in all_slots():
-        dbname = slot_dbname(slot)
-        try:
-            if slot == target_slot:
-                upsert_slot(slot, is_active=True, dbname=dbname)
-                results[slot] = "active"
-            else:
-                clear_active(dbname)
-                results[slot] = "cleared"
-        except (
-            psycopg2.Error,
-            OSError,
-        ) as exc:  # pragma: no cover - defensive cross-db handling
-            logger.warning("Slot %s DB not available: %s", slot, exc)
-            results[slot] = "unavailable"
-    return results

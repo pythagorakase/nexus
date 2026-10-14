@@ -52,7 +52,6 @@ from nexus.api.new_story_flow import (
     resume_setup,
     record_drafts,
     reset_setup,
-    activate_slot,
 )
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import all_slots, slot_dbname, require_slot_dbname
@@ -90,7 +89,11 @@ from nexus.api.preferences_endpoints import router as preferences_router
 from nexus.api.ui_config_endpoints import router as ui_config_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
-from nexus.api.route_capabilities import require_classified
+from nexus.api.route_capabilities import (
+    require_classified,
+    serving_plane,
+    set_serving_plane,
+)
 from nexus.api.runtime_status import register_runtime_status
 from nexus.api.static_ui import mount_ui
 from nexus.api.wizard_chat import router as wizard_chat_router
@@ -333,7 +336,6 @@ from nexus.api.narrative_schemas import (
     StartSetupRequest,
     RecordDraftRequest,
     ResetSetupRequest,
-    SelectSlotRequest,
     TraitMenuItemResponse,
     SlotStateResponse,
     SlotContinueRequest,
@@ -821,9 +823,13 @@ async def _resolve_and_approve_pending(
 
 # API Endpoints
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "narrative_api"}
+async def health_check(request: Request) -> Dict[str, str]:
+    """Health check endpoint; reports the plane of the app that served it."""
+    return {
+        "status": "healthy",
+        "service": "narrative_api",
+        "plane": serving_plane(request.app),
+    }
 
 
 @app.get("/api/config/models")
@@ -1750,6 +1756,8 @@ mount_ui(app)
 # Issue #824: every route must be classified into the player or operator
 # plane before the gateway can serve; an unclassified route fails import.
 require_classified(app)
+# The unprojected gateway serves every route, which is the operator plane's set.
+set_serving_plane(app, "operator")
 
 
 if __name__ == "__main__":

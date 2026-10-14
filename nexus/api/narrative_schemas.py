@@ -274,10 +274,6 @@ class ResetSetupRequest(BaseModel):
     slot: StrictInt = Field(ge=1, le=5)
 
 
-class SelectSlotRequest(BaseModel):
-    slot: StrictInt = Field(ge=1, le=5)
-
-
 # =============================================================================
 # Slot State Schemas
 # =============================================================================

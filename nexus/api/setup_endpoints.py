@@ -21,7 +21,6 @@ from nexus.api.narrative_schemas import (
     RecordDraftRequest,
     ResetSetupRequest,
     ResumeSetupResponse,
-    SelectSlotRequest,
     StartSetupRequest,
 )
 from nexus.api.new_story_cache import record_wizard_reply, write_wizard_choices
@@ -32,7 +31,6 @@ from nexus.api.wizard_confirmation import (
     begin_character_revision,
 )
 from nexus.api.new_story_flow import (
-    activate_slot,
     record_drafts,
     reset_setup,
     resume_setup,
@@ -212,20 +210,6 @@ async def reset_setup_endpoint(request: ResetSetupRequest):
         return {"status": "reset", "slot": request.slot}
     except Exception as e:
         logger.error(f"Error resetting setup: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/slot/select")
-async def select_slot_endpoint(request: SelectSlotRequest):
-    """Select a slot through the nonmutating compatibility activation path."""
-    # activate_slot only calls clear_active and upsert_slot(is_active=...),
-    # both no-ops. Locked stories remain selectable; setup writes are guarded
-    # by their own endpoints before starting any work.
-    try:
-        results = activate_slot(request.slot)
-        return {"status": "activated", "results": results}
-    except Exception as e:
-        logger.error(f"Error activating slot: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
