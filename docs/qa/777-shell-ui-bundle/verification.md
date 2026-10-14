@@ -351,21 +351,308 @@ a different Vector hovered token. The preliminary inference that all scalar
 bounds passed mistakenly relied on selected-assignment metadata; that claim
 is withdrawn and the actual measured audit is retained.
 
-Exactly two existing color-token changes are proposed through scratch-only
-browser previews. Owner authorization is pending; product palette, evaluator,
-thresholds and input closure rules remain unchanged. The failed active
-receipt/tables were restored after exact evidence preservation. Final capture,
-full UI acceptance, main merge, freshness and final Python-source provenance
-remain pending. This branch is not publication-ready.
+Historical at `c8a72061` (superseded by the Palette Disposition section
+below): exactly two existing color-token changes were proposed through
+scratch-only browser previews. Authorization was then pending, and the
+product palette, evaluator, thresholds and input closure rules were unchanged
+at that commit. The failed active receipt/tables were restored after exact
+evidence preservation. Final capture, full UI acceptance, main merge,
+freshness and final Python-source provenance were then pending, and the
+branch was not publication-ready.
 
 The [minimal legacy-listener repair](matchmedia-legacy-repair/README.md) is now
 committed and verified at `772dd499ed5cd00e5ceb5c2577efa428eb8866f8`:
 all four previously affected UI files passed, 77 tests in 5.17s, with no uncaught
 errors. Its new fingerprint changes only `client/src/tests/setup.ts`; no old
-capture is reused. The palette decision and remaining acceptance work above
-are still pending.
+capture is reused. At `3258c5b3` the palette decision and remaining acceptance
+work above were still pending; the coordinator's commit `7eb9a10c` later
+applied the palette (see Palette Disposition below), and the acceptance work
+remains the coordinator's step on the final wave-B UI union.
 
 Codex — GPT-6
+
+## Palette Disposition (Coordinator, 2026-10-09)
+
+The coordinator's commit `7eb9a10c` applied exactly the two token moves that
+the V2 joint search chose, and no other color change:
+
+| Theme/token | Before | Shipped since `7eb9a10c` |
+| --- | --- | --- |
+| Gilded `--state-map-rest` | `hsl(30 60% 60%)` | `hsl(30 70% 50%)` |
+| Vector `--state-map-hovered` | `hsl(190 90% 40%)` | `hsl(190 80% 40%)` |
+
+Both hues are unchanged; only saturation and lightness move inside each hue
+family. Veil is untouched. The shipped values are
+`ui/client/src/index.css:684` and `:831`; they equal the V2 joint assignments
+at [gilded-joint.json:26](capture-at-b6a704ca/gilded-joint.json) and
+[vector-joint.json:29](capture-at-b6a704ca/vector-joint.json). The Gilded map
+group's V2 search choice reaches minimum `7.709657692104731`, against
+`7.4977986569476665` for the previous palette
+([gilded-map-candidate-diagnosis.json](capture-at-b6a704ca/gilded-map-candidate-diagnosis.json),
+entry `receipt: v2`, `palette: new_search_choice`).
+
+Authorization: the #1099 rule is unchanged. The strict exact-optimum assertion
+(`ui/client/src/state-shades.test.ts:578-580` on this tree: a reachable group
+must reach 15, an unreachable group must equal the search's best, and the
+shipped minimum must equal the selected assignment's) and the assignment
+equality at `:583` require the shipped palette to be the search's choice. The
+coordinator recorded that decision on #777:
+<https://github.com/pythagorakase/nexus/issues/777#issuecomment-6076985289>
+(2026-10-09 03:05 CDT). No separate owner ruling is cited. The
+"Unapproved Two-Token Proposal" section of
+[capture-at-b6a704ca/README.md](capture-at-b6a704ca/README.md) and the
+stale-palette passages above are historical records of the state before
+`7eb9a10c`.
+
+The two shipped values have not yet been painted as shipped CSS in any receipt.
+Their only measured support is the V2 candidate samples captured at
+`b6a704ca`. The committed browser-resolved receipt
+(`ui/client/src/state-surfaces.resolved.json`, LFS oid `70925b79…`) is
+intentionally stale until the single regeneration on the final wave-B UI union.
+That regeneration and its acceptance run are the measured proof. Its refresh of
+the three joint tables, `theme-exceptions.json` and
+`docs/qa/777-glyph-first-states/amendment-2/state-tokens.md` is part of the same
+step. That reference still lists the old values at `:19` and `:34`. The full
+capture, the state-shades acceptance and the full `npm --prefix ui test` with
+state-shades green are the coordinator's step.
+
+## Integrated-Tree Proof (2026-10-13)
+
+Every command below ran on `a563203a` (the integration head with nine lane
+fixes merged; its `ui/` tree is byte-identical to `7eb9a10c`:
+`git diff --stat 7eb9a10c a563203a -- ui/` is empty). This fix's uncommitted
+edits were present: the README wording, the heading case, the parameterized
+hover script and this file. None is a vitest, build or state-surface input
+(`ui/scripts/state-surfaces/inputs.mjs` hashes `.mjs`, `.tsx` and `.css` under
+`scripts/state-surfaces/`, not its README). Every test, build and Chromium
+command ran under `nice -n 15`. The one-minute load read 2.86 to 10.26 before
+each run and never reached 24, so no wait loop was needed. `<scratch>` is
+`scratchpad/fix-waveb-r3-777-capture` of the session scratchpad. The Python
+import resolved to this worktree's `nexus/__init__.py`.
+
+The canonical documents' `verified_commit` stamps were moved to `f073b371` by
+the assembly. The Source Freshness section above describes the lane's original
+move from `4ae8b8d2`.
+
+### Dependencies and Focused UI Tests
+
+```text
+nice -n 15 npm --prefix ui ci            # exit 0
+nice -n 15 npm --prefix ui test -- TopBar NexusLayout MapPane LocalModelRows \
+  shell-accessibility StateGlyphs RightLedger ReturnRecapCard NarrativePane
+ Test Files  12 passed (12)
+      Tests  137 passed (137)
+```
+
+### Full UI Suite (State-Shades Stale by Design)
+
+```text
+nice -n 15 npm --prefix ui test
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ Test Files  1 failed | 40 passed (41)
+      Tests  632 passed (632)
+```
+
+The sole failure is the expected stale receipt. This lane's `index.css`,
+`tests/setup.ts` and `resolve-state-surfaces.mjs` changes, and other wave-B
+UI lanes, are in the hashed closure. Regeneration is the coordinator's step.
+`npm --prefix ui run resolve-state-surfaces` was not run.
+
+### Type Check and Build
+
+```text
+nice -n 15 npm --prefix ui run check     # exit 0: tsc, then check:design-sync (tsc -p .design-sync/tsconfig.previews.json), no diagnostics
+nice -n 15 npm --prefix ui run build     # exit 0
+PWA v1.0.3
+mode      generateSW
+precache  22 entries (2322.18 KiB)
+```
+
+The branch check reports no diagnostics, so the comparison with `origin/main`
+cannot show a new one. The `origin/main` check was not rerun.
+
+### Tooltip Focus Trace and Its Plant
+
+```text
+STATE_SURFACES_SCRATCH=<scratch>/trace nice -n 15 \
+  node ui/scripts/state-surfaces/tooltip-focus-trace.mjs     # exit 0
+Tooltip focus trace: 50/50 row open; 50/50 trash open; 50/50 outside closed
+```
+
+Plant: the item 16 `onBlur` handler was deleted from
+`ui/client/src/components/nexus/LocalModelRows.tsx` (lines 370-376, seven
+lines). Then:
+
+```text
+nice -n 15 npm --prefix ui test -- LocalModelRows           # exit 1
+   × exceeds-RAM tooltip > stays open as focus moves from the row to its trash button 56ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 passed (20)
+STATE_SURFACES_SCRATCH=<scratch>/trace-plant nice -n 15 \
+  node ui/scripts/state-surfaces/tooltip-focus-trace.mjs     # exit 0
+Tooltip focus trace: 50/50 row open; 50/50 trash open; 50/50 outside closed
+git checkout -- ui/client/src/components/nexus/LocalModelRows.tsx
+git diff --quiet -- ui/client/src/components/nexus/LocalModelRows.tsx && echo restored-diff-quiet
+restored-diff-quiet
+shasum -a 256 ui/client/src/components/nexus/LocalModelRows.tsx
+c99c3df1f8ffab69bb021229992699ba2b5ea5f824a52b8a889a3a3d94cac799   (identical before the plant)
+nice -n 15 npm --prefix ui test -- LocalModelRows           # exit 0
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+```
+
+As at `4ae8b8d2`, the browser trace does not discriminate: it reaches 50/50/50
+with the plant in place. The `focusOut` vitest case does discriminate.
+
+### Trace README Passage
+
+`ui/scripts/state-surfaces/README.md` keeps the stationary-viewport
+precondition that the coordinator ratified, in place of item 17's ordered
+wording. Checked against
+`ui/scripts/state-surfaces/tooltip-focus-trace.mjs` and the scroll diagnostic
+above, the passage was accurate on these points:
+
+- The trace scrolls the row into view and waits for scrolling to settle while
+  the preceding toggle has focus.
+- It asserts that the scroller position at the row and trash readings equals
+  that precondition.
+- It takes one reading per focus position and never polls.
+
+One point was only implied: "not persistence through natural Tab auto-scroll"
+did not say what happens under auto-scroll. The passage now says that the
+trace proves focus transitions in a stationary viewport only, and that natural
+Tab auto-scroll is ancestor scrolling and so still dismisses the tooltip. The
+passage has no heading. The file's only H1, "Painted Core-Mean Oracle", is
+already in Chicago title case.
+
+### Narrow-Width Proof
+
+The lane's `mobile-proof.mjs` hard-codes a Codex worktree. A scratch copy
+takes the root, the output directory and the fixture as arguments, and
+changes nothing else
+([script](integrated-proof/mobile-proof-integrated.mjs)). It ran on the trace's
+fixture, which carries the viewport meta:
+
+```text
+nice -n 15 node <scratch>/mobile/mobile-proof-integrated.mjs <worktree> \
+  <scratch>/mobile <scratch>/trace/fixture.html             # exit 0
+390x844 coarse/mobile: map and settings bottom rail, DOM order, focus hiding and blur restoration passed
+```
+
+The readback shows `innerWidth` 390 with the narrow coarse query true. Both
+navigation boxes are `x=0, y=796, width=390, height=48, bottom=844` and follow
+`main`. Display is `none` while a key input has focus and `flex` after blur,
+with zero errors and zero requests
+([readback](integrated-proof/narrow-readback.json)).
+
+The map screenshot is byte-identical to the lane's `narrow-map.png` (LFS oid
+`bbac9a16…`). The settings screenshot
+([integrated](integrated-proof/narrow-settings.png)) differs from the lane's
+copy only in the clipped settings scroller's inner scroll offset. The rail,
+its readback and both accessibility trees are identical.
+
+### Key-Row Hover Helper (Parameterized, with Planted Refusals)
+
+[key-hover-micro-v2.mjs](capture-at-b6a704ca/key-hover-micro-v2.mjs) now takes
+its repository root from `argv[2]`, defaulting to its own checkout, and its
+output directory from `STATE_SURFACES_SCRATCH`. It builds the fixture with
+`fixtureBuild` and the production Vite CSS, as `tooltip-focus-trace.mjs`
+does. It drives both of the helper's throw branches with planted cases: a
+full-viewport overlay, and a page whose mouse move lands on the sampled glyph.
+
+```text
+STATE_SURFACES_SCRATCH=<scratch>/hover-micro nice -n 15 \
+  node docs/qa/777-shell-ui-bundle/capture-at-b6a704ca/key-hover-micro-v2.mjs   # exit 0
+72/72 production-helper row hover cases passed: 639 fine/coarse, 760 fine, 1200 fine; 3 themes; 2 needs; 3 states.
+Old center hit hovered the SVG in 36/72 cases; corrected point in 0/72. Network 0; page errors 0.
+Planted 639/coarse/full-cover-overlay: refused: Measurement failure [data-testid="key-row-present"]: no visible empty row background for hover
+Planted 639/coarse/hovered-glyph-readback: refused: Measurement failure [data-testid="key-row-present"]: row background hover mismatch {"point":{"x":242,"y":409.171875},"hitIsRow":true,"rowHover":true,"glyphHover":true,"controlHover":false}
+Planted 1200/fine/full-cover-overlay: refused: Measurement failure [data-testid="key-row-present"]: no visible empty row background for hover
+Planted 1200/fine/hovered-glyph-readback: refused: Measurement failure [data-testid="key-row-present"]: row background hover mismatch {"point":{"x":379,"y":456.9375},"hitIsRow":true,"rowHover":true,"glyphHover":true,"controlHover":false}
+```
+
+The helper hash `c1480b36…` equals the one recorded at `b6a704ca`
+([log](integrated-proof/hover-micro.txt),
+[readings and refusals](integrated-proof/hover-micro.json)). The script exits
+non-zero if a planted case is accepted.
+
+### Python
+
+```text
+env -u NEXUS_RUN_LIVE_LLM -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL \
+  -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 \
+  /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit \
+  tests/test_api/test_ui_config.py tests/test_config \
+  tests/test_api/test_route_capabilities.py tests/test_api/test_preferences.py \
+  tests/test_api/test_settings_endpoints.py tests/test_orrery/test_card_identity.py \
+  tests/test_connection_lifecycle.py tests/test_reachability.py \
+  tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 7 targets: postgres, qa640_816_lifecycle_test_provider, qa640_885_ren_replay_* x4, qa640_offline_gate_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:52060 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:52061 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:52060 (psycopg2), save_04@local:52061 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+286 passed, 2 skipped, 7 warnings in 73.53s (0:01:13)
+```
+
+The offline suites ran as three sequential pieces, each under
+the ten-minute bound, with the same `env -u ...` prefix, without
+`NEXUS_RUN_POSTGRES`, and with `-p tests.dbname_audit`. Every tail shows
+`secret-store guard: active; nexus-api: denied` and `owner targets: none`.
+Skips are the PostgreSQL cases, which the focused set above runs:
+
+```text
+... pytest -q -p tests.dbname_audit tests --ignore=tests/test_api --ignore=tests/test_orrery
+3197 passed, 677 skipped, 8 warnings in 594.34s (0:09:54)
+... pytest -q -p tests.dbname_audit tests/test_api
+549 passed, 339 skipped, 7 warnings in 30.93s
+... pytest -q -p tests.dbname_audit tests/test_orrery
+FAILED tests/test_orrery/test_config.py::test_epistemics_rejects_event_type_without_birth_role_policy
+1 failed, 1363 passed, 1189 skipped, 2 warnings in 12.35s
+```
+
+That one failure is outside this lane. Its tail:
+`Regex: 'without birth-role policies.*ate'` against
+`Value error, claim_event_types contains event types emitted by background
+branches: ['ate']`. The background-branch validator now fires before the
+birth-role message that the test matches. The 809 and 784 lanes' evidence
+already records it
+(`docs/qa/809-typed-readers/verification.md:349`). It is reported to the
+coordinator and not fixed here.
+
+Static checks on the six Python files that the lane changed:
+
+```text
+PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m black --check \
+  nexus/api/narrative.py nexus/api/route_capabilities.py nexus/api/ui_config_endpoints.py \
+  nexus/config/settings_models.py tests/test_api/test_ui_config.py tests/test_config/test_ui_settings.py
+6 files would be left unchanged.
+... -m flake8 <same six files>                       # 52 diagnostics
+... -m mypy --explicit-package-bases <same six files>
+Found 9 errors in 2 files (checked 6 source files)
+nice -n 15 /Users/pythagor/nexus/.venv/bin/python -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+With line numbers ignored, the flake8 set equals the lane's
+[flake8 log](flake8.txt) minus one: an unused
+`recover_active_slot_choice` import in `narrative.py` that another lane
+removed. The nine mypy diagnostics are the same path-and-message set as the
+lane's [branch mypy](mypy-branch-full-context.txt). There are no new
+diagnostics.
+
+### Coordinator's Steps
+
+- State-surface regeneration on the final wave-B UI union, the three joint
+  tables, `theme-exceptions.json` and `state-tokens.md`.
+- The full `npm --prefix ui test` with state-shades green.
+- The whole-tree PostgreSQL gate.
+- Fleet migrations (none in this lane).
+- The ruling post on #777 (the decision comment above already exists).
 
 ## Integrated-Tree Status (2026-10-13)
 
