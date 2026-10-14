@@ -1,0 +1,43 @@
+{
+  "source_base": "bf229051e3d046b76ab8d18b34e9ee054a03bbf6",
+  "frozen_main": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "method": "Declared canonical sources intersected with this slice source diff; quoted rulings and statuses reread unchanged. Recompute after predecessor merges.",
+  "documents": [
+    {
+      "document": "docs/decisions/0006-who-owns-the-choice.md",
+      "changed_sources": [
+        "nexus/api/slot_endpoints.py"
+      ],
+      "previous_stamp": "d70a1991210ce16aef5d6f9b57b0ec563ee1d164",
+      "reviewed_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "ruling_body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0022-killed-c068.md",
+      "changed_sources": [
+        "nexus/api/slot_endpoints.py"
+      ],
+      "previous_stamp": "d70a1991210ce16aef5d6f9b57b0ec563ee1d164",
+      "reviewed_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "ruling_body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0025-legacy-new-story-seed-columns.md",
+      "changed_sources": [
+        "nexus/api/new_story_cache.py"
+      ],
+      "previous_stamp": "d70a1991210ce16aef5d6f9b57b0ec563ee1d164",
+      "reviewed_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "ruling_body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0053-resumable-genesis.md",
+      "changed_sources": [
+        "nexus/api/conversations.py"
+      ],
+      "previous_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "reviewed_stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+      "ruling_body_unchanged": true
+    }
+  ]
+}
