@@ -21,6 +21,8 @@ from nexus.agents.orrery.explain import (
 )
 from nexus.agents.orrery.substrate import (
     ALWAYS,
+    NOT,
+    AttentionClass,
     Branch,
     BranchSelection,
     DriveBand,
@@ -30,6 +32,40 @@ from nexus.agents.orrery.substrate import (
     evaluate_stack,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+
+def test_explain_reports_chosen_branch_attention() -> None:
+    """Attention is authored trace metadata and null when no branch fires."""
+    from dataclasses import replace
+
+    template = Template(
+        id="attention_explain_fixture",
+        priority=1,
+        drive_band=DriveBand.ANCHORED_ROUTINE,
+        blurb="Explain fixture.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                "Ordinary",
+                ALWAYS,
+                "{actor} waits.",
+                attention=AttentionClass.BACKGROUND,
+                deviation=True,
+            ),
+        ),
+    )
+    explanation = explain_template(template, WorldState(), {Slot.ACTOR: 1})
+    assert explanation.attention == "background"
+    assert explanation.to_dict()["attention"] == "background"
+    trace = explanation.branches[0].to_dict()
+    assert trace["attention"] == "background"
+    assert trace["deviation"] is True
+    refused = explain_template(
+        replace(template, package_gate=NOT(ALWAYS)), WorldState(), {Slot.ACTOR: 1}
+    )
+    assert refused.attention is None
+    assert refused.to_dict()["attention"] is None
 
 
 def _leaves(node: ConditionTrace):

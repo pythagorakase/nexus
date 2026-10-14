@@ -3,36 +3,57 @@
 from __future__ import annotations
 
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone
 import json
+import os
 import uuid
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+import requests  # type: ignore[import-untyped]
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+import tomlkit
 
+from nexus.agents.orrery.backstage import BackstagePayloadError, build_backstage_turn
 from nexus.agents.orrery.relationship_provenance import relationship_producer
+from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
 from nexus.agents.orrery.retrograde_persistence import (
     _ensure_prologue_metadata,
     _insert_prologue_chunk,
 )
 from nexus.agents.orrery.tag_writer import apply_pair_tag_bestowal
+from nexus.agents.orrery.templates import STROLL
 from nexus.api import backstage_endpoints, commit_handler_sync
 from nexus.memory.correspondence import (
     CorrespondenceCompactionPlan,
     insert_digest_version,
 )
 from nexus.config import load_settings
-from nexus.database import database_url
+from nexus.database import create_slot_engine, database_url
 from nexus.memory.manager import empty_pass2_baseline
 from tests.pg_fixtures import (
     assert_one_target,
     connect,
     disposable_slot_database,
+    seed_played_story,
     seed_protagonist,
 )
+from tests.scheduler_helpers import (
+    gateway_lane,
+    route_slot,
+    run_cli,
+    test_provider_config as configure_test,
+)
+from tests.test_api.test_attempt_manifest_pg import (
+    FIXTURE_CAST,
+    FIXTURE_TURN_GAP,
+    _stage_pending_turn,
+)
+from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -161,8 +182,10 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                 cur.execute("INSERT INTO entities (kind) VALUES ('place') RETURNING id")
                 place_entity = int(cur.fetchone()[0])
                 cur.execute(
-                    "INSERT INTO places (name, type, entity_id) "
-                    "VALUES ('Rootline', 'fixed_location', %s) RETURNING id",
+                    "INSERT INTO places (name, type, entity_id, coordinates) "
+                    "VALUES ('Rootline', 'fixed_location', %s, "
+                    "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                    "4326)::geography) RETURNING id",
                     (place_entity,),
                 )
                 place_id = int(cur.fetchone()[0])
@@ -377,6 +400,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                 )
 
                 provisional_id = latest + 1000
+                provisional_session = str(uuid.uuid4())
                 cur.execute(
                     """
                     INSERT INTO incubator (
@@ -390,7 +414,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                         'pending', 'TEST', '{}'::jsonb
                     )
                     """,
-                    (provisional_id, latest, str(uuid.uuid4())),
+                    (provisional_id, latest, provisional_session),
                 )
     finally:
         conn.close()
@@ -401,6 +425,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
         "prior_relationship_chunk": prior_relationship_chunk,
         "prologue": prologue_id,
         "provisional": provisional_id,
+        "provisional_session": provisional_session,
     }
 
 
@@ -439,6 +464,7 @@ def test_payload_assembles_every_committed_stream(
         "chunk_label": "S01E01_004",
         "turn_label": "t.4",
         "world_time": expected_clock.isoformat().replace("+00:00", "Z"),
+        "elapsed_seconds": 3600,
         "skald_status": "idle",
     }
     correspondence = payload["correspondence"]
@@ -536,6 +562,7 @@ def test_payload_assembles_every_committed_stream(
             "branch_label": "danger closes in",
             "event_type": "threat_issued",
             "drive_band": "crisis_constraint",
+            "attention": None,
             "proposal_id": "evade_pursuers:resolution-binding",
             "position": None,
             "binding_names": {},
@@ -543,6 +570,160 @@ def test_payload_assembles_every_committed_stream(
         }
     ]
     assert [entry["turn_label"] for entry in orrery["history"]] == ["t.3", "t.2"]
+
+
+def test_payload_reports_known_branch_attention(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """The legacy pressure-join path maps each known branch to its class.
+
+    Without a snapshot, ``branch_label`` comes only from
+    ``orrery_scene_pressures``. The stroll pressure row is a join fixture: no
+    background branch writes one at runtime, so legacy background rows read
+    ``None``. The snapshot test below covers the path live turns take.
+    """
+
+    chunk_id = backstage_case["chunks"][0]
+    expected = {
+        ("stroll", "Pace the near ground"): "background",
+        ("evade_pursuers", "Go to ground in flooded tunnels"): "meaningful",
+    }
+    resolution_ids: list[int] = []
+    pressure_ids: list[int] = []
+    try:
+        with closing(connect(disposable_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT orrery_proposal FROM narrative_chunks WHERE id = %s",
+                (chunk_id,),
+            )
+            assert cur.fetchone()[0] is None
+            cur.execute("SELECT entity_id FROM characters WHERE name = 'Celia'")
+            actor_id = int(cur.fetchone()[0])
+            for template_id, branch_label in expected:
+                binding_hash = f"attention-proof-{template_id}"
+                cur.execute(
+                    """
+                    INSERT INTO orrery_resolutions (
+                        tick_chunk_id, template_id, binding_hash,
+                        actor_entity_id, priority, magnitude, state_delta, brief
+                    ) VALUES (%s, %s, %s, %s, 1, 0.25, '{}'::jsonb, %s)
+                    RETURNING id
+                    """,
+                    (chunk_id, template_id, binding_hash, actor_id, branch_label),
+                )
+                resolution_ids.append(int(cur.fetchone()[0]))
+                cur.execute(
+                    """
+                    INSERT INTO orrery_scene_pressures (
+                        tick_chunk_id, template_id, binding_hash,
+                        actor_entity_id, priority, magnitude, branch_label,
+                        pressure_stub, prompt_text, bindings
+                    ) VALUES (%s, %s, %s, %s, 1, 0.25, %s,
+                              'attention proof', 'attention proof', '{}'::jsonb)
+                    RETURNING id
+                    """,
+                    (chunk_id, template_id, binding_hash, actor_id, branch_label),
+                )
+                pressure_ids.append(int(cur.fetchone()[0]))
+
+        response = client.get(
+            "/api/dev/backstage/4/turn", params={"chunk_id": chunk_id}
+        )
+        assert response.status_code == 200
+        orrery = response.json()["orrery"]
+        for key in ("rows", "inventory"):
+            rows = orrery[key]
+            assert len(rows) == len(expected) == 2
+            assert {
+                (row["template_id"], row["branch_label"]): row["attention"]
+                for row in rows
+            } == expected
+    finally:
+        with closing(connect(disposable_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM orrery_scene_pressures WHERE id = ANY(%s)",
+                (pressure_ids,),
+            )
+            cur.execute(
+                "DELETE FROM orrery_resolutions WHERE id = ANY(%s)",
+                (resolution_ids,),
+            )
+
+
+def test_snapshot_reports_background_attention_without_pressure_row(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """A live-shaped proposal snapshot alone carries the background class.
+
+    Live turns persist ``narrative_chunks.orrery_proposal``; no background
+    branch writes a scene pressure, so the snapshot is the only label source.
+    """
+
+    chunk_id = backstage_case["chunks"][0]
+    branch = next(
+        branch for branch in STROLL.branches if branch.label == "Pace the near ground"
+    )
+    draft = OrreryResolutionDraft(
+        template_id=STROLL.id,
+        priority=STROLL.priority,
+        binding_hash="attention-snapshot-proof",
+        bindings={},
+        branch_label=branch.label,
+        narrative_stub=branch.narrative_stub.format(actor="Celia"),
+        state_delta=dict(branch.state_delta),
+        event_type=branch.event_type,
+        changed_fields=tuple(branch.changed_fields),
+        magnitude=branch.magnitude,
+        promotable=branch.promotable,
+        binding_names={"actor": "Celia"},
+        position=1,
+        evaluated_at="2189-10-17T19:00:00+00:00",
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=chunk_id,
+        actor_count=1,
+        resolutions=(draft,),
+        rendered_cards=({"kind": "resolution", "proposal_id": draft.proposal_id},),
+    )
+    try:
+        with closing(connect(disposable_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT orrery_proposal FROM narrative_chunks WHERE id = %s",
+                (chunk_id,),
+            )
+            assert cur.fetchone()[0] is None
+            cur.execute(
+                "SELECT count(*) FROM orrery_scene_pressures "
+                "WHERE tick_chunk_id = %s",
+                (chunk_id,),
+            )
+            assert cur.fetchone()[0] == 0
+            cur.execute(
+                "UPDATE narrative_chunks SET orrery_proposal = %s::jsonb "
+                "WHERE id = %s",
+                (json.dumps(proposal.to_dict()), chunk_id),
+            )
+
+        response = client.get(
+            "/api/dev/backstage/4/turn", params={"chunk_id": chunk_id}
+        )
+        assert response.status_code == 200
+        orrery = response.json()["orrery"]
+        for key in ("rows", "inventory"):
+            assert [
+                (row["template_id"], row["branch_label"], row["attention"])
+                for row in orrery[key]
+            ] == [("stroll", "Pace the near ground", "background")]
+    finally:
+        with closing(connect(disposable_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE narrative_chunks SET orrery_proposal = NULL WHERE id = %s",
+                (chunk_id,),
+            )
 
 
 def test_history_counts_field_level_relationship_writes(
@@ -765,3 +946,270 @@ def test_backstage_clock_equals_selected_chunk(
         assert datetime.fromisoformat(header["world_time"]) == expected
         clocks.append(expected)
     assert clocks[0] > clocks[1]
+
+
+def test_backstage_header_elapsed_world_time(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """Fails if elapsed time is absent or counts the non-playable prologue."""
+    chunks = backstage_case["chunks"]
+    assert chunks == [2, 3, 4, 5]
+    elapsed = []
+    for index, chunk_id in enumerate(chunks):
+        response = client.get(
+            "/api/dev/backstage/4/turn", params={"chunk_id": chunk_id}
+        )
+        assert response.status_code == 200, response.text
+        seconds = response.json()["header"]["elapsed_seconds"]
+        elapsed.append(seconds)
+        if index:
+            with closing(connect(disposable_db)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT extract(epoch FROM "
+                    "(selected.world_time - previous.world_time)) "
+                    "FROM chunk_metadata selected CROSS JOIN chunk_metadata previous "
+                    "WHERE selected.chunk_id = %s AND previous.chunk_id = %s",
+                    (chunk_id, chunks[index - 1]),
+                )
+                assert seconds == int(cur.fetchone()[0])
+    assert elapsed == [None, 60, 3600, 3600]
+
+
+def test_backstage_header_missing_world_time_is_500(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+    disposable_db: str,
+) -> None:
+    """Fails if a missing prior clock silently becomes null or a zero delta."""
+    previous, selected = backstage_case["chunks"][-2:]
+    assert (previous, selected) == (4, 5)
+    engine = create_slot_engine(database_url(disposable_db))
+    try:
+        with Session(engine) as session:
+            try:
+                session.execute(text("SET LOCAL session_replication_role = replica"))
+                session.execute(
+                    text(
+                        "UPDATE chunk_metadata SET world_time = NULL "
+                        "WHERE chunk_id = :chunk_id"
+                    ),
+                    {"chunk_id": previous},
+                )
+                with pytest.raises(BackstagePayloadError) as error:
+                    build_backstage_turn(session, slot=4, chunk_id=selected)
+                assert error.value.status_code == 500
+                assert error.value.detail == (
+                    f"Committed chunk {selected} or its previous turn {previous} "
+                    "has no world_time"
+                )
+            finally:
+                session.rollback()
+    finally:
+        engine.dispose()
+    response = client.get("/api/dev/backstage/4/turn", params={"chunk_id": selected})
+    assert response.status_code == 200, response.text
+    assert response.json()["header"]["elapsed_seconds"] == 3600
+
+
+def test_economics_legacy_and_unbound_pending_are_unavailable(
+    client: TestClient, backstage_case: dict[str, Any]
+) -> None:
+    """Fails if legacy reads escape, the pending parent is ignored, or data vanishes."""
+    response = client.get("/api/dev/backstage/4/turn")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    latest = backstage_case["latest"]
+    provisional = backstage_case["provisional_session"]
+    assert payload["economics"]["accepted"] == {
+        "status": "unavailable",
+        "generation_session": None,
+        "detail": (
+            f"chunk {latest}: no generation session "
+            "(accepted before session binding)"
+        ),
+        "observation": None,
+    }
+    assert payload["economics"]["pending"] == {
+        "status": "unavailable",
+        "generation_session": provisional,
+        "detail": (
+            f"session {provisional}: no generation session "
+            "(staged before session binding)"
+        ),
+        "observation": None,
+    }
+    assert payload["correspondence"]["exchanges"]
+    assert payload["state_writes"]["rows"]
+    assert payload["orrery"]["rows"]
+    earlier = client.get(
+        "/api/dev/backstage/4/turn",
+        params={"chunk_id": backstage_case["chunks"][1]},
+    )
+    assert earlier.status_code == 200, earlier.text
+    assert earlier.json()["economics"]["pending"] is None
+
+
+def _without_read_at(observation: dict[str, Any]) -> dict[str, Any]:
+    """Remove only the read instant; every schema-3 value remains an oracle."""
+    return {key: value for key, value in observation.items() if key != "read_at"}
+
+
+def _read_utc_day(observation: dict[str, Any]) -> str:
+    """Return the UTC date of one observation's ``read_at``."""
+    read_at = datetime.fromisoformat(observation["read_at"])
+    return read_at.astimezone(timezone.utc).date().isoformat()
+
+
+def _backstage_read(client: TestClient) -> dict[str, Any]:
+    """Read the latest Backstage turn and require a 200."""
+    response = client.get("/api/dev/backstage/4/turn")
+    assert response.status_code == 200, response.text
+    payload: dict[str, Any] = response.json()
+    return payload
+
+
+def _same_utc_day_reads(
+    read_endpoint: Callable[[], dict[str, Any]],
+    endpoint_observation: Callable[[dict[str, Any]], dict[str, Any]],
+    read_cli: Callable[[], dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read the endpoint, then the CLI; reread both once across UTC midnight.
+
+    ``ledger_days_read`` runs through each read's own ``read_at`` date, so a pair
+    whose reads fall on different UTC dates differs by design. Both reads are
+    then repeated once; nothing is dropped from the comparison, and a second
+    straddling pair is returned as is and fails the comparison loudly.
+    """
+    payload, cli_observation = read_endpoint(), read_cli()
+    if _read_utc_day(endpoint_observation(payload)) != _read_utc_day(cli_observation):
+        payload, cli_observation = read_endpoint(), read_cli()
+    return payload, cli_observation
+
+
+def test_economics_matches_inspect_turn_for_a_test_turn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Fails on another session, changed observation data or post-acceptance pending."""
+    # The provider fixture must first see private runtime state and TEST-only use.
+    config = configure_test(tmp_path, "http://127.0.0.1:1", monkeypatch)
+    provider = request.getfixturevalue("mock_openai_server")
+    configure_test(tmp_path, provider, monkeypatch)
+    doc = tomlkit.parse(config.read_text())
+    doc["storyteller"]["correspondence"]["floor_turns"] = 1  # type: ignore[index]
+    config.write_text(tomlkit.dumps(doc))
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
+    with disposable_slot_database("qa640_uib_turn") as dbname:
+        route_slot(monkeypatch, dbname)
+        _route_backstage_to(monkeypatch, dbname)
+        seed_played_story(
+            dbname,
+            turns=3,
+            cast=FIXTURE_CAST,
+            time_delta=FIXTURE_TURN_GAP,
+            correspondence=True,
+            slot=4,
+        )
+        prior_session = _stage_pending_turn(dbname)
+        app = FastAPI()
+        app.include_router(backstage_endpoints.router)
+        with TestClient(app) as backstage:
+            with gateway_lane(monkeypatch):
+                output = run_cli(
+                    monkeypatch, "continue", "--slot", "4", "--choice", "1", "--json"
+                )
+                assert json.loads(output)["success"], output
+                with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT session_id::text, parent_chunk_id FROM incubator"
+                    )
+                    pending_session, parent_chunk = cur.fetchone()
+                payload, cli_observation = _same_utc_day_reads(
+                    lambda: _backstage_read(backstage),
+                    lambda read: read["economics"]["pending"]["observation"],
+                    lambda: json.loads(
+                        run_cli(
+                            monkeypatch,
+                            "inspect-turn",
+                            "--slot",
+                            "4",
+                            "--session",
+                            pending_session,
+                            "--json",
+                        )
+                    )["observation"],
+                )
+                pending = payload["economics"]["pending"]
+                assert pending["status"] == "observed"
+                assert pending["generation_session"] == pending_session
+                assert pending["detail"] is None
+                observation = pending["observation"]
+                assert observation["schema_version"] == 3
+                assert {item["seat"] for item in observation["attempts"]} >= {
+                    "skald_writer",
+                    "gaia",
+                }
+                assert _without_read_at(observation) == _without_read_at(
+                    cli_observation
+                )
+                with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT session_id::text FROM narrative_generation_sessions "
+                        "WHERE chunk_id = %s AND terminal_outcome = 'accepted'",
+                        (payload["header"]["chunk_id"],),
+                    )
+                    assert cur.fetchall() == [(prior_session,)]
+                assert payload["header"]["chunk_id"] == parent_chunk
+                assert payload["economics"]["accepted"]["status"] == "observed"
+                assert (
+                    payload["economics"]["accepted"]["generation_session"]
+                    == prior_session
+                )
+                approved = requests.post(
+                    f"{os.environ['NEXUS_API_URL']}/api/narrative/approve/"
+                    f"{pending_session}?slot=4&commit=true",
+                    timeout=120,
+                )
+                assert approved.status_code == 200, approved.text
+            # The fixture stopped and joined its workers, so job states now hold.
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT chunk_id FROM narrative_generation_sessions "
+                    "WHERE session_id = %s AND terminal_outcome = 'accepted'",
+                    (pending_session,),
+                )
+                (accepted_chunk,) = cur.fetchone()
+                cur.execute(
+                    "SELECT extract(epoch FROM "
+                    "(selected.world_time - parent.world_time)) "
+                    "FROM chunk_metadata selected CROSS JOIN chunk_metadata parent "
+                    "WHERE selected.chunk_id = %s AND parent.chunk_id = %s",
+                    (accepted_chunk, parent_chunk),
+                )
+                elapsed_seconds = int(cur.fetchone()[0])
+            payload, cli_observation = _same_utc_day_reads(
+                lambda: _backstage_read(backstage),
+                lambda read: read["economics"]["accepted"]["observation"],
+                lambda: json.loads(
+                    run_cli(
+                        monkeypatch,
+                        "inspect-turn",
+                        "--slot",
+                        "4",
+                        "--chunk",
+                        str(accepted_chunk),
+                        "--json",
+                    )
+                )["observation"],
+            )
+            accepted = payload["economics"]["accepted"]
+            assert payload["header"]["chunk_id"] == accepted_chunk
+            assert payload["header"]["elapsed_seconds"] == elapsed_seconds
+            assert accepted["status"] == "observed"
+            assert accepted["generation_session"] == pending_session
+            assert accepted["detail"] is None
+            assert payload["economics"]["pending"] is None
+            assert _without_read_at(accepted["observation"]) == _without_read_at(
+                cli_observation
+            )
