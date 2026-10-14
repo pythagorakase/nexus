@@ -771,3 +771,40 @@ docs/turn_flow_sequence.md
 `git fetch origin` left `origin/main` at `a01c162f`, so both stamps stay at
 the merge base and there is still no second range. Black, flake8 and mypy
 were not run: this branch changes no Python file.
+
+## Third Review-Fix Tails
+
+The third review round (`3eee9894`) changed two clauses of
+`docs/turn_flow_sequence.md` (corrections 5 and 6; no source and no stamp
+moved, and the body keeps its line count) and this file. `AGENTS.md:44`
+was re-read against the corrected document and stays true. No Python file
+changed, so the ruling's set is `tests/test_doc_front_matter.py` (the only
+test that reads either file) and `tests/test_reachability.py`; no
+PostgreSQL-backed test was run this round, and the offline-suite tails above
+stand. All at `3eee9894` with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`,
+`NEXUS_SLOT` and `NEXUS_RUN_POSTGRES` unset; every pytest command prefixed
+`nice -n 15`. The one-minute load read 6.99.
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+66 passed, 5 warnings in 5.55s
+
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+54 passed, 5 warnings in 10.84s
+
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+
+$ git diff --name-only origin/main...HEAD
+AGENTS.md
+docs/qa/817-turn-flow-reverify/verification.md
+docs/turn_flow_sequence.md
+```
+
+`git fetch origin` left `origin/main` at `a01c162f`, so both stamps stay at
+the merge base and there is still no second range. Black, flake8 and mypy
+were not run: this branch changes no Python file.
