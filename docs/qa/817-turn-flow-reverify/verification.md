@@ -652,3 +652,41 @@ docs/turn_flow_sequence.md
 The offline pieces skip their PostgreSQL tests by design (no
 `NEXUS_RUN_POSTGRES`). Black, flake8 and mypy were not run: this branch
 changes no Python file.
+
+## Review-Fix Tails
+
+The review round (`e436d121`) changed only `docs/turn_flow_sequence.md` (one
+added source, `job_queues.py`; the `NarrativePane.tsx` and `slot_endpoints.py`
+sources swapped into first-citation order; section 1's verb-only correction)
+and this file. `tests/test_doc_front_matter.py` is the only test that reads
+either file, so these runs cover the round; the offline-suite tails above
+stand. All at `e436d121` with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
+`NEXUS_SLOT` unset; every pytest command prefixed `nice -n 15`. The one-minute
+load read 12.55 before the PostgreSQL run.
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+66 passed, 5 warnings in 5.62s
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_doc_front_matter.py tests/test_owner_target_guard.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+147 passed in 8.41s
+
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+
+$ git diff --name-only origin/main...HEAD
+AGENTS.md
+docs/qa/817-turn-flow-reverify/verification.md
+docs/turn_flow_sequence.md
+```
+
+`git fetch origin` left `origin/main` at `a01c162f`, so both stamps stay at
+the merge base and there is still no second range.
