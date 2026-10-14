@@ -15,6 +15,7 @@ TEMPLATE_ID = "coverage_probe"
 def test_weather_is_an_honest_current_projection() -> None:
     """Unversioned place zones prevent historical weather from being rewound."""
 
+    assert "horizon_events" in coverage.HYDRATION_HONESTY["rewound_to_anchor"]
     assert "weather" not in coverage.HYDRATION_HONESTY["rewound_to_anchor"]
     assert "weather" in coverage.HYDRATION_HONESTY["current_projection"]
 
@@ -23,7 +24,13 @@ def _template() -> SimpleNamespace:
     return SimpleNamespace(
         id=TEMPLATE_ID,
         drive_band=SimpleNamespace(value="affiliation"),
-        branches=(SimpleNamespace(label="Probe branch", promotable=True),),
+        branches=(
+            SimpleNamespace(
+                label="Probe branch",
+                promotable=True,
+                attention=SimpleNamespace(value="meaningful"),
+            ),
+        ),
     )
 
 
@@ -35,6 +42,7 @@ def _item() -> SimpleNamespace:
         fired=True,
         chosen_branch="Probe branch",
         promotable=True,
+        attention="meaningful",
     )
 
 
@@ -154,6 +162,7 @@ def test_fanout_trimmed_pair_stays_fired_but_is_not_counted_as_winner(
     assert stats["fired"] == 2
     assert stats["won"] == 1
     assert stats["branch_chosen"]["Probe branch"] == 2
+    assert stats["branch_attention"] == {"Probe branch": "meaningful"}
     assert payload["anchors"][0]["winners_by_band"] == {"affiliation": 1}
     assert payload["anchors"][0]["resolution_winners"] == [
         {
@@ -162,6 +171,7 @@ def test_fanout_trimmed_pair_stays_fired_but_is_not_counted_as_winner(
             "template_id": TEMPLATE_ID,
             "drive_band": "affiliation",
             "promotable": True,
+            "attention": "meaningful",
         }
     ]
 

@@ -784,6 +784,7 @@ class TurnCycleManager:
                 BUILTIN_TEMPLATES,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
+                event_horizon_hours=orrery.binding.recent_event_horizon_hours,
                 sunhelm_settings=orrery_settings["sunhelm"],
                 selection_settings=orrery_settings["selection"],
                 habituation_settings=orrery_settings["habituation"],
