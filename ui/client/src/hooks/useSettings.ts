@@ -2,14 +2,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { SECRETS_QUERY_KEY } from "@/hooks/useSecrets";
+import { usePlane } from "@/hooks/usePlane";
 import type { Preferences, SettingsPatch, SettingsPayload, StorySettings } from "@/types/settings";
 
 export const SETTINGS_QUERY_KEY = ["/api/settings"] as const;
 export const PREFERENCES_QUERY_KEY = ["/api/preferences"] as const;
 
+/** Player preferences alone: a player-plane route (#824). */
+export function usePreferencesQuery() {
+  return useQuery<Preferences>({ queryKey: [...PREFERENCES_QUERY_KEY] });
+}
+
+/** Repository defaults merged with preferences; the defaults are operator-only. */
 export function useSettingsQuery() {
-  const defaults = useQuery<SettingsPayload>({ queryKey: [...SETTINGS_QUERY_KEY] });
-  const preferences = useQuery<Preferences>({ queryKey: [...PREFERENCES_QUERY_KEY] });
+  const defaults = useQuery<SettingsPayload>({
+    queryKey: [...SETTINGS_QUERY_KEY],
+    enabled: usePlane() === "operator",
+  });
+  const preferences = usePreferencesQuery();
   return {
     ...defaults,
     error: defaults.error ?? preferences.error,
@@ -33,10 +43,6 @@ export function applySettingsPatch(payload: SettingsPayload, patch: SettingsPatc
       ...(patch.theme === undefined ? {} : { theme: patch.theme }),
       ...(patch.fonts === undefined ? {} : { fonts: fonts as Preferences["fonts"] }),
     },
-    wizard: {
-      ...payload.wizard,
-      ...(patch.wizard_model === undefined ? {} : { default_model: patch.wizard_model }),
-    },
   };
 }
 
@@ -49,22 +55,15 @@ export function useSettingsMutation() {
       const previous = client.getQueryData<Preferences>(PREFERENCES_QUERY_KEY);
       if (previous) {
         const projected = applySettingsPatch({ ui: previous }, patch);
-        client.setQueryData(PREFERENCES_QUERY_KEY, {
-          ...previous, ...projected.ui,
-          wizard_model: patch.wizard_model ?? previous.wizard_model,
-        });
+        client.setQueryData(PREFERENCES_QUERY_KEY, { ...previous, ...projected.ui });
       }
       return { previous };
     },
     onError: (_error, _patch, context) => {
       if (context?.previous) client.setQueryData(PREFERENCES_QUERY_KEY, context.previous);
     },
-    onSuccess: (preferences, patch) => {
+    onSuccess: (preferences) => {
       client.setQueryData(PREFERENCES_QUERY_KEY, preferences);
-      // The wizard seat can move which keys are required.
-      if (patch.wizard_model !== undefined) {
-        void client.invalidateQueries({ queryKey: [...SECRETS_QUERY_KEY] });
-      }
     },
   });
 }

@@ -4,13 +4,15 @@ Headless helpers to manage new-story setup per slot.
 
 from __future__ import annotations
 
-from nexus.database import AmbiguousCommit, connection_kwargs
+from nexus.database import connection_kwargs
 
+import hashlib
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
 import psycopg2
 
@@ -18,24 +20,25 @@ from nexus.agents.orrery.retrograde_orchestrator import (
     start_genesis_run,
     record_genesis_failure,
 )
-from nexus.api.conversations import ConversationsClient, conversation_store_mode
+from nexus.api.conversations import new_conversation_id
 from nexus.api.narrative_schemas import WeirdLevel
 from nexus.api.new_story_cache import (
     WizardCache,
     clear_cache,
     init_cache,
     read_cache,
-    read_cache_raw,
     repoint_wizard_conversation,
     write_cache,
 )
 from nexus.api.new_story_schemas import StorySeed
 from nexus.api.save_slots import clear_active, get_slot_model, upsert_slot
-from nexus.api.slot_utils import slot_dbname, all_slots
-from scripts.new_story_setup import create_slot_schema_only
+from nexus.api.slot_utils import slot_dbname
+from nexus.maintenance.new_story_setup import create_slot_schema_only
 
 if TYPE_CHECKING:
     from nexus.api.new_story_schemas import TransitionData
+    from nexus.config.settings_models import Settings
+    from nexus.agents.orrery.retrograde_orchestrator import GenesisRunRecord
 
 logger = logging.getLogger("nexus.api.new_story_flow")
 
@@ -90,37 +93,20 @@ def build_transition_data_from_cache(cache: Any) -> "TransitionData":
     )
 
 
-def resolve_setup_model(
-    slot_model: Optional[str],
-    *,
-    setup_started: bool,
-    default_slot_model: str,
-    wizard_default_model: str,
-) -> str:
-    """Resolve an omitted model when a new-story setup starts.
-
-    Preserve a slot model when it differs from the fresh-slot placeholder or
-    when an existing wizard-cache row proves setup already locked that model.
-    Only a genuinely fresh slot falls back to the wizard roster default.
-    """
-    if slot_model and (setup_started or slot_model != default_slot_model):
-        return slot_model
-    return wizard_default_model
-
-
 def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     """
     Start a new setup conversation for a slot.
 
     - Clears cache in the slot DB
-    - Creates a conversations thread and stores thread_id
+    - Mints a conversation UUID (new_conversation_id) and stores it as thread_id;
+      the slot database holds its transcript
     - Marks slot as active (and clears other actives)
 
     Args:
         slot_number: Target save slot (1-5)
-        model: Optional explicit model override. When omitted, an existing
-            operator-set slot model is preserved; only an unset/fresh slot
-            uses the configured wizard default.
+        model: Optional explicit model override. When omitted, a slot model
+            pin is preserved; a slot with no pin (NULL) resolves the wizard
+            seat (the player preference, then the configured wizard default).
 
     Returns:
         Thread ID for the new conversation
@@ -142,11 +128,6 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 
     settings = load_settings()
     slot_model = get_slot_model(slot_number, dbname=dbname)
-    if (
-        slot_model == settings.global_.model.default_slot_model
-        and read_cache_raw(dbname) is None
-    ):
-        slot_model = None
     model_to_use = resolve_story_model(
         "wizard",
         settings=settings,
@@ -155,8 +136,7 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     )
 
     clear_cache(dbname)
-    client = ConversationsClient(model=model_to_use)
-    thread_id = client.create_thread()
+    thread_id = new_conversation_id()
     init_cache(dbname, thread_id=thread_id, target_slot=slot_number)
     clear_active(dbname)
     # Persist model to save_slots so bootstrap/narrative can use it
@@ -170,51 +150,6 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     return thread_id
 
 
-class WizardConversationMoveError(RuntimeError):
-    """A wizard thread could not be moved into the requested model's store."""
-
-
-def _remove_partial_copy(
-    target: ConversationsClient, thread_id: str, message_ids: list[str]
-) -> None:
-    """Delete a failed move's copied messages, then its thread.
-
-    Hosted conversations retain their items after the conversation is deleted,
-    so each copied item goes first. A thread whose items could not all be
-    deleted is kept, and logged, so its remaining items stay reachable.
-    """
-    remaining: list[str] = []
-    for message_id in reversed(message_ids):
-        try:
-            target.delete_message(thread_id, message_id)
-        except Exception:
-            remaining.append(message_id)
-            logger.exception(
-                "Removing copied message %s from partial wizard thread %s failed",
-                message_id,
-                thread_id,
-            )
-    if remaining:
-        logger.error(
-            "Partial wizard thread %s remains in %s storage with messages %s",
-            thread_id,
-            target.store_mode,
-            remaining,
-        )
-        return
-    try:
-        removed = target.delete_thread(thread_id)
-    except Exception:
-        removed = False
-        logger.exception("Removing partial wizard thread %s failed", thread_id)
-    if not removed:
-        logger.error(
-            "Partial wizard thread %s remains in %s storage",
-            thread_id,
-            target.store_mode,
-        )
-
-
 def switch_wizard_model(
     slot_number: int,
     *,
@@ -222,32 +157,7 @@ def switch_wizard_model(
     slot_model: Optional[str],
     model: str,
 ) -> str:
-    """Persist a requested wizard model and keep its conversation readable.
-
-    A model whose provider uses another conversation store (hosted OpenAI,
-    local files, or TEST memory) cannot read the current thread. Its messages
-    are copied, in order, into a new thread of the requested store, and the
-    new thread ID and model are saved in one transaction. Any failure before
-    that save leaves the slot model and cached thread ID unchanged and removes
-    the partial copy. An ambiguous commit keeps the copy, because the save may
-    have landed and the slot may already name the new thread.
-
-    Args:
-        slot_number: Target save slot (1-5).
-        thread_id: The wizard's current thread ID.
-        slot_model: The slot's stamped model, whose store holds the thread.
-        model: The explicitly requested wizard model.
-
-    Returns:
-        The thread ID the wizard continues in.
-
-    Raises:
-        RuntimeError: If the wizard has no thread, or no stamped slot model to
-            locate it.
-        WizardConversationMoveError: If the current store cannot be read.
-        WizardStateConflict: If the thread or slot model changed meanwhile.
-        AmbiguousCommit: If the save's outcome is unknown; the copy is kept.
-    """
+    """Repoint the slot model; its slot-database conversation does not move."""
     if thread_id is None:
         raise RuntimeError(
             f"Slot {slot_number} has no wizard conversation thread to switch "
@@ -257,82 +167,16 @@ def switch_wizard_model(
         return thread_id
     if not slot_model:
         raise RuntimeError(
-            f"Slot {slot_number} has no stamped wizard model, so the store "
-            f"holding thread {thread_id!r} is unknown; start a new setup"
+            f"Slot {slot_number} has no stamped wizard model; start a new setup"
         )
-    from nexus.config import load_settings
-
-    dbname = slot_dbname(slot_number)
-    settings = load_settings()
-    source_mode = conversation_store_mode(
-        settings.provider_for_model(slot_model), settings
+    repoint_wizard_conversation(
+        slot_dbname(slot_number),
+        expected_thread_id=thread_id,
+        thread_id=thread_id,
+        expected_model=slot_model,
+        model=model,
     )
-    target = ConversationsClient(model=model)
-    if source_mode == target.store_mode:
-        repoint_wizard_conversation(
-            dbname,
-            expected_thread_id=thread_id,
-            thread_id=thread_id,
-            expected_model=slot_model,
-            model=model,
-        )
-        return thread_id
-
-    try:
-        messages = ConversationsClient(model=slot_model).list_messages(
-            thread_id, limit=0
-        )
-    except Exception as exc:
-        raise WizardConversationMoveError(
-            f"Cannot move wizard thread {thread_id!r} of slot {slot_number} from "
-            f"{source_mode} storage ({slot_model!r}) to {target.store_mode} "
-            f"storage ({model!r}): reading the {source_mode} store failed: {exc}"
-        ) from exc
-
-    new_thread_id = target.create_thread()
-    copied: list[str] = []
-    try:
-        # list_messages is newest first; replay oldest first with provenance.
-        for message in reversed(messages):
-            copied.append(
-                target.add_message(
-                    new_thread_id,
-                    message["role"],
-                    message["content"],
-                    origin=message.get("origin"),
-                )
-            )
-        repoint_wizard_conversation(
-            dbname,
-            expected_thread_id=thread_id,
-            thread_id=new_thread_id,
-            expected_model=slot_model,
-            model=model,
-        )
-    except AmbiguousCommit:
-        # The save may have committed, so deleting the copy could leave the slot
-        # pointing at a missing thread. Keep it; the next read settles the state.
-        logger.error(
-            "Wizard thread move for slot %s ended in an ambiguous commit; "
-            "keeping %s in %s storage until the slot's thread ID is read back",
-            slot_number,
-            new_thread_id,
-            target.store_mode,
-        )
-        raise
-    except BaseException:
-        # The original failure propagates; only the partial copy is removed.
-        _remove_partial_copy(target, new_thread_id, copied)
-        raise
-    logger.info(
-        "Moved wizard thread %s (%s storage) to %s (%s storage) for slot %s",
-        thread_id,
-        source_mode,
-        new_thread_id,
-        target.store_mode,
-        slot_number,
-    )
-    return new_thread_id
+    return thread_id
 
 
 def resume_setup(slot_number: int) -> Optional[WizardCache]:
@@ -452,6 +296,166 @@ def _record_genesis_weird(
         )
 
 
+class GenesisStageOutputInvalid(RuntimeError):
+    """A saved stage is incompatible with its current structured contract."""
+
+
+class GenesisRunFailed(RuntimeError):
+    """The run joined by this request ended with a recorded failure."""
+
+
+_REUSABLE_GENESIS_STAGES = ("derivation", "packet", "seed_candidates", "expansion")
+
+
+def genesis_input_fingerprint(
+    *,
+    transition_data: TransitionData,
+    weird_level: WeirdLevel | None,
+    model: str,
+    settings: Settings,
+) -> str:
+    """Hash all ruled run inputs before generation mutates the transition data."""
+    payload = {
+        "version": 1,
+        "transition_data": transition_data.model_dump(mode="json"),
+        "weird_level": weird_level,
+        "model": model,
+        "trait_inputs": settings.wizard.trait_inputs.model_dump(mode="json"),
+        "wizard_max_retries": settings.wizard.max_retries,
+        "orrery": (
+            None if settings.orrery is None else settings.orrery.model_dump(mode="json")
+        ),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _validate_genesis_output(stage: str, output: Any, run: str) -> Any:
+    from nexus.agents.orrery.retrograde_expansion import RetrogradeExpansionPlanResponse
+    from nexus.agents.orrery.retrograde_packet import PACKET_SCHEMA_VERSION
+    from nexus.agents.orrery.retrograde_seed_candidates import (
+        RetrogradeSeedCandidateResponse,
+    )
+    from nexus.api.trait_compiler_schemas import TraitCompileInputs
+
+    try:
+        if stage == "derivation":
+            if not isinstance(output, dict) or set(output) != {
+                "trait_compile_inputs",
+                "outcome",
+            }:
+                raise ValueError("expected trait_compile_inputs and outcome")
+            if output["trait_compile_inputs"] is not None:
+                TraitCompileInputs.model_validate(output["trait_compile_inputs"])
+            if output["outcome"] is not None and not isinstance(
+                output["outcome"], dict
+            ):
+                raise ValueError("outcome must be a dict or None")
+        elif stage == "packet":
+            if (
+                not isinstance(output, dict)
+                or output.get("schema_version") != PACKET_SCHEMA_VERSION
+            ):
+                raise ValueError(f"expected packet schema {PACKET_SCHEMA_VERSION}")
+        elif stage == "seed_candidates":
+            RetrogradeSeedCandidateResponse.model_validate(output)
+        elif stage == "expansion":
+            RetrogradeExpansionPlanResponse.model_validate(output)
+        elif stage == "persistence":
+            if not isinstance(output, dict):
+                raise ValueError("persistence output must be a dict")
+            if "counters" not in output or not isinstance(
+                output.get("retrograde"), dict
+            ):
+                raise ValueError("persistence requires counters and retrograde")
+            pending = output.get("embedding_pending_summary_ids")
+            if not isinstance(pending, list) or any(
+                type(item) is not int for item in pending
+            ):
+                raise ValueError("embedding_pending_summary_ids must be a list of int")
+        else:
+            raise ValueError(f"Unknown saved genesis stage {stage}")
+    except (ValueError, TypeError) as exc:
+        raise GenesisStageOutputInvalid(
+            f"Saved {stage} output of genesis run {run} no longer validates: {exc}"
+        ) from exc
+    return output
+
+
+def _derivation_outcome(output: Any, run: str) -> dict[str, Any] | None:
+    """Read only the saved derivation ``outcome`` that a completed answer reports.
+
+    A committed world never calls the deriver again, so its saved trait
+    inputs are not validated against the current contract here.
+    """
+    if not isinstance(output, dict) or "outcome" not in output:
+        raise GenesisStageOutputInvalid(
+            f"Saved derivation output of genesis run {run} no longer validates: "
+            "expected an outcome"
+        )
+    outcome = output["outcome"]
+    if outcome is not None and not isinstance(outcome, dict):
+        raise GenesisStageOutputInvalid(
+            f"Saved derivation output of genesis run {run} no longer validates: "
+            "outcome must be a dict or None"
+        )
+    return outcome
+
+
+def reusable_genesis_outputs(
+    prior: GenesisRunRecord | None, fingerprint: str
+) -> dict[str, Any]:
+    """Validate the entire longest reusable prefix before any provider is called."""
+    if (
+        prior is None
+        or prior.status != "failed"
+        or prior.input_fingerprint != fingerprint
+    ):
+        return {}
+    persistence = prior.stages.get("persistence")
+    if persistence is not None and persistence.output is not None:
+        return {}
+    blocked = prior.stage == "persistence" and (prior.error or "").startswith(
+        "RetrogradePersistenceBlockedError:"
+    )
+    saved: dict[str, Any] = {}
+    for stage in _REUSABLE_GENESIS_STAGES:
+        row = prior.stages.get(stage)
+        if stage == "derivation" and row is None:
+            continue
+        if stage == "expansion" and blocked:
+            break
+        if row is None or row.output is None:
+            break
+        _validate_genesis_output(stage, row.output, prior.run)
+        saved[stage] = row.output
+    return saved
+
+
+def _reuse_genesis_stage(
+    slot: int, run: str, prior: GenesisRunRecord, stage: str
+) -> None:
+    from nexus.agents.orrery.retrograde_orchestrator import (
+        record_genesis_stage_output,
+        record_retrograde_progress,
+    )
+
+    row = prior.stages[stage]
+    record_retrograde_progress(
+        slot, run, stage, {**row.detail, "reused_from": prior.run}
+    )
+    record_genesis_stage_output(slot, run, stage, row.output)
+
+
+def _embedding_retry_message(exc: RuntimeError, slot: int) -> str:
+    return (
+        f"{exc} -- Retrograde history is committed but not yet embedded; "
+        f"retry the transition to finish it (the wizard's Retry, or: "
+        f"nexus continue --slot {slot})"
+    )
+
+
 def perform_transition_with_retrograde(
     slot_number: int,
     transition_data: "TransitionData",
@@ -472,12 +476,14 @@ def perform_transition_with_retrograde(
        joins the same transaction via the in_transaction hook. A blocked persistence
        raises and rolls back everything: the slot keeps its wizard cache and stays
        in wizard-ready, and the run is recorded as failed at its stage in genesis_runs.
-       A retry starts a new run and repeats every stage; resuming from saved stage
-       outputs is 776-S1b. A history-less world can never silently enter narrative mode.
+       A retry validates and reuses the longest saved prefix when the whole-run
+       fingerprint matches. Changed inputs rebuild every stage. The route holds
+       a session claim, so repeated POSTs join one run. A history-less world can
+       never silently enter narrative mode.
     3. After commit, pending Retrograde summaries are embedded through their
        dedicated lifecycle. An embedding failure surfaces loudly; the rows
-       stay pending and retryable via
-       ``nexus retrograde-embed-history --slot N --execute``.
+       stay pending and a transition retry finishes them from the committed
+       ledger without requiring the wizard cache or rebuilding the world.
 
     The resolved strangeness profile, with the selected level beside it, is
     recorded as ``global_variables.genesis_weird`` in the world's
@@ -509,7 +515,9 @@ def perform_transition_with_retrograde(
             finish_genesis_persistence,
             finish_skipped_genesis_run,
             generate_retrograde_history,
+            load_genesis_run,
             persist_retrograde_history,
+            record_genesis_input_fingerprint,
             record_genesis_stage_output,
             record_retrograde_progress,
         )
@@ -531,6 +539,23 @@ def perform_transition_with_retrograde(
             override=model,
         )
 
+        fingerprint = genesis_input_fingerprint(
+            transition_data=transition_data,
+            weird_level=weird_level,
+            model=effective_model,
+            settings=settings,
+        )
+        record_genesis_input_fingerprint(slot_number, run, fingerprint)
+        prior = load_genesis_run(slot_number, excluding=run)
+        saved = reusable_genesis_outputs(prior, fingerprint)
+        reused: list[str] = []
+
+        def reuse(stage: str) -> None:
+            if prior is None:
+                raise RuntimeError("Saved genesis output has no source run")
+            _reuse_genesis_stage(slot_number, run, prior, stage)
+            reused.append(stage)
+
         # Derive typed trait-compiler inputs before any world writes so the
         # compiler can create stub entities and relationship rows (M9). TEST-provider
         # wizards stay hermetic: no trait derivation and no Retrograde calls.
@@ -547,29 +572,42 @@ def perform_transition_with_retrograde(
                     f"Slot {slot_number} has no configured model; cannot derive "
                     "trait compile inputs at the transition"
                 )
-            # Sync context only: the transition endpoint runs this whole
-            # function via asyncio.to_thread, and the deriver uses
-            # agent.run_sync, which would deadlock inside a running event loop.
-            record_retrograde_progress(slot_number, run, "derivation", {})
-            trait_inputs_outcome = ensure_trait_compile_inputs(
-                transition_data,
-                slot=slot_number,
-                model_name=effective_model,
-                max_tokens=trait_inputs_settings.max_tokens,
-                retries=settings.wizard.max_retries,
-            )
+            if "derivation" in saved:
+                from nexus.api.trait_compiler_schemas import TraitCompileInputs
 
-            derived_inputs = transition_data.character.trait_compile_inputs
-            record_genesis_stage_output(
-                slot_number,
-                run,
-                "derivation",
-                (
-                    derived_inputs.model_dump(mode="json", exclude_none=True)
-                    if derived_inputs is not None
-                    else None
-                ),
-            )
+                output = saved["derivation"]
+                raw_inputs = output["trait_compile_inputs"]
+                transition_data.character.trait_compile_inputs = (
+                    None
+                    if raw_inputs is None
+                    else TraitCompileInputs.model_validate(raw_inputs)
+                )
+                trait_inputs_outcome = output["outcome"]
+                reuse("derivation")
+            else:
+                # The endpoint owns this sync worker; derivation uses run_sync.
+                record_retrograde_progress(slot_number, run, "derivation", {})
+                trait_inputs_outcome = ensure_trait_compile_inputs(
+                    transition_data,
+                    slot=slot_number,
+                    model_name=effective_model,
+                    max_tokens=trait_inputs_settings.max_tokens,
+                    retries=settings.wizard.max_retries,
+                )
+                derived_inputs = transition_data.character.trait_compile_inputs
+                record_genesis_stage_output(
+                    slot_number,
+                    run,
+                    "derivation",
+                    {
+                        "trait_compile_inputs": (
+                            derived_inputs.model_dump(mode="json", exclude_none=True)
+                            if derived_inputs is not None
+                            else None
+                        ),
+                        "outcome": trait_inputs_outcome,
+                    },
+                )
 
         if orrery_settings is None or not orrery_settings.enabled:
             skip_reason = "orrery_disabled"
@@ -597,8 +635,14 @@ def perform_transition_with_retrograde(
                     in_transaction=_skip_hook,
                 )
             )
-            result["retrograde"] = {"enabled": False, "skip_reason": skip_reason}
+            result["retrograde"] = {
+                "enabled": False,
+                "skip_reason": skip_reason,
+                "reused_stages": list(reused),
+            }
             result["trait_inputs"] = trait_inputs_outcome or {"derived": False}
+            result["run"] = run
+            result["world_name"] = transition_data.setting.world_name
             return result
 
         # Narrowing only: orrery_settings None always sets skip_reason above.
@@ -624,6 +668,8 @@ def perform_transition_with_retrograde(
             max_tokens=orrery_settings.retrograde.wizard.max_tokens,
             weird_level=weird_level,
             progress=_progress,
+            saved_outputs=saved,
+            on_stage_reused=reuse,
             on_stage_output=lambda stage, output: record_genesis_stage_output(
                 slot_number, run, stage, output
             ),
@@ -653,6 +699,18 @@ def perform_transition_with_retrograde(
                     "embedding_pending_summary_ids": manifest["retrieval"][
                         "embedding_pending_summary_ids"
                     ],
+                    "retrograde": {
+                        "enabled": True,
+                        "model": bundle.model,
+                        "weird": bundle.weird,
+                        "surface": build_wizard_history_surface(
+                            bundle=bundle, manifest=manifest
+                        ),
+                        "counters": dict(manifest["counters"]),
+                        "entity_stub_budget": dict(manifest["entity_stub_budget"]),
+                        "timings": [timing.model_dump() for timing in bundle.timings],
+                        "reused_stages": list(reused),
+                    },
                 },
             )
 
@@ -670,12 +728,16 @@ def perform_transition_with_retrograde(
                 progress=_progress,
             )
         except RuntimeError as exc:
-            raise RuntimeError(
-                f"{exc} -- Retrograde history is committed but not yet embedded; "
-                f"run: nexus retrograde-embed-history --slot {slot_number} --execute"
-            ) from exc
+            raise RuntimeError(_embedding_retry_message(exc, slot_number)) from exc
 
         surface = build_wizard_history_surface(bundle=bundle, manifest=manifest)
+        if embedding_results:
+            record_genesis_stage_output(
+                slot_number,
+                run,
+                "embedding",
+                [entry["summary_id"] for entry in embedding_results],
+            )
         record_retrograde_progress(
             slot_number,
             run,
@@ -693,12 +755,271 @@ def perform_transition_with_retrograde(
                 entry["summary_id"] for entry in embedding_results
             ],
             "timings": [timing.model_dump() for timing in bundle.timings],
+            "reused_stages": reused,
         }
         result["trait_inputs"] = trait_inputs_outcome or {"derived": False}
+        result["run"] = run
+        result["world_name"] = transition_data.setting.world_name
         return result
     except Exception as exc:
         record_genesis_failure(slot_number, run, f"{type(exc).__name__}: {exc}")
         raise
+
+
+def transition_result_from_ledger(slot: int, run: str) -> dict[str, Any]:
+    """Reconstruct the completed answer without accessing the wizard cache."""
+    from nexus.agents.orrery.retrograde_orchestrator import load_genesis_run
+    from nexus.api.db_pool import get_connection
+
+    record = load_genesis_run(slot, run)
+    if record is None or record.status != "done":
+        raise RuntimeError(f"Genesis run {run} is not done")
+    with get_connection(slot_dbname(slot)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT g.user_character, c.current_location, p.zone, z.layer, "
+            "g.setting->>'world_name' FROM global_variables g "
+            "JOIN characters c ON c.id = g.user_character "
+            "JOIN places p ON p.id = c.current_location "
+            "JOIN zones z ON z.id = p.zone WHERE g.id = TRUE"
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise RuntimeError(f"Genesis run {run} has no completed world")
+    retrograde: dict[str, Any]
+    if record.skip_reason is not None:
+        retrograde = {"enabled": False, "skip_reason": record.skip_reason}
+    else:
+        persistence = record.stages.get("persistence")
+        output = None if persistence is None else persistence.output
+        output = _validate_genesis_output("persistence", output, record.run)
+        embedding = record.stages.get("embedding")
+        retrograde = {
+            **output["retrograde"],
+            "embedded_summary_ids": (
+                embedding.output
+                if embedding is not None and embedding.output is not None
+                else []
+            ),
+        }
+    retrograde["reused_stages"] = [
+        stage
+        for stage in (*_REUSABLE_GENESIS_STAGES, "persistence")
+        if stage in record.stages and "reused_from" in record.stages[stage].detail
+    ]
+    derivation = record.stages.get("derivation")
+    trait_inputs: dict[str, Any] = {"derived": False}
+    if derivation is not None and derivation.output is not None:
+        trait_inputs = _derivation_outcome(derivation.output, record.run) or (
+            trait_inputs
+        )
+    return {
+        "character_id": row[0],
+        "place_id": row[1],
+        "zone_id": row[2],
+        "layer_id": row[3],
+        "world_name": row[4],
+        "run": record.run,
+        "retrograde": retrograde,
+        "trait_inputs": trait_inputs,
+    }
+
+
+def resume_committed_genesis_run(slot: int, prior: GenesisRunRecord) -> dict[str, Any]:
+    """Finish pending local embedding using an already committed world's ledger."""
+    from nexus.agents.orrery.retrograde_orchestrator import (
+        embed_retrograde_history_summaries,
+        record_genesis_input_fingerprint,
+        record_genesis_stage_output,
+        record_retrograde_progress,
+    )
+    from nexus.api.db_pool import get_connection
+    from nexus.config import load_settings
+
+    run = start_genesis_run(slot)
+    try:
+        if prior.input_fingerprint is not None:
+            record_genesis_input_fingerprint(slot, run, prior.input_fingerprint)
+        persistence = prior.stages.get("persistence")
+        output = None if persistence is None else persistence.output
+        output = _validate_genesis_output("persistence", output, prior.run)
+        # The world is committed and no generator runs again, so only what
+        # this resume reads is validated: the persistence output and the
+        # derivation outcome the answer reports. The packet, seed-candidate
+        # and expansion rows are copied verbatim; a contract that tightened
+        # since they were saved cannot block finishing the embedding.
+        derivation = prior.stages.get("derivation")
+        if derivation is not None and derivation.output is not None:
+            _derivation_outcome(derivation.output, prior.run)
+        stages = (*_REUSABLE_GENESIS_STAGES, "persistence")
+        for stage in stages:
+            saved = prior.stages.get(stage)
+            if saved is not None and saved.output is not None:
+                _reuse_genesis_stage(slot, run, prior, stage)
+        dbname = slot_dbname(slot)
+        with get_connection(dbname) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM retrograde_summaries WHERE id = ANY(%s) "
+                "AND embedding_generated_at IS NULL ORDER BY id",
+                (output["embedding_pending_summary_ids"],),
+            )
+            remaining = [row[0] for row in cur.fetchall()]
+        settings = load_settings()
+        embedding_results: list[dict[str, Any]] = []
+        if (
+            settings.orrery is not None
+            and settings.orrery.retrograde.retrieval.embed_after_apply
+            and remaining
+        ):
+            try:
+                embedding_results = embed_retrograde_history_summaries(
+                    dbname=dbname,
+                    manifest={
+                        "retrieval": {"embedding_pending_summary_ids": remaining}
+                    },
+                    settings=settings,
+                    progress=lambda stage, detail: record_retrograde_progress(
+                        slot, run, stage, detail
+                    ),
+                )
+            except RuntimeError as exc:
+                raise RuntimeError(_embedding_retry_message(exc, slot)) from exc
+            if embedding_results:
+                record_genesis_stage_output(
+                    slot,
+                    run,
+                    "embedding",
+                    [entry["summary_id"] for entry in embedding_results],
+                )
+        record_retrograde_progress(
+            slot, run, "done", {"embedded_summaries": len(embedding_results)}
+        )
+    except Exception as exc:
+        record_genesis_failure(slot, run, f"{type(exc).__name__}: {exc}")
+        raise
+    return transition_result_from_ledger(slot, run)
+
+
+def _joined_genesis_result(
+    slot: int, record: GenesisRunRecord | None
+) -> dict[str, Any] | None:
+    from nexus.agents.orrery.retrograde_orchestrator import GENESIS_RUN_INTERRUPTED
+
+    if record is None:
+        return None
+    if record.status == "done":
+        return transition_result_from_ledger(slot, record.run)
+    if record.status == "failed" and record.error != GENESIS_RUN_INTERRUPTED:
+        raise GenesisRunFailed(f"genesis run {record.run} failed: {record.error}")
+    return None
+
+
+def _committed_genesis_run_to_resume(slot: int) -> GenesisRunRecord | None:
+    """Find the newest failed run whose world committed and is not yet finished.
+
+    The latest run is that run itself, or a later post-commit resume that
+    failed before it copied the persistence output (an invalid saved output, a
+    database error, or a gateway stopped mid-copy). A later ``done`` run means
+    the world was finished. A later run with another non-NULL fingerprint is
+    a fresh build from new wizard inputs, never a resume of the old world.
+    """
+    from nexus.agents.orrery.retrograde_orchestrator import load_genesis_run
+    from nexus.api.db_pool import get_connection
+
+    with get_connection(slot_dbname(slot)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT r.run_id FROM genesis_runs r "
+            "JOIN genesis_run_stages s ON s.run_id = r.run_id "
+            "AND s.stage = 'persistence' AND s.output IS NOT NULL "
+            "WHERE r.status = 'failed' AND NOT EXISTS ("
+            "SELECT 1 FROM genesis_runs later "
+            "WHERE later.started_at > r.started_at AND (later.status = 'done' "
+            "OR later.input_fingerprint IS DISTINCT FROM r.input_fingerprint "
+            "AND later.input_fingerprint IS NOT NULL)) "
+            "ORDER BY r.started_at DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return load_genesis_run(slot, str(row[0]))
+
+
+def _own_transition(
+    slot: int,
+    prepare: Callable[[], tuple[TransitionData, Optional[WeirdLevel]]],
+) -> dict[str, Any]:
+    from nexus.agents.orrery.retrograde_orchestrator import (
+        GENESIS_RUN_INTERRUPTED,
+        load_genesis_run,
+    )
+
+    latest = load_genesis_run(slot)
+    if latest is not None and latest.status == "running":
+        record_genesis_failure(slot, latest.run, GENESIS_RUN_INTERRUPTED)
+        latest = load_genesis_run(slot, latest.run)
+    if latest is not None and latest.status == "failed":
+        committed = _committed_genesis_run_to_resume(slot)
+        if committed is not None:
+            return resume_committed_genesis_run(slot, committed)
+    data, level = prepare()
+    return perform_transition_with_retrograde(slot, data, weird_level=level)
+
+
+def run_genesis_transition(
+    slot: int,
+    prepare: Callable[[], tuple[TransitionData, Optional[WeirdLevel]]],
+) -> dict[str, Any]:
+    """Own one run or join the run that another request started after arrival."""
+    from nexus.agents.orrery.retrograde_orchestrator import (
+        GENESIS_RUN_INTERRUPTED,
+        genesis_slot_claim,
+        load_genesis_run,
+    )
+    from nexus.api.config_utils import get_retrograde_status_poll_interval_seconds
+
+    baseline = load_genesis_run(slot)
+    baseline_id = None if baseline is None else baseline.run
+    joined = (
+        baseline.run if baseline is not None and baseline.status == "running" else None
+    )
+    while True:
+        latest = load_genesis_run(slot)
+        if joined is None and latest is not None and latest.run != baseline_id:
+            joined = latest.run
+        record = load_genesis_run(slot, joined) if joined is not None else None
+        if (
+            record is not None
+            and record.status == "failed"
+            and record.error == GENESIS_RUN_INTERRUPTED
+            and latest is not None
+            and latest.run != record.run
+        ):
+            joined = latest.run
+            record = latest
+        result = _joined_genesis_result(slot, record)
+        if result is not None:
+            return result
+        with genesis_slot_claim(slot) as won:
+            if won:
+                # A previous owner can settle between our read and this claim.
+                # Follow that new run instead of preparing the deleted cache.
+                latest = load_genesis_run(slot)
+                record = load_genesis_run(slot, joined) if joined is not None else None
+                if latest is not None and (
+                    (joined is None and latest.run != baseline_id)
+                    or (
+                        record is not None
+                        and record.status == "failed"
+                        and record.error == GENESIS_RUN_INTERRUPTED
+                        and latest.run != record.run
+                    )
+                ):
+                    joined = latest.run
+                    record = latest
+                result = _joined_genesis_result(slot, record)
+                if result is not None:
+                    return result
+                return _own_transition(slot, prepare)
+        time.sleep(get_retrograde_status_poll_interval_seconds())
 
 
 def reset_setup(slot_number: int) -> None:
@@ -738,34 +1059,3 @@ def reset_setup(slot_number: int) -> None:
     upsert_slot(slot_number, is_active=False, dbname=dbname)
     dispose_database(dbname)
     logger.info("Reset complete for slot %s", slot_number)
-
-
-def activate_slot(target_slot: int) -> Dict[str, str]:
-    """
-    Mark a slot as active and clear active flags in other slots.
-
-    Skips slots whose databases do not exist.
-
-    Args:
-        target_slot: Slot number to activate (1-5)
-
-    Returns:
-        Dictionary mapping slot numbers to status strings ("active", "cleared", "unavailable")
-    """
-    results = {}
-    for slot in all_slots():
-        dbname = slot_dbname(slot)
-        try:
-            if slot == target_slot:
-                upsert_slot(slot, is_active=True, dbname=dbname)
-                results[slot] = "active"
-            else:
-                clear_active(dbname)
-                results[slot] = "cleared"
-        except (
-            psycopg2.Error,
-            OSError,
-        ) as exc:  # pragma: no cover - defensive cross-db handling
-            logger.warning("Slot %s DB not available: %s", slot, exc)
-            results[slot] = "unavailable"
-    return results

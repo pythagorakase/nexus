@@ -2,10 +2,10 @@
 
 import logging
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 # Python 3.11+ ships tomllib; mirror the loader's fallback for older runtimes.
 try:
@@ -53,7 +53,57 @@ def _field_constraint(model: type[BaseModel], field: str, attr: str) -> Any:
 _APEX_PROVIDER_PATTERN: str = _field_constraint(APEXSettings, "provider", "pattern")
 
 
-def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
+class ModelOption(BaseModel):
+    """One model the settings picker lists from ``[global.model.api_models]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    provider: str
+    label: str
+
+
+class SettingsMeta(BaseModel):
+    """Client-facing metadata derived from the config and the Pydantic models."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    models: List[ModelOption]
+    apex_allowed_providers: List[str]
+
+
+class SettingsPayload(BaseModel):
+    """The ``GET /api/settings`` response.
+
+    One field per section of the root ``Settings`` model except ``secrets``,
+    plus the derived ``settings_meta`` block. A section stays a dict: the
+    endpoint serves the file's values, not the validated defaults. A section
+    that ``Settings`` requires is required here; every other section is
+    optional, and an unknown top-level section raises.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    global_: Dict[str, Any] = Field(..., alias="global")
+    local_models: Optional[Dict[str, Any]] = None
+    lore: Dict[str, Any]
+    orrery: Optional[Dict[str, Any]] = None
+    memnon: Dict[str, Any]
+    memory: Dict[str, Any]
+    storyteller: Dict[str, Any]
+    apex: Dict[str, Any]
+    summaries: Optional[Dict[str, Any]] = None
+    wizard: Dict[str, Any]
+    api: Optional[Dict[str, Any]] = None
+    character_identity: Optional[Dict[str, Any]] = None
+    ui: Dict[str, Any]
+    ir_eval: Optional[Dict[str, Any]] = None
+    runtime: Optional[Dict[str, Any]] = None
+    usage: Optional[Dict[str, Any]] = None
+    settings_meta: SettingsMeta
+
+
+def _build_settings_meta(raw: Dict[str, Any]) -> SettingsMeta:
     """Derive the client-facing metadata block from config + Pydantic models.
 
     Providers flagged ``ui_visible = false`` in the api_models registry (the
@@ -70,11 +120,11 @@ def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     models = [
-        {
-            "id": entry["id"],
-            "provider": provider,
-            "label": entry.get("label", entry["id"]),
-        }
+        ModelOption(
+            id=entry["id"],
+            provider=provider,
+            label=entry.get("label", entry["id"]),
+        )
         for provider, cfg in visible.items()
         for entry in cfg.get("models", [])
     ]
@@ -85,26 +135,31 @@ def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
         if re.fullmatch(_APEX_PROVIDER_PATTERN, provider) or cfg.get("base_url")
     ]
 
-    return {
-        "models": models,
-        "apex_allowed_providers": apex_allowed_providers,
-    }
+    return SettingsMeta(
+        models=models,
+        apex_allowed_providers=apex_allowed_providers,
+    )
 
 
-def _build_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Raw settings under their nexus.toml names + derived metadata, minus secrets."""
+def _build_payload(raw: Dict[str, Any]) -> SettingsPayload:
+    """Raw settings under their nexus.toml names + derived metadata, minus secrets.
+
+    ``SettingsPayload`` types the response: an unknown top-level section
+    raises, as ``load_settings`` already does.
+    """
     raw = materialize_model_selections(raw)
     payload = dict(raw)
     # 1Password reference strings are bootstrap-only config; the browser has
     # no business seeing them even though they contain no secret material.
     payload.pop("secrets", None)
     payload["settings_meta"] = _build_settings_meta(raw)
-    return payload
+    return SettingsPayload.model_validate(payload)
 
 
 @router.head("")
 async def head_settings() -> Response:
-    """Connectivity probe (useNarrativeEngine polls HEAD /api/settings).
+    """HEAD on the settings route; the client's connectivity probe reads
+    GET /health since #824.
 
     FastAPI's APIRoute does not auto-serve HEAD from GET handlers (unlike
     bare Starlette routes), so the probe needs this explicit handler.
@@ -115,7 +170,7 @@ async def head_settings() -> Response:
     return Response(status_code=200)
 
 
-@router.get("")
-async def get_settings() -> Dict[str, Any]:
+@router.get("", response_model=SettingsPayload, response_model_exclude_unset=True)
+async def get_settings() -> SettingsPayload:
     """Serve the full settings payload for the React client."""
     return _build_payload(_read_raw_settings())

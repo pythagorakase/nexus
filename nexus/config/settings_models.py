@@ -32,7 +32,6 @@ NATIVE_API_PROVIDERS = frozenset({"openai", "anthropic"})
 MODEL_SELECTION_PATHS = frozenset(
     {
         "global.model.default_model",
-        "global.model.default_slot_model",
         "local_models.model",
         "apex.model",
         "apex.gaia_model",
@@ -343,9 +342,6 @@ class ModelConfig(BaseModel):
             "Inference callers must use their configured agent model fields."
         ),
     )
-    default_slot_model: str = Field(
-        default="TEST", description="Default model for newly created/reset slots"
-    )
     api_models: Dict[str, ProviderModels] = Field(
         default_factory=dict,
         description="API models grouped by provider (openai, anthropic, test)",
@@ -370,13 +366,11 @@ class ModelConfig(BaseModel):
             for provider in self.api_models.values()
             for entry in provider.models
         }
-        for field_name in ("default_model", "default_slot_model"):
-            model_id = getattr(self, field_name)
-            if model_id not in known_ids:
-                raise ValueError(
-                    f"{field_name} references unknown model id '{model_id}'. "
-                    f"Known IDs: {sorted(known_ids)}"
-                )
+        if self.default_model not in known_ids:
+            raise ValueError(
+                f"default_model references unknown model id '{self.default_model}'. "
+                f"Known IDs: {sorted(known_ids)}"
+            )
         return self
 
     @model_validator(mode="after")
@@ -920,8 +914,9 @@ class RuntimeCliSettings(BaseModel):
         allow_inf_nan=False,
         description=(
             "Per-request HTTP timeout of the CLI's model-turn requests: wizard "
-            "chat, trait toggles, phase introductions, and the POSTs that "
-            "schedule continue, retry, regenerate and the seed's opening turn; "
+            "chat, trait toggles, phase introductions, the POSTs that schedule "
+            "continue, retry, regenerate and the seed's opening turn, and "
+            "accept's commit POST; "
             "a finite number of seconds greater than 0"
         ),
     )
@@ -1345,6 +1340,7 @@ class OrreryBindingSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     window_chunks: int = Field(default=30, ge=1)
+    recent_event_horizon_hours: float = Field(default=24.0, gt=0, allow_inf_nan=False)
 
 
 class OrreryCompositionSettings(BaseModel):
@@ -2347,6 +2343,23 @@ class OrreryEpistemicsSettings(BaseModel):
         if unknown:
             raise ValueError(
                 f"claim_event_types contains unknown event types: {unknown}"
+            )
+        from nexus.agents.orrery.substrate import AttentionClass
+        from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+        background_event_types = {
+            event_type
+            for template in BUILTIN_TEMPLATES
+            for branch in template.branches
+            if branch.attention is AttentionClass.BACKGROUND
+            for event_type in (branch.event_type, branch.signal_event_type)
+            if event_type is not None
+        }
+        sorted_overlap = sorted(set(normalized) & background_event_types)
+        if sorted_overlap:
+            raise ValueError(
+                "claim_event_types contains event types emitted by background "
+                f"branches: {sorted_overlap}"
             )
         missing_policy = sorted(set(normalized) - set(CLAIM_BIRTH_ROLE_POLICY))
         if missing_policy:
@@ -3918,7 +3931,7 @@ class APIConstraintsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_choice_text_length: int = Field(
-        default=1000, ge=1, description="Maximum length of choice text"
+        ..., ge=1, description="Maximum length of choice text"
     )
 
 
@@ -4046,8 +4059,8 @@ class APISettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    constraints: Optional[APIConstraintsConfig] = Field(
-        default=None, description="API constraints configuration"
+    constraints: APIConstraintsConfig = Field(
+        ..., description="API constraints configuration"
     )
     database: APIDatabaseSettings = Field(
         ..., description="Slot database connection behavior"
@@ -4270,6 +4283,20 @@ class UIReaderSettings(BaseModel):
         return self
 
 
+class UIAnnouncerSettings(BaseModel):
+    """Generation live-region timing exposed through GET /api/config/ui."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hold_ms: int = Field(
+        ...,
+        strict=True,
+        ge=1000,
+        le=60_000,
+        description="Milliseconds a generation announcement stays in the live region",
+    )
+
+
 class UISettings(BaseModel):
     """Settings consumed by the React client.
 
@@ -4304,6 +4331,9 @@ class UISettings(BaseModel):
         description=(
             "Chunk-count bounds for the playable reader feed and the chunk range route"
         ),
+    )
+    announcer: UIAnnouncerSettings = Field(
+        ..., description="Hold duration for generation announcements"
     )
 
 
@@ -4411,6 +4441,22 @@ class Settings(BaseModel):
         description="Provider-reported API token telemetry settings",
     )
 
+    def require_orrery(self, purpose: str) -> OrrerySettings:
+        """Return Orrery settings or name the operation requiring the section."""
+        if self.orrery is None:
+            raise RuntimeError(
+                f"nexus.toml is missing the [orrery] section required for {purpose}"
+            )
+        return self.orrery
+
+    def require_runtime(self, purpose: str) -> RuntimeSettings:
+        """Return runtime settings or name the operation requiring the section."""
+        if self.runtime is None:
+            raise RuntimeError(
+                f"nexus.toml is missing the [runtime] section required for {purpose}"
+            )
+        return self.runtime
+
     @model_validator(mode="before")
     @classmethod
     def _apply_model_selections(cls, value: Any) -> Any:
@@ -4459,7 +4505,6 @@ class Settings(BaseModel):
         # value is None on an optional field, there is no model to validate.
         targets: List[Tuple[Any, str, bool]] = [
             (self.global_.model, "default_model", False),
-            (self.global_.model, "default_slot_model", False),
             (self.local_models, "model", True),
             (self.apex, "model", False),
             (self.apex, "gaia_model", True),

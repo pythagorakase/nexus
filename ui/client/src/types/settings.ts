@@ -1,8 +1,10 @@
 /**
- * Shapes for the read-only GET /api/settings surface (FastAPI, proxied by
- * Express). GET serves the nexus.toml sections (minus `secrets`) with concrete
- * model selections and a derived `settings_meta` block. Single source of truth
- * for the client - extend here, not locally.
+ * Shapes for the read-only GET /api/settings surface. The server types the
+ * response as `SettingsPayload` in `nexus/api/settings_endpoints.py`: every
+ * nexus.toml section except `secrets`, with concrete model selections, plus
+ * the derived `settings_meta` block. This type declares only the fields the
+ * client reads. Single source of truth for the client - extend here, not
+ * locally.
  */
 
 export type ThemeId = "veil" | "gilded" | "vector";
@@ -53,20 +55,12 @@ export interface OrreryDashboardKnobs {
 
 export interface SettingsPayload {
   /** Concrete model ID supplied by the roster. */
-  apex?: { provider?: string; model?: string; gaia_model?: string | null };
+  apex?: { model?: string; gaia_model?: string | null };
   local_models?: { model?: string };
-  wizard?: { default_model?: string; fallback_model?: string };
   lore?: {
     token_budget?: {
       apex_context_window?: number;
-      system_prompt_tokens?: number;
     };
-  };
-  memnon?: {
-    models?: Record<
-      string,
-      { is_active?: boolean; dimensions?: number; weight?: number }
-    >;
   };
   orrery?: {
     dashboard?: OrreryDashboardKnobs;
@@ -91,7 +85,6 @@ export interface Preferences {
 export interface SettingsPatch {
   theme?: ThemeId;
   fonts?: Partial<Record<ThemeId, Partial<FontSlots>>>;
-  wizard_model?: string;
 }
 
 /** Null pins inherit defaults; null Gaia follows this story's Skald. */

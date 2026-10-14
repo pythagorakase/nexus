@@ -112,12 +112,6 @@ OWNERSHIP: dict[FacadePath, str] = {
         "model",
         "default_model",
     ): "global_.model.default_model",
-    (
-        "Agent Settings",
-        "global",
-        "model",
-        "default_slot_model",
-    ): "global_.model.default_slot_model",
     ("Agent Settings", "LORE", "debug"): "lore.debug",
     ("Agent Settings", "LORE", "agentic_sql"): "lore.agentic_sql",
     (
