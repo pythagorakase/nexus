@@ -368,6 +368,215 @@ owed. No migration, no fleet application, no `ui/` change.
   run against the owner host, because `secrets.seat_providers` reads the
   platform secret store.
 
+## Whole-Tree Failure at the Integration Head (2026-10-13)
+
+Run by the wave-B fixer (Claude Opus 5.5) in worktree
+`.claude/worktrees/fix-803-s6`, branch `claude/waveb-fix-803-s6`, cut from the
+final integration head `a984e79089758eff6859e0a27db7142db1e58ebf`. Every
+command ran from the worktree root with the shared interpreter, `nice -n 15`
+and `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset. One-minute
+load (`uptime`) before the PostgreSQL runs: 5.77, 7.60, 5.36, 9.66, 9.77,
+9.26, 9.79 and 8.22. None exceeded 24, so no wait loop ran. The import
+check `PYTHONPATH=$PWD $PY -c 'import nexus;print(nexus.__file__)'` printed
+`/Users/pythagor/nexus/.claude/worktrees/fix-803-s6/nexus/__init__.py`.
+
+### The Finding
+
+The coordinator's gate log `temp/orders_2026_10_07/coord/waveb2-wholetree-a984e790.log`
+records `test_plan_without_template_blocks_its_dependents` failing with
+`AssertionError: assert 'postgres.reachable' == 'template.present'`.
+
+### Diagnosis: A Server Outage, Not a Patch Target or Leaked State
+
+The same gate log shows that PostgreSQL was unreachable during that run:
+
+```text
+grep -c 'failed: timeout expired' temp/orders_2026_10_07/coord/waveb2-wholetree-a984e790.log
+1971
+grep -c 'verify "trust"' temp/orders_2026_10_07/coord/waveb2-wholetree-a984e790.log
+0
+```
+
+The run ended `203 failed, 5138 passed, 215 skipped, 8 warnings, 1765 errors
+in 6075.07s (1:41:15)`. In the same file, the sibling
+`test_plan_names_pending_migrations_in_registry_order` errored at fixture setup
+(`tests/test_runtime/test_init_plan_pg.py:64`, `disposable_slot_database` ->
+`assert_one_target("postgres")` -> `psycopg2.OperationalError: connection to
+server on socket "/tmp/.s.PGSQL.5432" failed: timeout expired`), and every
+failing `tests/test_runtime/test_readiness_pg.py` test shows the same timeout.
+The no-template test opens no fixture connection, so the plan ran its
+`postgres.reachable` check against the unreachable server, that check failed
+first, and `template.present` became a blocked dependent. The plan was correct;
+the outage looked like an assertion failure. The `scripts.migrate` patch-target
+fix (`266f4e5a`) is present at this head
+(`tests/test_runtime/test_init_plan_pg.py:20` imports
+`nexus.maintenance.migrate`), and no cached readiness state is involved: the
+three ruled orders below are green on the integration head.
+
+### Reproduction Orders on `a984e790` (All Green)
+
+Alone:
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_runtime/test_init_plan_pg.py
+..                                                                       [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 7 targets: postgres, qa640_803s6_slot1_*, qa640_803s6_slot2_*, qa640_803s6_slot3_*, qa640_803s6_slot4_*, qa640_803s6_slot5_*, qa640_803s6_template_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2 passed in 15.24s
+```
+
+After `tests/config` and the first PostgreSQL file of the gate, in one session:
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/config tests/test_api/test_acceptance_staging_pg.py tests/test_runtime/test_init_plan_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 26 targets: postgres, qa640_803s6_slot1_*, qa640_803s6_slot2_*, qa640_803s6_slot3_*, qa640_803s6_slot4_*, qa640_803s6_slot5_*, qa640_803s6_template_*, qa640_acceptance_* x19
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+159 passed, 7 warnings in 68.59s (0:01:08)
+```
+
+The whole `tests/test_runtime` directory:
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_runtime
+........................................................................ [ 29%]
+........................................................................ [ 59%]
+........................................................................ [ 89%]
+.........................                                                [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 18 targets: postgres, qa640_1013_readiness_* x2, qa640_803s6_slot1_*, qa640_803s6_slot2_*, qa640_803s6_slot3_*, qa640_803s6_slot4_*, qa640_803s6_slot5_*, qa640_803s6_template_*, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+241 passed in 181.28s (0:03:01)
+```
+
+### Red: The Gate's Failure Reproduced by an Unreachable Server (`a984e790`)
+
+`[api.database]` in `nexus.toml` leaves `port` absent, so `PGPORT` selects the
+port (`nexus/database.py:158-163`). `PGPORT=1` names a port with no server,
+which stands in for the outage without a plant in any file:
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PGPORT=1 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_runtime/test_init_plan_pg.py
+>       assert step.check_id == "template.present"
+E       AssertionError: assert 'postgres.reachable' == 'template.present'
+E         
+E         - template.present
+E         + postgres.reachable
+
+tests/test_runtime/test_init_plan_pg.py:189: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 1 targets: postgres
+dbname audit: owner server: local:1
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_init_plan_pg.py::test_plan_without_template_blocks_its_dependents
+ERROR tests/test_runtime/test_init_plan_pg.py::test_plan_names_pending_migrations_in_registry_order
+1 failed, 1 error in 0.24s
+```
+
+This is the gate's pattern exactly: the sibling errors at setup and the
+no-template test fails on `postgres.reachable`.
+
+### The Fix (`d226faa4`)
+
+`tests/test_runtime/test_init_plan_pg.py` adds a `reachable_server` fixture
+that runs `pg_fixtures.assert_one_target("postgres")`, the same probe the clone
+fixtures run first, and the no-template test takes it. An unreachable server
+now errors at setup like every other PostgreSQL test. The test also compares
+the whole plan step (number, check id, observed text and remediation) instead
+of its fields one at a time, so a real mismatch prints the observed text. No
+assertion was removed or loosened; the step number is now asserted too.
+
+### Green and Outage Tails on `d226faa4`
+
+The same unreachable-server run now errors both tests at setup:
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PGPORT=1 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_runtime/test_init_plan_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 1 targets: postgres
+dbname audit: owner server: local:1
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+ERROR tests/test_runtime/test_init_plan_pg.py::test_plan_names_pending_migrations_in_registry_order
+ERROR tests/test_runtime/test_init_plan_pg.py::test_plan_without_template_blocks_its_dependents
+2 errors in 0.17s
+```
+
+The ruled focused set:
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_runtime/test_init_plan_pg.py tests/test_runtime/test_readiness_pg.py tests/test_script_wrappers.py
+................                                                         [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 17 targets: postgres, qa640_1013_readiness_* x2, qa640_803s6_slot1_*, qa640_803s6_slot2_*, qa640_803s6_slot3_*, qa640_803s6_slot4_*, qa640_803s6_slot5_*, qa640_803s6_template_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+16 passed in 46.54s
+```
+
+The two whole-tree consumers (run on the uncommitted change that became
+`d226faa4`; the change touches only the test file above):
+
+```text
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
+receipt isolation: checkout and user receipts untouched
+dbname audit: 6 targets: postgres, qa640_816_lifecycle_test_provider, qa640_885_ren_replay_* x4
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:58497 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:58498 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:58497 (psycopg2), save_04@local:58498 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+10 passed, 2 skipped, 2 warnings in 41.89s
+```
+
+The two skips are `tests/test_orrery/test_card_identity.py:122: Set
+NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.` The
+`secret-store guard` line of this run sits above the eight lines kept here.
+
+Static checks on the changed file:
+
+```text
+nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m black tests/test_runtime/test_init_plan_pg.py
+All done! ✨ 🍰 ✨
+1 file left unchanged.
+nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m flake8 tests/test_runtime/test_init_plan_pg.py
+(no output; exit 0)
+PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m mypy --explicit-package-bases tests/test_runtime/test_init_plan_pg.py
+Success: no issues found in 1 source file
+```
+
+Clone sweep after the runs (empty output):
+
+```text
+psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_803s6%' OR datname LIKE 'readiness803%'"
+(no output; exit 0)
+```
+
+### Coordinator's Steps
+
+- A quiet whole-tree gate on the next integration head: coordinator's step. The
+  `a984e790` gate cannot judge any PostgreSQL test, because the server timed
+  out throughout it.
+- State-surface regeneration and fleet migrations: coordinator's steps (this
+  fix has neither).
+
 ## Deliberate Departure From the Order's Verbatim Text
 
 Order items 2, 4 and 8 gave the module docstring, the `--plan` help and the
