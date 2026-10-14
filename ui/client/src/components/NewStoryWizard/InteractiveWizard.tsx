@@ -7,7 +7,7 @@ import {
     RETROGRADE_STAGES,
     getRetrogradeStatus,
     retrogradeStageOf,
-    type RetrogradeStage,
+    skippedRetrogradeStages,
     type RetrogradeStatus,
 } from "@/lib/narrative-api";
 import { wizardDraftScope } from "@/lib/wizard-draft";
@@ -109,7 +109,7 @@ function pollRetrogradeStages(
     previousRun: string | null,
     intervalMs: number,
     signal: AbortSignal,
-    onStage: (stage: RetrogradeStage) => void,
+    onStatus: (status: RetrogradeStatus) => void,
     onError: (error: Error) => void,
     onSettled?: (status: RetrogradeStatus) => void,
 ): void {
@@ -124,8 +124,7 @@ function pollRetrogradeStages(
         }
         if (signal.aborted) return;
         if (status.run !== previousRun) {
-            const stage = retrogradeStageOf(status);
-            if (stage !== null) onStage(stage);
+            onStatus(status);
             if (status.run_status !== "running") {
                 onSettled?.(status);
                 return;
@@ -573,6 +572,12 @@ export function InteractiveWizard({
 
     }, [slot]);
 
+    const showGenesisStatus = useCallback((status: RetrogradeStatus) => {
+        const stage = retrogradeStageOf(status);
+        if (stage !== null) setWaitScreenStage(stage);
+        setWaitScreenSkipped(skippedRetrogradeStages(status));
+    }, []);
+
     // Transition handler - performs transition + triggers bootstrap, then navigates
     // NexusLayout handles detecting incubator data and showing approval modal
     const performTransition = useCallback(async () => {
@@ -611,7 +616,7 @@ export function InteractiveWizard({
                 before.run,
                 before.status_poll_interval_seconds * 1000,
                 stagePoll.signal,
-                setWaitScreenStage,
+                showGenesisStatus,
                 (error) => {
                     console.error("Genesis stage read error:", error);
                     toast({ title: "Transmission Error", description: error.message, variant: "destructive" });
@@ -643,7 +648,7 @@ export function InteractiveWizard({
                         throw new Error(`${detail}\n${statusError.message}`);
                     },
                 );
-                if (status.run !== before.run) setWaitScreenStage(retrogradeStageOf(status));
+                if (status.run !== before.run) showGenesisStatus(status);
                 throw new Error(detail);
             }
 
@@ -652,8 +657,11 @@ export function InteractiveWizard({
             if (typeof retrogradeRan !== "boolean") {
                 throw new Error(`Transition response names no Retrograde outcome: ${JSON.stringify(transition)}`);
             }
-            // A skipped Retrograde run leaves its stages dim, not done.
-            if (!retrogradeRan) setWaitScreenSkipped(RETROGRADE_STAGES);
+            const settled = await getRetrogradeStatus(slot, abortController.signal);
+            if (settled.run_status !== "done" || retrogradeRan !== (settled.stage === "done")) {
+                throw new Error(`Transition answered, but the gateway's genesis record disagrees: ${JSON.stringify(settled)}`);
+            }
+            showGenesisStatus(settled);
 
             await openStory(abortController.signal);
 
@@ -675,7 +683,7 @@ export function InteractiveWizard({
             setWaitScreenError(e.message || "Failed to initialize story");
             // Keep wait screen active with error state for retry
         }
-    }, [slot, toast, openStory]);
+    }, [slot, toast, openStory, showGenesisStatus]);
 
     // A ready wizard can detach while its server run continues. Read the
     // durable record on mount and attach only to a run still in progress.
@@ -699,7 +707,6 @@ export function InteractiveWizard({
                 setWaitScreenError(status.error);
                 release();
             } else if (status.run_status === "done") {
-                if (status.stage === "idle") setWaitScreenSkipped(RETROGRADE_STAGES);
                 try {
                     await openStory(signal);
                 } catch (error) {
@@ -720,10 +727,10 @@ export function InteractiveWizard({
                     return;
                 }
                 setWaitScreenActive(true);
-                setWaitScreenStage(retrogradeStageOf(status));
+                showGenesisStatus(status);
                 pollRetrogradeStages(
                     slot, null, status.status_poll_interval_seconds * 1000,
-                    signal, setWaitScreenStage, fail, settled,
+                    signal, showGenesisStatus, fail, settled,
                 );
             } catch (error) {
                 if (signal.aborted) return;
@@ -737,7 +744,7 @@ export function InteractiveWizard({
         };
         reattach();
         return () => controller.abort();
-    }, [slot, resumeData, openStory, toast]);
+    }, [slot, resumeData, openStory, toast, showGenesisStatus]);
 
     // Save first, then show: the glyph reflects only a level the server holds.
     // Settles to whether the gateway saved the level.

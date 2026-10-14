@@ -1,0 +1,27 @@
+"""Record actual tests-only Python failures; never implement the feature."""
+from pathlib import Path
+import argparse
+import importlib.util
+import json
+import xml.etree.ElementTree as ET
+coord=Path(__file__).resolve().parent
+spec=importlib.util.spec_from_file_location('proof',coord/'run_803_815_proof.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+m.ROOTS['776']=Path('/Users/pythagor/.codex/worktrees/resume-derivation-wait/nexus')
+a=argparse.Namespace(phase='776-s6-initial-red',expected_head='6111594741bf2006c9c706afe09b4861b29dc1d7',expected_main='4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8')
+p=m.Proof(a)
+try:
+ assert not p.git('diff','--name-only',a.expected_main,'HEAD','--','nexus','scripts','config','nexus.toml')
+ p.admission()
+ selectors=json.loads((p.root/'docs/qa/776-trait-derivation-wait/initial-red-selectors.json').read_text())['python']
+ junit=p.out/'initial-red.xml'
+ output=p.command('initial-red',['-m','pytest','-q','-s','-ra','-p','tests.dbname_audit','-p','no:cacheprovider','--junitxml',str(junit),'-o','junit_logging=all',*selectors],postgres=True,allowed=(1,))
+ assert all(g in output for g in m.GUARDS)
+ cases=list(ET.parse(junit).getroot().iter('testcase'))
+ assert cases and not any(c.find('error') is not None or c.find('skipped') is not None for c in cases)
+ p.data['cases']=[{'name':c.attrib['name'],'failure': None if c.find('failure') is None else c.find('failure').attrib.get('message')} for c in cases]
+ p.data['state']='actual-red-recorded-inspect-reasons'
+ p.save()
+ print(p.out/'results.json')
+except BaseException as exc:
+ p.data.update(state='failed',error=str(exc));p.save();raise
