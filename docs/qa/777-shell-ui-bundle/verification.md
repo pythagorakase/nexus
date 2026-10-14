@@ -691,3 +691,26 @@ the green full suite after it are the coordinator's step. The 777 Python set
 `dbname audit: owner targets: none`. This evidence cites the
 `4ae8b8d2` merge base above as historical; the assembly has since moved the
 canonical documents' `verified_commit` stamps to `f073b371`.
+
+## Regeneration on the Wave-B UI Union (Coordinator, 2026-10-13)
+
+Run from `.claude/worktrees/ui-union` (branch `claude/wave-b-ui-union`: the wave-B integration head plus 777-KBD, 961-HOME, 824-S1 and 809-S3b) with `scratchpad/waveb/regenerate_state_surfaces.sh`: nine serial `nice -n 15` batches covering the 33 conditions (22 vectors; the 27 fine-pointer renders plus six coarse), each with its own `STATE_SURFACES_SCRATCH` and shard, then `--assemble`. Input fingerprint `c7df4f2cb3e82dd9aaad312acb3321900a3b4dee7625108faaa530b48e43dfcf`; module graph 2,099 inputs; file:// origin with the network aborted; zero requests and zero page errors in every batch (`regeneration-ui-union-2026-10-13/driver.log`, `assemble.log`).
+
+Acceptance (`npm --prefix ui test -- --run state-shades`): the two recorded-table checks failed first because the recorded joint tables and `theme-exceptions.json` still described the 27-condition inventory (2,187 measured rows and 229/766/1187 exceptions against 2,673 rows now); the tables were refreshed through the test's own `STATE_SHADES_EVIDENCE_DIR` emission and the exceptions re-derived from the measured shortfalls (275/792/1266). With those refreshed, `state-shades.test.ts` and `media-state-shades.test.ts` pass: 106 tests (`regeneration-ui-union-2026-10-13/acceptance-tail.txt`).
+
+The exhaustive search confirms the palette disposition of `7eb9a10c`: every group's shipped minimum equals the group optimum or clears 15 ΔE where reachable.
+
+| Theme | Group | Optimum | Shipped minimum | Feasible assignments | Changed tokens |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Veil | memory | 48.2821 | 28.7231 | 270 | 0 |
+| Veil | delete | 14.6295 | 14.6295 | 0 | 2 |
+| Veil | map | 6.0138 | 6.0138 | 0 | 3 |
+| Veil | key | 18.4458 | 17.2666 | 1930 | 2 |
+| Gilded | memory | 43.1757 | 33.2117 | 150 | 1 |
+| Gilded | delete | 12.1386 | 12.1386 | 0 | 2 |
+| Gilded | map | 7.7097 | 7.7097 | 0 | 4 |
+| Gilded | key | 16.2573 | 16.1506 | 22 | 3 |
+| Vector | memory | 41.8156 | 39.0728 | 36 | 1 |
+| Vector | delete | 23.2089 | 15.9700 | 156 | 0 |
+| Vector | map | 5.9002 | 5.9002 | 0 | 3 |
+| Vector | key | 11.4681 | 11.4681 | 0 | 3 |
