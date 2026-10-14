@@ -73,7 +73,14 @@ class Story(NamedTuple):
 
 @pytest.fixture
 def story(monkeypatch: pytest.MonkeyPatch) -> Iterator[Story]:
-    """Seed one story with two same-zone candidates in the adverse id order."""
+    """Seed one story with two same-zone candidates in the adverse id order.
+
+    The uncharted venue is legacy data: a place inserted before migration 149
+    that never received coordinates. Migration 149 refuses such a row from any
+    new write (``trg_places_require_point``, ``trg_places_keep_point``), so the
+    fixture clears its point with ``trg_places_keep_point`` disabled for exactly
+    that one statement, inside the same transaction, on its disposable clone.
+    """
     with disposable_slot_database("qa640_785s3d") as dbname:
         route_slot_to_disposable(monkeypatch.setattr, slot=SLOT, dbname=dbname)
         zone = seed_zone(
@@ -104,9 +111,13 @@ def story(monkeypatch: pytest.MonkeyPatch) -> Iterator[Story]:
         seed_story_clock(dbname, world_time=BASE)
         tick = seed_story_clock(dbname, world_time=BASE + timedelta(hours=1), scene=2)
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            # Model the pre-149 pointless row; the trigger is re-enabled before
+            # this transaction commits.
+            cur.execute("ALTER TABLE places DISABLE TRIGGER trg_places_keep_point")
             cur.execute(
                 "UPDATE places SET coordinates = NULL WHERE id = %s", (uncharted,)
             )
+            cur.execute("ALTER TABLE places ENABLE TRIGGER trg_places_keep_point")
         assert uncharted < charted
         yield Story(
             dbname,

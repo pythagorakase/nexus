@@ -525,3 +525,306 @@ product readers" is the wave-B commit on that path).
 - Fleet application of migration 149 (`python scripts/migrate.py --all`, then
   `--slot 1 --write-locked-slot`, then `nexus doctor`).
 - The optional paid retry probe (not run; no paid call was made).
+
+## Consumer Fixes and Integrated-Tree Proof (2026-10-14)
+
+Branch `claude/waveb-fix-840-consumers`, cut from the final integration head
+f9c89f9b (origin/main f073b371, sixteen wave-B lane fixes, migrations 149-151).
+The coordinator's whole-tree gate on f9c89f9b
+(`temp/orders_2026_10_07/coord/waveb3-wholetree-f9c89f9b.log`, final line
+`2 failed, 7226 passed, 76 skipped, 35 warnings, 17 errors in 7518.25s
+(2:05:18)`) found two consumers of the item-1 point rule that item 10 had not
+reached. Both are fixed in the consumer; migration 149 and its triggers are
+unchanged.
+
+### Red: The Gate's Tails on f9c89f9b
+
+The gate log is the red run for both findings (excerpts, verbatim):
+
+```
+44111:FAILED tests/test_test_provider_seeder.py::test_optimized_seeder_refuses_a_suppressed_singleton_update[post_transition]
+44112:FAILED tests/test_test_provider_seeder.py::test_optimized_seeder_refuses_a_suppressed_singleton_update[save_slot]
+44113:ERROR tests/test_mock_openai.py::test_mock_responses_routes_bootstrap_schema_as_final_result_tool
+44114:ERROR tests/test_mock_openai.py::test_mock_responses_routes_bootstrap_schema_as_native_text_format
+44115:ERROR tests/test_mock_openai.py::test_seeded_test_provider_database_holds_the_rows_the_provider_reads
+44116:ERROR tests/test_mock_openai.py::test_reseeding_test_provider_preserves_reference_parity
+44117:ERROR tests/test_mock_openai.py::test_child_mock_server_reads_the_routed_database
+44118:ERROR tests/test_orrery/test_travel_routable_destinations_pg.py::test_location_class_chooser_skips_uncharted
+...  (twelve test_travel_routable_destinations_pg.py errors, 44118-44129)
+216:E           psycopg2.errors.NotNullViolation: Place 'Spine-9 Rootline Tram 3B' has no point (INSERT); every new place carries real-Earth coordinates and a point is never removed
+219:migrations/008_populate_mock_database.py:286: NotNullViolation
+11972:E               psycopg2.errors.NotNullViolation: Place 'Uncharted Venue' has no point (UPDATE); every new place carries real-Earth coordinates and a point is never removed
+11975:tests/test_orrery/test_travel_routable_destinations_pg.py:107: NotNullViolation
+39493:E           assert 'RuntimeError: global_variables singleton row is missing' in 'Traceback (most recent call last):\n  File "/Users/pythagor/nexus/.claude/worktrees/gate-waveb3/migrations/008_popula...oordinates and a point is never removed\nCONTEXT:  PL/pgSQL function places_refuse_missing_point() line 3 at RAISE\n\n'
+```
+
+### Fixes
+
+- 967be735, `migrations/008_populate_mock_database.py`: the seeder's one place
+  (`Spine-9 Rootline Tram 3B`, place 1, a `vehicle` in zone 1
+  `Rhine-Ruhr Arcology Belt`) is inserted with
+  `coordinates = ST_SetSRID(ST_MakePoint(6.9, 51.47, 0, 0), 4326)::geography`,
+  the PointZM shape of the production writer
+  (`nexus/api/new_story_db_mapper.py:415-428`). The point is latitude 51.47,
+  longitude 6.9. It is not invented here: it is the `latitude`/`longitude` the
+  wizard fixture already authors for this place
+  (`tests/fixtures/test_cache_wizard.json`, `initial_location`), read by the new
+  `_require_fixture_place_point`, exactly as the production writer reads the
+  place draft's `latitude`/`longitude` (`new_story_db_mapper.py:367`). It fits
+  the mock story: Neon Palimpsest is "an urban continuum stretching from the
+  flooded lowlands of old Amsterdam through the vertical spires of the
+  Rhine-Ruhr arcology belt", the zone is "the old Rhine-Ruhr industrial
+  region", and the tram crawls "through the deepest maintenance tunnels of the
+  Rhine-Ruhr Roots"; 51.47 N, 6.9 E is in the Ruhr between Essen and
+  Oberhausen, inside that belt. A fixture without a numeric on-Earth point
+  raises `ValueError` before the place insert (no default point). The insert
+  stays inside the seeder's one transaction (`seed_test_provider_database`);
+  the seeder issues no `UPDATE places`, so only `trg_places_require_point`
+  applies to it.
+- 46bebdbc, `tests/test_orrery/test_travel_routable_destinations_pg.py`: the
+  `story` fixture models `Uncharted Venue` as a pre-149 place that never
+  received coordinates (stated in the fixture docstring). It keeps
+  `seed_place` (so the row has the production zone) and clears the point in
+  its existing transaction between
+  `ALTER TABLE places DISABLE TRIGGER trg_places_keep_point` and
+  `ALTER TABLE places ENABLE TRIGGER trg_places_keep_point`, on its
+  disposable `qa640_785s3d` clone; DDL is transactional, so the trigger is
+  enabled again before the transaction commits (or by rollback). Every
+  assertion is unchanged.
+
+### Proof Commands
+
+`$PY` is `/Users/pythagor/nexus/.venv/bin/python`. Import check:
+`PYTHONPATH=$PWD $PY -c 'import nexus;print(nexus.__file__)'` printed
+`/Users/pythagor/nexus/.claude/worktrees/fix-840-consumers/nexus/__init__.py`.
+Every PostgreSQL run went through this wrapper (scratchpad
+`fix-840-consumers-840-S2-consumers/run.sh`), which waits in a bounded loop
+(cap 40 x 30 s) while the one-minute load is 24 or more, records the commit,
+the dirty-file count and the load, then runs pytest with
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset. No run had to
+wait (each tail shows `waited 0x30s`).
+
+```
+#!/bin/zsh
+# usage: run.sh <logname> <pytest args...>
+S=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/fix-840-consumers-840-S2-consumers
+cd /Users/pythagor/nexus/.claude/worktrees/fix-840-consumers
+log=$S/$1.log; shift
+n=0
+until [ "$(sysctl -n vm.loadavg | awk '{print int($2)}')" -lt 24 ]; do n=$((n+1)); [ $n -ge 40 ] && echo "load wait cap hit" && exit 3; sleep 30; done
+{ echo "commit: $(git rev-parse --short HEAD) dirty: $(git status --porcelain | wc -l | tr -d ' ')"; echo "load before run: $(sysctl -n vm.loadavg) (waited ${n}x30s)"; } > $log
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit "$@" >> $log 2>&1
+rc=$?
+echo "exit: $rc" >> $log
+head -2 $log; tail -8 $log
+```
+
+So each `run.sh <log> <args>` below runs `env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit <args>`.
+"dirty: 2" in the first run is the two then-uncommitted fixes, committed
+unchanged as 967be735 and 46bebdbc.
+
+### (1) The Three Red Files
+
+`run.sh set1 tests/test_mock_openai.py tests/test_test_provider_seeder.py tests/test_orrery/test_travel_routable_destinations_pg.py`
+
+```
+commit: f9c89f9b dirty: 2
+load before run: { 2.68 7.95 8.89 } (waited 0x30s)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 25 targets: postgres, qa640_785s3d_* x12, qa640_816_empty_* x4, qa640_816_legacy_trait_*, qa640_816_singleton_* x2, qa640_816_test_provider_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+41 passed in 61.51s (0:01:01)
+exit: 0
+```
+
+The same command at the fix commit (`run.sh set1-commit ...`):
+
+```
+commit: 46bebdbc dirty: 0
+load before run: { 6.41 8.55 9.07 } (waited 0x30s)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 25 targets: postgres, qa640_785s3d_* x12, qa640_816_empty_* x4, qa640_816_legacy_trait_*, qa640_816_singleton_* x2, qa640_816_test_provider_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+41 passed in 61.73s (0:01:01)
+exit: 0
+```
+
+### (2) Every Other Consumer of the TEST-Provider Seeder
+
+`run.sh set2a tests/conftest.py tests/pg_fixtures.py tests/proofs/proof_session_truth.py tests/proofs/proof_weird_entry_points.py tests/test_config/test_test_provider_database.py tests/test_logon_mock_integration.py tests/test_turn_observation.py tests/test_commit_handler_sync.py tests/test_cli_inspect_pg.py tests/test_lore/test_window_coverage_pg.py tests/test_mock_openai.py`
+
+```
+commit: 46bebdbc dirty: 0
+load before run: { 11.17 9.82 9.53 } (waited 0x30s)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 23 targets: postgres, qa640_756s1_distinct_*, qa640_756s1_generation_* x2, qa640_775_browser_*, qa640_815_inspect_*, qa640_815s5_operator_*, qa640_816_empty_* x4, qa640_816_legacy_trait_*, qa640_816_test_provider_* x5, qa640_compaction_retry_*, qa640_historical_coverage_* x3, qa640_window_coverage_*, qa735_slot_model_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+FAILED tests/proofs/proof_session_truth.py::test_disconnected_session_browser_recovery
+FAILED tests/proofs/proof_weird_entry_points.py::test_cli_weird_high_walks_the_wizard_to_the_transition
+FAILED tests/proofs/proof_weird_entry_points.py::test_browser_glyphs_hold_confirm_and_ride_the_transition
+3 failed, 104 passed, 2 skipped, 9 warnings in 123.87s (0:02:03)
+exit: 1
+```
+
+The three failures are the two explicit-only proof files, which the
+whole-tree gate never collects (`pytest.ini` has no `proof_*` pattern; they
+run only when named). Neither reaches the seeder: `grep -n
+"routed_test_provider_database\|disposable_test_provider_database\|seed_test_provider"`
+over `tests/proofs/*.py` finds nothing; each builds its story with
+`disposable_slot_database`. Causes, from the log:
+`proof_weird_entry_points.py` raises
+`RuntimeError: NEXUS_GATEWAY_PORT is unset; the order assigns the lane`
+(it requires a lane, which this gate must leave unset), and
+`proof_session_truth.py` times out on
+`get_by_test_id("input-freeform") to be visible` because the worktree has no
+built client. With its lane set, the CLI proof names that cause directly:
+
+`env -u NEXUS_SLOT NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit "tests/proofs/proof_weird_entry_points.py::test_cli_weird_high_walks_the_wizard_to_the_transition"`
+(lane 8015 checked free with `lsof -nP -iTCP:8015 -sTCP:LISTEN` before and
+after)
+
+```
+commit: 46bebdbc dirty: 0
+load: { 6.16 8.42 9.00 }
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+FAILED tests/proofs/proof_weird_entry_points.py::test_cli_weird_high_walks_the_wizard_to_the_transition
+1 failed, 2 warnings in 0.66s
+exit: 1
+```
+
+with `E           Failed: .../fix-840-consumers/ui/dist/public/index.html is
+missing: run npm --prefix ui ci && npm --prefix ui run build first`. This lane
+changes no `ui/` file, so it does not build the client; the browser proofs are
+a coordinator's step. The gate files of piece (a), rerun alone with skip
+reasons (`run.sh set2a-gate -rs tests/conftest.py tests/pg_fixtures.py
+tests/test_config/test_test_provider_database.py tests/test_logon_mock_integration.py
+tests/test_turn_observation.py tests/test_commit_handler_sync.py
+tests/test_cli_inspect_pg.py tests/test_lore/test_window_coverage_pg.py
+tests/test_mock_openai.py`):
+
+```
+commit: 46bebdbc dirty: 0
+load before run: { 6.66 7.70 8.47 } (waited 0x30s)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 22 targets: postgres, qa640_756s1_distinct_*, qa640_756s1_generation_* x2, qa640_815_inspect_*, qa640_815s5_operator_*, qa640_816_empty_* x4, qa640_816_legacy_trait_*, qa640_816_test_provider_* x5, qa640_compaction_retry_*, qa640_historical_coverage_* x3, qa640_window_coverage_*, qa735_slot_model_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+SKIPPED [2] tests/test_lore/test_window_coverage_pg.py:488: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+104 passed, 2 skipped, 9 warnings in 84.56s (0:01:24)
+exit: 0
+```
+
+`run.sh set2b tests/test_api/test_attempt_manifest_pg.py tests/test_api/test_narrative_jobs_pg.py tests/test_api/test_provider_guard_consumers.py tests/test_api/test_summary_budget_usage.py tests/test_api/test_session_truth_pg.py tests/test_api/test_seat_policy_jobs_pg.py`
+
+```
+commit: 46bebdbc dirty: 0
+load before run: { 5.29 8.16 8.90 } (waited 0x30s)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 29 targets: postgres, qa640_764_jobs_*, qa640_764_manifest_*, qa640_764_turn_*, qa640_775_errors_* x2, qa640_775_left_*, qa640_775_right_*, qa640_775_status_*, qa640_800b_inspect_*, qa640_802_reported_*, qa640_814_seats_*, qa640_937_budget_* x2, qa640_938_usage_* x2, qa640_acceptance_* x3, qa640_offline_gate_* x10
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+32 passed, 9 warnings in 115.67s (0:01:55)
+exit: 0
+```
+
+`run.sh set2c tests/test_api/test_scheduler_corpus_pg.py tests/test_api/test_scheduler_pg.py tests/test_api/test_scheduler_recovery_pg.py`
+
+```
+commit: 46bebdbc dirty: 0
+load before run: { 6.07 7.47 8.51 } (waited 0x30s)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 21 targets: postgres, qa640_800_call_gate_*, qa640_800_corpus_*, qa640_800_kill_*, qa640_800_renew_* x4, qa640_800_turn_*, qa640_offline_gate_* x12
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+20 passed, 9 warnings in 120.57s (0:02:00)
+exit: 0
+```
+
+### (3) 840-S2's Own Tests and the Whole-Tree Consumers
+
+`tests/test_orrery/test_migrate.py` is added because it also references the
+seeder (`grep -rln "seed_test_provider_database\|008_populate_mock" tests`).
+
+`run.sh set3a -rs tests/test_orrery/test_place_point_required_pg.py tests/test_orrery/test_retrograde_maturation.py tests/test_trait_compiler.py tests/test_orrery/test_migrate.py`
+
+```
+commit: 46bebdbc dirty: 0
+load before run: { 16.32 10.73 9.56 } (waited 0x30s)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 16 targets: postgres, qa640_840s2_drain_*, qa640_840s2_guard_* x6, qa640_grieving_migration_*, qa640_maturation799_*, qa640_vocab_migration_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+157 passed in 31.64s
+exit: 0
+```
+
+`run.sh set3b -rs tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py`
+
+```
+commit: 46bebdbc dirty: 0
+load before run: { 12.30 10.38 9.48 } (waited 0x30s)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 6 targets: postgres, qa640_816_lifecycle_test_provider, qa640_885_ren_replay_* x4
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:64102 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:64103 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:64102 (psycopg2), save_04@local:64103 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+10 passed, 2 skipped, 2 warnings in 38.70s
+exit: 0
+```
+
+No disposable database from these runs remains (`psql -d postgres -Atc
+"select datname from pg_database where datname like 'qa640_785s3d%' or datname
+like 'qa640_816%' or datname like 'qa640_840s2%' or datname like 'qa640_775%'
+or datname like 'qa640_838%'"` printed nothing).
+
+### Static Checks (46bebdbc)
+
+- `nice -n 15 $PY -m black --check migrations/008_populate_mock_database.py tests/test_orrery/test_travel_routable_destinations_pg.py`:
+  `All done! ... 2 files would be left unchanged.`
+- `nice -n 15 $PY -m flake8` on the same two files: 13 E501 in
+  `migrations/008_populate_mock_database.py` (lines 175, 246, 339, 391-403,
+  407, 408, 445), all on untouched lines; the same command on the f9c89f9b
+  versions (`git show f9c89f9b:<path>` into the scratchpad, run with the
+  worktree's `.flake8`) gives the same 13 E501, shifted by the inserted lines
+  (151, 222, 308, 360-372, 376, 377, 414). No new diagnostic. The travel test
+  has none on either side.
+- `PYTHONPATH=$PWD nice -n 15 $PY -m mypy --explicit-package-bases` on the two
+  files: `Success: no issues found in 2 source files`.
+- `PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py`:
+  `66 passed, 5 warnings in 5.54s` (neither file is a declared source).
+- `nice -n 15 $PY -S scripts/check_exception_dispositions.py --baseline-base-ref f9c89f9b`:
+  `OK: exception disposition coverage and shrink-only baseline verified.`
+- The pre-commit hooks passed on both commits.
+
+### Coordinator's Steps for This Fix
+
+- The whole-tree PostgreSQL gate on the merged head.
+- The two browser/CLI proofs in `tests/proofs/` (they need the built client
+  `ui/dist/public/index.html` and a gateway lane; outside the gate).
+- Fleet application of migration 149 (unchanged by this fix).
