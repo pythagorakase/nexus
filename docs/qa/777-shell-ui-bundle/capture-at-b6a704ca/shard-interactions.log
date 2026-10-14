@@ -1,0 +1,17 @@
+
+> nexus-ui@1.0.0 test
+> vitest run shard-interactions.diagnostic -t painted_mask_means_are_linear_and_interactions_are_real_and_settled|same_value_has_exactly_the_same_settled_mask_mean
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ shard-interactions.diagnostic.test.ts (11 tests | 9 skipped) 6433ms
+   ✓ 777-S2 state shades > painted_mask_means_are_linear_and_interactions_are_real_and_settled 2027ms
+   ✓ 777-S2 state shades > same_value_has_exactly_the_same_settled_mask_mean 4405ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 9 skipped (11)
+   Start at  21:06:34
+   Duration  7.22s (transform 36ms, setup 26ms, collect 442ms, tests 6.43s, environment 159ms, prepare 50ms)
+

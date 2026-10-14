@@ -1,0 +1,286 @@
+{
+  "source_head": "3a146419ef535850f7cab28beb540ef74d32783d",
+  "legacy_receipt_oid": "70925b79f007e7e632b063ba2434cb68d7769da404fca6b9e60295081c36a6e4",
+  "legacy_receipt_bytes": 168893558,
+  "matching_rule": "viewport width/height, reducedMotion and animationPhase; newly added pointer feature does not rename physical coverage",
+  "legacy_fine_mapping": [
+    {
+      "old_id": "w1101-1279/reduce",
+      "new_id": "w1101-1279/pointer=fine/reduce",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w1-639/reduce",
+      "new_id": "w1-639/pointer=fine/reduce",
+      "viewport": {
+        "width": 639,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w1-639/motion/start",
+      "new_id": "w1-639/pointer=fine/motion/start",
+      "viewport": {
+        "width": 639,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w1-639/motion/trough",
+      "new_id": "w1-639/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 639,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    },
+    {
+      "old_id": "w640-760/reduce",
+      "new_id": "w640-760/pointer=fine/reduce",
+      "viewport": {
+        "width": 760,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w640-760/motion/start",
+      "new_id": "w640-760/pointer=fine/motion/start",
+      "viewport": {
+        "width": 760,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w640-760/motion/trough",
+      "new_id": "w640-760/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 760,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    },
+    {
+      "old_id": "w761-767/reduce",
+      "new_id": "w761-767/pointer=fine/reduce",
+      "viewport": {
+        "width": 767,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w761-767/motion/start",
+      "new_id": "w761-767/pointer=fine/motion/start",
+      "viewport": {
+        "width": 767,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w761-767/motion/trough",
+      "new_id": "w761-767/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 767,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    },
+    {
+      "old_id": "w768-1023/reduce",
+      "new_id": "w768-1023/pointer=fine/reduce",
+      "viewport": {
+        "width": 1023,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w768-1023/motion/start",
+      "new_id": "w768-1023/pointer=fine/motion/start",
+      "viewport": {
+        "width": 1023,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w768-1023/motion/trough",
+      "new_id": "w768-1023/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 1023,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    },
+    {
+      "old_id": "w1024-1100/reduce",
+      "new_id": "w1024-1100/pointer=fine/reduce",
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w1024-1100/motion/start",
+      "new_id": "w1024-1100/pointer=fine/motion/start",
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w1024-1100/motion/trough",
+      "new_id": "w1024-1100/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    },
+    {
+      "old_id": "w1101-1279/motion/start",
+      "new_id": "w1101-1279/pointer=fine/motion/start",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w1101-1279/motion/trough",
+      "new_id": "w1101-1279/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    },
+    {
+      "old_id": "w1280/reduce",
+      "new_id": "w1280/pointer=fine/reduce",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w1280/motion/start",
+      "new_id": "w1280/pointer=fine/motion/start",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w1280/motion/trough",
+      "new_id": "w1280/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    },
+    {
+      "old_id": "w1281-1535/reduce",
+      "new_id": "w1281-1535/pointer=fine/reduce",
+      "viewport": {
+        "width": 1281,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w1281-1535/motion/start",
+      "new_id": "w1281-1535/pointer=fine/motion/start",
+      "viewport": {
+        "width": 1281,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w1281-1535/motion/trough",
+      "new_id": "w1281-1535/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 1281,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    },
+    {
+      "old_id": "w1536+/reduce",
+      "new_id": "w1536+/pointer=fine/reduce",
+      "viewport": {
+        "width": 1536,
+        "height": 900
+      },
+      "motion": "reduce",
+      "phase": null
+    },
+    {
+      "old_id": "w1536+/motion/start",
+      "new_id": "w1536+/pointer=fine/motion/start",
+      "viewport": {
+        "width": 1536,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0
+    },
+    {
+      "old_id": "w1536+/motion/trough",
+      "new_id": "w1536+/pointer=fine/motion/trough",
+      "viewport": {
+        "width": 1536,
+        "height": 900
+      },
+      "motion": "no-preference",
+      "phase": 0.5
+    }
+  ],
+  "new_coarse_conditions": [
+    "w1-639/pointer=coarse/reduce",
+    "w1-639/pointer=coarse/motion/start",
+    "w1-639/pointer=coarse/motion/trough",
+    "w640-760/pointer=coarse/reduce",
+    "w640-760/pointer=coarse/motion/start",
+    "w640-760/pointer=coarse/motion/trough"
+  ]
+}

@@ -1,0 +1,2024 @@
+{
+  "scope": "72 reduced-motion key-row cases, not full painted/color acceptance",
+  "helperSha256": "c1480b3688e1f0f7df79df80f76ffecf5ab0fe15727fcdf2125df8cf2adb6c06",
+  "readings": [
+    {
+      "label": "639/fine/veil/required/required-missing",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 352.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/veil/required/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 409.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/veil/required/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/veil/optional/optional-absent",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 409.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/veil/optional/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/veil/optional/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 522.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/gilded/required/required-missing",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 352.65625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/gilded/required/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 409.15625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/gilded/required/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.65625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/gilded/optional/optional-absent",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 409.15625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/gilded/optional/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.65625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/gilded/optional/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 522.15625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/vector/required/required-missing",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 352.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/vector/required/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 408.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/vector/required/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/vector/optional/optional-absent",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 408.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/vector/optional/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/fine/vector/optional/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 521.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/veil/required/required-missing",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 352.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/veil/required/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 409.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/veil/required/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/veil/optional/optional-absent",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 409.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/veil/optional/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/veil/optional/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 522.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/gilded/required/required-missing",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 352.65625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/gilded/required/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 409.15625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/gilded/required/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.65625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/gilded/optional/optional-absent",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 409.15625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/gilded/optional/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.65625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/gilded/optional/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 522.15625
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/vector/required/required-missing",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 352.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/vector/required/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 408.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/vector/required/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/vector/optional/optional-absent",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 408.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/vector/optional/present",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 465.171875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "639/coarse/vector/optional/verified",
+      "centerGlyphHover": true,
+      "point": {
+        "x": 242,
+        "y": 521.671875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/veil/required/required-missing",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 248,
+        "y": 352.578125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/veil/required/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 248,
+        "y": 409.078125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/veil/required/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 248,
+        "y": 465.578125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/veil/optional/optional-absent",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 248,
+        "y": 409.078125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/veil/optional/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 248,
+        "y": 465.578125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/veil/optional/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 248,
+        "y": 522.078125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/gilded/required/required-missing",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 254,
+        "y": 352.21875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/gilded/required/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 254,
+        "y": 408.71875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/gilded/required/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 254,
+        "y": 465.21875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/gilded/optional/optional-absent",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 254,
+        "y": 408.71875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/gilded/optional/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 254,
+        "y": 465.21875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/gilded/optional/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 254,
+        "y": 521.71875
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/vector/required/required-missing",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 256,
+        "y": 352.03125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/vector/required/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 256,
+        "y": 408.53125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/vector/required/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 256,
+        "y": 465.03125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/vector/optional/optional-absent",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 256,
+        "y": 408.53125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/vector/optional/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 256,
+        "y": 465.03125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "760/fine/vector/optional/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 256,
+        "y": 521.53125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/veil/required/required-missing",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 400.4375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/veil/required/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 456.9375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/veil/required/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 513.4375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/veil/optional/optional-absent",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 456.9375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/veil/optional/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 513.4375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/veil/optional/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 569.9375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/gilded/required/required-missing",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 399.78125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/gilded/required/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 456.28125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/gilded/required/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 512.78125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/gilded/optional/optional-absent",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 456.28125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/gilded/optional/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 512.78125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/gilded/optional/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 569.28125
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/vector/required/required-missing",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 399.9375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/vector/required/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 456.4375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/vector/required/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 512.9375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/vector/optional/optional-absent",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 456.4375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/vector/optional/present",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 512.9375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    },
+    {
+      "label": "1200/fine/vector/optional/verified",
+      "centerGlyphHover": false,
+      "point": {
+        "x": 379,
+        "y": 569.4375
+      },
+      "hitIsRow": true,
+      "rowHover": true,
+      "rowFocusVisible": false,
+      "glyphHover": false,
+      "glyphFocusVisible": false,
+      "controls": [
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        },
+        {
+          "hover": false,
+          "focusVisible": false
+        }
+      ],
+      "opacity": "1"
+    }
+  ],
+  "errors": [],
+  "requests": []
+}

@@ -1,0 +1,52 @@
+{
+  "source_head": "b6a704caab86c304590785832b665fa98a12ef1c",
+  "source_tree": "ef6f9396160b343d82b6ac0f996862cd4513a704",
+  "receipt_sha256": "7033fa0f402dac6837a9577a677c30142e74112f36f52e5714cfdbe239e0fb5a",
+  "status": "failed strict/full UI acceptance; complete inventory only",
+  "counts": {
+    "wide": 7596,
+    "narrow": 21972
+  },
+  "changed_fields": {
+    "wide/settleCriteria": 552,
+    "wide/pseudos": 6636,
+    "wide/target": 6636,
+    "narrow/box": 21972,
+    "narrow/meanLinear": 8227,
+    "narrow/controlMeanLinear": 12723,
+    "narrow/coreSize": 4810,
+    "narrow/histogram": 13608,
+    "narrow/settleCriteria": 274,
+    "narrow/maskSize": 3352,
+    "narrow/pseudos": 948,
+    "narrow/target": 948,
+    "wide/box": 408
+  },
+  "interpretation": {
+    "painted": "All wide painted metrics exact. All 15792 painted metric changes are at <=760px, with changed layout boxes; unchanged theme/key styles and approved narrow shell layout govern the moved geometry.",
+    "wide_pseudos_target": "Corrected natural key-row background hover replaces child-control hover; semantic row hover remains true.",
+    "wide_settleCriteria": "Only whether Escape was required for the already-closed measured tooltip state differs.",
+    "wide_box": "Delete glyph origin differs; dimensions and every painted metric are unchanged. Raw geometry is retained; no assertion of identical wide JSON samples."
+  },
+  "shards": {
+    "1": "4b47702696c4d6ea8a10ba543e0d14274f348722f2a39404db356b5444786b97",
+    "2": "29c67d4569a417926ef3e91634cf441aa3bbec5c23dba67811548d6beb49f205",
+    "3": "4e6706a56436120ca0d55d48540dcfbd1bda73b9de00afdac57c88c88313b724",
+    "4": "b89c67f6de99d16c3b8ec7413259d683c047f804d557ad6266ef0654f8e90fe8",
+    "5": "1e732012fc7413e534e715bee630d97284115e539f261a139fd8836115b0a3f6",
+    "6": "80a66dc3f3d73ec000761d2419d632ffffc5237412fddc41e0b9b24317e4beb8",
+    "7": "d4bd52092ce6220730d5f4f81a3a702fb88b252dffa59c53c11c2e23685e533e",
+    "8": "6beaf576cf47410d9a36105f60d7dc793930a09b842833ac1351aa0d8f802a38",
+    "9": "edfb08b2933e55f952e461741ed0092b72a0f96dfc721abebbb81e7bfbb9bc27"
+  },
+  "proposal_images": {
+    "gilded-1023-motion-start-before.png": "67311c0f7d11a1b280c18913db8f40203fa3bc4ae6dd83af948a737777591967",
+    "gilded-1023-motion-start-proposed.png": "9cc1f566378926d4b6c5c5f401dcf86885988f86de1cfecaf25b84a9d67fa520",
+    "gilded-1200-normal-before.png": "92f311cd66adc199c5c4634f8fcd7fc29dca2da69bc18acfe25dd6c674524b3d",
+    "gilded-1200-normal-proposed.png": "d5bf0529c7142b587e5c3a91d30ae46e67b881dd22907c88e5464b6c360e4804",
+    "vector-1023-motion-start-before.png": "9d1f62ffe5441caf27c52868b44b93b64466f454d02b60c363f63218d42aad90",
+    "vector-1023-motion-start-proposed.png": "b791c34ace146f8d1e651d2820923a348b30face75f79fd256ce7fe0b3bdd3ce",
+    "vector-1200-normal-before.png": "89028c061573facb4ac6ca5e1e1cae440e123d304ff1df034e8a6d2faeed9cc9",
+    "vector-1200-normal-proposed.png": "a2bd51eba903d6dfac2bfa4db3759bcf070023e25472bd17bf2eb1326be2562c"
+  }
+}

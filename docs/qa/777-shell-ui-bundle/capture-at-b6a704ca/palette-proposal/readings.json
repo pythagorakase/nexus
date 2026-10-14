@@ -1,0 +1,889 @@
+{
+  "scope": "Visual proposal only; scratch document CSS override, no product change or final capture acceptance",
+  "inputFingerprint": "4b8a9bbd8b880dc12ff8a534e7ef819eaa72fe376f0e28a8a295f9754d976fe7",
+  "fixtureSha256": "f690aed8cc2b8d208065815664d5343ea64f8374cefc75a3a3b02a8822eea695",
+  "readings": [
+    {
+      "theme": "gilded",
+      "scene": {
+        "id": "1023-motion-start",
+        "width": 1023,
+        "reducedMotion": "no-preference",
+        "phase": 0
+      },
+      "property": "hsl(30 60% 60%)",
+      "value": "hsl(30 60% 60%)",
+      "file": "gilded-1023-motion-start-before.png",
+      "innerWidth": 1023,
+      "fine": true,
+      "reduced": false,
+      "pins": [
+        {
+          "id": 1,
+          "state": "selected",
+          "hover": false,
+          "box": {
+            "x": 655.625,
+            "y": 451,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(133, 101, 20)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(133, 101, 20)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 712.875,
+            "y": 473,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(214, 153, 92)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(214, 153, 92)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 687.5,
+            "y": 447.625,
+            "width": 6,
+            "height": 6.000030517578125
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(214, 153, 92)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(214, 153, 92)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "state": "current",
+          "hover": false,
+          "box": {
+            "x": 681,
+            "y": 425.625,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(221, 200, 136)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(221, 200, 136)"
+            }
+          ]
+        }
+      ],
+      "animationsRunning": 0
+    },
+    {
+      "theme": "gilded",
+      "scene": {
+        "id": "1023-motion-start",
+        "width": 1023,
+        "reducedMotion": "no-preference",
+        "phase": 0
+      },
+      "property": "hsl(30 70% 50%)",
+      "value": "hsl(30 70% 50%)",
+      "file": "gilded-1023-motion-start-proposed.png",
+      "innerWidth": 1023,
+      "fine": true,
+      "reduced": false,
+      "pins": [
+        {
+          "id": 1,
+          "state": "selected",
+          "hover": false,
+          "box": {
+            "x": 655.625,
+            "y": 451,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(133, 101, 20)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(133, 101, 20)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 712.875,
+            "y": 473,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(217, 128, 38)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(217, 128, 38)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 687.5,
+            "y": 447.625,
+            "width": 6,
+            "height": 6.000030517578125
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(217, 128, 38)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(217, 128, 38)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "state": "current",
+          "hover": false,
+          "box": {
+            "x": 681,
+            "y": 425.625,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(221, 200, 136)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(221, 200, 136)"
+            }
+          ]
+        }
+      ],
+      "animationsRunning": 0
+    },
+    {
+      "theme": "gilded",
+      "scene": {
+        "id": "1200-normal",
+        "width": 1200,
+        "reducedMotion": "reduce",
+        "phase": 0
+      },
+      "property": "hsl(30 60% 60%)",
+      "value": "hsl(30 60% 60%)",
+      "file": "gilded-1200-normal-before.png",
+      "innerWidth": 1200,
+      "fine": true,
+      "reduced": true,
+      "pins": [
+        {
+          "id": 1,
+          "state": "selected",
+          "hover": false,
+          "box": {
+            "x": 744.125,
+            "y": 451,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(133, 101, 20)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(133, 101, 20)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 808.75,
+            "y": 473.0000305175781,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(214, 153, 92)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(214, 153, 92)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 776,
+            "y": 440.25,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(214, 153, 92)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(214, 153, 92)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "state": "current",
+          "hover": false,
+          "box": {
+            "x": 776.875,
+            "y": 418.25,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(221, 200, 136)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(221, 200, 136)"
+            }
+          ]
+        }
+      ],
+      "animationsRunning": 0
+    },
+    {
+      "theme": "gilded",
+      "scene": {
+        "id": "1200-normal",
+        "width": 1200,
+        "reducedMotion": "reduce",
+        "phase": 0
+      },
+      "property": "hsl(30 70% 50%)",
+      "value": "hsl(30 70% 50%)",
+      "file": "gilded-1200-normal-proposed.png",
+      "innerWidth": 1200,
+      "fine": true,
+      "reduced": true,
+      "pins": [
+        {
+          "id": 1,
+          "state": "selected",
+          "hover": false,
+          "box": {
+            "x": 744.125,
+            "y": 451,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(133, 101, 20)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(133, 101, 20)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 808.75,
+            "y": 473.0000305175781,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(217, 128, 38)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(217, 128, 38)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 776,
+            "y": 440.25,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(217, 128, 38)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(217, 128, 38)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "state": "current",
+          "hover": false,
+          "box": {
+            "x": 776.875,
+            "y": 418.25,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(221, 200, 136)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(221, 200, 136)"
+            }
+          ]
+        }
+      ],
+      "animationsRunning": 0
+    },
+    {
+      "theme": "vector",
+      "scene": {
+        "id": "1023-motion-start",
+        "width": 1023,
+        "reducedMotion": "no-preference",
+        "phase": 0
+      },
+      "property": "hsl(190 90% 40%)",
+      "value": "hsl(190 90% 40%)",
+      "file": "vector-1023-motion-start-before.png",
+      "innerWidth": 1023,
+      "fine": true,
+      "reduced": false,
+      "pins": [
+        {
+          "id": 1,
+          "state": "selected",
+          "hover": false,
+          "box": {
+            "x": 655.625,
+            "y": 451,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(102, 242, 255)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(102, 242, 255)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 712.875,
+            "y": 473,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(37, 175, 244)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(37, 175, 244)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "state": "hovered",
+          "hover": true,
+          "box": {
+            "x": 655.625,
+            "y": 425.625,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(10, 163, 194)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(10, 163, 194)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "state": "current",
+          "hover": false,
+          "box": {
+            "x": 681,
+            "y": 425.625,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(0, 212, 255)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(0, 212, 255)"
+            }
+          ]
+        }
+      ],
+      "animationsRunning": 0
+    },
+    {
+      "theme": "vector",
+      "scene": {
+        "id": "1023-motion-start",
+        "width": 1023,
+        "reducedMotion": "no-preference",
+        "phase": 0
+      },
+      "property": "hsl(190 80% 40%)",
+      "value": "hsl(190 80% 40%)",
+      "file": "vector-1023-motion-start-proposed.png",
+      "innerWidth": 1023,
+      "fine": true,
+      "reduced": false,
+      "pins": [
+        {
+          "id": 1,
+          "state": "selected",
+          "hover": false,
+          "box": {
+            "x": 655.625,
+            "y": 451,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(102, 242, 255)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(102, 242, 255)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 712.875,
+            "y": 473,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(37, 175, 244)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(37, 175, 244)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "state": "hovered",
+          "hover": true,
+          "box": {
+            "x": 655.625,
+            "y": 425.625,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(20, 156, 184)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(20, 156, 184)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "state": "current",
+          "hover": false,
+          "box": {
+            "x": 681,
+            "y": 425.625,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(0, 212, 255)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(0, 212, 255)"
+            }
+          ]
+        }
+      ],
+      "animationsRunning": 0
+    },
+    {
+      "theme": "vector",
+      "scene": {
+        "id": "1200-normal",
+        "width": 1200,
+        "reducedMotion": "reduce",
+        "phase": 0
+      },
+      "property": "hsl(190 90% 40%)",
+      "value": "hsl(190 90% 40%)",
+      "file": "vector-1200-normal-before.png",
+      "innerWidth": 1200,
+      "fine": true,
+      "reduced": true,
+      "pins": [
+        {
+          "id": 1,
+          "state": "selected",
+          "hover": false,
+          "box": {
+            "x": 744.125,
+            "y": 451,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(102, 242, 255)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(102, 242, 255)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 808.75,
+            "y": 473.0000305175781,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(37, 175, 244)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(37, 175, 244)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "state": "hovered",
+          "hover": true,
+          "box": {
+            "x": 744.125,
+            "y": 418.25,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(10, 163, 194)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(10, 163, 194)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "state": "current",
+          "hover": false,
+          "box": {
+            "x": 776.875,
+            "y": 418.25,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(0, 212, 255)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(0, 212, 255)"
+            }
+          ]
+        }
+      ],
+      "animationsRunning": 0
+    },
+    {
+      "theme": "vector",
+      "scene": {
+        "id": "1200-normal",
+        "width": 1200,
+        "reducedMotion": "reduce",
+        "phase": 0
+      },
+      "property": "hsl(190 80% 40%)",
+      "value": "hsl(190 80% 40%)",
+      "file": "vector-1200-normal-proposed.png",
+      "innerWidth": 1200,
+      "fine": true,
+      "reduced": true,
+      "pins": [
+        {
+          "id": 1,
+          "state": "selected",
+          "hover": false,
+          "box": {
+            "x": 744.125,
+            "y": 451,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(102, 242, 255)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(102, 242, 255)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "state": "rest",
+          "hover": false,
+          "box": {
+            "x": 808.75,
+            "y": 473.0000305175781,
+            "width": 6,
+            "height": 6
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(37, 175, 244)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(37, 175, 244)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "state": "hovered",
+          "hover": true,
+          "box": {
+            "x": 744.125,
+            "y": 418.25,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(20, 156, 184)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(20, 156, 184)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "state": "current",
+          "hover": false,
+          "box": {
+            "x": 776.875,
+            "y": 418.25,
+            "width": 69.75,
+            "height": 33
+          },
+          "parts": [
+            {
+              "part": "fill",
+              "fill": "rgb(0, 212, 255)",
+              "stroke": "none"
+            },
+            {
+              "part": "outline",
+              "fill": "none",
+              "stroke": "rgb(0, 212, 255)"
+            }
+          ]
+        }
+      ],
+      "animationsRunning": 0
+    }
+  ],
+  "requests": [],
+  "errors": []
+}
