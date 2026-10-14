@@ -3,7 +3,7 @@
  * Features animated grid background, deciphering text, and octagonal buttons.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useSplashNavigation, SplashThemeMenu } from './shared';
+import { useSplashNavigation } from './shared';
 import { FrameCorners } from '@arwes/react-frames';
 
 // Vector color palette
@@ -351,9 +351,6 @@ export function VectorSplash() {
       alignItems: 'center',
       overflow: 'hidden',
     }}>
-      {/* Theme switcher menu */}
-      <SplashThemeMenu />
-
       {/* Background fades out fast */}
       <div className={isExiting ? 'animate-fade-out-fast' : ''} style={{ position: 'absolute', inset: 0 }}>
         <GridBackground />

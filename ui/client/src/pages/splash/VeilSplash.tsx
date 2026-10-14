@@ -20,7 +20,7 @@
 import { CSSProperties, ReactNode, useState } from 'react';
 
 import { CrescentFrame, VeilSpiral } from '@/components/veil';
-import { useSplashNavigation, SplashThemeMenu } from './shared';
+import { useSplashNavigation } from './shared';
 
 // Veil brand values (lifted from the .dark theme tokens; hard-coded here so
 // the locked splash composition cannot drift with token edits)
@@ -157,9 +157,6 @@ export function VeilSplash() {
         overflow: 'hidden',
       }}
     >
-      {/* Theme switcher menu */}
-      <SplashThemeMenu />
-
       {/* Hero layer: living spiral field (canvas) + licensed crescent border
           (full-bleed 9-slice). The spiral renders the 1200x700 viewBox with
           xMidYMid slice; the frame stretches edge-to-edge at a fixed pixel

@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { ThemeSaveRejected, useOpenOnThemeSaveError } from '@/components/ThemeSaveRejected';
 
 // Animation timing constants (in milliseconds)
 export const ANIMATION = {
@@ -71,11 +72,15 @@ export const useSplashNavigation = () => {
 };
 
 /**
- * Theme switcher menu for splash screens.
+ * Theme switcher menu for splash screens, rendered once by SplashPage so a
+ * theme change does not remount it.
  * Positioned in top-left corner with theme-aware styling.
+ * A rejected save opens the menu and shows the reason below the themes.
  */
 export const SplashThemeMenu = () => {
   const { theme, setTheme, glowClass } = useTheme();
+  const [open, setOpen] = useState(false);
+  useOpenOnThemeSaveError(setOpen);
 
   const themeOptions: { value: Theme; label: string; icon: typeof Sparkles }[] = [
     { value: 'gilded', label: 'Gilded', icon: Sparkles },
@@ -85,7 +90,7 @@ export const SplashThemeMenu = () => {
 
   return (
     <div style={{ position: 'absolute', top: 28, left: 28, zIndex: 50 }}>
-      <DropdownMenu>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
@@ -107,6 +112,7 @@ export const SplashThemeMenu = () => {
               </div>
             </DropdownMenuItem>
           ))}
+          <ThemeSaveRejected testId="splash-theme-save-error" />
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
