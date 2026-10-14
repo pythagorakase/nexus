@@ -31,8 +31,10 @@ class StorySettings(BaseModel):
 def read_story_settings(dbname: str) -> StorySettings:
     """Read slot or explicitly named evaluation settings; DB errors propagate."""
     if dbname.startswith(("qa640_", "ref_")):
-        from scripts.database_targets import evaluation_dbname
-        from scripts.migrate import get_connection as get_evaluation_connection
+        from nexus.maintenance.database_targets import evaluation_dbname
+        from nexus.maintenance.migrate import (
+            get_connection as get_evaluation_connection,
+        )
 
         connection = closing(get_evaluation_connection(evaluation_dbname(dbname)))
     else:
@@ -257,33 +259,11 @@ def resolve_enqueued_seat(
     seat: str,
     cur: Any,
     *,
-    settings: Mapping[str, Any] | None = None,
+    settings: Settings | None = None,
     slot: int | None = None,
 ) -> SeatResolution:
     """Capture pins on the accepting transaction, serialized against repinning."""
-    if settings is None:
-        typed = load_settings()
-    elif "global" in settings:
-        typed = Settings.model_validate(
-            {
-                k: v
-                for k, v in settings.items()
-                if k not in {"Agent Settings", "API Settings"}
-            }
-        )
-    else:
-        # Accepting experience callers already hold the Orrery subsection.
-        complete = load_settings().model_dump()
-
-        def merge(target: dict[str, Any], updates: Mapping[str, Any]) -> None:
-            for key, value in updates.items():
-                if isinstance(value, Mapping) and isinstance(target.get(key), dict):
-                    merge(target[key], value)
-                else:
-                    target[key] = value
-
-        merge(complete["orrery"], settings.get("orrery", settings))
-        typed = Settings.model_validate(complete)
+    typed = settings or load_settings()
     cur.execute(
         "SELECT model, gaia_model, apex_context_window FROM global_variables WHERE id = TRUE FOR SHARE"
     )

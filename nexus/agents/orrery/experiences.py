@@ -20,7 +20,7 @@ from nexus.agents.orrery.epistemics import (
     WITNESS_ROLES,
 )
 from nexus.agents.orrery.player_identity import canonical_player_entity_id
-from nexus.config.settings_models import OrreryExperienceSettings
+from nexus.config.settings_models import OrreryExperienceSettings, Settings
 from nexus.config.story_model import persisted_job_model, resolve_enqueued_seat
 from nexus.presence.roster import read_rosters
 from nexus.telemetry.usage import usage_context
@@ -322,14 +322,9 @@ class MalformedExperienceEventError(ValueError):
         super().__init__(reason)
 
 
-def experience_settings(settings: Mapping[str, Any]) -> OrreryExperienceSettings:
-    """Validate the experience subsection from a full settings mapping."""
-
-    orrery = settings.get("orrery") if "orrery" in settings else settings
-    raw = (orrery or {}).get("experiences") or {}
-    if isinstance(raw, OrreryExperienceSettings):
-        return raw
-    return OrreryExperienceSettings.model_validate(raw)
+def experience_settings(settings: Settings) -> OrreryExperienceSettings:
+    """Require the typed experience subsection."""
+    return settings.require_orrery("character experiences").experiences
 
 
 def _row_value(row: Any, key: str, index: int) -> Any:
@@ -648,7 +643,7 @@ def seed_character_experiences_sync(
     conn: Any,
     *,
     anchor_chunk_id: int,
-    settings: Mapping[str, Any],
+    settings: Settings,
     warning_sink: Optional[list[dict[str, Any]]] = None,
 ) -> int:
     """Sweep and seed every unformed event at or before an accepted chunk."""
@@ -1017,7 +1012,7 @@ def enqueue_scene_experience_job_sync(
     scene_end_chunk_id: int,
     world_layer: str,
     slot: Optional[int],
-    settings: Mapping[str, Any],
+    settings: Settings,
 ) -> int:
     """Enqueue bounded immutable prior-scene seed batches at a scene reset."""
 
@@ -1799,7 +1794,7 @@ def load_experience_status_sync(cur: Any) -> dict[str, Any]:
 def drain_experience_render_jobs_sync(
     *,
     slot: Optional[int],
-    settings: Mapping[str, Any],
+    settings: Settings,
     conn: Any,
     provider: Optional[Any] = None,
     limit: Optional[int] = None,

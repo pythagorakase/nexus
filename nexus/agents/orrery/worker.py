@@ -24,8 +24,12 @@ from nexus.agents.orrery.retrograde_maturation import (
     drain_maturation_jobs_sync,
     load_maturation_status_sync,
 )
-from nexus.config import load_settings_as_dict
-from nexus.config.settings_models import OrreryNarrationSettings, OrreryPromoteSettings
+from nexus.config import load_settings
+from nexus.config.settings_models import (
+    OrreryNarrationSettings,
+    OrreryPromoteSettings,
+    Settings,
+)
 
 logger = logging.getLogger("nexus.orrery.worker")
 
@@ -109,7 +113,7 @@ def process_orrery_outbox_sync(
     semantic_clearance_evidence_events: int = (
         DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS
     ),
-    settings: Optional[Mapping[str, Any]] = None,
+    settings: Optional[Settings] = None,
     maturation_limit: Optional[int] = None,
     experience_limit: Optional[int] = None,
     experience_provider: Optional[Any] = None,
@@ -122,9 +126,7 @@ def process_orrery_outbox_sync(
         raise ValueError(
             "Select the registered TEST provider in settings for scheduler proofs"
         )
-    scheduler = SlotScheduler(
-        slot or get_active_slot(), settings=dict(settings) if settings else None
-    )
+    scheduler = SlotScheduler(slot or get_active_slot(), settings=settings)
     result = scheduler.run_pass(
         promotion_limit=promotion_limit,
         narration_limit=narration_limit,
@@ -152,7 +154,7 @@ def process_orrery_outbox_sync(
 def drain_experience_outbox_sync(
     slot: Optional[int] = None,
     *,
-    settings: Optional[Mapping[str, Any]] = None,
+    settings: Optional[Settings] = None,
     provider: Optional[Any] = None,
     limit: Optional[int] = None,
     conn: Optional[Any] = None,
@@ -163,7 +165,7 @@ def drain_experience_outbox_sync(
     try:
         return drain_experience_render_jobs_sync(
             slot=slot,
-            settings=dict(settings or load_settings_as_dict()),
+            settings=settings or load_settings(),
             conn=connection,
             provider=provider,
             limit=limit,
@@ -177,14 +179,14 @@ def promote_pending_resolutions_sync(
     slot: Optional[int] = None,
     *,
     limit: int = 20,
-    settings: Optional[Mapping[str, Any]] = None,
+    settings: Optional[Settings] = None,
     conn: Optional[Any] = None,
 ) -> tuple[int, int]:
     """Mark pending resolutions promoted or skipped with deterministic criteria."""
 
+    promotion_settings = _promotion_settings(settings or load_settings())
     owns_conn = conn is None
     conn = conn or _connect_for_slot(slot)
-    settings_dict = dict(settings or load_settings_as_dict())
     try:
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -214,7 +216,6 @@ def promote_pending_resolutions_sync(
                 if not rows:
                     return (0, 0)
 
-                promotion_settings = _promotion_settings(settings_dict)
                 promoted = 0
                 skipped = 0
                 slot_label = _slot_label(slot)
@@ -236,7 +237,7 @@ def drain_narration_outbox_sync(
     slot: Optional[int] = None,
     *,
     limit: Optional[int] = None,
-    settings: Optional[Mapping[str, Any]] = None,
+    settings: Optional[Settings] = None,
     conn: Optional[Any] = None,
 ) -> tuple[int, int]:
     """Persist deterministic descriptors for queued or expired Orrery jobs.
@@ -245,9 +246,9 @@ def drain_narration_outbox_sync(
     provider/model provenance is retained, but never used to make a call.
     """
 
-    settings_dict = dict(settings or load_settings_as_dict())
-    narration_settings = _narration_settings(settings_dict)
-    max_attempts, retry_delay_seconds = _narration_retry_settings(settings_dict)
+    settings = settings or load_settings()
+    narration_settings = _narration_settings(settings)
+    max_attempts, retry_delay_seconds = _narration_retry_settings(settings)
     job_limit = narration_settings.max_jobs_per_drain
     if limit is not None:
         if limit < 0:
@@ -790,11 +791,8 @@ def _promotion_verdict(
     )
 
 
-def _promotion_settings(settings: Mapping[str, Any]) -> OrreryPromoteSettings:
-    raw_settings = (settings.get("orrery") or {}).get("promote") or {}
-    if isinstance(raw_settings, OrreryPromoteSettings):
-        return raw_settings
-    return OrreryPromoteSettings.model_validate(raw_settings)
+def _promotion_settings(settings: Settings) -> OrreryPromoteSettings:
+    return settings.require_orrery("Orrery promotion").promote
 
 
 def _mark_promoted(
@@ -871,14 +869,11 @@ def _perceptual_descriptor(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _narration_settings(settings: Mapping[str, Any]) -> OrreryNarrationSettings:
-    raw_settings = (settings.get("orrery") or {}).get("narration") or {}
-    if isinstance(raw_settings, OrreryNarrationSettings):
-        return raw_settings
-    return OrreryNarrationSettings.model_validate(raw_settings)
+def _narration_settings(settings: Settings) -> OrreryNarrationSettings:
+    return settings.require_orrery("Orrery narration").narration
 
 
-def _narration_retry_settings(settings: Mapping[str, Any]) -> tuple[int, int]:
+def _narration_retry_settings(settings: Settings) -> tuple[int, int]:
     narration = _narration_settings(settings)
     return max(1, narration.max_attempts), max(0, narration.retry_delay_seconds)
 

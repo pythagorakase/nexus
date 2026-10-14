@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 from weakref import WeakSet
@@ -15,8 +15,8 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
-from nexus.config import load_settings_as_dict
-from nexus.config.settings_models import DeferredWorkSettings, MEMNONSettings
+from nexus.config import load_settings
+from nexus.config.settings_models import Settings
 from nexus.database import connection_kwargs, is_connection_failure, transaction
 from nexus.jobs.gate import SchedulerStopped, provider_gate
 
@@ -31,9 +31,7 @@ def notify_generation_released(dbname: str) -> None:
             scheduler.wakeup.set()
 
 
-def experience_embedding_rounds(
-    settings: Mapping[str, Any], requested: int | None
-) -> int:
+def experience_embedding_rounds(settings: Settings, requested: int | None) -> int:
     """Return how many rendered recollections one pass may embed.
 
     ``None`` takes ``[orrery.experiences].max_embeddings_per_drain``. ``0``
@@ -42,7 +40,7 @@ def experience_embedding_rounds(
     configured bound, as the Orrery queue limits do.
 
     Args:
-        settings: Full settings mapping.
+        settings: Validated settings.
         requested: The pass's ``experience_embedding_limit``.
 
     Raises:
@@ -66,16 +64,16 @@ class SlotScheduler:
         slot: int,
         *,
         dbname: str | None = None,
-        settings: dict[str, Any] | None = None,
+        settings: Settings | None = None,
     ) -> None:
         from nexus.api.slot_utils import require_slot_dbname
 
         self.slot = slot
         self.dbname = dbname or require_slot_dbname(slot=slot)
-        self.settings = settings or load_settings_as_dict()
-        self.cfg = DeferredWorkSettings.model_validate(
-            self.settings["runtime"]["scheduler"]
-        )
+        self.settings = settings or load_settings()
+        self.runtime = self.settings.require_runtime("the deferred-work scheduler")
+        self.orrery = self.settings.require_orrery("the deferred-work scheduler")
+        self.cfg = self.runtime.scheduler
         self.owner = f"gateway:{os.getpid()}:{uuid4()}"
         self.nonce = str(uuid4())
         self.stopping = threading.Event()
@@ -430,9 +428,7 @@ class SlotScheduler:
     def _end_heartbeat(self) -> None:
         self._heartbeat_stop.set()
         if self._heartbeat:
-            self._heartbeat.join(
-                timeout=self.settings["runtime"]["health"]["stop_grace_seconds"]
-            )
+            self._heartbeat.join(timeout=self.runtime.health.stop_grace_seconds)
 
     def run_pass(
         self,
@@ -512,23 +508,21 @@ class SlotScheduler:
                 queues: list[tuple[str, int, Callable[[], Any]]] = [
                     (
                         "orrery_narration_jobs",
-                        self.settings["orrery"]["narration"]["max_jobs_per_drain"],
+                        self.orrery.narration.max_jobs_per_drain,
                         lambda: worker.drain_narration_outbox_sync(
                             self.slot, conn=conn, settings=self.settings, limit=1
                         ),
                     ),
                     (
                         "character_experience_jobs",
-                        self.settings["orrery"]["experiences"]["max_jobs_per_drain"],
+                        self.orrery.experiences.max_jobs_per_drain,
                         lambda: worker.drain_experience_outbox_sync(
                             self.slot, conn=conn, settings=self.settings, limit=1
                         ),
                     ),
                     (
                         "orrery_maturation_jobs",
-                        self.settings["orrery"]["retrograde"]["maturation"][
-                            "max_jobs_per_drain"
-                        ],
+                        self.orrery.retrograde.maturation.max_jobs_per_drain,
                         lambda: drain_maturation_jobs_sync(
                             self.slot, conn=conn, settings=self.settings, limit=1
                         ),
@@ -597,9 +591,7 @@ class SlotScheduler:
                         self.cfg.embeddings,
                         lambda: drain_embedding(
                             conn,
-                            memnon=MEMNONSettings.model_validate(
-                                self.settings["memnon"]
-                            ),
+                            memnon=self.settings.memnon,
                             cfg=self.cfg.embeddings,
                             owner=self.owner,
                         ),
@@ -722,9 +714,7 @@ class SlotScheduler:
 
     def stop(self) -> None:
         """Stop dispatch within the runtime grace; never cancel a provider call."""
-        deadline = (
-            time.monotonic() + self.settings["runtime"]["health"]["stop_grace_seconds"]
-        )
+        deadline = time.monotonic() + self.runtime.health.stop_grace_seconds
         _schedulers.discard(self)
         self.stopping.set()
         self.wakeup.set()

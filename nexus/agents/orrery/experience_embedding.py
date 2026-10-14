@@ -14,6 +14,7 @@ from nexus.agents.memnon.utils.source_embeddings import (
     embed_source_rows,
 )
 from nexus.agents.orrery.experiences import experience_settings
+from nexus.config.settings_models import Settings
 
 UNEMBEDDED_RENDERED_EXPERIENCE_PREDICATE = (
     "experience_text IS NOT NULL"
@@ -82,7 +83,7 @@ def drain_experience_embeddings_sync(
     conn: Any,
     *,
     dbname: str,
-    settings: Mapping[str, Any],
+    settings: Settings,
     limit: int,
 ) -> int:
     """Embed the oldest rendered, unembedded experiences, all or nothing.
@@ -95,7 +96,7 @@ def drain_experience_embeddings_sync(
     Args:
         conn: Open DBAPI connection to the slot database named by ``dbname``.
         dbname: Slot database whose experiences are embedded.
-        settings: Full settings mapping; a disabled ``[orrery.experiences]``
+        settings: Validated settings; a disabled ``[orrery.experiences]``
             drains nothing.
         limit: Maximum experiences to embed in this call; must be positive.
 

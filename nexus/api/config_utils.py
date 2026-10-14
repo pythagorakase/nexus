@@ -1,9 +1,7 @@
 """Shared configuration utilities for API modules."""
 
 import logging
-from typing import Dict, Any
-
-from nexus.config import load_settings, load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.settings_models import WizardSettings
 
 logger = logging.getLogger("nexus.api.config_utils")
@@ -39,12 +37,10 @@ def get_wizard_max_tokens() -> int:
 
 def get_max_choice_text_length() -> int:
     """Get the maximum allowed length for choice selection text."""
-    settings = load_settings_as_dict()
-    return (
-        settings.get("api", {})
-        .get("constraints", {})
-        .get("max_choice_text_length", 1000)
-    )
+    settings = load_settings()
+    if settings.api is None:
+        raise RuntimeError("nexus.toml is missing the required [api] section")
+    return settings.api.constraints.max_choice_text_length
 
 
 def get_generation_lease_timeout_seconds() -> int:

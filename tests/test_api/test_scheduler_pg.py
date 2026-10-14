@@ -2,6 +2,7 @@
 
 from contextlib import closing
 from time import monotonic, sleep
+from typing import Any, Mapping
 from uuid import uuid4
 
 import pytest
@@ -10,9 +11,10 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.api import narrative_lease
 from nexus.agents.orrery.job_queues import load_job_queues_sync
-from nexus.config import load_settings_as_dict
+from nexus.config.settings_models import Settings
 from nexus.jobs.scheduler import SlotScheduler
 from tests.pg_fixtures import connect, seed_protagonist, seed_story_base
+from tests.settings_helpers import settings_with
 from tests.test_orrery.test_narration_job_fencing_pg import (
     _materialize_pending_resolution,
     _enqueue,
@@ -21,15 +23,17 @@ from tests.test_orrery.test_narration_job_fencing_pg import (
 pytestmark = pytest.mark.requires_postgres
 
 
-def scheduler_settings():
-    settings = load_settings_as_dict()
-    settings["runtime"]["scheduler"].update(
-        poll_interval_seconds=0.02,
-        generation_wait_seconds=0.01,
-        heartbeat_interval_seconds=0.1,
-        lease_duration_seconds=2,
+def scheduler_settings(overrides: Mapping[str, Any] | None = None) -> Settings:
+    """Validate the fast scheduler timings together with each test's overrides."""
+    return settings_with(
+        {
+            "runtime.scheduler.poll_interval_seconds": 0.02,
+            "runtime.scheduler.generation_wait_seconds": 0.01,
+            "runtime.scheduler.heartbeat_interval_seconds": 0.1,
+            "runtime.scheduler.lease_duration_seconds": 2,
+            **(overrides or {}),
+        }
     )
-    return settings
 
 
 def wait_until(predicate, timeout=5):

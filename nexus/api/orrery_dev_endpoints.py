@@ -44,6 +44,7 @@ from nexus.agents.orrery.overrides import (
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api.slot_utils import get_slot_db_url
+from nexus.config.settings_models import OrrerySettings
 
 logger = logging.getLogger("nexus.api.orrery_dev_endpoints")
 
@@ -250,12 +251,11 @@ class OrreryCognitionTraceRequest(BaseModel):
     anchor_chunk_id: int = Field(ge=1)
 
 
-def _orrery_settings() -> dict[str, Any]:
-    from nexus.config import load_settings_as_dict
+def _orrery_settings() -> OrrerySettings:
+    from nexus.config import load_settings
 
-    settings = load_settings_as_dict()
-    orrery = settings.get("orrery")
-    if not orrery:
+    orrery = load_settings().orrery
+    if orrery is None:
         raise RuntimeError(
             "nexus.toml has no [orrery] section; the audit dashboard cannot "
             "resolve without binding/sunhelm configuration"
@@ -426,10 +426,11 @@ async def get_catalog() -> dict[str, Any]:
     """Static template catalog: bands, pseudo-templates, families, event map."""
 
     orrery = _orrery_settings()
+    sections = orrery.model_dump(by_alias=True)
     return build_catalog(
         BUILTIN_TEMPLATES,
-        sunhelm_settings=orrery.get("sunhelm"),
-        promote_settings=orrery.get("promote"),
+        sunhelm_settings=sections["sunhelm"],
+        promote_settings=sections["promote"],
     )
 
 
@@ -438,10 +439,11 @@ async def post_resolve(request: OrreryResolveRequest) -> dict[str, Any]:
     """Explained dry-run tick against a real slot. Read-only."""
 
     orrery = _orrery_settings()
+    sections = orrery.model_dump(by_alias=True)
     window_chunks = (
         request.window_chunks
         if request.window_chunks is not None
-        else int(orrery["binding"]["window_chunks"])
+        else orrery.binding.window_chunks
     )
     overrides = (
         request.overrides.to_overrides() if request.overrides is not None else None
@@ -458,19 +460,19 @@ async def post_resolve(request: OrreryResolveRequest) -> dict[str, Any]:
                 BUILTIN_TEMPLATES,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
-                sunhelm_settings=orrery.get("sunhelm"),
+                sunhelm_settings=sections["sunhelm"],
                 overrides=overrides,
-                selection_settings=orrery.get("selection"),
-                habituation_settings=orrery.get("habituation"),
-                package_selection_settings=orrery.get("package_selection"),
-                project_settings=orrery.get("projects"),
-                epistemics_settings=orrery.get("epistemics"),
-                fanout_settings=orrery.get("fanout"),
-                contagion_settings=orrery.get("contagion"),
-                weather_settings=orrery.get("weather"),
-                mood_settings=orrery.get("mood"),
-                composition_settings=orrery.get("composition"),
-                resolver_settings=orrery.get("resolver"),
+                selection_settings=sections["selection"],
+                habituation_settings=sections["habituation"],
+                package_selection_settings=sections["package_selection"],
+                project_settings=sections["projects"],
+                epistemics_settings=sections["epistemics"],
+                fanout_settings=sections["fanout"],
+                contagion_settings=sections["contagion"],
+                weather_settings=sections["weather"],
+                mood_settings=sections["mood"],
+                composition_settings=sections["composition"],
+                resolver_settings=sections["resolver"],
             )
         except OverrideValidationError as exc:
             # Override validation (unknown vocab, no-op toggles) is caller
@@ -486,6 +488,7 @@ async def post_entity_context(
     """Hover-audit payload for a set of entity ids. Read-only."""
 
     orrery = _orrery_settings()
+    sections = orrery.model_dump(by_alias=True)
     with _slot_session(request.slot) as session:
         anchor_chunk_id = (
             request.anchor_chunk_id
@@ -497,8 +500,8 @@ async def post_entity_context(
             request.entity_ids,
             anchor_chunk_id=anchor_chunk_id,
             recent_events_limit=request.recent_events_limit,
-            sunhelm_settings=orrery.get("sunhelm"),
-            contagion_settings=orrery.get("contagion"),
+            sunhelm_settings=sections["sunhelm"],
+            contagion_settings=sections["contagion"],
         )
 
 
@@ -508,6 +511,8 @@ async def post_cognition_trace(
 ) -> dict[str, Any]:
     """Anchor-aware character cognition trace. Read-only and dev-gated."""
 
+    orrery = _orrery_settings()
+    sections = orrery.model_dump(by_alias=True)
     with _slot_session(request.slot) as session:
         _validate_cognition_trace_boundary(
             session,
@@ -519,7 +524,7 @@ async def post_cognition_trace(
                 session,
                 request.entity_id,
                 anchor_chunk_id=request.anchor_chunk_id,
-                orrery_settings=_orrery_settings(),
+                orrery_settings=sections,
             )
         except CognitionTraceInputError as exc:
             _reject_cognition_trace_input(
@@ -539,13 +544,13 @@ async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
     """
 
     orrery = _orrery_settings()
-    dashboard = orrery.get("dashboard", {})
-    max_anchors = int(dashboard["coverage_max_anchors"])
-    epoch_min = int(dashboard["coverage_epoch_min_world_times"])
+    sections = orrery.model_dump(by_alias=True)
+    max_anchors = orrery.dashboard.coverage_max_anchors
+    epoch_min = orrery.dashboard.coverage_epoch_min_world_times
     window_chunks = (
         request.window_chunks
         if request.window_chunks is not None
-        else int(orrery["binding"]["window_chunks"])
+        else orrery.binding.window_chunks
     )
     requested = (
         len(request.anchor_chunk_ids)
@@ -581,19 +586,19 @@ async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
             BUILTIN_TEMPLATES,
             anchor_chunk_ids=anchor_chunk_ids,
             window_chunks=window_chunks,
-            sunhelm_settings=orrery.get("sunhelm"),
+            sunhelm_settings=sections["sunhelm"],
             epoch_min_world_times=epoch_min,
-            selection_settings=orrery.get("selection"),
-            habituation_settings=orrery.get("habituation"),
-            package_selection_settings=orrery.get("package_selection"),
-            project_settings=orrery.get("projects"),
-            epistemics_settings=orrery.get("epistemics"),
-            fanout_settings=orrery.get("fanout"),
-            contagion_settings=orrery.get("contagion"),
-            weather_settings=orrery.get("weather"),
-            mood_settings=orrery.get("mood"),
-            composition_settings=orrery.get("composition"),
-            resolver_settings=orrery.get("resolver"),
+            selection_settings=sections["selection"],
+            habituation_settings=sections["habituation"],
+            package_selection_settings=sections["package_selection"],
+            project_settings=sections["projects"],
+            epistemics_settings=sections["epistemics"],
+            fanout_settings=sections["fanout"],
+            contagion_settings=sections["contagion"],
+            weather_settings=sections["weather"],
+            mood_settings=sections["mood"],
+            composition_settings=sections["composition"],
+            resolver_settings=sections["resolver"],
         )
 
 

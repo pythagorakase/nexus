@@ -32,9 +32,12 @@ def test_locked_scheduler_observes_then_acquires(
     offline_gate_db, caplog, monkeypatch, capsys
 ) -> None:
     """Lock polling is quiet and unlocking waits the configured observer hold."""
-    settings = scheduler_settings()
-    settings["runtime"]["scheduler"]["poll_interval_seconds"] = 1.0
-    settings["runtime"]["scheduler"]["unlock_hold_seconds"] = 1.0
+    settings = scheduler_settings(
+        {
+            "runtime.scheduler.poll_interval_seconds": 1.0,
+            "runtime.scheduler.unlock_hold_seconds": 1.0,
+        }
+    )
     scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
     caplog.set_level(logging.INFO, logger="nexus.jobs.scheduler")
     set_locked(offline_gate_db, True)
@@ -117,8 +120,7 @@ def test_read_only_pass_becomes_observer(offline_gate_db, caplog) -> None:
 
 def test_brief_unlock_does_not_admit_scheduler(offline_gate_db, caplog) -> None:
     """An observed unlock shorter than the hold never creates an ownership row."""
-    settings = scheduler_settings()
-    settings["runtime"]["scheduler"]["unlock_hold_seconds"] = 0.5
+    settings = scheduler_settings({"runtime.scheduler.unlock_hold_seconds": 0.5})
     scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
     caplog.set_level(logging.INFO, logger="nexus.jobs.scheduler")
     set_locked(offline_gate_db, True)
@@ -152,8 +154,7 @@ def test_lock_hold_survives_database_error(offline_gate_db) -> None:
     """A real SQL failure between lock observations cannot erase lock memory."""
     import psycopg2
 
-    settings = scheduler_settings()
-    settings["runtime"]["scheduler"]["unlock_hold_seconds"] = 0.2
+    settings = scheduler_settings({"runtime.scheduler.unlock_hold_seconds": 0.2})
     scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
     set_locked(offline_gate_db, True)
     try:
