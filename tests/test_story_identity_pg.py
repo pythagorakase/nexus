@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
 import re
+import time
 import uuid
 
 import psycopg2
@@ -153,6 +154,32 @@ def test_transition_renews_identity(monkeypatch: pytest.MonkeyPatch) -> None:
         assert len(set(values)) == 3
 
 
+def _open_backends(dbname: str, *, via: str, settle: float = 5.0) -> int:
+    """Count the backends still open on ``dbname`` once finished ones have gone.
+
+    A client's ``close()`` returns before the server removes that backend from
+    ``pg_stat_activity``, so a count taken at once can see one that is still
+    exiting (a whole-tree gate read ``1`` for a connection the test itself had
+    just closed). Poll from ``via`` until the count reaches zero or ``settle``
+    seconds pass; a leaked connection stays open past the deadline and the last
+    count seen is returned. Each poll is its own transaction because
+    ``pg_stat_activity`` is frozen for the rest of a transaction once read.
+    """
+    deadline = time.monotonic() + settle
+    with closing(connect(via)) as conn:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            while True:
+                cur.execute(
+                    "SELECT count(*) FROM pg_stat_activity WHERE datname = %s",
+                    (dbname,),
+                )
+                open_backends = int(cur.fetchone()[0])
+                if open_backends == 0 or time.monotonic() >= deadline:
+                    return open_backends
+                time.sleep(0.05)
+
+
 def test_clone_forks_with_lineage(monkeypatch: pytest.MonkeyPatch) -> None:
     """A data clone gets a new ``clone`` identity and one fork row to its source."""
     monkeypatch.setattr(new_story_setup, "USE_POOL", False)
@@ -230,12 +257,7 @@ def test_clone_forks_with_lineage(monkeypatch: pytest.MonkeyPatch) -> None:
             with closing(connect(target)) as conn, conn, conn.cursor() as cur:
                 cur.execute("SELECT content FROM previous_story")
                 assert cur.fetchall() == [("keep this story",)]
-            with closing(connect(source)) as conn, conn, conn.cursor() as cur:
-                cur.execute(
-                    "SELECT count(*) FROM pg_stat_activity WHERE datname = %s",
-                    (target,),
-                )
-                assert cur.fetchone()[0] == 0
+            assert _open_backends(target, via=source) == 0
 
 
 def _migration_comments() -> dict[str, str]:
