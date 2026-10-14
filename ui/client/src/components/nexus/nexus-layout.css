@@ -922,6 +922,14 @@
   border-color: var(--brass);
   background: hsl(320 55% 50% / .12);
 }
+/* Keyboard focus on a roster row: the dialog Close button's shadcn ring
+   (`--ring`, 2px, 2px offset), drawn inside the row so the scrolling list
+   cannot clip it. The gap keeps it apart from the selected row's 1px brass
+   border: a focused row reads as an inner ring, the selected row as an edge. */
+.charspane-list li:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -5px;
+}
 .char-glyph {
   width: 30px;
   height: 30px;
@@ -1082,6 +1090,10 @@
   height: 100%;
   min-height: 0;
 }
+/* The pane root takes focus only programmatically (tabIndex -1), when the
+   place dialog closes without a connected opener; it is not a control. */
+.mappane:focus,
+.mappane:focus-visible { outline: none; }
 .mappane-list {
   padding: 8px 0;
   overflow-y: auto;
@@ -1616,7 +1628,7 @@
 }
 @keyframes row-in {
   from { opacity: 0; transform: translateX(-6px); }
-  to { opacity: 1; transform: none; }
+  to { transform: none; }
 }
 
 .nexus-backstage-sigil {
@@ -1669,6 +1681,7 @@
 .nexus-backstage-chip,
 .nexus-backstage-writes,
 .nexus-backstage-orrery,
+.nexus-backstage-economics,
 .nexus-backstage-held {
   font-family: var(--font-menu);
 }
@@ -1852,6 +1865,7 @@
   padding: 2px 0;
   animation: row-in .25s ease-out;
 }
+.nexus-backstage-orrery-row[data-attention="background"] { opacity: .55; }
 .nexus-backstage-band {
   width: 3px;
   align-self: stretch;
@@ -1907,6 +1921,26 @@
   color: hsl(var(--primary));
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.nexus-backstage-economics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* A job queue name is longer than a seat; let it widen its own row instead of
+   painting over the copy beside it. */
+.nexus-backstage-economics .nexus-backstage-kind {
+  width: auto;
+  min-width: 68px;
+}
+.nexus-backstage-economics-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-left: 8px;
+  border-left: 1px dashed hsl(var(--accent) / .5);
+  opacity: .7;
 }
 .nexus-backstage-footer {
   flex: none;
@@ -2361,6 +2395,25 @@
   .rail-right { display: none; }
 }
 @media (max-width: 760px) {
+  .nexus-main,
+  .nexus-main.no-ledger {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .rail-left {
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: 4px calc(12px + env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+  }
+  .rail-divider { width: 1px; height: 22px; margin: 0 6px; }
+  .rail-btn.on::before {
+    left: 50%; top: -5px; transform: translateX(-50%); width: 22px; height: 3px;
+  }
+  .rail-btn .rail-tip {
+    left: 50%; top: auto; bottom: calc(100% + 10px); transform: translateX(-50%);
+  }
+  .nexus-backstage-drawer { left: 0; bottom: calc(49px + env(safe-area-inset-bottom)); }
   .nexus-shell { grid-template-rows: 40px 1fr; }
   .topbar { padding: 0 12px; }
   .topbar-left .wordmark { font-size: 20px; }
@@ -2370,6 +2423,11 @@
   .scene-title { font-size: 26px; }
   .charspane { grid-template-columns: 1fr; }
   .mappane { grid-template-columns: 1fr; grid-template-rows: 220px 1fr; }
+}
+
+@media (max-width: 760px) and (pointer: coarse) {
+  .nexus-main:has(.nexus-content :is(input, textarea, [contenteditable="true"]):focus) > .rail-left { display: none; }
+  .rail-btn .rail-tip { display: none; }
 }
 
 /* ─── Reduced motion (#777) ───

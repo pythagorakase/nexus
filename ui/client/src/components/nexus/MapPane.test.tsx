@@ -11,7 +11,8 @@
  * wiring are all the real ones.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { geoEquirectangular } from "d3-geo";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/map-geometry";
 import type { CurrentPlace, Place, Zone } from "@shared/schema";
 import { MapPane } from "./MapPane";
+import { MapViewProvider } from "./MapViewContext";
 
 const SLOT = 5;
 
@@ -104,14 +106,15 @@ function renderPane() {
   for (const place of PLACES) {
     client.setQueryData(["/api/places", place.id, "images", SLOT], []);
   }
-  render(
+  const tree = (visible: boolean) => (
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <MapPane slot={SLOT} />
+        <MapViewProvider>{visible && <MapPane slot={SLOT} />}</MapViewProvider>
       </ThemeProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return client;
+  const view = render(tree(true));
+  return { client, setVisible: (visible: boolean) => view.rerender(tree(visible)) };
 }
 
 function readViewBox() {
@@ -163,6 +166,47 @@ afterEach(() => {
 });
 
 describe("MapPane", () => {
+  it("restores the last view, selection and zones after a tab switch", () => {
+    const { setVisible } = renderPane();
+    resizeCanvas(1000, 600);
+    fireEvent.click(screen.getByTestId("map-zone-1"));
+    fireEvent.click(screen.getByTestId("map-place-row-101"));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    const svg = screen.getByTestId("map-svg");
+    for (let tick = 0; tick < 3; tick++) {
+      fireEvent.wheel(svg, { deltaY: -100, clientX: 850, clientY: 120 });
+    }
+    const before = readViewBox();
+    setVisible(false);
+    setVisible(true);
+    resizeCanvas(1000, 600);
+    expect(readViewBox()).toEqual(before);
+    expect(screen.getByTestId("map-place-row-101")).toHaveClass("on");
+    expect(screen.getByTestId("map-place-row-102")).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("still recenters on a new current place after a return", async () => {
+    const { client, setVisible } = renderPane();
+    resizeCanvas(1000, 600);
+    fireEvent.wheel(screen.getByTestId("map-svg"), {
+      deltaY: -100, clientX: 850, clientY: 120,
+    });
+    setVisible(false);
+    setVisible(true);
+    resizeCanvas(1000, 600);
+    act(() => {
+      client.setQueryData<CurrentPlace[]>(["/api/current-place", SLOT], [
+        { placeId: 101, name: "Bryggen Wharf", chunkId: 2 },
+      ]);
+    });
+    await waitFor(() => {
+      const center = viewCenterLngLat(1000, 600);
+      expect(center.longitude).toBeCloseTo(5.3242, 9);
+      expect(center.latitude).toBeCloseTo(60.3975, 9);
+    });
+  });
+
   it("keeps pan and zoom across a canvas resize", () => {
     renderPane();
     resizeCanvas(1000, 600);
@@ -190,7 +234,7 @@ describe("MapPane", () => {
   });
 
   it("keeps the pan when a places refetch keeps the extent", async () => {
-    const client = renderPane();
+    const { client } = renderPane();
     resizeCanvas(1000, 600);
     const svg = screen.getByTestId("map-svg");
     for (let tick = 0; tick < 3; tick++) {
@@ -260,5 +304,131 @@ describe("MapPane", () => {
     expect(box.x + box.width / 2).toBeCloseTo(truePoint.x, 6);
     expect(box.y + box.height / 2).toBeCloseTo(truePoint.y, 6);
     expect(screen.getByRole("dialog")).toHaveTextContent("60.397500, 5.324200");
+  });
+});
+
+/**
+ * Focus return from the place dialog (#777, QA 2026-10-09): the dialog is
+ * controlled and has no Radix trigger, so closing it used to drop focus on
+ * document.body. It now returns to the control that opened it, or to the
+ * map pane root when that control has left the document.
+ */
+describe("MapPane place dialog focus return", () => {
+  async function openFromRow(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByTestId("map-zone-1"));
+    const row = screen.getByTestId("map-place-row-101");
+    row.focus();
+    await user.keyboard("{Enter}");
+    const close = await screen.findByRole("button", { name: "Close" });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+    return { row, close };
+  }
+
+  it("returns focus to the place button after Escape", async () => {
+    const user = userEvent.setup();
+    renderPane();
+    resizeCanvas(1000, 600);
+    const { row } = await openFromRow(user);
+    expect(screen.getByRole("dialog")).toHaveTextContent("Bryggen Wharf");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(row);
+    expect(row).toHaveClass("on");
+  });
+
+  it("returns focus to the place button after the Close button", async () => {
+    const user = userEvent.setup();
+    renderPane();
+    resizeCanvas(1000, 600);
+    const { row, close } = await openFromRow(user);
+
+    await user.click(close);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(row);
+
+    // A second pass through the keyboard reaches the same place.
+    await user.keyboard("{Enter}");
+    const again = await screen.findByRole("button", { name: "Close" });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(row);
+  });
+
+  it("focuses the map pane root when the opener left the document", async () => {
+    const user = userEvent.setup();
+    const { client } = renderPane();
+    resizeCanvas(1000, 600);
+    const { row } = await openFromRow(user);
+
+    // A turn moves the open place into a zone the reader has not expanded:
+    // its row leaves the list while the dialog stays open on the place.
+    act(() => {
+      client.setQueryData<Zone[]>(["/api/zones", SLOT], [
+        ...ZONES,
+        { id: 2, name: "Askoy", summary: null, boundary: null },
+      ]);
+      client.setQueryData<Place[]>(
+        ["/api/places", SLOT],
+        PLACES.map((place) => (place.id === 101 ? { ...place, zone: 2 } : place)),
+      );
+    });
+    await waitFor(() => expect(row.isConnected).toBe(false));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Bryggen Wharf");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(screen.getByTestId("map-pane"));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("focuses the map pane root when a refetch drops the open place", async () => {
+    const user = userEvent.setup();
+    const { client } = renderPane();
+    resizeCanvas(1000, 600);
+    const { row } = await openFromRow(user);
+
+    // The place leaves the slot while its dialog is open: MapPlaceDialog
+    // renders nothing, so the dialog unmounts without Escape or Close.
+    act(() => {
+      client.setQueryData<Place[]>(
+        ["/api/places", SLOT],
+        PLACES.filter((place) => place.id !== 101),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(row.isConnected).toBe(false);
+    expect(document.activeElement).toBe(screen.getByTestId("map-pane"));
+  });
+
+  it("focuses the map pane root when a pin opened the dialog", async () => {
+    const user = userEvent.setup();
+    renderPane();
+    resizeCanvas(1000, 600);
+    // A press and release on the pin under the drag threshold: the pane
+    // selects on release (pins are SVG groups, so there is no opener).
+    await user.click(
+      screen.getByTestId("map-pin-103").querySelector('[data-map-part="fill"]')!,
+    );
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Floyen Station");
+    const close = screen.getByRole("button", { name: "Close" });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(screen.getByTestId("map-pane"));
   });
 });
