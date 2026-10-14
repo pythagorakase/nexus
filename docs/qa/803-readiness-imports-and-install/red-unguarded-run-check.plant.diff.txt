@@ -1,0 +1,18 @@
+diff --git a/nexus/runtime/readiness.py b/nexus/runtime/readiness.py
+index ee55ac34..05819fd5 100644
+--- a/nexus/runtime/readiness.py
++++ b/nexus/runtime/readiness.py
+@@ -1526,12 +1526,7 @@ validate_registry(REGISTRY)
+ 
+ def _run_check(spec: CheckSpec, ctx: ReadinessContext) -> Outcome:
+     """Turn only import failures from a check into an installation finding."""
+-    try:
+-        return spec.run(ctx)
+-    except (
+-        ImportError
+-    ) as exc:  # nexus-exception-disposition: fail; reason=import; safety=failed check
+-        return _import_failure(spec.id, exc)
++    return spec.run(ctx)
+ 
+ 
+ def run_readiness(

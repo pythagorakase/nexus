@@ -1,0 +1,45 @@
+❌ Error validating /Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus.toml:
+   No module named 'opentelemetry._events'
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6280, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6214, in main
+    outcome = _dispatch(args)
+              ^^^^^^^^^^^^^^^
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 6097, in _dispatch
+    return run_doctor(args)
+           ^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/cli.py", line 4447, in run_doctor
+    report = run_readiness(args.target, ReadinessContext(config_path=config))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/runtime/readiness.py", line 1384, in run_readiness
+    outcome = spec.run(ctx)
+              ^^^^^^^^^^^^^
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/runtime/readiness.py", line 254, in _check_config
+    settings = load_settings(path)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/loader.py", line 279, in load_settings
+    return _load_from_toml(path)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/loader.py", line 320, in _load_from_toml
+    settings = Settings(**data)
+               ^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pydantic/main.py", line 253, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/config/settings_models.py", line 1447, in _validate_weather_contract
+    from nexus.agents.orrery.weather import WEATHER_VALUES
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/agents/orrery/__init__.py", line 22, in <module>
+    from nexus.agents.orrery.resolver import (
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/agents/orrery/resolver.py", line 74, in <module>
+    from nexus.presence.roster import read_roster, read_rosters
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/presence/roster.py", line 16, in <module>
+    from nexus.api.native_structured_output import WireContractViolation
+  File "/Users/pythagor/.codex/worktrees/resume-readiness-install/nexus/nexus/api/native_structured_output.py", line 16, in <module>
+    from pydantic_ai import JsonSchemaTransformer
+  File "/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/nexus-803s1-before-tbmhbwu5/stub/pydantic_ai/__init__.py", line 1, in <module>
+    raise ModuleNotFoundError("No module named 'opentelemetry._events'", name="opentelemetry._events")
+ModuleNotFoundError: No module named 'opentelemetry._events'
