@@ -110,7 +110,7 @@ reflects gateway reachability alone.
    `user_text` (`nexus/api/choice_handling.py`) records and generates from that
    edited text instead, and its `choice_object` keeps the number with
    `"edited": true`; unchanged text resolves as the bare choice. Freeform
-   `user_text` is recorded as written.
+   `user_text` is recorded verbatim after surrounding whitespace is stripped.
 5. Binds the session to its parent chunk and claims the parent's embedding
    trigger, which enqueues every playable chunk older than the parent that
    lacks embeddings (`nexus/jobs/embeddings.py`). Embedding therefore trails
@@ -297,9 +297,9 @@ through `nexus models verify` and the doctor's `models.artifacts` check.
 A gateway started with `NEXUS_SLOT` runs one `SlotScheduler`
 (`nexus/jobs/scheduler.py`) for that slot. It holds the durable
 `deferred_work_scheduler` lease, observes locked slots without draining them,
-and before every job and provider call waits until no generation lease is
-live, so background inference never competes with a turn. Each pass drains, in
-order:
+and before every job and provider call waits until no generation lease is live.
+The wait gates dispatch only: a background request already dispatched when a
+turn starts can still be in flight during the turn. Each pass drains, in order:
 
 1. Orrery promotion (`promote_pending_resolutions_sync` in
    `nexus/agents/orrery/worker.py`), by the deterministic thresholds in

@@ -155,7 +155,7 @@ UI clauses cite the handler or render condition, never a doc comment.
 | 83-86 | A numbered `choice`, or `accept_fate` (the first presented choice), resolves to that choice's full text, which the chunk records and generation receives. | `nexus/api/choice_handling.py:262-279` (choice), `:280-286` (`accept_fate` takes choice 1); `nexus/api/narrative.py:589-597` (persisted), `:1036-1040` (passed to generation) | true |
 | 86-89 | A `choice` sent with different `user_text` records and generates from that edited text, and its `choice_object` keeps the number with `"edited": true`. | `nexus/api/choice_handling.py:264-273` | true |
 | 89 | Unchanged text resolves as the bare choice. | `nexus/api/choice_handling.py:274-278` | true |
-| 89-90 | Freeform `user_text` is recorded as written. | `nexus/api/choice_handling.py:288-299` (the trimmed text becomes `choice_text`) | true |
+| 89-90 → 112-113 | Freeform `user_text` is recorded as written. Now: recorded verbatim after surrounding whitespace is stripped. | `nexus/api/choice_handling.py:260` (`text = (user_text or "").strip()`), `:288-298` (the stripped text becomes `choice_text` at `:291`); `nexus/api/narrative.py:589-597` (persisted); `resolve_choice_response(None, user_text="  I wait.\n")` returns `'I wait.'` | corrected |
 | 91-92 | Step 5 binds the session to its parent chunk and claims the parent's embedding trigger. | `nexus/api/narrative.py:1011-1016`, `:654-677`; `nexus/api/narrative_lease.py:357` `claim_parent_embedding` | true |
 | 92-93 | The claim enqueues every playable chunk older than the parent that lacks embeddings (`embeddings.py`). | `nexus/api/narrative_lease.py:399`; `nexus/jobs/embeddings.py:50-59` (`nc.id < parent`, `embedding_generated_at IS NULL`, playable predicate) | true |
 | 93-94 | Embedding therefore trails acceptance by one turn. | Follows from the predicate at `nexus/jobs/embeddings.py:55` (the parent itself waits for the next turn's claim) | true |
@@ -309,7 +309,7 @@ inversion was inside step 1, corrected above.
 | 275-276 | It holds the durable `deferred_work_scheduler` lease. | `nexus/jobs/scheduler.py:152-185` | true |
 | 276 | It observes locked slots without draining them. | `nexus/jobs/scheduler.py:111-150`, `:154` (a locked slot is never acquired) | true |
 | 277-278 | Before every job and provider call it waits until no generation lease is live. | `nexus/jobs/scheduler.py:294-341` (`checkpoint`), `:497-499` (installed as the provider gate); `nexus/jobs/gate.py:43-47` (`before_provider_call`) | true |
-| 278 | So background inference never competes with a turn. | `nexus/jobs/scheduler.py:294-341` (`checkpoint` waits while a generation lease is live), `:497-499` (installed as the provider gate); `nexus/jobs/gate.py:43-47` (`before_provider_call`) | true |
+| 278 → 301-302 | So background inference never competes with a turn. Now: the wait gates dispatch only; a background request already dispatched when a turn starts can still be in flight during the turn. | `nexus/jobs/scheduler.py:329-335` (`checkpoint` returns as soon as no generation lease is live, and the provider request it gates runs after it returns), `:497-499` (installed as the provider gate); `nexus/jobs/gate.py:43-47` (`before_provider_call`); `nexus/api/narrative_lease.py:158` (`acquire_generation_lease`), `:187-274` (takes the lease without waiting for background inference) | corrected |
 | 278-279 | Each pass drains, in order, the seven lanes below. | `nexus/jobs/scheduler.py:480-626` | true |
 | 281-283 | 1. Orrery promotion (`promote_pending_resolutions_sync` in `worker.py`), by the deterministic thresholds in `[orrery.promote]`. | `nexus/jobs/scheduler.py:502`; `nexus/agents/orrery/worker.py:178`, `:223`, `:795`; `nexus.toml:696` | true |
 | 284-285 | 2. The narration outbox records deterministic perceptual descriptors without a provider call. | `nexus/jobs/scheduler.py:510`; `nexus/agents/orrery/worker.py:236`, `:348` | true |
@@ -357,8 +357,8 @@ drains leaves out no drain and puts none out of order. No clause was added.
 
 ### Verdict Counts
 
-171 rows: 167 `true` (4 of them convention, locator or reference rows), 4
-`corrected` (four corrections, one row each), 0 `cut`.
+171 rows: 165 `true` (4 of them convention, locator or reference rows), 6
+`corrected` (six corrections, one row each), 0 `cut`.
 
 ## Corrections (Item 3)
 
@@ -411,9 +411,32 @@ drains leaves out no drain and puts none out of order. No clause was added.
    `nexus.toml:1074`) and the cross-encoder rerank (`memnon.py:1620`) that the
    Deep Retrieval section describes. The paragraph's last five lines were
    rewrapped; the body keeps its line count.
+5. **Section 8, lines 277-279 (now 300-302).** Before: "... waits until no
+   generation lease is live, so background inference never competes with a
+   turn." After: "... waits until no generation lease is live. The wait gates
+   dispatch only: a background request already dispatched when a turn starts
+   can still be in flight during the turn." Only the "so ..." clause changes
+   (row 278); the wait itself stays true (row 277-278). `checkpoint` returns
+   as soon as no generation lease is live (`nexus/jobs/scheduler.py:329-335`),
+   and the provider request it gates runs after it returns; nothing stops a
+   request already sent. A turn takes the generation lease without waiting for
+   background inference (`nexus/api/narrative_lease.py:158`
+   `acquire_generation_lease`, `:187-274`), so a player can start a turn while
+   an already-dispatched summary request is still active. The sentence's last
+   three lines were rewrapped; the body keeps its line count.
+6. **Section 2, step 4, lines 89-90 (now 112-113).** Before: "Freeform
+   `user_text` is recorded as written." After: "Freeform `user_text` is
+   recorded verbatim after surrounding whitespace is stripped."
+   `resolve_choice_response` strips the text (`nexus/api/choice_handling.py:260`)
+   before it becomes `choice_text` (`:291`), which `nexus/api/narrative.py:589-597`
+   persists. Calling the real function with `user_text="  I wait.\n"` and no
+   choice returns `choice_text == 'I wait.'`.
 
 No clause was cut and none was added. Every heading and `status: canonical`
-are unchanged.
+are unchanged. The boot-check line that begins "marked
+`NEXUS_TEST_PROVIDER_ONLY=1` skips this boot check" (line 271 at `M`, now 294)
+is 81 columns wide; it was already that wide on `main` at `M`, and this branch
+leaves it untouched.
 
 ## Sources (Item 4)
 
