@@ -8,6 +8,7 @@ import { FontProvider, KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { secretsQueryKey } from "@/hooks/useSecrets";
 import { PREFERENCES_QUERY_KEY, SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
+import { HEALTH_QUERY_KEY } from "@/hooks/usePlane";
 import type { SettingsPayload } from "@/types/settings";
 import SplashPage from "../SplashPage";
 
@@ -49,6 +50,8 @@ function renderHome() {
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], SETTINGS);
+  // The Settings pane reads the serving plane from GET /health (824-S1); Home is the operator plane here.
+  queryClient.setQueryData(HEALTH_QUERY_KEY, { status: "healthy", service: "narrative_api", plane: "operator" });
   queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
     theme: "veil", fonts: KEEPERS, wizard_model: "TEST",
   });
