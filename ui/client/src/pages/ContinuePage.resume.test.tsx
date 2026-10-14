@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import ContinuePage from "./ContinuePage";
 import { useSplashNavigation } from "./splash/shared";
 
-vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({}) }));
+vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ saveError: null }) }));
 vi.mock("@/components/ThemeMenu", () => ({ ThemeMenu: () => null }));
 vi.mock("@/components/ai", () => ({
   Conversation: ({ children }: any) => <div>{children}</div>,

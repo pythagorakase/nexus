@@ -9,7 +9,7 @@ vi.mock("./SlotSelector", () => ({
         })}>Resume saved wizard</button>
     ),
 }));
-vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({}) }));
+vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ saveError: null }) }));
 vi.mock("@/components/ThemeMenu", () => ({ ThemeMenu: () => null }));
 vi.mock("@/components/ai", () => ({
     Conversation: ({ children }: any) => <div>{children}</div>,
