@@ -45,6 +45,30 @@ def _require_fixture_base_timestamp(cache: dict) -> str:
     return base_timestamp
 
 
+def _require_fixture_place_point(location: dict) -> tuple[float, float]:
+    """Return the initial location's (longitude, latitude) or fail loudly.
+
+    Migration 149 refuses a place without a point, so the seeded place takes
+    the real-Earth point the wizard fixture authored for it, as the production
+    writer (``new_story_db_mapper``) takes the place draft's point.
+    """
+    latitude = location.get("latitude")
+    longitude = location.get("longitude")
+    if not isinstance(latitude, (int, float)) or not isinstance(
+        longitude, (int, float)
+    ):
+        raise ValueError(
+            "Wizard TEST fixture initial_location is missing its required "
+            "numeric latitude and longitude"
+        )
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        raise ValueError(
+            "Wizard TEST fixture initial_location point is off the Earth: "
+            f"latitude {latitude}, longitude {longitude}"
+        )
+    return float(longitude), float(latitude)
+
+
 def load_wizard_cache() -> dict:
     """Load and parse the wizard test cache."""
     raw = json.loads(CACHE_FILE.read_text())
@@ -227,6 +251,7 @@ def populate_post_transition_data(conn, cache: dict):
     layer = cache.get("layer_draft", {})
     zone = cache.get("zone_draft", {})
     location = cache.get("initial_location", {})
+    place_longitude, place_latitude = _require_fixture_place_point(location)
 
     concept = character.get("concept", {})
 
@@ -282,11 +307,15 @@ def populate_post_transition_data(conn, cache: dict):
         )
 
         # Insert place (type is required, FK column is 'zone' not 'zone_id')
-        # Tram car is a 'vehicle' type
+        # Tram car is a 'vehicle' type. Its point is the fixture's authored
+        # latitude/longitude, written in the production PointZM shape.
         cur.execute(
             """
-            INSERT INTO places (id, name, type, summary, zone, extra_data)
-            VALUES (1, %s, 'vehicle'::place_type, %s, 1, %s)
+            INSERT INTO places (id, name, type, summary, zone, extra_data, coordinates)
+            VALUES (
+                1, %s, 'vehicle'::place_type, %s, 1, %s,
+                ST_SetSRID(ST_MakePoint(%s, %s, 0, 0), 4326)::geography
+            )
         """,
             (
                 location.get("name", "Spine-9 Rootline Tram 3B"),
@@ -299,6 +328,8 @@ def populate_post_transition_data(conn, cache: dict):
                         "approximate_area": zone.get("approximate_area"),
                     }
                 ),
+                place_longitude,
+                place_latitude,
             ),
         )
 
