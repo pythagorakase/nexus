@@ -164,6 +164,16 @@ RELATIONSHIP_KEY_COLUMNS: dict[str, tuple[str, ...]] = {
     "faction_relationships": ("faction1_id", "faction2_id"),
 }
 
+RELATIONSHIP_ENTITY_ID_COLUMNS: dict[str, frozenset[str]] = {
+    "character_relationships": frozenset(
+        {"character1_entity_id", "character2_entity_id"}
+    ),
+    "faction_relationships": frozenset({"faction1_entity_id", "faction2_entity_id"}),
+    "faction_character_relationships": frozenset(
+        {"faction_entity_id", "character_entity_id"}
+    ),
+}
+
 # Wall-clock columns the DB stamps with now() at write time; excluded from
 # verify comparison because replay cannot reproduce them by design.
 VOLATILE_COLUMNS: dict[str, frozenset[str]] = {
@@ -3413,6 +3423,13 @@ def _diff_section(
             ):
                 # Old checkpoint documents never recorded canonical names.
                 # Missing is unknown, not a historical NULL or current name.
+                skipped += 1
+                continue
+            if column in RELATIONSHIP_ENTITY_ID_COLUMNS.get(section, frozenset()) and (
+                column not in exp_row or column not in act_row
+            ):
+                # Checkpoint documents captured before migration 151 lack the
+                # entity-id columns; missing is unknown, not NULL.
                 skipped += 1
                 continue
             if (section, str(key), column) in unreproducible:
