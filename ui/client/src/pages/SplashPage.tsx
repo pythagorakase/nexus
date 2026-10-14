@@ -8,10 +8,19 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { GildedSplash } from './splash/GildedSplash';
 import { VectorSplash } from './splash/VectorSplash';
 import { VeilSplash } from './splash/VeilSplash';
+import { SplashThemeMenu } from './splash/shared';
 
 export default function SplashPage() {
   const { isVector, isVeil } = useTheme();
-  return isVeil ? <VeilSplash />
-       : isVector ? <VectorSplash />
-       : <GildedSplash />;
+  // One theme menu outside the variant swap: a pick switches the variant
+  // optimistically and a rejected save switches it back, and a menu inside
+  // the variant would remount and lose the rejection it should show.
+  // It comes first so it stays the first stop in the tab order, as it was
+  // inside each variant; its z-index keeps it painted above the variant.
+  return (
+    <>
+      <SplashThemeMenu />
+      {isVeil ? <VeilSplash /> : isVector ? <VectorSplash /> : <GildedSplash />}
+    </>
+  );
 }
