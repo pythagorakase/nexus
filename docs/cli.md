@@ -74,14 +74,14 @@ these tables by `scripts/render_cli_reference.py`;
 
 Expected failures are reported through these codes. A missing or invalid
 active `nexus.toml`, or a `NEXUS_API_URL` without a host, is a `config_error`
-checked for every command but `doctor` and `receipts` before it runs. A
+checked for every command but `doctor`, `init` and `receipts` before it runs. A
 `NEXUS_API_URL` that is not `http://` or `https://`, and a runtime credential
 that is missing or refused, are a `config_error` when the first request is
 sent. Every HTTP
 command reports these, and an API that refuses or drops the connection or
 does not answer in time (exit 4), the same way.
 
-The play and slot commands (`load`, `continue`, `retry`, `undo`,
+The play and slot commands (`load`, `continue`, `retry`, `accept`, `undo`,
 `regenerate`, `clear`, `lock`, `unlock`, `model --set`/`--clear`) and every
 `inspect` verb classify the API's answers the same way:
 
@@ -131,10 +131,10 @@ failure. A traceback means a programming fault.
 `[runtime.cli].request_timeout_seconds` bounds each short request of `load`,
 `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, and
 `model --set`/`--clear`. `[runtime.cli].turn_request_timeout_seconds` bounds
-each model-turn request: wizard chat, trait toggles, phase introductions, and
-the POSTs that schedule `continue`, `retry`, `regenerate`, and the seed's
-opening turn. The wizard's transition to narrative takes
-`[orrery.retrograde.wizard].transition_timeout_seconds`. Waiting on a
+each model-turn request: wizard chat, trait toggles, phase introductions, the
+POSTs that schedule `continue`, `retry`, `regenerate`, and the seed's opening
+turn, and the commit POST of `accept`. The wizard's transition to narrative
+takes `[orrery.retrograde.wizard].transition_timeout_seconds`. Waiting on a
 generation session is described in Waiting on a Generation below.
 
 ### Transports
@@ -143,25 +143,30 @@ Each command declares the most privileged resource its handler opens; the
 [Transports](cli_reference.md#transports) table of the generated reference
 lists each transport and its commands.
 
-The runtime is remote when the active `nexus.toml` sets `[runtime] profile =
-"remote"`, or when `NEXUS_API_URL` names a host other than `localhost` or a
-loopback address. A remote runtime refuses `database` and `local_operator`
-commands with exit 3 before any connection is opened. Two exceptions follow
-the remote profile itself: `up` and `status` probe the hosted runtime's
-`/runtime/status` over HTTP. The runtime commands that accept `--config`
-(`up`, `down`, `restart`, `status`, `logs`, `models lock`, `models verify`,
-`models plan`, `models fetch`)
-check the profile of that file. `doctor` is exempt from the refusal and from
-the configuration check below: it diagnoses this machine's configuration and
-role itself, so it runs under any profile, and an invalid `nexus.toml` is its
-`config.valid` finding rather than a `config_error`. `receipts` is exempt in
-the same way: it reads this machine's receipts when no configuration loads.
+The runtime is remote when the active `nexus.toml` sets
+`[runtime] profile = "remote"`, or when `NEXUS_API_URL` names a host other
+than `localhost` or a loopback address. A remote runtime refuses `database`,
+`local_operator` and `operator_api` commands with exit 3 before any connection
+is opened. Two exceptions follow the remote profile itself: `up` and `status`
+probe the hosted runtime's `/runtime/status` over HTTP. The runtime commands
+that accept `--config` (`up`, `down`, `restart`, `status`, `logs`,
+`models lock`, `models verify`, `models plan`, `models fetch`) check the
+profile of that file. `doctor` and `init` are exempt from the refusal and from
+the configuration check below: they diagnose this machine's configuration and
+role themselves, so they run under any profile, and an invalid `nexus.toml` is
+their `config.valid` finding rather than a `config_error`. `receipts` is
+exempt in the same way: it reads this machine's receipts when no configuration
+loads.
+
+`clear`, `lock`, `unlock` and `model --set`/`--clear` call operator routes over
+`http` and still run under a remote runtime; issue #824 decides their class
+when it splits the listeners.
 
 Only the host name decides: a LAN address, a Tailscale name, or `0.0.0.0`
-counts as remote even when it reaches this machine, so every `database` and
-`local_operator` command, `up`, `status` and `logs` included, is refused while
-`NEXUS_API_URL` names it. Point `NEXUS_API_URL` at `localhost` or `127.0.0.1`
-for this machine's runtime.
+counts as remote even when it reaches this machine, so every `database`,
+`local_operator` and `operator_api` command, `up`, `status` and `logs`
+included, is refused while `NEXUS_API_URL` names it. Point `NEXUS_API_URL` at
+`localhost` or `127.0.0.1` for this machine's runtime.
 
 ### JSON Failure Envelope
 
@@ -228,14 +233,16 @@ Every failed wait keeps the scheduled work in `partial`: `session_id`,
 Every command's arguments are in the generated [CLI reference](cli_reference.md).
 The sections below describe the commands that need more than their arguments.
 
-### `inspect` — Read Story Records as JSON
+### `inspect` — Read Story Records and Operator State as JSON
 
-Each verb reads GET routes that `nexus/api/route_capabilities.py` declares on
-the player plane and puts what they answer under `data`. Each record is the
+Each verb reads GET routes that `nexus/api/route_capabilities.py` declares
+and puts what they answer under `data`. Each record is the
 route's own payload, unchanged. `inspect chunks` lists those payloads oldest
 first, and `inspect incubator` reports the route's empty answer as `null`.
 Nothing is written. Each request's timeout is `[runtime.cli].inspect_timeout_seconds`.
-`--slot` is required.
+The story verbs read player-plane routes and require `--slot`. `inspect settings`
+and `inspect secrets` read operator-plane routes with the `operator_api`
+transport: a remote runtime refuses them before any request (exit 3).
 
 | Verb | Routes | `data` |
 | --- | --- | --- |
@@ -247,6 +254,8 @@ Nothing is written. Each request's timeout is `[runtime.cli].inspect_timeout_sec
 | `inspect characters [ID]` | `/api/characters` (with `startId`/`endId` for one) | The list, or the one character |
 | `inspect places [ID]` | `/api/places` | The list, or the one place |
 | `inspect factions [ID]` | `/api/factions` | The list, or the one faction |
+| `inspect settings` | `/api/settings` | The active `nexus.toml` by section, without its `secrets` section, plus `settings_meta` |
+| `inspect secrets [--slot N]` | `/api/secrets/status` (with `slot` when given) | Each keyed provider's status: `present`, the key's last four characters (`last4`), and the seats that require it. The key itself is never served or printed |
 
 ```bash
 poetry run nexus inspect slot --slot 5 --json
@@ -256,6 +265,8 @@ poetry run nexus inspect chunk 45 --slot 5 --json
 poetry run nexus inspect incubator --slot 5 --json
 poetry run nexus inspect characters --slot 5 --json
 poetry run nexus inspect places 3 --slot 5 --json
+poetry run nexus inspect settings --json
+poetry run nexus inspect secrets --slot 5 --json
 ```
 
 `inspect chunks` takes `--last` or a `--from`/`--to` range, not both; a bad
@@ -267,8 +278,8 @@ list as one such block per record.
 
 The entity verbs print what `/api/characters`, `/api/places` and `/api/factions` serve, field for field. Those routes do not yet gate spoiler-bearing fields: a character's `personality`, `emotionalState`, `currentActivity`, `background` and `extraData`, and the `extraData` of places and factions, reach any player-plane caller. Gating belongs to the player DTOs of issue #769, at the serving boundary; the CLI adds no redaction of its own.
 
-Interactions, queues, settings, and secrets status have no inspect verb yet:
-they have no player-plane read route.
+Queues are read by `nexus jobs --slot N`, a `database` command. Interactions
+have no inspect verb; their inspection belongs to issue #787's gatherings.
 
 ### `tags audit` — Report Tags in Deprecated Categories
 
@@ -476,6 +487,17 @@ Clears wizard state and returns the slot to empty.
 
 ```bash
 poetry run nexus clear --slot 5
+```
+
+### `accept` — Commit the Pending Draft
+
+Commits the pending draft as the next chunk, without recording a choice on it;
+the next `continue` answers its choices. To discard a draft instead, use `undo`,
+which also clears the choice recorded on the draft's parent. A committed chunk
+cannot be undone. With no draft pending, `accept` fails with `api_error`.
+
+```bash
+poetry run nexus accept --slot 5
 ```
 
 ### `undo` — Revert Last Action

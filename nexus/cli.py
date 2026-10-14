@@ -26,6 +26,8 @@ Commands:
     nexus inspect slot --slot N  Read one slot's state as a JSON envelope
     nexus inspect chunks|chunk|incubator|characters|places|factions --slot N
                                  Read player-plane story records as JSON envelopes
+    nexus inspect settings|secrets
+                                 Read this machine's operator state as JSON envelopes
     nexus tags audit --slot N|--all  Report active tags in deprecated categories
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
@@ -1314,7 +1316,7 @@ def _request_timeout_seconds() -> float:
 
 
 def _turn_request_timeout_seconds() -> float:
-    """The per-request budget of a model-turn request (chat, scheduling POSTs)."""
+    """The per-request budget of a model-turn request (chat, scheduling, accept)."""
     return _runtime_cli_settings().turn_request_timeout_seconds
 
 
@@ -1460,7 +1462,7 @@ def _inspect_body(response: requests.Response) -> Any:
 
 
 def _inspect_read(path: str, *, params: Optional[Mapping[str, Any]] = None) -> Any:
-    """GET one player-plane route and return its JSON body unchanged."""
+    """GET one route and return its JSON body unchanged."""
     return _inspect_body(_inspect_response(path, params=params))
 
 
@@ -1618,6 +1620,65 @@ def _entity_family(route: str, label: str) -> Callable[[argparse.Namespace], Any
     return read
 
 
+def _inspect_settings(args: argparse.Namespace) -> Any:
+    """Read active settings without permitting a secrets section in the result."""
+    body = _inspect_read("/api/settings")
+    if not isinstance(body, dict):
+        raise InspectFailure(
+            "invalid_response", "GET /api/settings did not answer a JSON object"
+        )
+    if "secrets" in body:
+        raise InspectFailure(
+            "invalid_response", "GET /api/settings served a secrets section"
+        )
+    return body
+
+
+_SECRET_STATUS_KEYS = frozenset(
+    {"provider", "account", "present", "last4", "required", "required_by"}
+)
+
+
+def _inspect_secrets(args: argparse.Namespace) -> Any:
+    """Read masked status, rejecting unexpected fields without echoing values."""
+    params = {} if args.slot is None else {"slot": args.slot}
+    body = _inspect_read("/api/secrets/status", params=params)
+    if not isinstance(body, list):
+        raise InspectFailure(
+            "invalid_response", "GET /api/secrets/status did not answer a JSON list"
+        )
+    for i, record in enumerate(body):
+        if not isinstance(record, dict) or set(record) != _SECRET_STATUS_KEYS:
+            raise InspectFailure(
+                "invalid_response",
+                f"GET /api/secrets/status record {i} does not have exactly the fields "
+                f"{sorted(_SECRET_STATUS_KEYS)}",
+            )
+        if not isinstance(record["present"], bool):
+            raise InspectFailure(
+                "invalid_response",
+                f"GET /api/secrets/status record {i} has a non-boolean present",
+            )
+        last4 = record["last4"]
+        if last4 is not None and not (isinstance(last4, str) and len(last4) <= 4):
+            raise InspectFailure(
+                "invalid_response",
+                f"GET /api/secrets/status record {i} carries more than the last four "
+                "characters of a key",
+            )
+        required_by = record["required_by"]
+        if not isinstance(required_by, list) or any(
+            not isinstance(item, dict) or set(item) != {"seat", "model"}
+            for item in required_by
+        ):
+            raise InspectFailure(
+                "invalid_response",
+                f"GET /api/secrets/status record {i} has a required_by entry without "
+                "exactly the fields ['model', 'seat']",
+            )
+    return body
+
+
 _INSPECT_READERS: Mapping[str, Callable[[argparse.Namespace], Any]] = {
     "slot": _inspect_slot,
     "chunks": _inspect_chunks,
@@ -1626,6 +1687,8 @@ _INSPECT_READERS: Mapping[str, Callable[[argparse.Namespace], Any]] = {
     "characters": _entity_family("/api/characters", "character"),
     "places": _entity_family("/api/places", "place"),
     "factions": _entity_family("/api/factions", "faction"),
+    "settings": _inspect_settings,
+    "secrets": _inspect_secrets,
 }
 
 # What human output prints for an explicitly empty read.
@@ -1635,14 +1698,16 @@ _INSPECT_EMPTY: Mapping[str, str] = {
     "characters": "No characters.",
     "places": "No places.",
     "factions": "No factions.",
+    "secrets": "No keyed providers.",
 }
 
 
 def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
-    """Run one read-only ``nexus inspect`` command over the player-plane API.
+    """Run one read-only ``nexus inspect`` command over the API.
 
-    Each verb reads GET routes nexus/api/route_capabilities.py declares on the
-    player plane and puts what they answer under ``data``: each record is the
+    Story verbs read player-plane GET routes; ``settings`` and ``secrets`` read
+    operator-plane GET routes, which nexus.cli_contract refuses under a remote
+    runtime. Each verb puts what they answer under ``data``: each record is the
     route's own payload, unchanged. ``inspect chunks`` lists those payloads
     oldest first, and ``inspect incubator`` reports the route's empty answer
     as ``None`` (JSON ``null``). Nothing is written. A request that cannot
@@ -1654,10 +1719,12 @@ def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
         raise ValueError(f"Unknown inspect command: {args.inspect_command!r}")
     try:
         data = reader(args)
-    except InspectFailure as failure:
+    except (
+        InspectFailure
+    ) as failure:  # nexus-exception-disposition: fail; reason=read; safety=exit 1
         result: Dict[str, Any] = {
             "success": False,
-            "slot": args.slot,
+            "slot": getattr(args, "slot", None),
             "code": failure.code,
             "error": failure.message,
         }
@@ -2931,6 +2998,44 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     # Narrative mode - call continue directly
     # (Also reached after wizard transition above)
     if not state.get("is_wizard_mode"):
+        if retrograde_info is None:
+            status_response = _api_get(
+                f"{get_api_url()}/api/story/new/retrograde/status",
+                params={"slot": args.slot},
+                timeout=_request_timeout_seconds(),
+            )
+            status = _api_object(status_response)
+            _retrograde_status_stage(status)
+            if "run_status" not in status or status["run_status"] not in (
+                None,
+                "running",
+                "failed",
+                "done",
+            ):
+                raise ValueError(f"Unrecognized genesis run_status: {status!r}")
+            if status["run_status"] in {"running", "failed"}:
+                transition_url = f"{get_api_url()}/api/story/new/transition"
+                with _echo_retrograde_stages(args.slot, enabled=not args.json):
+                    transition_response = _api_post(
+                        transition_url,
+                        json={"slot": args.slot},
+                        timeout=_transition_timeout_seconds(),
+                    )
+                if not 200 <= transition_response.status_code < 300:
+                    return {
+                        "success": False,
+                        "code": _answer_failure_code(transition_response),
+                        "error": f"Transition failed: {transition_response.text}",
+                    }
+                retrograde_info = _api_object(transition_response).get("retrograde")
+                state_response = _api_get(state_url, timeout=_request_timeout_seconds())
+                state = _api_object(state_response)
+                if state.get("is_wizard_mode"):
+                    return {
+                        "success": False,
+                        "error": "Transition completed but still in wizard mode",
+                    }
+
         # Narrative mode - call continue directly
         # The API already resolves the persisted slot model. Sending a
         # model is an explicit override and must remain opt-in.
@@ -3018,6 +3123,38 @@ def run_retry(args: argparse.Namespace) -> Dict[str, Any]:
             "invalid_response", f"{retry_url} returned no session ID"
         )
     return _wait_for_narrative_result(args.slot, session_id)
+
+
+def run_accept(args: argparse.Namespace) -> Dict[str, Any]:
+    """Commit the pending draft through POST /api/narrative/approve.
+
+    The draft becomes the next chunk without a recorded choice, so the next
+    ``continue`` answers it. Discarding a draft is ``undo``.
+    """
+    url = f"{get_api_url()}/api/narrative/approve"
+    response = _api_post(
+        url,
+        json={"slot": args.slot, "commit": True},
+        timeout=_turn_request_timeout_seconds(),
+    )
+    data = _api_object(response)
+    chunk_id = data.get("chunk_id")
+    if (
+        data.get("status") != "committed"
+        or not isinstance(chunk_id, int)
+        or isinstance(chunk_id, bool)
+    ):
+        raise ApiAnswerFailure(
+            "invalid_response", f"{url} returned no committed chunk ID"
+        )
+    result = {
+        "success": True,
+        "message": f"Slot {args.slot}: committed chunk {chunk_id}",
+        "chunk_id": chunk_id,
+    }
+    if data.get("warnings"):
+        result["warnings"] = data["warnings"]
+    return result
 
 
 def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
@@ -4504,6 +4641,21 @@ def run_doctor(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+def run_init(args: argparse.Namespace) -> int:
+    """Print ordered owner-host setup steps without applying them."""
+    from nexus.runtime.init_plan import build_init_plan, render_plan
+    from nexus.runtime.readiness import ReadinessContext
+
+    config = Path(args.config) if args.config else None
+    plan = build_init_plan(ReadinessContext(config_path=config))
+    if args.json:
+        print(json.dumps(plan.model_dump(mode="json"), indent=2, sort_keys=True))
+    else:
+        for line in render_plan(plan):
+            print(line)
+    return 0 if plan.ok else 1
+
+
 def _receipt_detail_text(details: Mapping[str, Any]) -> str:
     """One line of ``key=value`` pairs; structured values as compact JSON."""
     return " ".join(
@@ -5154,12 +5306,14 @@ Examples:
   nexus inspect incubator --slot 5  The pending draft, or null
   nexus inspect characters --slot 5  Characters (also places, factions)
   nexus inspect characters 3 --slot 5  One character by id
+  nexus inspect secrets --json   Masked API key status (this machine only)
   nexus tags audit --all --json   Active tags in deprecated categories
   nexus continue --slot 5       Advance the story
   nexus continue --slot 5 --choice 1   Select choice #1
   nexus continue --slot 5 --user-text "I approach carefully"
   nexus continue --slot 5 --accept-fate   Auto-advance
   nexus undo --slot 5           Revert last action
+  nexus accept --slot 5         Commit the pending draft
   nexus model --slot 5          Show current model
   nexus model --slot 5 --set TEST   Change to TEST model
   nexus model --list            List available models
@@ -5289,6 +5443,20 @@ Examples:
     )
     _add_config_arg(doctor_parser)
 
+    init_parser = subparsers.add_parser(
+        "init", help="Plan this machine's setup as an owner host (read-only)"
+    )
+    init_parser.add_argument(
+        "--plan",
+        action="store_true",
+        required=True,
+        help=(
+            "Print the ordered steps the failed owner-host checks name; "
+            "applies no setup changes"
+        ),
+    )
+    _add_config_arg(init_parser)
+
     usage_parser = subparsers.add_parser(
         "usage",
         help="Show exact provider-reported API token usage",
@@ -5413,6 +5581,27 @@ Examples:
             "entity_id", type=int, nargs="?", help=f"One {family[:-1]}'s id"
         )
 
+    inspect_settings_parser = inspect_verbs.add_parser(
+        "settings",
+        help="Read the active settings through GET /api/settings (this machine only)",
+        allow_abbrev=False,
+    )
+    _add_global_output_args(inspect_settings_parser)
+    inspect_secrets_parser = inspect_verbs.add_parser(
+        "secrets",
+        help=(
+            "Read masked API key status through GET /api/secrets/status "
+            "(this machine only)"
+        ),
+        allow_abbrev=False,
+    )
+    _add_global_output_args(inspect_secrets_parser)
+    inspect_secrets_parser.add_argument(
+        "--slot",
+        type=int,
+        help="Resolve required keys against this slot's story pins (1-5)",
+    )
+
     # tags family (issue #811): read-only audits of the tag vocabulary.
     tags_family = subparsers.add_parser(
         "tags", help="Read-only audits of the Orrery tag vocabulary"
@@ -5488,6 +5677,12 @@ Examples:
         "retry", help="Retry the failed continuation of the recorded action"
     )
     retry_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+
+    # accept command
+    accept_parser = subparsers.add_parser("accept", help="Commit the pending draft")
+    accept_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
 
@@ -6005,6 +6200,7 @@ _SLOT_COMMANDS = frozenset(
         "load",
         "continue",
         "retry",
+        "accept",
         "undo",
         "regenerate",
         "clear",
@@ -6031,6 +6227,7 @@ _SLOT_COMMANDS = frozenset(
         "inspect characters",
         "inspect places",
         "inspect factions",
+        "inspect secrets",
         "tags audit",
         "model",
         "retrograde-seed-candidates",
@@ -6143,6 +6340,8 @@ def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
         result = run_home(args)
     elif args.command == "doctor":
         return run_doctor(args)
+    elif args.command == "init":
+        return run_init(args)
     elif args.command == "receipts":
         return run_receipts(args)
     elif args.command == "usage":
@@ -6178,6 +6377,8 @@ def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
         result = run_continue(args)
     elif args.command == "retry":
         result = run_retry(args)
+    elif args.command == "accept":
+        result = run_accept(args)
     elif args.command == "undo":
         result = run_undo(args)
     elif args.command == "regenerate":
@@ -6239,7 +6440,7 @@ def main() -> int:
     if usage_error is not None:
         return _fail(args, "usage_error", usage_error)
 
-    # A self-diagnostic command (doctor, receipts) reports on the
+    # A self-diagnostic command (doctor, init, receipts) reports on the
     # configuration and this machine itself, so neither check below may
     # pre-empt its report.
     if command not in SELF_DIAGNOSTIC_COMMANDS:
