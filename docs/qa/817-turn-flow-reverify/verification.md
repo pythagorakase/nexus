@@ -583,3 +583,58 @@ Every clause is true at `M`. `AGENTS.md`'s `verified_commit` moves from
 `f073b3711a3bd0273943c9defad85913452fd00b` to
 `a01c162f1e4daaf5009a9bba7397ae4065a8614b`; no other line of `AGENTS.md`
 changes.
+
+## Second Range (Item 7)
+
+Before pushing, `git fetch origin` left `origin/main` at `a01c162f`, the
+merge base already used above, so there was no second range, no merge and no
+conflicted clause.
+
+## Gate Tails
+
+All at `40e7ed6f` with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT`
+unset; every command prefixed `nice -n 15`. The one-minute load read 4.5 before
+the PostgreSQL run.
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+66 passed, 5 warnings in 5.79s
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_doc_front_matter.py tests/test_owner_target_guard.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+147 passed in 8.71s
+
+$ PYTHONPATH=$PWD $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3196 passed, 678 skipped, 8 warnings in 622.11s (0:10:22)
+
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1910 passed, 1532 skipped, 7 warnings in 45.88s
+
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+54 passed, 5 warnings in 10.94s
+
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+
+$ git diff --name-only origin/main...HEAD
+AGENTS.md
+docs/qa/817-turn-flow-reverify/verification.md
+docs/turn_flow_sequence.md
+```
+
+The offline pieces skip their PostgreSQL tests by design (no
+`NEXUS_RUN_POSTGRES`). Black, flake8 and mypy were not run: this branch
+changes no Python file.
