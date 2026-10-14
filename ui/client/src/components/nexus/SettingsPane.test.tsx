@@ -86,7 +86,7 @@ function renderPane(
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
     theme: settings.ui?.theme ?? "veil", fonts: settings.ui?.fonts ?? KEEPERS,
-    wizard_model: settings.wizard?.default_model ?? "TEST",
+    wizard_model: "TEST",
   });
   queryClient.setQueryData(["/api/slot/4/settings"], {
     skald_model: settings.apex?.model ?? null, gaia_model: settings.apex?.gaia_model ?? null,
@@ -540,10 +540,8 @@ describe("SettingsPane model IDs", () => {
     ...SETTINGS,
     apex: {
       model: "frontier-2.1",
-      provider: "openai",
       gaia_model: "vendor/model-next",
     },
-    wizard: { default_model: "frontier-2.1" },
     settings_meta: {
       ...SETTINGS.settings_meta!,
       models: [
@@ -561,10 +559,10 @@ describe("SettingsPane model IDs", () => {
   });
 
   it("projects player preferences without changing story defaults", () => {
-    const patched = applySettingsPatch(settings, { theme: "vector", wizard_model: "vendor/model-next" });
+    const patched = applySettingsPatch(settings, { theme: "vector" });
     expect(patched.apex).toEqual(settings.apex);
     expect(patched.ui?.theme).toBe("vector");
-    expect(patched.wizard?.default_model).toBe("vendor/model-next");
+    expect(patched).not.toHaveProperty("wizard");
   });
 
   it("shows both assignments and switches which model is selected", () => {

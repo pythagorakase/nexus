@@ -8,6 +8,7 @@ mock TEST server must never be selected implicitly.
 """
 
 from contextlib import closing
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -15,14 +16,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+import tomlkit
 
 from nexus.api import new_story_flow, setup_endpoints
 from nexus.api.config_utils import get_new_story_model
 from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import read_cache_raw
 from nexus.api.narrative_schemas import ChatRequest, StartSetupRequest
-from nexus.api.new_story_flow import resolve_setup_model
 from nexus.api.wizard_chat import resolve_wizard_model, wizard_model_lock_candidate
+from nexus.config.preferences import save_preferences
+from nexus.config.story_model import read_story_settings
 from tests.pg_fixtures import connect
 
 
@@ -50,46 +53,6 @@ def test_chat_request_accepts_explicit_test_model() -> None:
 def test_start_setup_request_model_defaults_to_none() -> None:
     request = StartSetupRequest(slot=5)
     assert request.model is None
-
-
-def test_setup_model_preserves_operator_slot_model() -> None:
-    assert (
-        resolve_setup_model(
-            "operator-model",
-            setup_started=False,
-            default_slot_model="fresh-placeholder",
-            wizard_default_model="wizard-default",
-        )
-        == "operator-model"
-    )
-
-
-def test_setup_model_preserves_default_named_model_after_setup_started() -> None:
-    """A prior wizard row disambiguates an intentional TEST model stamp."""
-    assert (
-        resolve_setup_model(
-            "TEST",
-            setup_started=True,
-            default_slot_model="TEST",
-            wizard_default_model="wizard-default",
-        )
-        == "TEST"
-    )
-
-
-@pytest.mark.parametrize("slot_model", [None, "", "fresh-placeholder"])
-def test_setup_model_uses_wizard_default_only_for_fresh_slot(
-    slot_model: str | None,
-) -> None:
-    assert (
-        resolve_setup_model(
-            slot_model,
-            setup_started=False,
-            default_slot_model="fresh-placeholder",
-            wizard_default_model="wizard-default",
-        )
-        == "wizard-default"
-    )
 
 
 @pytest.mark.requires_postgres
@@ -135,6 +98,36 @@ def test_setup_endpoint_passes_omitted_model_to_core(
     ) == [
         {"role": "assistant", "content": result["welcome_message"], "phase": "setting"}
     ]
+
+
+@pytest.mark.requires_postgres
+def test_start_setup_keeps_every_non_null_slot_pin(
+    offline_gate_db: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-NULL slot model is a pin, even when it names the TEST model.
+
+    The fixture pins the clone to TEST and leaves no wizard cache; the player
+    preference names a second test-provider entry, which must not win.
+    """
+    config = tmp_path / "nexus.toml"
+    doc: Any = tomlkit.parse(Path("nexus.toml").read_text())
+    doc["runtime"]["state_dir"] = str(tmp_path / "player-state")
+    models = doc["global"]["model"]["api_models"]["test"]["models"]
+    second = tomlkit.inline_table()
+    for key, value in models[0].items():
+        if key != "uses":
+            second[key] = value
+    second["id"] = "TEST-B"
+    second["label"] = "TEST-B"
+    models.append(second)
+    config.write_text(tomlkit.dumps(doc))
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+    assert read_cache_raw(offline_gate_db) is None
+
+    save_preferences({"wizard_model": "TEST-B"})
+    new_story_flow.start_setup(4)
+
+    assert read_story_settings(offline_gate_db).skald_model == "TEST"
 
 
 def test_configured_wizard_default_is_not_the_mock() -> None:

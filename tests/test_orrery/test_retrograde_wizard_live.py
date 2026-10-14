@@ -227,8 +227,8 @@ def stage_fixture_world(dbname: str) -> Any:
     from nexus.api.save_slots import upsert_slot
     from nexus.api.wizard_test_cache import load_cache
 
-    # Fresh slots default to the mock TEST model (global.model.
-    # default_slot_model); a real wizard run overrides it in start_setup.
+    # A fresh slot stores no model pin (NULL); a real wizard run persists the
+    # resolved model in start_setup.
     # Mirror that here so the transition engages real Retrograde generation.
     upsert_slot(ROUTED_SLOT, model=_live_run_model(), dbname=dbname)
 

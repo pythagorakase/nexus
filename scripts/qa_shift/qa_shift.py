@@ -787,7 +787,6 @@ def _write_runtime_config(
                 f"Target model {config.target_model!r} is not registered in {source}"
             )
 
-        model["default_slot_model"] = config.target_model
         from nexus.config.settings_models import (
             MODEL_SELECTION_PATHS,
             materialize_model_selections,

@@ -42,7 +42,6 @@ import tomlkit
 from nexus.config import load_settings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime.supervisor import _pid_alive, _port_open
-from tests.model_registry_helpers import registry_model
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
@@ -170,8 +169,6 @@ def _write_config(
         ] = f"http://127.0.0.1:{mock_port}/v1"
     else:
         del doc["global"]["model"]["api_models"]["test"]
-        # default_slot_model = "TEST" would dangle without the registry entry
-        doc["global"]["model"]["default_slot_model"] = registry_model("openai")
     if external_gateway_url:
         doc["runtime"]["external"] = {"gateway_url": external_gateway_url}
     if remote_base_url:

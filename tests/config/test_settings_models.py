@@ -106,7 +106,6 @@ def test_model_config_rejects_unknown_default_model():
     with pytest.raises(ValidationError, match="default_model references unknown"):
         ModelConfig(
             default_model="missing-model",
-            default_slot_model="TEST",
             api_models={
                 "test": ProviderModels(
                     models=[APIModelEntry(id="TEST", label="TEST")],
@@ -470,11 +469,20 @@ def test_global_default_model_unknown_role_rejected():
         Settings(**raw)
 
 
-def test_global_default_slot_model_unknown_role_rejected():
-    """An unknown role in the slot default fails Settings validation too."""
+def test_retired_default_slot_model_is_rejected():
+    """The retired slot default fails as an explicit key and as a roster use."""
     raw = _nexus_toml_dict()
-    raw["global"]["model"]["default_slot_model"] = "@test.nonexistent_role"
-    with pytest.raises(ValidationError, match="references unknown model id"):
+    raw["global"]["model"]["default_slot_model"] = "TEST"
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        Settings(**raw)
+
+    with open("nexus.toml", "rb") as handle:
+        raw = tomllib.load(handle)
+    test_entry = raw["global"]["model"]["api_models"]["test"]["models"][0]
+    test_entry["uses"] = ["global.model.default_slot_model"]
+    with pytest.raises(
+        ValidationError, match="Unknown model use 'global.model.default_slot_model'"
+    ):
         Settings(**raw)
 
 
@@ -492,15 +500,6 @@ def test_llama_server_port_drift_ignored_while_disabled():
     raw = _nexus_toml_dict()
     raw["runtime"]["services"]["llama_server"]["port"] = 1299  # enabled stays "never"
     Settings(**raw)
-
-
-def test_global_default_slot_model_accepts_registered_id():
-    """An explicit slot default must be a registered model ID."""
-    raw = _nexus_toml_dict()
-    raw["global"]["model"]["default_slot_model"] = "TEST"
-    settings = Settings(**raw)
-    test_default = "TEST"
-    assert settings.global_.model.default_slot_model == test_default
 
 
 def test_resolve_model_ref_validates_ids_and_rejects_aliases():
@@ -757,7 +756,6 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
     from nexus.config.loader import get_provider_for_model
 
     raw = _nexus_toml_dict()
-    raw["global"]["model"]["default_slot_model"] = "TEMPTEST"
     raw["global"]["model"]["api_models"]["test"]["models"][0]["id"] = "TEMPTEST"
     raw["global"]["model"]["api_models"]["test"][
         "base_url"

@@ -194,6 +194,9 @@ def test_wizard_records_player_model_in_slot(
     doc["runtime"]["state_dir"] = str(tmp_path / "player-state")
     config.write_text(tomlkit.dumps(doc))
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+    with connect(offline_gate_db) as conn, conn.cursor() as cur:
+        cur.execute("UPDATE global_variables SET model = NULL WHERE id = TRUE")
+    assert read_story_settings(offline_gate_db).skald_model is None
     save_preferences({"wizard_model": "TEST"})
     thread_id = new_story_flow.start_setup(4)
     assert thread_id

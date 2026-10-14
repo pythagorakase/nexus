@@ -32,7 +32,6 @@ NATIVE_API_PROVIDERS = frozenset({"openai", "anthropic"})
 MODEL_SELECTION_PATHS = frozenset(
     {
         "global.model.default_model",
-        "global.model.default_slot_model",
         "local_models.model",
         "apex.model",
         "apex.gaia_model",
@@ -343,9 +342,6 @@ class ModelConfig(BaseModel):
             "Inference callers must use their configured agent model fields."
         ),
     )
-    default_slot_model: str = Field(
-        default="TEST", description="Default model for newly created/reset slots"
-    )
     api_models: Dict[str, ProviderModels] = Field(
         default_factory=dict,
         description="API models grouped by provider (openai, anthropic, test)",
@@ -370,13 +366,11 @@ class ModelConfig(BaseModel):
             for provider in self.api_models.values()
             for entry in provider.models
         }
-        for field_name in ("default_model", "default_slot_model"):
-            model_id = getattr(self, field_name)
-            if model_id not in known_ids:
-                raise ValueError(
-                    f"{field_name} references unknown model id '{model_id}'. "
-                    f"Known IDs: {sorted(known_ids)}"
-                )
+        if self.default_model not in known_ids:
+            raise ValueError(
+                f"default_model references unknown model id '{self.default_model}'. "
+                f"Known IDs: {sorted(known_ids)}"
+            )
         return self
 
     @model_validator(mode="after")
@@ -4511,7 +4505,6 @@ class Settings(BaseModel):
         # value is None on an optional field, there is no model to validate.
         targets: List[Tuple[Any, str, bool]] = [
             (self.global_.model, "default_model", False),
-            (self.global_.model, "default_slot_model", False),
             (self.local_models, "model", True),
             (self.apex, "model", False),
             (self.apex, "gaia_model", True),
