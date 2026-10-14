@@ -8,9 +8,10 @@ import {
   LOCAL_MODELS_DOWNLOAD_KEY,
   LOCAL_MODELS_STATUS_KEY,
 } from "@/hooks/useLocalModels";
+import { HEALTH_QUERY_KEY, type Plane } from "@/hooks/usePlane";
 import { secretsQueryKey } from "@/hooks/useSecrets";
 import { applySettingsPatch, SETTINGS_QUERY_KEY, PREFERENCES_QUERY_KEY } from "@/hooks/useSettings";
-import { queryClient as settingsQueryClient } from "@/lib/queryClient";
+import { getQueryFn, queryClient as settingsQueryClient } from "@/lib/queryClient";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type { SecretStatus } from "@/types/secrets";
 import type { SettingsPayload } from "@/types/settings";
@@ -66,6 +67,13 @@ async function statusSettled(queryClient: QueryClient, calls: string[]) {
   });
 }
 
+/** Seed the serving plane the pane reads from GET /health. */
+function seedPlane(queryClient: QueryClient, plane: Plane = "operator") {
+  queryClient.setQueryData(HEALTH_QUERY_KEY, {
+    status: "healthy", service: "narrative_api", plane,
+  });
+}
+
 function renderPane(
   settings: SettingsPayload = SETTINGS,
   gateOpen: boolean = false,
@@ -74,10 +82,11 @@ function renderPane(
   }),
   statuses: SecretStatus[] | null = STATUSES,
 ) {
+  seedPlane(queryClient);
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
     theme: settings.ui?.theme ?? "veil", fonts: settings.ui?.fonts ?? KEEPERS,
-    wizard_model: settings.wizard?.default_model ?? "TEST",
+    wizard_model: "TEST",
   });
   queryClient.setQueryData(["/api/slot/4/settings"], {
     skald_model: settings.apex?.model ?? null, gaia_model: settings.apex?.gaia_model ?? null,
@@ -125,6 +134,52 @@ describe("SettingsPane developer mode", () => {
     expect(lever).toHaveAttribute("aria-checked", "true");
     expect(localStorage.getItem("nexus-developer-mode")).toBe("true");
     expect(screen.queryByText(/Exposes the story machinery/)).not.toBeInTheDocument();
+  });
+});
+
+describe("SettingsPane player plane", () => {
+  it("player plane shows only theme, typography and app icon", async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      if (String(input) === "/api/preferences") {
+        return new Response(
+          JSON.stringify({ theme: "veil", fonts: KEEPERS, wizard_model: "TEST" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { queryFn: getQueryFn({ on401: "throw" }), retry: false, staleTime: Infinity },
+      },
+    });
+    seedPlane(queryClient, "player");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <DeveloperModeProvider>
+            <FontProvider>
+              <SettingsPane slot={4} />
+            </FontProvider>
+          </DeveloperModeProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(calls).toContain("GET /api/preferences"));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    const pane = screen.getByTestId("settings-pane");
+    for (const id of ["theme", "type", "pwa"]) {
+      expect(pane.querySelector(`#set-${id}`)).not.toBeNull();
+    }
+    for (const id of ["model", "keys", "lore", "advanced"]) {
+      expect(pane.querySelector(`#set-${id}`)).toBeNull();
+    }
+    expect(calls.filter((call) =>
+      /\/api\/settings|\/api\/secrets\/status|\/api\/local-models\/|\/api\/slot\/4\/settings/.test(call),
+    )).toEqual([]);
   });
 });
 
@@ -414,6 +469,7 @@ describe("SettingsPane model card local provider", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
+    seedPlane(queryClient);
     queryClient.setQueryData([...SETTINGS_QUERY_KEY], {
       ...SETTINGS,
       local_models: { model: "nousresearch/hermes-4-70b" },
@@ -484,10 +540,8 @@ describe("SettingsPane model IDs", () => {
     ...SETTINGS,
     apex: {
       model: "frontier-2.1",
-      provider: "openai",
       gaia_model: "vendor/model-next",
     },
-    wizard: { default_model: "frontier-2.1" },
     settings_meta: {
       ...SETTINGS.settings_meta!,
       models: [
@@ -505,10 +559,10 @@ describe("SettingsPane model IDs", () => {
   });
 
   it("projects player preferences without changing story defaults", () => {
-    const patched = applySettingsPatch(settings, { theme: "vector", wizard_model: "vendor/model-next" });
+    const patched = applySettingsPatch(settings, { theme: "vector" });
     expect(patched.apex).toEqual(settings.apex);
     expect(patched.ui?.theme).toBe("vector");
-    expect(patched.wizard?.default_model).toBe("vendor/model-next");
+    expect(patched).not.toHaveProperty("wizard");
   });
 
   it("shows both assignments and switches which model is selected", () => {
@@ -750,6 +804,7 @@ describe("stale theme save errors from other theme switchers (#961 review)", () 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
+    seedPlane(queryClient);
     queryClient.setQueryData([...SETTINGS_QUERY_KEY], SETTINGS);
     queryClient.setQueryData([...PREFERENCES_QUERY_KEY], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
     queryClient.setQueryData(["/api/slot/4/settings"], { skald_model: null, gaia_model: null, apex_context_window: null });

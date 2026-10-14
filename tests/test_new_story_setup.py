@@ -36,8 +36,7 @@ import tomlkit
 
 from nexus.api import slot_utils
 from nexus.api.save_slots import is_slot_locked
-from scripts import migrate
-from scripts import new_story_setup
+from nexus.maintenance import migrate, new_story_setup
 from tests.pg_fixtures import (
     connect,
     disposable_database,
@@ -392,6 +391,22 @@ def test_template_clone_first_runner_pass_applies_nothing(
             dbname, source_db=template_source, force=True, migrations_dir=tree
         )
         assert _stamps(dbname) == template_stamps
+
+
+def test_fresh_slot_stores_no_model_pin(
+    monkeypatch: pytest.MonkeyPatch, template_source: str
+) -> None:
+    """A freshly initialized slot stores NULL in ``model``: no pin."""
+    monkeypatch.setattr(new_story_setup, "USE_POOL", False)
+    with disposable_database("qa640_809_fresh_pin") as dbname:
+        new_story_setup.initialize_slot_database(
+            dbname, source_db=template_source, force=True
+        )
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT model, new_story FROM public.global_variables WHERE id = TRUE"
+            )
+            assert cur.fetchone() == (None, True)
 
 
 def test_failing_migration_is_unapplied_and_initialization_raises(

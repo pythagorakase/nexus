@@ -53,9 +53,8 @@ def renamed_test_model_config(
     """Write the active configuration with the TEST provider's model renamed.
 
     The copy is the file ``load_settings()`` would read, with the single
-    ``[global.model.api_models.test]`` model's ``id`` set to ``model_id``; its
-    ``uses`` list carries ``default_slot_model`` to the new id. When ``port`` is
-    given, the test ``base_url`` and ``[runtime.services.mock_openai].port``
+    ``[global.model.api_models.test]`` model's ``id`` set to ``model_id``. When
+    ``port`` is given, the test ``base_url`` and ``[runtime.services.mock_openai].port``
     move to that port together. No other key changes. Call this before setting
     ``NEXUS_RUNTIME_CONFIG``.
     """

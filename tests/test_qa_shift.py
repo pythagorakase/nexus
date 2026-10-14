@@ -301,7 +301,8 @@ def test_begin_creates_archive_and_pins_every_remote_model(
     assert state["baseline_bleed_offered_count"] == 0
     assert state["baseline_bleed_used_count"] == 0
     assert state["status"] == "active"
-    assert model["default_slot_model"] == "gpt-5.6-terra"
+    assert "default_slot_model" not in model
+    assert document["wizard"]["default_model"] == config.target_model
     assert document["apex"]["model"] == config.target_model
     assert (
         document["apex"].get("gaia_model") or document["apex"]["model"]
@@ -389,7 +390,6 @@ def test_runtime_config_shape_errors_are_clean_shift_errors(
 MODEL_ROUTE_KEYS = {
     "compaction_model",
     "default_model",
-    "default_slot_model",
     "fallback_model",
     "gaia_model",
     "model",
@@ -397,10 +397,7 @@ MODEL_ROUTE_KEYS = {
     "target_model",
 }
 
-DIRECTLY_PINNED_ROUTES = {
-    "global.model.default_slot_model",
-    "wizard.fallback_model",
-}
+DIRECTLY_PINNED_ROUTES = {"wizard.default_model", "wizard.fallback_model"}
 
 NON_REMOTE_ROUTES = {
     "local_models.model",
@@ -420,12 +417,14 @@ def _collect_model_routes(table: Mapping[str, Any], prefix: str = "") -> dict[st
 
 def test_every_tracked_model_route_is_pinned(tmp_path: Path) -> None:
     """An isolated QA config must not leak inference onto an unpinned model."""
+    from nexus.config.loader import load_settings
     from nexus.config.settings_models import materialize_model_selections
 
     config = qa_shift.load_shift_config()
     path = qa_shift._write_runtime_config(
         repo_root=qa_shift.REPO_ROOT, archive=tmp_path, config=config
     )
+    load_settings(path)
     document = materialize_model_selections(tomllib.loads(path.read_text()))
     routes = _collect_model_routes(document)
     assert DIRECTLY_PINNED_ROUTES <= set(routes)

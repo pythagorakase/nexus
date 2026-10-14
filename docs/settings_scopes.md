@@ -10,7 +10,7 @@ Design pending owner confirmation; issues #814 and #756.
 | Player | `[runtime].state_dir/preferences.toml` | `GET/PATCH /api/preferences` |
 | Developer | Read-only `nexus.toml` | `GET /api/settings` |
 
-Story fields are `skald_model` (existing `model` column), `gaia_model`, and `apex_context_window`. Migration 117 adds only the latter two nullable columns with comments. NULL Skald and context pins follow repository defaults; NULL Gaia follows the actual Skald selection, including a request override. Existing rows are not repinned. The old `/api/slot/{n}/model` routes are retired.
+Story fields are `skald_model` (existing `model` column), `gaia_model`, and `apex_context_window`. Migration 117 adds only the latter two nullable columns with comments. NULL Skald and context pins follow repository defaults; NULL Gaia follows the actual Skald selection, including a request override. Existing rows are not repinned. A new or reset slot stores NULL in `model`: no pin. The old `/api/slot/{n}/model` routes are retired.
 
 Player fields are `theme`, per-theme `fonts`, and `wizard_model`. First write materializes all three from repository defaults into an atomically replaced TOML file. Until then, reads use defaults without creating a file. A relative state directory resolves under the runtime home: the checkout by default (the gitignored `.nexus/runtime`), or `$NEXUS_HOME` when set. An absolute state directory is used as configured.
 
