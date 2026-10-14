@@ -137,11 +137,11 @@ LOGON resolves the storyteller route (model, wire class, provider), which fixes
 the effective context window and the token budget. `handle_user_input` in
 `nexus/memory/manager.py` then runs Pass 2: deterministic entity detection
 reports every known character, place, and faction named in the input as a
-divergence gap. Unless the input is a bare choice number or letter
-(`[memory] skip_simple_choices`) or no budget remains, a raw vector search over
-the input keeps the results that fit the Pass-2 budget (`[memory]
-phase2_fraction` of the context window). An embedder, reranker or search error
-in that query fails the turn; it is never logged and skipped.
+divergence gap. Unless the input is a bare choice number or letter (`[memory]
+skip_simple_choices`) or no budget remains, a raw hybrid search over the input
+(MEMNON's `query_memory`) keeps the results that fit the Pass-2 budget
+(`[memory] phase2_fraction` of the context window). An embedder, reranker or
+search error in that query fails the turn; it is never logged and skipped.
 
 ### Warm Slice
 
@@ -324,7 +324,7 @@ order:
    model, as the Orrery queue limits cap their own lanes.
 
 The scheduler lease, the promotion limit, and the compaction, summary, and
-embedding queues are configured in `[runtime.scheduler]`; the other Orrery
+embedding queues are configured in `[runtime.scheduler]`; the Orrery
 queues take their limits from their own `[orrery]` tables.
 `python -m nexus.agents.orrery.worker` runs one pass under the same ownership.
 

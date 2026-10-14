@@ -185,7 +185,7 @@ terminal update.
 | 115-117 | Deterministic entity detection reports every known character, place, and faction named in the input as a divergence gap. | `nexus/memory/manager.py:972-978`; `nexus/memory/entity_detector.py:97-158` (loads every character with aliases, place and faction), `:244-269` (each match becomes a gap) | true |
 | 117-118 | Pass 2 is skipped for a bare choice number or letter (`[memory] skip_simple_choices`). | `nexus.toml:1170`; `nexus/memory/manager.py:869`, `:1002` | true |
 | 118 | Pass 2 is skipped when no budget remains. | `nexus/memory/manager.py:1021` | true |
-| 118-120 | Otherwise a raw vector search over the input keeps the results that fit the Pass-2 budget (`[memory] phase2_fraction` of the context window). | `nexus/memory/manager.py:1042-1046`, `:1077-1090` (keep while within budget), `:498` (`int(window * phase2_fraction)`); `nexus.toml:1168` | true |
+| 118-120 → 141-143 | Otherwise a raw vector search over the input keeps the results that fit the Pass-2 budget (`[memory] phase2_fraction` of the context window). Now: a raw hybrid search over the input (MEMNON's `query_memory`). | `nexus/memory/manager.py:1042-1046`, `:1077-1090` (keep while within budget), `:498` (`int(window * phase2_fraction)`); `nexus.toml:1168`; `nexus/memory/incremental.py:145` (`query_memory(query=query, k=k, use_hybrid=True)`); `nexus/agents/memnon/memnon.py:1506` (the hybrid strategy runs when `use_hybrid` and hybrid search are both on), `:1620` (rerank); `nexus.toml:1074` (`[memnon.retrieval.hybrid_search] enabled = true`) | corrected |
 | 120-121 | An embedder, reranker or search error in that query fails the turn; it is never logged and skipped. | `nexus/memory/manager.py:1042` (no handler); `nexus/memory/incremental.py:145` (`query_memory` with no handler); `nexus/agents/lore/lore.py:421-428` and `nexus/api/narrative_generation.py:330-337` (the phase error fails the turn) | true |
 | 125-126 | MEMNON loads a window of up to `[lore.chunk_parameters] warm_slice_initial` playable chunks ending at the parent. | `nexus.toml:314-315`; `nexus/agents/lore/utils/turn_cycle.py:391-393`; `nexus/agents/memnon/memnon.py:1308`, `:1337-1338` (playable predicate, `id <= parent`) | true |
 | 126 | Pass-2 additions join as recalled chunks. | `nexus/agents/lore/utils/turn_cycle.py:418`; `nexus/memory/manager.py:1220` (`is_recalled: True`) | true |
@@ -303,13 +303,13 @@ inversion was inside step 1, corrected above.
 | 269-270 | Before starting its scheduler, the gateway checks the production model artifact lock by file list, size and revision. | `nexus/api/narrative.py:129` (before `:135-136`); `nexus/agents/memnon/utils/artifact_manifest.py:731-733` (`hash_files=False`) | true |
 | 270 | It refuses startup on drift. | `nexus/agents/memnon/utils/artifact_manifest.py:734-743` (`ArtifactLockError`) | true |
 | 270-271 | A process marked `NEXUS_TEST_PROVIDER_ONLY=1` skips this boot check. | `nexus/api/narrative.py:123-127` | true |
-| 271-272 | Full sha256 checks run through `nexus models verify`. | `nexus/cli.py:5733` (the `verify` verb); `nexus/agents/memnon/utils/artifact_manifest.py:971` (`hash_files=True` for verify), `:570` (sha256 compare) | true |
+| 271-272 | Full sha256 checks run through `nexus models verify`. | `nexus/cli.py:5727` (`add_parser("models")`), `:5737` (the verb `add_parser`, which receives `verify` from the tuple at `:5733`); `nexus/agents/memnon/utils/artifact_manifest.py:971` (`hash_files=True` for verify), `:570` (sha256 compare) | true |
 | 272 | Full sha256 checks run through the doctor's `models.artifacts` check. | `nexus/runtime/readiness.py:1452` (registration), `:1100` (`hash_files=True`) | true |
 | 274-275 | A gateway started with `NEXUS_SLOT` runs one `SlotScheduler` (`scheduler.py`) for that slot. | `nexus/api/narrative.py:132-136`; `nexus/jobs/scheduler.py:59` | true |
 | 275-276 | It holds the durable `deferred_work_scheduler` lease. | `nexus/jobs/scheduler.py:152-185` | true |
 | 276 | It observes locked slots without draining them. | `nexus/jobs/scheduler.py:111-150`, `:154` (a locked slot is never acquired) | true |
 | 277-278 | Before every job and provider call it waits until no generation lease is live. | `nexus/jobs/scheduler.py:294-341` (`checkpoint`), `:497-499` (installed as the provider gate); `nexus/jobs/gate.py:43-47` (`before_provider_call`) | true |
-| 278 | So background inference never competes with a turn. | Convention (the rationale of the checkpoint above). | true |
+| 278 | So background inference never competes with a turn. | `nexus/jobs/scheduler.py:294-341` (`checkpoint` waits while a generation lease is live), `:497-499` (installed as the provider gate); `nexus/jobs/gate.py:43-47` (`before_provider_call`) | true |
 | 278-279 | Each pass drains, in order, the seven lanes below. | `nexus/jobs/scheduler.py:480-626` | true |
 | 281-283 | 1. Orrery promotion (`promote_pending_resolutions_sync` in `worker.py`), by the deterministic thresholds in `[orrery.promote]`. | `nexus/jobs/scheduler.py:502`; `nexus/agents/orrery/worker.py:178`, `:223`, `:795`; `nexus.toml:696` | true |
 | 284-285 | 2. The narration outbox records deterministic perceptual descriptors without a provider call. | `nexus/jobs/scheduler.py:510`; `nexus/agents/orrery/worker.py:236`, `:348` | true |
@@ -327,7 +327,7 @@ inversion was inside step 1, corrected above.
 | 298-301 | An operator pass (`SlotScheduler.run_pass`) lowers that bound with `experience_embedding_limit`, and `0` skips the lane without loading a model. | `nexus/jobs/scheduler.py:433-440`, `:51-56` (`0` returns before the table is read) | true |
 | 301 | As the Orrery queue limits cap their own lanes. | `nexus/jobs/scheduler.py:536-541` (`min(maximum, requested)`) | true |
 | 303-304 → 326-327 | The scheduler lease and the compaction, summary, and embedding queues are configured in `[runtime.scheduler]`. Now: the scheduler lease, the promotion limit, and the compaction, summary, and embedding queues. | `nexus.toml:1400-1426`; `nexus/jobs/scheduler.py:76`, `:506` (`self.cfg.promotion_limit`, `nexus.toml:1409`), `:555`, `:601`; `nexus/jobs/narrative_jobs.py:37`, `:59`, `:78` (attempts and lease from the same tables) | corrected |
-| 304-305 → 327-328 | The Orrery queues take their limits from their own `[orrery]` tables. Now: the other Orrery queues. | `nexus/jobs/scheduler.py:511`, `:518-523`, `:525-529`, `:55`; `nexus.toml:430`, `:669`, `:809` | corrected |
+| 304-305 | The Orrery queues take their limits from their own `[orrery]` tables. | `nexus/jobs/scheduler.py:511`, `:518-523`, `:525-529`, `:55`; `nexus.toml:430`, `:669`, `:809` | true |
 | 305-306 → 329 | `python -m nexus.agents.orrery.worker` runs one pass under the same ownership. | `nexus/agents/orrery/worker.py:1002`, `:985`, `:129-135` (`SlotScheduler.run_pass`) | true |
 
 The drain order (lines 281-301) matches `_drain`: promotion `:502`, narration
@@ -357,8 +357,8 @@ drains leaves out no drain and puts none out of order. No clause was added.
 
 ### Verdict Counts
 
-171 rows: 167 `true` (5 of them convention, locator or reference rows), 4
-`corrected` (three corrections; the third spans two rows), 0 `cut`.
+171 rows: 167 `true` (4 of them convention, locator or reference rows), 4
+`corrected` (four corrections, one row each), 0 `cut`.
 
 ## Corrections (Item 3)
 
@@ -391,11 +391,26 @@ drains leaves out no drain and puts none out of order. No clause was added.
    `[runtime.scheduler]`; the Orrery queues take their limits from their own
    `[orrery]` tables." After: "The scheduler lease, the promotion limit, and
    the compaction, summary, and embedding queues are configured in
-   `[runtime.scheduler]`; the other Orrery queues take their limits from their
-   own `[orrery]` tables." The Orrery promotion lane takes its per-pass limit
-   from `[runtime.scheduler] promotion_limit` (`nexus.toml:1409`,
-   `scheduler.py:506`); only its thresholds live in `[orrery.promote]`. The
-   trailing sentence was rewrapped onto its own line; its words are unchanged.
+   `[runtime.scheduler]`; the Orrery queues take their limits from their own
+   `[orrery]` tables." Only the first clause changes. The Orrery promotion
+   lane takes its per-pass limit from `[runtime.scheduler] promotion_limit`
+   (`nexus.toml:1409`, `scheduler.py:506`); only its thresholds live in
+   `[orrery.promote]`. The second clause keeps its words (row 304-305, true):
+   it does not group promotion with the Orrery queues, whose limits come from
+   `[orrery]` tables and cap their own lanes (line 301), while the operator's
+   promotion limit replaces the configured value instead. The trailing
+   sentence was rewrapped onto its own line; its words are unchanged.
+4. **Section 3, User Input and Pass 2, lines 118-120 (now 141-143).** Before:
+   "... a raw vector search over the input keeps the results that fit the
+   Pass-2 budget ...". After: "... a raw hybrid search over the input
+   (MEMNON's `query_memory`) keeps the results that fit the Pass-2 budget
+   ...". The Pass-2 query is not a vector search alone: it calls
+   `query_memory(query=query, k=k, use_hybrid=True)`
+   (`nexus/memory/incremental.py:145`), which runs the hybrid vector and
+   full-text strategy (`nexus/agents/memnon/memnon.py:1506`, enabled at
+   `nexus.toml:1074`) and the cross-encoder rerank (`memnon.py:1620`) that the
+   Deep Retrieval section describes. The paragraph's last five lines were
+   rewrapped; the body keeps its line count.
 
 No clause was cut and none was added. Every heading and `status: canonical`
 are unchanged.
@@ -415,7 +430,7 @@ the order the body first cites them:
 | `ui/client/src/hooks/useInputDraft.ts` | 49-50, 50-51 |
 | `nexus/cli.py` | 55-56, 56-57, 57, 271-272, 297-298 |
 | `nexus/memory/entity_detector.py` | 115-117 |
-| `nexus/memory/incremental.py` | 120-121 |
+| `nexus/memory/incremental.py` | 118-120, 120-121 |
 | `nexus/agents/lore/utils/entity_queries.py` | 131, 131-132 |
 | `nexus/agents/lore/utils/entity_inclusion.py` | 133-134 |
 | `nexus/agents/memnon/utils/search.py` | 140-141, 145-146 |
@@ -451,8 +466,8 @@ for the 17 unpredicted paths names these orders: 817-S3 (`entity_queries.py`,
 it re-verifies this document); 812-S4a (`cross_encoder.py`, `db_access.py`,
 `embedding_manager.py`, `artifact_manifest.py`, `source_embeddings.py`; its
 item 8 re-verifies this document); 820-S2 (`cross_encoder.py`,
-`embedding_manager.py`, `artifact_manifest.py`; already in the header's list
-for `nexus/cli.py`, and it plans no re-verification); 803-S1, 803-S6, 811-S3a
+`embedding_manager.py`, `artifact_manifest.py`; in the header's list for
+`nexus/cli.py`; landed as #1125); 803-S1, 803-S6, 811-S3a
 and 822-S1 (`readiness.py`; all landed, 822-S1 re-verifies); 809-S1, 838-S1,
 840-S2, 783-S1a (`retrograde_maturation.py`; all landed); 802-S1b and 811-S3a
 (`api_anthropic.py`, `api_openai.py`; landed, and 811-S3a names the provider
@@ -460,8 +475,11 @@ shims out of scope); 776-S1b and 776-S6 (`InteractiveWizard.tsx`; landed).
 `search.py` appears only in `812-S4a.md:86`, as out-of-scope work deferred to
 812-S4b, an order not yet drafted. `entity_detector.py`, `incremental.py`,
 `entity_inclusion.py`, `scene_order.py` and `job_queues.py` appear in no
-order. The only open order that edits an
-added path without re-verifying this document is 820-S2, already listed.
+order. Every order that edits an added path
+without re-verifying this document has landed: 820-S2 (#1125), 806-S1
+(#1118) and 815-S2 (#1127) are ancestors of M, as are 815-S3 (#1132), 815-S5
+(#1133), 803-S6 (#1131), 776-S1b (#1137) and 776-S3 (#1139). No open order is
+bound.
 `gh pr list --state open` was empty when this was written.
 
 **Landing note: the future 812-S4b.** `812-S4a.md:86` defers to 812-S4b
