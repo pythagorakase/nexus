@@ -7,6 +7,7 @@ from nexus.agents.orrery.substrate import (
     AND,
     NOT,
     OR,
+    AttentionClass,
     Branch,
     Condition,
     DriveBand,
@@ -2979,6 +2980,7 @@ SLEEP = Template(
     ),
     branches=(
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Collapse into deferred sleep",
             conditions=has_need_debt_at_or_above("sleep", 48),
             narrative_stub=(
@@ -3003,6 +3005,7 @@ SLEEP = Template(
             magnitude=0.74,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Sleep at home",
             conditions=HOME_PLACE,
             narrative_stub=(
@@ -3026,6 +3029,7 @@ SLEEP = Template(
             magnitude=0.22,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Sleep in safe lodgings",
             conditions=OR(
                 SAFE_LODGING_PLACE,
@@ -3052,6 +3056,7 @@ SLEEP = Template(
             magnitude=0.28,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Sleep rough in cover or transit",
             conditions=ALWAYS,
             narrative_stub=(
@@ -3100,6 +3105,7 @@ DRINK = Template(
     ),
     branches=(
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Drink desperately, whatever is available",
             conditions=has_need_debt_at_or_above("thirst", 16),
             narrative_stub=(
@@ -3122,6 +3128,7 @@ DRINK = Template(
             magnitude=0.56,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Drink in a public room",
             conditions=PUBLIC_DRINK_PLACE,
             narrative_stub=(
@@ -3144,6 +3151,7 @@ DRINK = Template(
             magnitude=0.22,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Drink from a public or wild source",
             conditions=PUBLIC_WATER_PLACE,
             narrative_stub=(
@@ -3166,6 +3174,7 @@ DRINK = Template(
             magnitude=0.14,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Drink routinely from what is at hand",
             conditions=ALWAYS,
             narrative_stub=(
@@ -3210,6 +3219,7 @@ EAT = Template(
     ),
     branches=(
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Eat ravenously, whatever is available",
             conditions=has_need_debt_at_or_above("hunger", 16),
             narrative_stub=(
@@ -3232,6 +3242,7 @@ EAT = Template(
             magnitude=0.62,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Eat at home with household",
             conditions=AND(
                 HOME_PLACE,
@@ -3257,6 +3268,7 @@ EAT = Template(
             magnitude=0.22,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Eat at home alone",
             conditions=HOME_PLACE,
             narrative_stub=(
@@ -3280,6 +3292,7 @@ EAT = Template(
             magnitude=0.20,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Eat in a public dining place",
             conditions=PUBLIC_DINING_PLACE,
             narrative_stub=(
@@ -3302,6 +3315,7 @@ EAT = Template(
             magnitude=0.26,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Forage or hunt from the country",
             conditions=AND(
                 in_location_class("wilderness"),
@@ -3327,6 +3341,7 @@ EAT = Template(
             magnitude=0.38,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Eat from rations or what was packed",
             conditions=has_tag("travel_provisioned"),
             narrative_stub=(
@@ -3349,6 +3364,7 @@ EAT = Template(
             magnitude=0.18,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Find something and eat it",
             conditions=ALWAYS,
             narrative_stub=(
@@ -3858,6 +3874,7 @@ TRAIN = Template(
     ),
     branches=(
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Drill the fighting forms",
             conditions=has_any_tag(
                 "combat_trained",
@@ -3880,6 +3897,7 @@ TRAIN = Template(
             magnitude=0.22,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Condition the body",
             conditions=has_any_tag("athlete", "dancer", "scout", "ranger", "hunter"),
             narrative_stub=(
@@ -3895,6 +3913,7 @@ TRAIN = Template(
             magnitude=0.18,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Sharpen the finer skill",
             conditions=has_any_tag(
                 "hacker",
@@ -3920,6 +3939,7 @@ TRAIN = Template(
             magnitude=0.18,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Keep the edge from dulling",
             conditions=ALWAYS,
             narrative_stub=(
@@ -3957,6 +3977,7 @@ RUN_ERRANDS = Template(
     ),
     branches=(
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Make the market run",
             conditions=in_location_class("commerce"),
             narrative_stub=(
@@ -3973,6 +3994,7 @@ RUN_ERRANDS = Template(
             magnitude=0.18,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Scrounge for what the day needs",
             conditions=resources_below("poor"),
             narrative_stub=(
@@ -3988,6 +4010,7 @@ RUN_ERRANDS = Template(
             magnitude=0.16,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Provision the household",
             conditions=has_any_tag(
                 "domestic_role", "cares_for_household", "matriarch", "patriarch"
@@ -4005,6 +4028,7 @@ RUN_ERRANDS = Template(
             magnitude=0.16,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Knock out the small obligations",
             conditions=ALWAYS,
             narrative_stub=(
@@ -4041,6 +4065,7 @@ STROLL = Template(
     ),
     branches=(
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Walk under open sky",
             conditions=AND(
                 weather_is("clear", "warm"),
@@ -4059,6 +4084,7 @@ STROLL = Template(
             magnitude=0.16,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Walk the familiar streets",
             conditions=URBAN_PUBLIC_FLOW_PLACE,
             narrative_stub=(
@@ -4075,6 +4101,7 @@ STROLL = Template(
             magnitude=0.14,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Take the night air",
             conditions=time_of_day_in("evening", "night"),
             narrative_stub=(
@@ -4089,6 +4116,7 @@ STROLL = Template(
             magnitude=0.12,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Pace the near ground",
             conditions=ALWAYS,
             narrative_stub=(
@@ -4126,6 +4154,7 @@ UPKEEP = Template(
     ),
     branches=(
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Maintain the working tools",
             conditions=has_any_tag(
                 "engineer",
@@ -4151,6 +4180,7 @@ UPKEEP = Template(
             magnitude=0.16,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Mend and ready the kit",
             conditions=has_any_tag(
                 "soldier",
@@ -4173,6 +4203,7 @@ UPKEEP = Template(
             magnitude=0.15,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Set the home in order",
             conditions=at_routine_anchor("home"),
             narrative_stub=(
@@ -4188,6 +4219,7 @@ UPKEEP = Template(
             magnitude=0.14,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Tidy what is theirs",
             conditions=ALWAYS,
             narrative_stub=(
@@ -4223,6 +4255,7 @@ RECREATE = Template(
     ),
     branches=(
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Find games and company",
             conditions=AND(PUBLIC_MEETING_PLACE, NOT(is_hidden())),
             narrative_stub=(
@@ -4239,6 +4272,7 @@ RECREATE = Template(
             mood_affinities={"elated": 1.5},
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Lose an hour to the loved thing",
             conditions=has_any_tag(
                 "musician",
@@ -4262,6 +4296,7 @@ RECREATE = Template(
             magnitude=0.14,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Watch the world go by",
             conditions=time_of_day_in("evening", "night"),
             narrative_stub=(
@@ -4277,6 +4312,7 @@ RECREATE = Template(
             magnitude=0.10,
         ),
         Branch(
+            attention=AttentionClass.BACKGROUND,
             label="Take a small private pleasure",
             conditions=ALWAYS,
             narrative_stub=(
@@ -4343,6 +4379,7 @@ MAKE_ACQUAINTANCE = Template(
             changed_fields=("entity_pair_tags",),
             magnitude=0.08,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
     ),
 )
@@ -4554,6 +4591,7 @@ ADVANCE_RELOCATION_PLAN = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Scout a candidate place",
@@ -4587,6 +4625,7 @@ ADVANCE_RELOCATION_PLAN = Template(
             ),
             magnitude=0.20,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Lose ground to a setback",
@@ -4605,6 +4644,7 @@ ADVANCE_RELOCATION_PLAN = Template(
             ),
             magnitude=0.10,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Press on with the next practical step",
@@ -4623,6 +4663,7 @@ ADVANCE_RELOCATION_PLAN = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
     ),
 )
@@ -4911,6 +4952,7 @@ ADVANCE_RECRUIT_ALLY = Template(
             ),
             magnitude=0.10,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             preemptive=True,
         ),
         Branch(
@@ -4930,6 +4972,7 @@ ADVANCE_RECRUIT_ALLY = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Prove reliable in a small consequential way",
@@ -4947,6 +4990,7 @@ ADVANCE_RECRUIT_ALLY = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Make the next commitment concrete",
@@ -4965,6 +5009,7 @@ ADVANCE_RECRUIT_ALLY = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
     ),
 )
@@ -5293,6 +5338,7 @@ ADVANCE_PURSUE_ROMANCE = Template(
             ),
             magnitude=0.10,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             preemptive=True,
         ),
         Branch(
@@ -5311,6 +5357,7 @@ ADVANCE_PURSUE_ROMANCE = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Build closeness through chosen time",
@@ -5328,6 +5375,7 @@ ADVANCE_PURSUE_ROMANCE = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Make the next intention legible",
@@ -5345,6 +5393,7 @@ ADVANCE_PURSUE_ROMANCE = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             mood_affinities={"elated": 1.5},
         ),
     ),
@@ -5650,6 +5699,7 @@ ADVANCE_COURT_PATRON = Template(
             ),
             magnitude=0.10,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             preemptive=True,
         ),
         Branch(
@@ -5668,6 +5718,7 @@ ADVANCE_COURT_PATRON = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Prove reliable under scrutiny",
@@ -5685,6 +5736,7 @@ ADVANCE_COURT_PATRON = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Make the next claim on favor legible",
@@ -5702,6 +5754,7 @@ ADVANCE_COURT_PATRON = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             mood_affinities={"elated": 1.5},
         ),
     ),
@@ -5974,6 +6027,7 @@ ADVANCE_COURT_PATRON_FACTION = Template(
             ),
             magnitude=0.10,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             preemptive=True,
         ),
         Branch(
@@ -5992,6 +6046,7 @@ ADVANCE_COURT_PATRON_FACTION = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Prove reliable under institutional scrutiny",
@@ -6009,6 +6064,7 @@ ADVANCE_COURT_PATRON_FACTION = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Make the next claim on standing legible",
@@ -6026,6 +6082,7 @@ ADVANCE_COURT_PATRON_FACTION = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             mood_affinities={"elated": 1.5},
         ),
     ),
@@ -6325,6 +6382,7 @@ ADVANCE_SEEK_REDEMPTION = Template(
             ),
             magnitude=0.10,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             preemptive=True,
         ),
         Branch(
@@ -6343,6 +6401,7 @@ ADVANCE_SEEK_REDEMPTION = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Make one concrete repair",
@@ -6360,6 +6419,7 @@ ADVANCE_SEEK_REDEMPTION = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Leave forgiveness in the wronged party's hands",
@@ -6377,6 +6437,7 @@ ADVANCE_SEEK_REDEMPTION = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             mood_affinities={"elated": 1.5},
         ),
     ),
@@ -6580,6 +6641,7 @@ ADVANCE_BUILD_VENTURE = Template(
             ),
             magnitude=0.10,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             preemptive=True,
         ),
         Branch(
@@ -6599,6 +6661,7 @@ ADVANCE_BUILD_VENTURE = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Secure one more commitment",
@@ -6616,6 +6679,7 @@ ADVANCE_BUILD_VENTURE = Template(
             ),
             magnitude=0.18,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
         ),
         Branch(
             label="Finish the next opening task",
@@ -6634,6 +6698,7 @@ ADVANCE_BUILD_VENTURE = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            attention=AttentionClass.MEANINGFUL,
             mood_affinities={"elated": 1.5},
         ),
     ),

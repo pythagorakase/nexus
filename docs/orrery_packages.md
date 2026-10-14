@@ -7,6 +7,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 Drive bands are authoring metadata: they explain whether a package is crisis/constraint, embodied maintenance, anchored routine, affiliation, or project/identity pressure. Static priority still decides resolver order; any lower-band package that outranks a higher-band package should carry an explicit rationale.
 
+Attention class is authored per branch. A **background** branch is ordinary activity authored as safe to keep out of the storyteller's card set; an unmarked branch is meaningful.
+
 **Source-of-truth:** `nexus/agents/orrery/templates.py` (`BUILTIN_TEMPLATES`).  
 **Substrate:** `nexus/agents/orrery/substrate.py` (`Template`, `Branch`, `CompoundCondition`).  
 **Design plan:** [docs/orrery_design_plan.md](orrery_design_plan.md)
@@ -2166,7 +2168,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has `cns_stimulated` ephemeral
   - **NOT:** actor has inbound `hunting` pair tag
 
-### Branch 1 — Collapse into deferred sleep  *(mag 0.74)*
+### Branch 1 — Collapse into deferred sleep  *(mag 0.74)* · **background**
 
 **When:** actor has `sleep` debt ≥ 48
 
@@ -2175,7 +2177,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} stops negotiating with exhaustion. Whatever place they have reached becomes the place where the body claims its overdue sleep.
 
-### Branch 2 — Sleep at home  *(mag 0.22)*
+### Branch 2 — Sleep at home  *(mag 0.22)* · **background**
 
 **When:**
 
@@ -2188,7 +2190,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} reaches familiar shelter and lets sleep take them where the room already knows their shape.
 
-### Branch 3 — Sleep in safe lodgings  *(mag 0.28)*
+### Branch 3 — Sleep in safe lodgings  *(mag 0.28)* · **background**
 
 **When:**
 
@@ -2203,7 +2205,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} finds a place secure enough to become temporary shelter and lets the unfamiliar room do enough of the work.
 
-### Branch 4 — Sleep rough in cover or transit  *(mag 0.36)*
+### Branch 4 — Sleep rough in cover or transit  *(mag 0.36)* · **background**
 
 **When:** *(always)*
 
@@ -2242,7 +2244,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
             - actor is in `production` place class
   - **NOT:** actor has inbound `hunting` pair tag
 
-### Branch 1 — Drink desperately, whatever is available  *(mag 0.56)*
+### Branch 1 — Drink desperately, whatever is available  *(mag 0.56)* · **background**
 
 **When:** actor has `thirst` debt ≥ 16
 
@@ -2251,7 +2253,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} drinks with the single-mindedness that severe thirst produces, past concern for source or dignity.
 
-### Branch 2 — Drink in a public room  *(mag 0.22)*
+### Branch 2 — Drink in a public room  *(mag 0.22)* · **background**
 
 **When:**
 
@@ -2265,7 +2267,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} drinks what the room serves and lets the small ritual of holding a cup make the hour easier.
 
-### Branch 3 — Drink from a public or wild source  *(mag 0.14)*
+### Branch 3 — Drink from a public or wild source  *(mag 0.14)* · **background**
 
 **When:**
 
@@ -2278,7 +2280,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} drinks from whatever the place provides, and the relief of water makes the rest of the day briefly simpler.
 
-### Branch 4 — Drink routinely from what is at hand  *(mag 0.1)*
+### Branch 4 — Drink routinely from what is at hand  *(mag 0.1)* · **background**
 
 **When:** *(always)*
 
@@ -2305,7 +2307,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
     - actor has `hunger` debt ≥ 8
   - **NOT:** actor has inbound `hunting` pair tag
 
-### Branch 1 — Eat ravenously, whatever is available  *(mag 0.62)*
+### Branch 1 — Eat ravenously, whatever is available  *(mag 0.62)* · **background**
 
 **When:** actor has `hunger` debt ≥ 16
 
@@ -2314,7 +2316,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} eats with the inattention of real hunger, relief overtaking any concern about what the food ought to be.
 
-### Branch 2 — Eat at home with household  *(mag 0.22)*
+### Branch 2 — Eat at home with household  *(mag 0.22)* · **background**
 
 **When:**
 
@@ -2329,7 +2331,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} sits down to the meal that home means and lets being-with stand in for being-alone for a while.
 
-### Branch 3 — Eat at home alone  *(mag 0.2)*
+### Branch 3 — Eat at home alone  *(mag 0.2)* · **background**
 
 **When:**
 
@@ -2342,7 +2344,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} makes the kind of meal home makes possible: unremarkable, private, and enough to let the evening continue on ordinary terms.
 
-### Branch 4 — Eat in a public dining place  *(mag 0.26)*
+### Branch 4 — Eat in a public dining place  *(mag 0.26)* · **background**
 
 **When:**
 
@@ -2357,7 +2359,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} eats something the place can provide and watches the room continue its public life around them.
 
-### Branch 5 — Forage or hunt from the country  *(mag 0.38)*
+### Branch 5 — Forage or hunt from the country  *(mag 0.38)* · **background**
 
 **When:**
 
@@ -2370,7 +2372,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} works the country for what the season has put within reach and makes a meal out of survival knowledge.
 
-### Branch 6 — Eat from rations or what was packed  *(mag 0.18)*
+### Branch 6 — Eat from rations or what was packed  *(mag 0.18)* · **background**
 
 **When:** actor has `travel_provisioned` tag
 
@@ -2379,7 +2381,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} eats what was packed for exactly this kind of hour: practical, portable, and enough.
 
-### Branch 7 — Find something and eat it  *(mag 0.14)*
+### Branch 7 — Find something and eat it  *(mag 0.14)* · **background**
 
 **When:** *(always)*
 
@@ -3278,7 +3280,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `wounded` ephemeral
 
-### Branch 1 — Make the market run  *(mag 0.18)*
+### Branch 1 — Make the market run  *(mag 0.18)* · **background**
 
 **When:** actor is in `commerce` place class
 
@@ -3287,7 +3289,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} works through the stalls and counters with a mental list — provisions, replacements, the one thing that ran out at the worst moment — trading small money for the continued smooth running of a life.
 
-### Branch 2 — Scrounge for what the day needs  *(mag 0.16)*
+### Branch 2 — Scrounge for what the day needs  *(mag 0.16)* · **background**
 
 **When:** actor's own resources are below `poor`
 
@@ -3296,7 +3298,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} does the poor person's version of errands: finding, borrowing, bartering, stretching — acquiring by ingenuity what others acquire by purse.
 
-### Branch 3 — Provision the household  *(mag 0.16)*
+### Branch 3 — Provision the household  *(mag 0.16)* · **background**
 
 **When:** actor has any of [`domestic_role`, `cares_for_household`, `matriarch`, `patriarch`]
 
@@ -3305,7 +3307,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} runs the rounds a household quietly depends on — food in, worn things out, the standing orders renewed — the invisible supply chain of ordinary life.
 
-### Branch 4 — Knock out the small obligations  *(mag 0.1)*
+### Branch 4 — Knock out the small obligations  *(mag 0.1)* · **background**
 
 **When:** *(always)*
 
@@ -3335,7 +3337,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `wounded` ephemeral
 
-### Branch 1 — Walk under open sky  *(mag 0.16)*
+### Branch 1 — Walk under open sky  *(mag 0.16)* · **background**
 
 **When:**
 
@@ -3348,7 +3350,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} walks for the sake of walking, under weather good enough to notice — the pace of someone whose next hour has, for once, no owner.
 
-### Branch 2 — Walk the familiar streets  *(mag 0.14)*
+### Branch 2 — Walk the familiar streets  *(mag 0.14)* · **background**
 
 **When:**
 
@@ -3364,7 +3366,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} takes the long way through streets they know by wear rather than by name, registering the small changes — a new face at a stall, a repaired door — that a neighborhood shows only to its regulars.
 
-### Branch 3 — Take the night air  *(mag 0.12)*
+### Branch 3 — Take the night air  *(mag 0.12)* · **background**
 
 **When:** time of day is one of [evening, night]
 
@@ -3373,7 +3375,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves.
 
-### Branch 4 — Pace the near ground  *(mag 0.08)*
+### Branch 4 — Pace the near ground  *(mag 0.08)* · **background**
 
 **When:** *(always)*
 
@@ -3401,7 +3403,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor is in transit
   - **NOT:** actor has inbound `hunting` pair tag
 
-### Branch 1 — Maintain the working tools  *(mag 0.16)*
+### Branch 1 — Maintain the working tools  *(mag 0.16)* · **background**
 
 **When:** actor has any of [`engineer`, `mechanic`, `tinkerer`, `artificer`, `artisan`, `keeps_shop`, `merchant`, `hacker`, `musician`]
 
@@ -3410,7 +3412,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} goes over the tools of their trade — cleaning, adjusting, replacing the part that was about to become a story — because the work is only ever as good as the kit.
 
-### Branch 2 — Mend and ready the kit  *(mag 0.15)*
+### Branch 2 — Mend and ready the kit  *(mag 0.15)* · **background**
 
 **When:** actor has any of [`soldier`, `scout`, `ranger`, `hunter`, `combat_trained`, `travel_ready`]
 
@@ -3419,7 +3421,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} strips, checks, and rights their gear with the economy of habit — edges, straps, seals, charges — so that when it matters, nothing surprises them.
 
-### Branch 3 — Set the home in order  *(mag 0.14)*
+### Branch 3 — Set the home in order  *(mag 0.14)* · **background**
 
 **When:** actor is at `home` anchor
 
@@ -3428,7 +3430,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} puts their own place back in order — the small repairs and resets that make a room somewhere to return to instead of somewhere to pass through.
 
-### Branch 4 — Tidy what is theirs  *(mag 0.08)*
+### Branch 4 — Tidy what is theirs  *(mag 0.08)* · **background**
 
 **When:** *(always)*
 
@@ -3459,7 +3461,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `wounded` ephemeral
 
-### Branch 1 — Drill the fighting forms  *(mag 0.22)*
+### Branch 1 — Drill the fighting forms  *(mag 0.22)* · **background**
 
 **When:** actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `martial_artist`, `monk`]
 
@@ -3468,7 +3470,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} runs the forms until the body stops asking why — footwork, repetition, the unglamorous maintenance that keeps a fighter's skill from becoming a fighter's memory.
 
-### Branch 2 — Condition the body  *(mag 0.18)*
+### Branch 2 — Condition the body  *(mag 0.18)* · **background**
 
 **When:** actor has any of [`athlete`, `dancer`, `scout`, `ranger`, `hunter`]
 
@@ -3477,7 +3479,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} puts the body through its paces — distance, climbing, stretch and strain — paying the quiet daily tax that keeps it answering when called.
 
-### Branch 3 — Sharpen the finer skill  *(mag 0.18)*
+### Branch 3 — Sharpen the finer skill  *(mag 0.18)* · **background**
 
 **When:** actor has any of [`hacker`, `arcane_caster`, `medical_skill`, `surgical_training`, `first_aid_trained`, `musician`, `performer`, `surveillance_capable`]
 
@@ -3486,7 +3488,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} practices the exacting part of what they do — scales, sutures, sigils, whatever their craft calls its fundamentals — because the difference between good and trusted is repetition nobody sees.
 
-### Branch 4 — Keep the edge from dulling  *(mag 0.12)*
+### Branch 4 — Keep the edge from dulling  *(mag 0.12)* · **background**
 
 **When:** *(always)*
 
@@ -3515,7 +3517,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grieving` ephemeral
 
-### Branch 1 — Find games and company  *(mag 0.15)*
+### Branch 1 — Find games and company  *(mag 0.15)* · **background**
 
 **When:**
 
@@ -3532,7 +3534,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} joins whatever the room is playing at — dice, cards, darts, argument — for stakes small enough to laugh about and company good enough to stay for.
 
-### Branch 2 — Lose an hour to the loved thing  *(mag 0.14)*
+### Branch 2 — Lose an hour to the loved thing  *(mag 0.14)* · **background**
 
 **When:** actor has any of [`musician`, `artist`, `writer`, `scholar`, `dancer`, `performer`, `loremaster`]
 
@@ -3541,7 +3543,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} returns to the thing they love with no audience and no deadline — playing, sketching, reading — the version of their craft that belongs to no one else.
 
-### Branch 3 — Watch the world go by  *(mag 0.1)*
+### Branch 3 — Watch the world go by  *(mag 0.1)* · **background**
 
 **When:** time of day is one of [evening, night]
 
@@ -3550,7 +3552,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment.
 
-### Branch 4 — Take a small private pleasure  *(mag 0.08)*
+### Branch 4 — Take a small private pleasure  *(mag 0.08)* · **background**
 
 **When:** *(always)*
 

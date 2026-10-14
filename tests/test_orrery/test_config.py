@@ -223,7 +223,17 @@ def test_epistemics_rejects_event_type_without_birth_role_policy() -> None:
 
     with pytest.raises(
         ValidationError,
-        match="without birth-role policies.*ate",
+        match="without birth-role policies.*socialized",
+    ):
+        OrreryEpistemicsSettings(claim_event_types=["socialized"])
+
+
+def test_epistemics_rejects_background_event_before_birth_role_policy() -> None:
+    """A background branch's event fails as background before the policy check."""
+
+    with pytest.raises(
+        ValidationError,
+        match=r"emitted by background branches: \['ate'\]",
     ):
         OrreryEpistemicsSettings(claim_event_types=["ate"])
 
