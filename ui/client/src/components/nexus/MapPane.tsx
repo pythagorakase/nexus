@@ -75,12 +75,12 @@ import {
   type DragSession,
   type LabelCandidate,
   type PanBounds,
-  type ViewBox,
 } from "@/lib/map-geometry";
 import { getCurrentPlace, getPlaces, getZones } from "@/lib/narrative-api";
 import { worldOutline } from "@/lib/world-outline";
 import type { CurrentPlace, Place, Zone } from "@shared/schema";
 import { MapPlaceDialog } from "./MapPlaceDialog";
+import { useMapView } from "./MapViewContext";
 
 interface MapPaneProps {
   slot: number | null;
@@ -177,22 +177,18 @@ export function MapPane({ slot }: MapPaneProps) {
 
   // ── Local state ─────────────────────────────────────────────────────
   const [hoveredId, setHoveredId] = useState<number | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [expandedZones, setExpandedZones] = useState<Set<number>>(new Set());
-  const [mapDimensions, setMapDimensions] = useState({
-    width: 800,
-    height: 600,
-  });
-  const [viewBox, setViewBox] = useState<ViewBox>({
-    x: 0,
-    y: 0,
-    width: 800,
-    height: 600,
-  });
+  const {
+    selectedId, setSelectedId, expandedZones, setExpandedZones,
+    mapDimensions, setMapDimensions, viewBox, setViewBox, centeredOnRef,
+  } = useMapView();
   const [isDragging, setIsDragging] = useState(false);
 
   const svgRef = useRef<SVGSVGElement>(null);
+  // The place dialog is controlled and has no Radix trigger, so closing it
+  // returns focus here: the control that opened it, else the pane root.
+  const mapRootRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
   const downTargetRef = useRef<EventTarget | null>(null);
@@ -319,11 +315,6 @@ export function MapPane({ slot }: MapPaneProps) {
         mapBounds.maxLat,
       ].join(",")
     : null;
-  const centeredOnRef = useRef<{
-    slot: number | null;
-    placeId: number;
-    boundsKey: string | null;
-  } | null>(null);
   useEffect(() => {
     if (firstCurrentPlaceId === undefined) return;
     const last = centeredOnRef.current;
@@ -478,7 +469,9 @@ export function MapPane({ slot }: MapPaneProps) {
       const pin = downTargetRef.current.closest("[data-place-id]");
       if (pin) {
         const placeId = Number(pin.getAttribute("data-place-id"));
-        if (Number.isFinite(placeId)) selectPlace(placeId, false);
+        // Pins are SVG groups, not focusable controls: no opener to return
+        // to, so a close lands on the pane root.
+        if (Number.isFinite(placeId)) selectPlace(placeId, false, null);
       }
     }
     downTargetRef.current = null;
@@ -495,8 +488,13 @@ export function MapPane({ slot }: MapPaneProps) {
   };
 
   // ── Selection ───────────────────────────────────────────────────────
-  const selectPlace = (placeId: number, center: boolean) => {
+  const selectPlace = (
+    placeId: number,
+    center: boolean,
+    opener: HTMLElement | null,
+  ) => {
     setSelectedId(placeId);
+    openerRef.current = opener;
     setDialogOpen(true);
     if (center) {
       const coords = placeCoordinates.get(placeId);
@@ -504,6 +502,14 @@ export function MapPane({ slot }: MapPaneProps) {
         setViewBox((prev) => centerViewBoxOn(coords, prev, panBounds));
       }
     }
+  };
+
+  const returnFocusOnDialogClose = (event: Event) => {
+    event.preventDefault();
+    const opener = openerRef.current;
+    if (opener?.isConnected) opener.focus();
+    else mapRootRef.current?.focus();
+    openerRef.current = null;
   };
 
   const toggleZone = (zoneId: number) => {
@@ -563,7 +569,12 @@ export function MapPane({ slot }: MapPaneProps) {
   const dataError = (placesError ?? zonesError) as Error | null;
 
   return (
-    <div className="mappane" data-testid="map-pane">
+    <div
+      className="mappane"
+      ref={mapRootRef}
+      tabIndex={-1}
+      data-testid="map-pane"
+    >
       {/* ── Location index ─────────────────────────────────────────────
           No header: the rail's Map tab already names this surface, and a
           place count would restate the visible list (tenets 3/5; same
@@ -602,7 +613,9 @@ export function MapPane({ slot }: MapPaneProps) {
                             className={`map-place-row ${
                               selectedId === place.id ? "on" : ""
                             } ${state === "current" ? "here" : ""}`}
-                            onClick={() => selectPlace(place.id, true)}
+                            onClick={(event) =>
+                              selectPlace(place.id, true, event.currentTarget)
+                            }
                             data-testid={`map-place-row-${place.id}`}
                           >
                             <svg
@@ -829,6 +842,7 @@ export function MapPane({ slot }: MapPaneProps) {
         slot={slot}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+        onCloseAutoFocus={returnFocusOnDialogClose}
       />
     </div>
   );

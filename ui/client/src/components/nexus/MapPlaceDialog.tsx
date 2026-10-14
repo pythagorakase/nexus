@@ -26,6 +26,8 @@ interface MapPlaceDialogProps {
   slot: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Where focus goes on close; the dialog has no Radix trigger to return to. */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 /**
@@ -68,6 +70,7 @@ export function MapPlaceDialog({
   slot,
   open,
   onOpenChange,
+  onCloseAutoFocus,
 }: MapPlaceDialogProps) {
   const { data: images } = useQuery<PlaceImage[]>({
     queryKey: ["/api/places", place?.id, "images", slot],
@@ -91,6 +94,7 @@ export function MapPlaceDialog({
       <DialogContent
         className="map-dialog max-h-[85vh] overflow-y-auto"
         data-testid="map-place-dialog"
+        onCloseAutoFocus={onCloseAutoFocus}
       >
         <DialogHeader>
           <span className="eyebrow brass-glow">
