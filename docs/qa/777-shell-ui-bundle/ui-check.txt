@@ -1,0 +1,8 @@
+
+> nexus-ui@1.0.0 check
+> tsc && npm run check:design-sync
+
+
+> nexus-ui@1.0.0 check:design-sync
+> tsc -p .design-sync/tsconfig.previews.json
+

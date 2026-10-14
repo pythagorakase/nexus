@@ -67,7 +67,7 @@ const math = transformSync(readFileSync(resolve(ui, 'client/src/state-shades-mea
 const { ciede2000, deutanLinearLab } = await import('data:text/javascript;base64,' + Buffer.from(math).toString('base64'));
 if (media.unsupported.length) throw new Error(`Unemulatable at-rule/media preludes or declaration functions: ${media.unsupported.join('; ')}`);
 const html = resolve(scratch, 'fixture.html');
-writeFileSync(html, `<!doctype html><meta charset="utf-8"><style>${css}</style><div id="root"></div><script src="fixture.js"></script>`);
+writeFileSync(html, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>${css}</style><div id="root"></div><script src="fixture.js"></script>`);
 const base = execFileSync('git', ['show', `${START}:ui/client/src/index.css`], { cwd: root, encoding: 'utf8' });
 const shipped = readFileSync(resolve(ui, 'client/src/index.css'), 'utf8');
 const browser = await chromium.launch({ headless: true });
@@ -97,6 +97,15 @@ async function renderInventory(condition, theme, calibrating = false) {
       if (!await page.evaluate(([f, v]) => matchMedia(`(${f}: ${v})`).matches, [feature, value]))
         throw new Error(`Unemulatable media feature (${feature}: ${value}) in ${media.preludes.filter(p => p.includes(feature)).join('; ')}`);
     results.proof.matchedMedia ??= {}; results.proof.matchedMedia[condition.id] = matchedMedia;
+    const reachablePreludes = new Set(media.variants.flatMap(variant => variant.satisfied));
+    for (const [prelude, matches] of Object.entries(matchedMedia)) {
+      if (reachablePreludes.has(prelude) && matches !== condition.satisfied.includes(prelude))
+        throw new Error(`Media layout mismatch ${condition.id}: ${prelude} read ${matches}`);
+    }
+    for (const prelude of condition.satisfied) {
+      if (!Object.hasOwn(matchedMedia, prelude))
+        throw new Error(`Missing media readback ${condition.id}: ${prelude}`);
+    }
     // Finite transitions/animations finish. Infinite animations have no finished
     // promise: pause the actual browser effect at its start and trough, separately.
     // Preserve the existing Playwright waitFor settle bound (30 seconds),
@@ -131,6 +140,30 @@ async function renderInventory(condition, theme, calibrating = false) {
       await page.mouse.move(0, 0);
       await page.locator('body').click({ position: { x: 1, y: 1 } });
       await settled();
+    }
+    async function hoverKeyRow(selector) {
+      const row = page.locator(selector);
+      await row.scrollIntoViewIfNeeded();
+      const point = await row.evaluate(n => {
+        const box = n.getBoundingClientRect();
+        const top = Math.max(0, box.top), bottom = Math.min(innerHeight, box.bottom);
+        const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right);
+        const y = (top + bottom) / 2;
+        for (let x = left + 2; x < right - 1; x += 2)
+          if (document.elementFromPoint(x, y) === n) return { x, y };
+        return null;
+      });
+      if (!point) throw new Error(`Measurement failure ${selector}: no visible empty row background for hover`);
+      await page.mouse.move(point.x, point.y);
+      const actual = await row.evaluate((n, point) => ({
+        hitIsRow: document.elementFromPoint(point.x, point.y) === n,
+        rowHover: n.matches(':hover'),
+        glyphHover: n.querySelector('.key-status svg').matches(':hover'),
+        controlHover: [...n.querySelectorAll('button,input,[tabindex]')].some(c => c.matches(':hover')),
+      }), point);
+      if (!actual.hitIsRow || !actual.rowHover || actual.glyphHover || actual.controlHover)
+        throw new Error(`Measurement failure ${selector}: row background hover mismatch ${JSON.stringify({ point, ...actual })}`);
+      return point;
     }
     async function keyboardFocus(selector) {
       // Click body resets the browser's sequential navigation starting point.
@@ -372,7 +405,10 @@ async function renderInventory(condition, theme, calibrating = false) {
         for (const action of ['rest', 'hover', 'focus-visible']) for (const state of Object.keys(roots.key).filter(s => need === 'required' ? s !== 'optional-absent' : s !== 'required-missing')) {
           const row = `[data-testid="key-row-${state}"]`;
           await reset(); let steps = 'seed status; verified via fixture VERIFY click';
-          if (action === 'hover') { await page.locator(row).hover(); steps += '; mouse hover row'; }
+          if (action === 'hover') {
+            const point = await hoverKeyRow(row);
+            steps += `; mouse hover verified row background at ${point.x},${point.y}`;
+          }
           if (action === 'focus-visible') steps += `; keyboard Tab ×${await keyboardFocus(`${row} input`)}`;
           await captureValues('key', state, `key/${need}/${action}`, `${row} .key-status svg`, steps);
         }

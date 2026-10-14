@@ -1,0 +1,251 @@
+{
+  "scope": "Source-only declared closure; no freshness tests or runtime imports.",
+  "head": "f755a209b64cd67f8feaaa774dbcd0679863452b",
+  "prior_source": "894d8c88",
+  "main_comparison": "f073b3711a3bd0273943c9defad85913452fd00b",
+  "records": [
+    {
+      "document": "AGENTS.md",
+      "incremental_changed_sources": [
+        "nexus.toml",
+        "nexus/api/narrative.py"
+      ],
+      "all_changed_sources_from_main": [
+        "CLAUDE.md",
+        "docs/turn_flow_sequence.md",
+        "nexus.toml",
+        "nexus/agents/logon/apex_schema.py",
+        "nexus/agents/lore/utils/turn_cycle.py",
+        "nexus/agents/orrery/worker.py",
+        "nexus/api/narrative.py",
+        "nexus/jobs/scheduler.py",
+        "tests/pg_fixtures.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0006-who-owns-the-choice.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/api/slot_endpoints.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0007-secrets-with-authors.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/agents/orrery/retrograde_expansion.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0008-the-story-clock-in-chrome.md",
+      "incremental_changed_sources": [
+        "ui/client/src/components/nexus/TopBar.tsx"
+      ],
+      "all_changed_sources_from_main": [
+        "ui/client/src/components/nexus/TopBar.tsx"
+      ],
+      "stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8"
+    },
+    {
+      "document": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "incremental_changed_sources": [
+        "nexus.toml"
+      ],
+      "all_changed_sources_from_main": [
+        "nexus.toml",
+        "nexus/cli.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0010-the-gaia-seat.md",
+      "incremental_changed_sources": [
+        "nexus.toml"
+      ],
+      "all_changed_sources_from_main": [
+        "nexus.toml",
+        "nexus/config/story_model.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0016-speculative-maturation.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "docs/orrery_retrograde_spec.md",
+        "nexus/agents/orrery/retrograde_maturation.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0017-sparse-entity-enrichment.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "docs/orrery_retrograde_spec.md",
+        "nexus/agents/orrery/retrograde_maturation.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0019-killed-c014.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/agents/orrery/worker.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0022-killed-c068.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/api/slot_endpoints.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0024-killed-c102.md",
+      "incremental_changed_sources": [
+        "nexus.toml"
+      ],
+      "all_changed_sources_from_main": [
+        "docs/orrery_retrograde_spec.md",
+        "nexus.toml"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0025-legacy-new-story-seed-columns.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/api/new_story_cache.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0027-narration-job-provider-columns.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/agents/orrery/worker.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0034-conspiracy-channel.md",
+      "incremental_changed_sources": [
+        "nexus.toml"
+      ],
+      "all_changed_sources_from_main": [
+        "nexus.toml",
+        "prompts/storyteller_gaia.md"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0040-story-bundles.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/maintenance/new_story_setup.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0042-durable-intentions.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/agents/orrery/substrate.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0044-mundane-texture.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/agents/orrery/worker.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0049-faction-seeding.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/api/trait_compiler.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0051-time-lens.md",
+      "incremental_changed_sources": [
+        "ui/client/src/components/nexus/NexusLayout.tsx"
+      ],
+      "all_changed_sources_from_main": [
+        "ui/client/src/components/nexus/NexusLayout.tsx"
+      ],
+      "stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8"
+    },
+    {
+      "document": "docs/decisions/0052-story-map.md",
+      "incremental_changed_sources": [
+        "ui/client/src/components/nexus/MapPane.tsx"
+      ],
+      "all_changed_sources_from_main": [
+        "ui/client/src/components/nexus/MapPane.tsx"
+      ],
+      "stamp": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8"
+    },
+    {
+      "document": "docs/decisions/0053-resumable-genesis.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/api/conversations.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0054-responsive-shell.md",
+      "incremental_changed_sources": [
+        "ui/client/src/components/nexus/NexusLayout.tsx",
+        "ui/client/src/components/nexus/nexus-layout.css",
+        "ui/client/src/hooks/useNarrowShell.ts"
+      ],
+      "all_changed_sources_from_main": [
+        "ui/client/src/components/nexus/NexusLayout.tsx",
+        "ui/client/src/components/nexus/nexus-layout.css",
+        "ui/client/src/hooks/useNarrowShell.ts"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/decisions/0055-weirdness-control.md",
+      "incremental_changed_sources": [],
+      "all_changed_sources_from_main": [
+        "nexus/agents/orrery/retrograde_maturation.py"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    },
+    {
+      "document": "docs/turn_flow_sequence.md",
+      "incremental_changed_sources": [
+        "nexus.toml",
+        "nexus/api/narrative.py",
+        "ui/client/src/hooks/useNarrativeEngine.ts"
+      ],
+      "all_changed_sources_from_main": [
+        "nexus.toml",
+        "nexus/agents/lore/utils/turn_cycle.py",
+        "nexus/agents/orrery/experience_embedding.py",
+        "nexus/agents/orrery/worker.py",
+        "nexus/api/commit_handler_sync.py",
+        "nexus/api/narrative.py",
+        "nexus/config/story_model.py",
+        "nexus/jobs/scheduler.py",
+        "nexus/jobs/summaries.py",
+        "ui/client/src/hooks/useNarrativeEngine.ts",
+        "ui/client/src/lib/narrative-api.ts"
+      ],
+      "stamp": "f073b3711a3bd0273943c9defad85913452fd00b"
+    }
+  ]
+}

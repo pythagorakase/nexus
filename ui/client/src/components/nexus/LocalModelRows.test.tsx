@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -419,5 +420,30 @@ describe("LocalModelRows", () => {
     expect(screen.getByTestId("lm-alert")).toHaveTextContent(
       "llama-server exited before becoming ready",
     );
+  });
+});
+
+
+describe("exceeds-RAM tooltip", () => {
+  it("stays open as focus moves from the row to its trash button", async () => {
+    const user = userEvent.setup();
+    renderRows({ status: { ...WITH_Q6_INSTALLED, system_ram_gb: 36 } });
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
+    for (let step = 0; step < 30 && document.activeElement !== row; step++) {
+      await user.tab();
+    }
+    expect(row).toHaveFocus();
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    act(() => { fireEvent.focusOut(row, { relatedTarget: trash }); });
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    await user.tab();
+    expect(trash).toHaveFocus();
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    await user.tab();
+    expect(row.contains(document.activeElement)).toBe(false);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(row).toHaveAttribute("data-state", "closed");
   });
 });

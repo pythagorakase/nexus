@@ -367,6 +367,13 @@ export function LocalModelRows({
                           .filter(Boolean)
                           .join(" ")}
                         onClick={blocked ? undefined : () => clickQuant(q)}
+                        onBlur={(event) => {
+                          // Focus moving inside the row keeps the tooltip open;
+                          // Radix closes it when focus leaves the row.
+                          if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                            event.preventDefault();
+                          }
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();

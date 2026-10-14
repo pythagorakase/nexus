@@ -1,5 +1,6 @@
 /**
  * LeftRail - the 60px vertical icon rail (primary navigation).
+ * At 760px and below it is a bottom row after the content.
  *
  * Home returns to the splash; the four tabs switch the main pane. The
  * active tab carries the 3x22px magenta edge marker + glow (CSS ::before).

@@ -1,0 +1,12 @@
+== black --check (branch fc7c5a3c)
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+== flake8 (branch)
+nexus/agents/orrery/backstage.py:650:89: E501 line too long (91 > 88 characters)
+exit=1
+== black --check (origin/main f073b371)
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+== flake8 (origin/main)
+nexus/agents/orrery/backstage.py:547:89: E501 line too long (91 > 88 characters)
+exit=1

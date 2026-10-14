@@ -1,0 +1,151 @@
+
+> nexus-ui@1.0.0 test
+> vitest run MapPane NexusLayout.test
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/nexus/NexusLayout.test.tsx (5 tests | 2 failed) 116ms
+   × NexusLayout pane ownership and rail order > keeps one map view owner across tab switches 53ms
+     → useMapView must be used inside MapViewProvider
+   × NexusLayout pane ownership and rail order > puts the rail after the content at narrow width 9ms
+     → expected +0 to be truthy
+stderr | src/components/nexus/NexusLayout.test.tsx > NexusLayout pane ownership and rail order > keeps one map view owner across tab switches
+Error: Uncaught [Error: useMapView must be used inside MapViewProvider]
+    at reportException (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/helpers/runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:353:9)
+    at invokeEventListeners (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:286:3)
+    at HTMLUnknownElementImpl._dispatch (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:233:9)
+    at HTMLUnknownElementImpl.dispatchEvent (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:104:17)
+    at HTMLUnknownElement.dispatchEvent (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:241:34)
+    at Object.invokeGuardedCallbackDev (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:4213:16)
+    at invokeGuardedCallback (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:4277:31)
+    at beginWork$1 (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:27490:7)
+    at performUnitOfWork (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:26599:12) Error: useMapView must be used inside MapViewProvider
+    at Module.useMapView (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/components/nexus/MapViewContext.tsx:55:21)
+    at MapPane (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/components/nexus/NexusLayout.test.tsx:72:53)
+    at renderWithHooks (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at HTMLUnknownElement.callCallback (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:350:25)
+    at invokeEventListeners (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:286:3)
+    at HTMLUnknownElementImpl._dispatch (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:233:9)
+Error: Uncaught [Error: useMapView must be used inside MapViewProvider]
+    at reportException (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/helpers/runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:353:9)
+    at invokeEventListeners (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:286:3)
+    at HTMLUnknownElementImpl._dispatch (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:233:9)
+    at HTMLUnknownElementImpl.dispatchEvent (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:104:17)
+    at HTMLUnknownElement.dispatchEvent (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:241:34)
+    at Object.invokeGuardedCallbackDev (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:4213:16)
+    at invokeGuardedCallback (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:4277:31)
+    at beginWork$1 (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:27490:7)
+    at performUnitOfWork (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:26599:12) Error: useMapView must be used inside MapViewProvider
+    at Module.useMapView (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/components/nexus/MapViewContext.tsx:55:21)
+    at MapPane (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/components/nexus/NexusLayout.test.tsx:72:53)
+    at renderWithHooks (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at HTMLUnknownElement.callCallback (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/react-dom/cjs/react-dom.development.js:4164:14)
+    at HTMLUnknownElement.callTheUserObjectsOperation (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+    at innerInvokeEventListeners (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:350:25)
+    at invokeEventListeners (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:286:3)
+    at HTMLUnknownElementImpl._dispatch (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:233:9)
+The above error occurred in the <MapPane> component:
+
+    at MapPane (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/components/nexus/NexusLayout.test.tsx:72:53)
+    at main
+    at div
+    at div
+    at NexusLayout (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/components/nexus/NexusLayout.tsx:43:49)
+    at DeveloperModeProvider (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/contexts/DeveloperModeContext.tsx:11:34)
+    at ThemeProvider (/Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client/src/contexts/ThemeContext.tsx:13:26)
+    at QueryClientProvider (file:///Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/node_modules/@tanstack/react-query/build/modern/QueryClientProvider.js:20:3)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+
+ ❯ src/components/nexus/MapPane.test.tsx (5 tests | 1 failed) 185ms
+   × MapPane > restores the last view, selection and zones after a tab switch 102ms
+     → expected { x: 4.9500000000116415, …(3) } to deeply equal { x: 206.43241923365906, …(3) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/nexus/MapPane.test.tsx > MapPane > restores the last view, selection and zones after a tab switch
+AssertionError: expected { x: 4.9500000000116415, …(3) } to deeply equal { x: 206.43241923365906, …(3) }
+
+- Expected
++ Received
+
+  Object {
+-   "height": 450.78888054094654,
+-   "width": 751.3148009015775,
+-   "x": 206.43241923365906,
+-   "y": 29.092223891814328,
++   "height": 600,
++   "width": 1000,
++   "x": 4.9500000000116415,
++   "y": 0.749999999998181,
+  }
+
+ ❯ src/components/nexus/MapPane.test.tsx:182:27
+    180|     setVisible(true);
+    181|     resizeCanvas(1000, 600);
+    182|     expect(readViewBox()).toEqual(before);
+       |                           ^
+    183|     expect(screen.getByTestId("map-place-row-101")).toHaveClass("on");
+    184|     expect(screen.getByTestId("map-place-row-102")).toBeVisible();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/components/nexus/NexusLayout.test.tsx > NexusLayout pane ownership and rail order > keeps one map view owner across tab switches
+Error: useMapView must be used inside MapViewProvider
+ ❯ Module.useMapView src/components/nexus/MapViewContext.tsx:55:21
+     53| export function useMapView(): MapViewState {
+     54|   const state = useContext(MapViewContext);
+     55|   if (!state) throw new Error("useMapView must be used inside MapViewP…
+       |                     ^
+     56|   return state;
+     57| }
+ ❯ MapPane src/components/nexus/NexusLayout.test.tsx:72:53
+ ❯ renderWithHooks ../node_modules/react-dom/cjs/react-dom.development.js:15486:18
+ ❯ mountIndeterminateComponent ../node_modules/react-dom/cjs/react-dom.development.js:20103:13
+ ❯ beginWork ../node_modules/react-dom/cjs/react-dom.development.js:21626:16
+ ❯ beginWork$1 ../node_modules/react-dom/cjs/react-dom.development.js:27465:14
+ ❯ performUnitOfWork ../node_modules/react-dom/cjs/react-dom.development.js:26599:12
+ ❯ workLoopSync ../node_modules/react-dom/cjs/react-dom.development.js:26505:5
+ ❯ renderRootSync ../node_modules/react-dom/cjs/react-dom.development.js:26473:7
+ ❯ recoverFromConcurrentError ../node_modules/react-dom/cjs/react-dom.development.js:25889:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/components/nexus/NexusLayout.test.tsx > NexusLayout pane ownership and rail order > puts the rail after the content at narrow width
+AssertionError: expected +0 to be truthy
+
+- Expected: 
+true
+
++ Received: 
+0
+
+ ❯ src/components/nexus/NexusLayout.test.tsx:346:84
+    344|     const main = document.querySelector("main.nexus-content")!;
+    345|     const nav = () => screen.getByRole("navigation", { name: "Primary …
+    346|     expect(main.compareDocumentPosition(nav()) & Node.DOCUMENT_POSITIO…
+       |                                                                                    ^
+    347|     act(() => notify({ matches: false }));
+    348|     expect(main.compareDocumentPosition(nav()) & Node.DOCUMENT_POSITIO…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 7 passed (10)
+   Start at  13:43:23
+   Duration  894ms (transform 411ms, setup 55ms, collect 617ms, tests 301ms, environment 322ms, prepare 94ms)
+

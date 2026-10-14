@@ -1,0 +1,23 @@
+{
+  "state": "actual-initial-reds-accepted-by-coordinator",
+  "head": "7557f00c7278d74e203c585d0092436db4f15934",
+  "tree": "98e20d9f013579c9f6a6d6189e80a61c2912c618",
+  "python_results": "../uib-python-initial-red-20261009T015153Z-02cc3f2c/results.json",
+  "python": "4 intended failures,9warnings,24.47s,all3guards,clonesgone",
+  "ui": {
+    "failed": 12,
+    "passed": 8,
+    "files": 3,
+    "seconds": 2.57,
+    "failures": "missing economics section/pending display/elapsed suffix/formatter only",
+    "unchanged_777_announcer_cases": 3
+  },
+  "failed_admission_preserved": "RuntimeError: UI selection/collection differs from the two required suites",
+  "diagnosis": "The frozen NexusLayout filter also selects existing NexusLayout.announcer.test.tsx. Its three unchanged cases all passed; runner expected only two files, so it conservatively refused acceptance after valid test execution. Root inspected every result and accepted the actual requested reds, without rerunning or editing tests.",
+  "npm_initial_failure_retained": "../uib-ui-initial-red-20261009T015239Z-a9cd0c86/results.json",
+  "report_sha256": "a9a6d2504b79feb8ad5a5e356c5bf701ad57bf42f6e5f86321c2679bade6169f",
+  "results_sha256": "9a6286f2fd4240cf9b9ca60c1aef5b941e832ae73426732af620a6395bdc3577",
+  "clean_source_verified": true,
+  "product_implementation_admitted": true,
+  "reviewer": "Codex \u2014 GPT-6"
+}

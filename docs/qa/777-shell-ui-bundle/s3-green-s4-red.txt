@@ -1,0 +1,42 @@
+
+> nexus-ui@1.0.0 test
+> vitest run MapPane NexusLayout.test
+
+
+ RUN  v2.1.9 /Users/pythagor/.codex/worktrees/resume-shell-ui/nexus/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/nexus/NexusLayout.test.tsx (5 tests | 1 failed) 122ms
+   × NexusLayout pane ownership and rail order > puts the rail after the content at narrow width 7ms
+     → expected +0 to be truthy
+ ✓ src/components/nexus/MapPane.test.tsx (5 tests) 186ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/nexus/NexusLayout.test.tsx > NexusLayout pane ownership and rail order > puts the rail after the content at narrow width
+AssertionError: expected +0 to be truthy
+
+- Expected: 
+true
+
++ Received: 
+0
+
+ ❯ src/components/nexus/NexusLayout.test.tsx:346:84
+    344|     const main = document.querySelector("main.nexus-content")!;
+    345|     const nav = () => screen.getByRole("navigation", { name: "Primary …
+    346|     expect(main.compareDocumentPosition(nav()) & Node.DOCUMENT_POSITIO…
+       |                                                                                    ^
+    347|     act(() => notify({ matches: false }));
+    348|     expect(main.compareDocumentPosition(nav()) & Node.DOCUMENT_POSITIO…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 9 passed (10)
+   Start at  13:43:47
+   Duration  928ms (transform 319ms, setup 53ms, collect 664ms, tests 308ms, environment 318ms, prepare 92ms)
+

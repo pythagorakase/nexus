@@ -1,0 +1,2022 @@
+{
+  "condition": {
+    "viewport": {
+      "width": 1200,
+      "height": 900
+    },
+    "deviceScaleFactor": 4,
+    "colorScheme": "dark",
+    "reducedMotion": "reduce",
+    "hasTouch": false,
+    "isMobile": false
+  },
+  "counts": {
+    "rowOpen": 50,
+    "trashOpen": 50,
+    "outsideClosed": 50
+  },
+  "runs": [
+    {
+      "run": 1,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 2,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 3,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 4,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 5,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 6,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 7,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 8,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 9,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 10,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 11,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 12,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 13,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 14,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 15,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 16,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 17,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 18,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 19,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 20,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 21,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 22,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 23,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 24,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 25,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 26,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 27,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 28,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 29,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 30,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 31,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 32,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 33,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 34,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 35,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 36,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 37,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 38,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 39,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 40,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 41,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 42,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 43,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 44,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 45,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 46,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 47,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 48,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 49,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    },
+    {
+      "run": 50,
+      "tabs": 23,
+      "stationaryPrecondition": {
+        "focused": "lm-toggle-fixture",
+        "scrollTop": 937,
+        "stableFrames": 2,
+        "rowTop": 461.1875,
+        "rowBottom": 491.1875,
+        "visibleTop": 52,
+        "visibleBottom": 900
+      },
+      "atRow": {
+        "focused": "lm-quant-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "atTrash": {
+        "focused": "lm-trash-fixture-Q4",
+        "focusWithin": true,
+        "scrollTop": 937,
+        "state": "instant-open",
+        "tooltip": true,
+        "open": true,
+        "closed": false
+      },
+      "outside": {
+        "focused": "key-input-required-missing",
+        "focusWithin": false,
+        "scrollTop": 937,
+        "state": "closed",
+        "tooltip": false,
+        "open": false,
+        "closed": true
+      }
+    }
+  ],
+  "pageErrors": [],
+  "requests": []
+}

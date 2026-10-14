@@ -1,0 +1,22 @@
+{
+  "scope": "Static AST source inventory only; no product imports, tests or database reads.",
+  "head": "f755a209b64cd67f8feaaa774dbcd0679863452b",
+  "tree": "6571e0ea7100ced95c1c7eb71939b2a1541a05a8",
+  "argv": [
+    "nice",
+    "-n",
+    "15",
+    "/Users/pythagor/nexus/.venv/bin/python",
+    "-I",
+    "-S",
+    "/Users/pythagor/.codex/worktrees/resume-wave-b-integration/nexus/scripts/check_reachability.py",
+    "--root",
+    "/Users/pythagor/.codex/worktrees/resume-wave-b-integration/nexus",
+    "--report",
+    "/Users/pythagor/nexus/temp/orders_2026_10_08_codex/coord/wave-b-source-assembly/independent-uib-reachability-f755a209.json"
+  ],
+  "exit_code": 0,
+  "script_sha256": "7c39dbbd22f672c4eed1d0ccaea57518cb2fab76dfab90579caec5441c9bec6a",
+  "log_sha256": "fe3dcd43735a5e697c52502081b8a72bbec2ba0897694c14fe40dacbebd8a444",
+  "clean_before_after": true
+}
