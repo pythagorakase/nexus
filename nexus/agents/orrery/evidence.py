@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any, Callable, Mapping, Optional
 
 from nexus.agents.orrery.catalog import _PREDICATE_PARSERS
@@ -67,6 +68,7 @@ from nexus.agents.orrery.substrate import (
     active_mood,
     _at_routine_anchor,
     _is_in_transit,
+    _hour_window_floor,
     _possessed_claim_knowledge,
     _routine_anchor,
     _routine_anchor_destination_available,
@@ -1471,6 +1473,9 @@ def _event_payload(event: Any) -> dict[str, Any]:
         "event_id": event.event_id,
         "event_type": event.event_type,
         "tick": event.tick,
+        "world_time": (
+            event.world_time.isoformat() if event.world_time is not None else None
+        ),
         "actor_entity_id": event.actor_entity_id,
         "target_entity_id": event.target_entity_id,
     }
@@ -1998,6 +2003,280 @@ def _count_recent_events_at_least(
         observed={
             "current_tick": state.current_tick,
             "cutoff_tick": cutoff,
+            "matched_count": len(matched),
+        },
+        matched=matched,
+        result=False if slot_unbound else len(matched) >= min_count,
+    )
+
+
+@_resolver("recent_event_within_hours")
+def _recent_event_within_hours(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict:
+    floor = _hour_window_floor(
+        state, float(match["hours"]), "recent_event_within_hours"
+    )
+    event_type = match["event"]
+    within_hours = float(match["hours"])
+    actor_slot = match["actor"]
+    target_slot = match["target"]
+    fields_filter_active = match.group(0).rstrip(")").endswith(",fields")
+    actor_id = _entity(bindings, actor_slot) if actor_slot else None
+    target_id = _entity(bindings, target_slot) if target_slot else None
+    assert state.world_time is not None  # Validated by the horizon guard.
+    matched: list[dict[str, Any]] = []
+    slot_unbound = (actor_slot is not None and actor_id is None) or (
+        target_slot is not None and target_id is None
+    )
+    if not slot_unbound:
+        for event in state.horizon_events:
+            assert event.world_time is not None  # Validated by WorldState.
+            if event.world_time < floor:
+                continue
+            if event_type != "*" and event.event_type != event_type:
+                continue
+            if actor_id is not None and event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            matched.append(_event_payload(event))
+    entities: dict[str, Optional[int]] = {}
+    if actor_slot:
+        entities[actor_slot] = actor_id
+    if target_slot:
+        entities[target_slot] = target_id
+    return _evidence(
+        "recent_event_within_hours",
+        params={
+            "event_type": None if event_type == "*" else event_type,
+            "within_hours": within_hours,
+            "actor_slot": actor_slot,
+            "target_slot": target_slot,
+            "changed_fields_filter": fields_filter_active,
+        },
+        entities=entities,
+        observed={
+            "world_time": state.world_time.isoformat(),
+            "event_horizon_hours": state.event_horizon_hours,
+            "floor_world_time": floor.isoformat(),
+        },
+        matched=matched,
+        # The changed_fields filter set lives only inside the closure; with
+        # the marker present the verdict is not recomputable from the name.
+        result=None if fields_filter_active else bool(matched),
+    )
+
+
+@_resolver("knows_recent_event_within_hours")
+def _knows_recent_event_within_hours(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict:
+    floor = _hour_window_floor(
+        state, float(match["hours"]), "knows_recent_event_within_hours"
+    )
+    event_type = match["event"]
+    within_hours = float(match["hours"])
+    actor_slot = match["actor"]
+    target_slot = match["target"]
+    fields_filter_active = match.group(0).rstrip(")").endswith(",fields")
+    knower_id = _entity(bindings, "actor")
+    actor_id = _entity(bindings, actor_slot) if actor_slot else None
+    target_id = _entity(bindings, target_slot) if target_slot else None
+    assert state.world_time is not None  # Validated by the horizon guard.
+    slot_unbound = (actor_slot is not None and actor_id is None) or (
+        target_slot is not None and target_id is None
+    )
+    candidates: list[dict[str, Any]] = []
+    known_event_ids: frozenset[int] = frozenset()
+    if knower_id is not None:
+        known_event_ids = state.awareness_by_entity.get(knower_id, frozenset())
+    if not slot_unbound and (knower_id is not None or not state.epistemics_enabled):
+        for event in state.horizon_events:
+            assert event.world_time is not None  # Validated by WorldState.
+            if event.world_time < floor:
+                continue
+            if event_type != "*" and event.event_type != event_type:
+                continue
+            if actor_id is not None and event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            scope = (
+                state.claimed_event_scopes.get(event.event_id)
+                if event.event_id is not None
+                else None
+            )
+            actor_holds_awareness = event.event_id in known_event_ids
+            visible_to_actor = (
+                not state.epistemics_enabled
+                or scope is None
+                or scope == "common"
+                or actor_holds_awareness
+            )
+            candidates.append(
+                {
+                    **_event_payload(event),
+                    "claim_scope": scope,
+                    "actor_holds_awareness": actor_holds_awareness,
+                    "visible_to_actor": visible_to_actor,
+                }
+            )
+    visible_candidates = [
+        candidate for candidate in candidates if candidate["visible_to_actor"]
+    ]
+    if visible_candidates:
+        selected = visible_candidates[0]
+        event_id = selected["event_id"]
+        if not state.epistemics_enabled:
+            reason = "eligible because Epistemics is disabled"
+        elif selected["claim_scope"] is None:
+            reason = f"eligible because event {event_id} has no claim"
+        elif selected["claim_scope"] == "common":
+            reason = f"eligible because claim on event {event_id} is common"
+        else:
+            reason = f"eligible because actor holds awareness of event {event_id}"
+    elif candidates:
+        reason = (
+            f"blocked: claim on event {candidates[0]['event_id']} not known to actor"
+        )
+    elif knower_id is None and state.epistemics_enabled:
+        reason = "blocked: actor slot has no bound knower"
+    else:
+        reason = "blocked: no matching recent event"
+    entities: dict[str, Optional[int]] = {"actor": knower_id}
+    if actor_slot:
+        entities[actor_slot] = actor_id
+    if target_slot:
+        entities[target_slot] = target_id
+    return _evidence(
+        "knows_recent_event_within_hours",
+        params={
+            "event_type": None if event_type == "*" else event_type,
+            "within_hours": within_hours,
+            "knower_slot": "actor",
+            "actor_slot": actor_slot,
+            "target_slot": target_slot,
+            "changed_fields_filter": fields_filter_active,
+        },
+        entities=entities,
+        observed={
+            "world_time": state.world_time.isoformat(),
+            "event_horizon_hours": state.event_horizon_hours,
+            "floor_world_time": floor.isoformat(),
+            "epistemics_enabled": state.epistemics_enabled,
+            "reason": reason,
+        },
+        matched=candidates,
+        result=None if fields_filter_active else bool(visible_candidates),
+    )
+
+
+@_resolver("since_last_event_hours_at_least")
+def _since_last_event_hours_at_least(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict:
+    floor = _hour_window_floor(
+        state, float(match["hours"]), "since_last_event_hours_at_least"
+    )
+    event_type = match["event"]
+    minimum_hours = float(match["hours"])
+    actor_slot = match["actor"]
+    target_slot = match["target"]
+    actor_id = _entity(bindings, actor_slot)
+    target_id = _entity(bindings, target_slot) if target_slot else None
+    latest: Optional[datetime] = None
+    if actor_id is not None and not (target_slot is not None and target_id is None):
+        for event in state.horizon_events:
+            if event.event_type != event_type:
+                continue
+            if event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            assert event.world_time is not None  # Validated by WorldState.
+            if latest is None or event.world_time > latest:
+                latest = event.world_time
+    assert state.world_time is not None  # Validated by the horizon guard.
+    elapsed = (
+        (state.world_time - latest).total_seconds() / 3600
+        if latest is not None
+        else None
+    )
+    entities: dict[str, Optional[int]] = {actor_slot: actor_id}
+    if target_slot:
+        entities[target_slot] = target_id
+    if actor_id is None or (target_slot is not None and target_id is None):
+        result = False
+    else:
+        result = latest is None or latest <= floor
+    return _evidence(
+        "since_last_event_hours_at_least",
+        params={
+            "event_type": event_type,
+            "minimum_hours": minimum_hours,
+            "actor_slot": actor_slot,
+            "target_slot": target_slot,
+        },
+        entities=entities,
+        observed={
+            "world_time": state.world_time.isoformat(),
+            "event_horizon_hours": state.event_horizon_hours,
+            "latest_matching_world_time": (
+                latest.isoformat() if latest is not None else None
+            ),
+            "elapsed_hours": elapsed,
+        },
+        result=result,
+    )
+
+
+@_resolver("count_recent_events_within_hours_at_least")
+def _count_recent_events_within_hours_at_least(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict:
+    floor = _hour_window_floor(
+        state, float(match["hours"]), "count_recent_events_within_hours_at_least"
+    )
+    event_type = match["event"]
+    min_count = int(match["count"])
+    within_hours = float(match["hours"])
+    actor_slot = match["actor"]
+    target_slot = match["target"]
+    actor_id = _entity(bindings, actor_slot)
+    target_id = _entity(bindings, target_slot) if target_slot else None
+    slot_unbound = actor_id is None or (target_slot is not None and target_id is None)
+    assert state.world_time is not None  # Validated by the horizon guard.
+    matched: list[dict[str, Any]] = []
+    if not slot_unbound:
+        for event in state.horizon_events:
+            assert event.world_time is not None  # Validated by WorldState.
+            if event.world_time < floor:
+                continue
+            if event.event_type != event_type:
+                continue
+            if event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            matched.append(_event_payload(event))
+    entities: dict[str, Optional[int]] = {actor_slot: actor_id}
+    if target_slot:
+        entities[target_slot] = target_id
+    return _evidence(
+        "count_recent_events_within_hours_at_least",
+        params={
+            "event_type": event_type,
+            "min_count": min_count,
+            "within_hours": within_hours,
+            "actor_slot": actor_slot,
+            "target_slot": target_slot,
+        },
+        entities=entities,
+        observed={
+            "world_time": state.world_time.isoformat(),
+            "event_horizon_hours": state.event_horizon_hours,
+            "floor_world_time": floor.isoformat(),
             "matched_count": len(matched),
         },
         matched=matched,

@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, List, Mapping, Tuple
 
 from nexus.agents.orrery.substrate import (
+    AttentionClass,
     Branch,
     CompoundCondition,
     Template,
@@ -463,6 +464,64 @@ _register(
     _render_since_last_event,
 )
 
+
+# World-hour event predicates (no template conversion).
+def _render_recent_event_hours(m: re.Match) -> str:
+    event = m.group("event")
+    n = m.group("hours")
+    actor = m.group("actor")
+    target = m.group("target")
+    parts = ["any event" if event == "*" else f"`{event}` event"]
+    if actor:
+        parts.append(f"with actor={_slot(actor)}")
+    if target:
+        parts.append(f"targeting {_slot(target)}")
+    return f"recent {' '.join(parts)} in last {n} world hours"
+
+
+def _render_knows_recent_event_hours(m: re.Match) -> str:
+    event = m.group("event")
+    n = m.group("hours")
+    actor = m.group("actor")
+    target = m.group("target")
+    parts = ["any event" if event == "*" else f"`{event}` event"]
+    if actor:
+        parts.append(f"with actor={_slot(actor)}")
+    if target:
+        parts.append(f"targeting {_slot(target)}")
+    return f"actor knows recent {' '.join(parts)} in last {n} world hours"
+
+
+def _render_since_last_event_hours(m: re.Match) -> str:
+    event = m.group("event")
+    n = m.group("hours")
+    actor = m.group("actor")
+    target = m.group("target")
+    if target:
+        scope = f"({_slot(actor)}, {_slot(target)}) pair"
+    else:
+        scope = _slot(actor)
+    return f"≥ {n} world hours since last `{event}` event for {scope}"
+
+
+_register(
+    r"recent_event_within_hours\((?P<event>[^,)]+),<=(?P<hours>\d+(?:\.\d+)?)h"
+    r"(?:,actor=(?P<actor>\w+))?(?:,target=(?P<target>\w+))?(?:,fields)?\)",
+    _render_recent_event_hours,
+)
+_register(
+    r"knows_recent_event_within_hours\((?P<event>[^,)]+),"
+    r"<=(?P<hours>\d+(?:\.\d+)?)h,knower=actor"
+    r"(?:,actor=(?P<actor>\w+))?(?:,target=(?P<target>\w+))?(?:,fields)?\)",
+    _render_knows_recent_event_hours,
+)
+_register(
+    r"since_last_event_hours_at_least\("
+    r"(?P<event>[^,()]+),(?P<hours>\d+(?:\.\d+)?)h@(?P<actor>\w+)"
+    r"(?:,target=(?P<target>\w+))?\)",
+    _render_since_last_event_hours,
+)
+
 _register(
     r"project_due\((?P<project>[^,()]+),(?P<mode>[^@()]+)" r"@(?P<slot>\w+)\)",
     lambda m: (
@@ -509,6 +568,27 @@ _register(
     r"(?P<event>[^,()]+),>=(?P<count>\d+),<=(?P<n>\d+)@(?P<actor>\w+)"
     r"(?:,target=(?P<target>\w+))?\)",
     _render_count_recent_events,
+)
+
+
+def _render_count_recent_events_hours(m: re.Match) -> str:
+    event = m.group("event")
+    count = m.group("count")
+    n = m.group("hours")
+    actor = m.group("actor")
+    target = m.group("target")
+    if target:
+        scope = f"({_slot(actor)}, {_slot(target)}) pair"
+    else:
+        scope = _slot(actor)
+    return f"≥ {count} `{event}` events within {n} world hours for {scope}"
+
+
+_register(
+    r"count_recent_events_within_hours_at_least\("
+    r"(?P<event>[^,()]+),>=(?P<count>\d+),<=(?P<hours>\d+(?:\.\d+)?)h@(?P<actor>\w+)"
+    r"(?:,target=(?P<target>\w+))?\)",
+    _render_count_recent_events_hours,
 )
 
 
@@ -706,6 +786,10 @@ def _render_branch(idx: int, branch: Branch) -> List[str]:
     markers = []
     if branch.preemptive:
         markers.append("**preemptive**")
+    if branch.attention is not AttentionClass.MEANINGFUL:
+        markers.append(f"**{branch.attention.value}**")
+    if branch.deviation:
+        markers.append("**deviation**")
     if not branch.promotable:
         markers.append("**not promotable**")
     marker = f" · {' · '.join(markers)}" if markers else ""
@@ -827,6 +911,13 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("event_type", re.compile(r"knows_recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
     ("event_type", re.compile(r"count_recent_events_at_least\(([^,()]+),")),
+    ("event_type", re.compile(r"recent_event_within_hours\(([^,*()]+),")),
+    ("event_type", re.compile(r"knows_recent_event_within_hours\(([^,*()]+),")),
+    ("event_type", re.compile(r"since_last_event_hours_at_least\(([^,()]+),")),
+    (
+        "event_type",
+        re.compile(r"count_recent_events_within_hours_at_least\(([^,()]+),"),
+    ),
     ("place_class", re.compile(r"in_location_class\(([^@()]+)@")),
     ("place_class_list", re.compile(r"has_location_class_destination\(([^@()]+)@")),
     ("relationship", re.compile(r"has_relationship_of_type\(([^,()]+),")),
@@ -1037,6 +1128,10 @@ def render_catalog(templates: Iterable[Template]) -> str:
         "or project/identity pressure. Static priority still decides resolver "
         "order; any lower-band package that outranks a higher-band package should "
         "carry an explicit rationale.",
+        "",
+        "Attention class is authored per branch. A **background** branch is "
+        "ordinary activity authored as safe to keep out of the storyteller's "
+        "card set; an unmarked branch is meaningful.",
         "",
         "**Source-of-truth:** `nexus/agents/orrery/templates.py` "
         "(`BUILTIN_TEMPLATES`).  ",

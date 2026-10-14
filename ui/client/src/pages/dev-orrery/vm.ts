@@ -103,6 +103,11 @@ export function evidenceText(ev: TraceEvidence | null | undefined): string {
       const elapsed = o.elapsed_ticks;
       return elapsed == null ? "never fired" : `${fmtNum(elapsed)} ticks ago`;
     }
+    case "since_last_event_hours_at_least": {
+      const elapsed = o.elapsed_hours;
+      return elapsed == null ? "never fired" : `${fmtNum(elapsed)}h ago`;
+    }
+    case "recent_event_within_hours":
     case "recent_event":
       return matched.length
         ? `${matched.length} in window`
@@ -234,7 +239,9 @@ export function gateConsumesEvent(node: TraceNode, eventType: string): boolean {
   if (!node.op)
     return (
       (node.raw.startsWith("recent_event(") ||
-        node.raw.startsWith("since_last_event_at_least(")) &&
+        node.raw.startsWith("since_last_event_at_least(") ||
+        node.raw.startsWith("recent_event_within_hours(") ||
+        node.raw.startsWith("since_last_event_hours_at_least(")) &&
       node.raw.includes(eventType)
     );
   return (node.children ?? []).some((c) => gateConsumesEvent(c, eventType));

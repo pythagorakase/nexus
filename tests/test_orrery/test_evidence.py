@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import json
 from contextlib import closing
+from dataclasses import replace
 from datetime import datetime, timezone
+from typing import Callable
 
 import pytest
 
@@ -34,6 +36,7 @@ from nexus.agents.orrery.epistemics import ClaimKnowledge
 from nexus.agents.orrery.explain import explain_stack
 from nexus.agents.orrery.substrate import (
     ALWAYS,
+    Condition,
     EventRecord,
     ProjectPolicy,
     RoutineAnchor,
@@ -47,6 +50,7 @@ from nexus.agents.orrery.substrate import (
     co_located,
     count_co_located,
     count_recent_events_at_least,
+    count_recent_events_within_hours_at_least,
     direct_contact_is_dramatic,
     faction_member,
     fame_at_or_above,
@@ -82,6 +86,7 @@ from nexus.agents.orrery.substrate import (
     is_in_transit,
     knows_claim_about,
     knows_recent_event,
+    knows_recent_event_within_hours,
     lacks_pair_tag,
     lacks_tag,
     mood_is,
@@ -91,6 +96,7 @@ from nexus.agents.orrery.substrate import (
     project_target_is,
     project_target_is_active,
     recent_event,
+    recent_event_within_hours,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
     relative_orbit_distance,
@@ -99,6 +105,7 @@ from nexus.agents.orrery.substrate import (
     routine_anchor_due,
     routine_anchor_has_destination,
     since_last_event_at_least,
+    since_last_event_hours_at_least,
     time_of_day_in,
     travel_progress_at_or_above,
     travel_purpose_is,
@@ -200,7 +207,22 @@ RICH_STATE = WorldState(
         )
     },
     time_of_day="night",
-    world_time=datetime(2073, 5, 3, 11, 30),
+    world_time=datetime(2073, 5, 3, 11, 30, tzinfo=timezone.utc),
+    event_horizon_hours=24.0,
+    horizon_events=(
+        EventRecord(
+            event_type="threat_issued",
+            tick=99,
+            target_entity_id=ACTOR,
+            world_time=datetime(2073, 5, 3, 11, tzinfo=timezone.utc),
+        ),
+        EventRecord(
+            event_type="contact_made",
+            tick=95,
+            actor_entity_id=ACTOR,
+            world_time=datetime(2073, 5, 3, 10, tzinfo=timezone.utc),
+        ),
+    ),
     weather="rain",
     mood_enabled=True,
     current_tick=100,
@@ -211,6 +233,22 @@ BINDINGS = {Slot.ACTOR: ACTOR, Slot.TARGET: TARGET, Slot.FACTION: FACTION_ID}
 # One authored predicate per factory — the sweep below asserts this table
 # covers every registered resolver, so a new factory cannot land silently.
 FACTORY_SWEEP = [
+    recent_event_within_hours("threat_issued", within_hours=2, target_slot=Slot.ACTOR),
+    recent_event_within_hours(within_hours=3),
+    knows_recent_event_within_hours(
+        "threat_issued", within_hours=2, target_slot=Slot.TARGET
+    ),
+    knows_recent_event_within_hours(
+        "threat_issued", within_hours=2, target_slot=Slot.ACTOR
+    ),
+    since_last_event_hours_at_least("contact_made", 1.5),
+    since_last_event_hours_at_least("contact_made", 1.5, target_slot=Slot.TARGET),
+    count_recent_events_within_hours_at_least(
+        "contact_made", within_hours=2, min_count=1
+    ),
+    count_recent_events_within_hours_at_least(
+        "contact_made", within_hours=2, min_count=1, target_slot=Slot.TARGET
+    ),
     has_tag("off_grid"),
     lacks_tag("captive"),
     has_any_tag("off_grid", "public_role"),
@@ -365,6 +403,21 @@ def test_observed_values_surface_for_thresholds() -> None:
     )
     assert cooldown["observed"]["latest_matching_tick"] == 95
     assert cooldown["observed"]["elapsed_ticks"] == 5
+    hours = resolve_evidence(
+        since_last_event_hours_at_least("contact_made", 1.5).__name__,
+        RICH_STATE,
+        BINDINGS,
+    )
+    assert hours["observed"]["elapsed_hours"] == 1.5
+    assert (
+        hours["observed"]["latest_matching_world_time"] == "2073-05-03T10:00:00+00:00"
+    )
+    recent = resolve_evidence(
+        recent_event_within_hours(within_hours=2).__name__, RICH_STATE, BINDINGS
+    )
+    assert recent["observed"]["floor_world_time"] == "2073-05-03T09:30:00+00:00"
+    assert recent["observed"]["event_horizon_hours"] == 24.0
+    assert recent["matched"][0]["world_time"] == "2073-05-03T11:00:00+00:00"
     assert cooldown["result"] is True
 
     progress = resolve_evidence(
@@ -564,3 +617,45 @@ def test_slot_backed_explain_carries_evidence_end_to_end(
                 assert leaf["evidence"]["result"] == leaf["result"]
                 checked += 1
     assert checked > 100, "expected slot-wide leaf evidence coverage"
+
+
+@pytest.mark.parametrize(
+    "factory", (recent_event_within_hours, knows_recent_event_within_hours)
+)
+def test_hour_evidence_preserves_unknown_changed_fields_verdict(
+    factory: Callable[..., Condition],
+) -> None:
+    """Names retain the fields marker, not the closure's exact filter values."""
+    predicate = factory(within_hours=2, changed_fields_any_of=("location",))
+    evidence = resolve_evidence(predicate.__name__, RICH_STATE, BINDINGS)
+    assert evidence["params"]["changed_fields_filter"] is True
+    assert evidence["result"] is None
+    assert RICH_STATE.world_time is not None
+    assert evidence["observed"]["world_time"] == RICH_STATE.world_time.isoformat()
+
+
+@pytest.mark.parametrize("aware", (False, True))
+def test_knows_hour_evidence_matches_closure_under_epistemics(aware: bool) -> None:
+    """A bounded claim blocks the knows-hours form until the actor is aware."""
+
+    state = replace(
+        RICH_STATE,
+        epistemics_enabled=True,
+        claimed_event_scopes={91: "bounded"},
+        awareness_by_entity={ACTOR: frozenset({91})} if aware else {},
+        horizon_events=(
+            EventRecord(
+                event_type="threat_issued",
+                tick=99,
+                target_entity_id=ACTOR,
+                world_time=datetime(2073, 5, 3, 11, tzinfo=timezone.utc),
+                event_id=91,
+            ),
+        ),
+    )
+    predicate = knows_recent_event_within_hours(
+        "threat_issued", within_hours=2, target_slot=Slot.ACTOR
+    )
+    evidence = resolve_evidence(predicate.__name__, state, BINDINGS)
+    assert predicate(state, BINDINGS) is aware
+    assert evidence["result"] == predicate(state, BINDINGS)

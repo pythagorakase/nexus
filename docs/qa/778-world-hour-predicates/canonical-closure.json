@@ -1,0 +1,65 @@
+{
+  "status": "stamps_rechecked_on_integrated_tree",
+  "base": "f073b3711a3bd0273943c9defad85913452fd00b",
+  "declarations": [
+    {
+      "document": "AGENTS.md",
+      "changed_sources": [
+        "nexus.toml",
+        "nexus/agents/lore/utils/turn_cycle.py"
+      ],
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/turn_flow_sequence.md",
+      "changed_sources": [
+        "nexus.toml",
+        "nexus/agents/lore/utils/turn_cycle.py"
+      ],
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0034-conspiracy-channel.md",
+      "changed_sources": [
+        "nexus.toml"
+      ],
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0024-killed-c102.md",
+      "changed_sources": [
+        "nexus.toml"
+      ],
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0010-the-gaia-seat.md",
+      "changed_sources": [
+        "nexus.toml"
+      ],
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0009-dollars-in-the-ledger.md",
+      "changed_sources": [
+        "nexus.toml"
+      ],
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b",
+      "body_unchanged": true
+    },
+    {
+      "document": "docs/decisions/0042-durable-intentions.md",
+      "changed_sources": [
+        "nexus/agents/orrery/substrate.py"
+      ],
+      "verified_commit": "f073b3711a3bd0273943c9defad85913452fd00b",
+      "body_unchanged": true
+    }
+  ],
+  "note": "The lane authored these stamps at 4ae8b8d2; the wave-B assembly merge c8abc33f took main's 81163beb for AGENTS.md, docs/turn_flow_sequence.md and decision 0009, and a later assembly commit re-stamped all seven documents to f073b371 (origin/main, the merge base of the integration branch). Re-checked 2026-10-13 on claude/waveb-fix-778-s3."
+}

@@ -13,8 +13,56 @@ from nexus.agents.orrery.catalog import (
     _render_state_delta,
     render_catalog,
 )
-from nexus.agents.orrery.substrate import DriveBand, drive_band_priority_warnings
+from nexus.agents.orrery.substrate import (
+    ALWAYS,
+    AttentionClass,
+    Branch,
+    DriveBand,
+    Slot,
+    Template,
+    drive_band_priority_warnings,
+)
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+
+def test_catalog_marks_attention_and_deviation() -> None:
+    """Background and authored deviations render; meaningful needs no marker."""
+    content = render_catalog((template_module.SLEEP, template_module.MAKE_ACQUAINTANCE))
+    assert (
+        "### Branch 1 — Collapse into deferred sleep  *(mag 0.74)* · **background**"
+        in content
+    )
+    assert "### Branch 2 — Sleep at home  *(mag 0.22)* · **background**" in content
+    acquaintance = next(
+        line
+        for line in content.splitlines()
+        if line.startswith("### Branch 1 — Exchange names")
+    )
+    assert acquaintance.endswith("· **not promotable**")
+    assert "**meaningful**" not in acquaintance and "**background**" not in acquaintance
+    template = Template(
+        id="attention_catalog_fixture",
+        priority=1,
+        drive_band=DriveBand.ANCHORED_ROUTINE,
+        blurb="Catalog fixture.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                "Unusual routine",
+                ALWAYS,
+                "{actor} waits.",
+                attention=AttentionClass.BACKGROUND,
+                deviation=True,
+            ),
+        ),
+    )
+    heading = next(
+        line
+        for line in render_catalog((template,)).splitlines()
+        if line.startswith("### Branch 1")
+    )
+    assert heading.endswith("· **background** · **deviation**")
 
 
 def test_catalog_includes_all_templates() -> None:
@@ -186,6 +234,23 @@ def test_render_predicate_name_handles_known_predicates() -> None:
     """Spot-check the prose renderer for a few representative predicate forms."""
 
     cases = [
+        (
+            "recent_event_within_hours(stroll_taken,<=1.5h)",
+            "recent `stroll_taken` event in last 1.5 world hours",
+        ),
+        (
+            "knows_recent_event_within_hours(stroll_taken,<=24h,knower=actor)",
+            "actor knows recent `stroll_taken` event in last 24 world hours",
+        ),
+        (
+            "since_last_event_hours_at_least(stroll_taken,1.5h@actor,target=target)",
+            "≥ 1.5 world hours since last `stroll_taken` event for "
+            "(actor, target) pair",
+        ),
+        (
+            "count_recent_events_within_hours_at_least(stroll_taken,>=2,<=1.5h@actor)",
+            "≥ 2 `stroll_taken` events within 1.5 world hours for actor",
+        ),
         ("ALWAYS", "*(always)*"),
         ("has_tag(vendetta_holder@actor)", "actor has `vendetta_holder` tag"),
         (
