@@ -461,3 +461,125 @@ added path without re-verifying this document is 820-S2, already listed.
 `docs/turn_flow_sequence.md` `verified_commit`:
 `f073b3711a3bd0273943c9defad85913452fd00b` →
 `a01c162f1e4daaf5009a9bba7397ae4065a8614b`.
+
+## The Red Run
+
+With items 2 to 5 committed (`aa29e2e0`) and `AGENTS.md` not yet re-stamped,
+the freshness test fails exactly as the order predicts:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -vv tests/test_doc_front_matter.py::test_declared_sources_carry_a_fresh_verified_commit
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_doc_front_matter.py::test_declared_sources_carry_a_fresh_verified_commit - AssertionError: assert ['AGENTS.md: docs/turn_flow_sequence.md changed since the merge base a01c162f1e4d without a re-stamped verified_commit'] == []
+
+  Left contains one more item: 'AGENTS.md: docs/turn_flow_sequence.md changed since the merge base a01c162f1e4d without a re-stamped verified_commit'
+
+  Full diff:
+  - []
+  + [
+  +     'AGENTS.md: docs/turn_flow_sequence.md changed since the merge base '
+  +     'a01c162f1e4d without a re-stamped verified_commit',
+  + ]
+======================== 1 failed, 5 warnings in 2.20s =========================
+```
+
+After item 6 the same test passes (see the gate tails below).
+
+## AGENTS.md Clauses Re-Checked (Item 6)
+
+`AGENTS.md` was last re-verified whole at `41783c1d` (817-S2a) and later
+re-stamped by single-change passes, most recently to `f073b371`. The order
+names `364fef4b` as the base of this check:
+
+```
+$ AS=(<the 34 AGENTS.md sources>)
+$ git log --first-parent --oneline 364fef4b..a01c162f -- $AS
+493902a1 Client Plane Awareness; Retire the No-Op slot/select (824-S1, 824-S5) (#1147)
+21cf9353 Typed Settings Response; Fresh Slots Store No Model Pin (809-S3b, 809-S7a) (#1146)
+954e8dc3 Trait Derivation on the Wait Screen (776-S6) (#1142)
+6853e529 Move Runtime-Imported Setup and Migration Modules Into nexus/ (811-S3a) (#1141)
+fa1d20e1 Refuse Place Stubs Without a Point; Producers Author the Point (840-S2) (#1138)
+bab4b68b World-Hour Predicates, Event Times in the Read Model, and a World-Time Horizon (778-S3) (#1134)
+75699431 Typed Settings for the Remaining Product Dict Readers (809-S1) (#1130)
+f073b371 Merge pull request #1128 from pythagorakase/claude/812-models-plan-fetch
+be9ce348 Merge pull request #1124 from pythagorakase/claude/836-unified-references
+9c8f1050 Merge pull request #1123 from pythagorakase/claude/816-test-provider-database
+6f338c55 Merge pull request #1122 from pythagorakase/claude/785-travel-trio
+7399bd99 Merge pull request #1120 from pythagorakase/claude/812-one-embedder
+d476db91 Merge pull request #1118 from pythagorakase/claude/806-receipt-store
+dbc1f392 Merge pull request #1116 from pythagorakase/claude/840-natural-earth
+91678330 Merge pull request #1117 from pythagorakase/claude/822-story-identity
+fc6f7b45 Refuse a NULL story-clock base and fix base_timestamp at genesis (778-S1b, migration 144) (#1114)
+8f4ad48e Runtime maturation follows the story's genesis strangeness (#838 S1) (#1111)
+4f1d1b81 Delete the uncalled MEMNON read-only SQL executor; keep the documented unused labels (#813 S2, S3) (#1108)
+2e8b415c Data clones migrate before they pin (#1083) (#1105)
+c58f86d2 Remove the dead wizard streaming endpoint (#1081) (#1103)
+```
+
+20 commits. The `AGENTS.md` sources each one changed (`git diff --name-only
+<c>^1 <c> -- $AS`):
+
+| Commit | Changed `AGENTS.md` sources |
+|---|---|
+| `493902a1` | `nexus/api/narrative.py` |
+| `21cf9353` | `nexus.toml` |
+| `954e8dc3` | `docs/turn_flow_sequence.md` (stamp only) |
+| `6853e529` | `CLAUDE.md` |
+| `fa1d20e1` | `nexus/agents/logon/apex_schema.py` |
+| `bab4b68b` | `nexus/agents/lore/utils/turn_cycle.py` |
+| `75699431` | `nexus/agents/orrery/worker.py`, `nexus/jobs/scheduler.py`, `tests/pg_fixtures.py` |
+| `f073b371` | `docs/turn_flow_sequence.md`, `nexus/api/narrative.py` |
+| `be9ce348` | `docs/turn_flow_sequence.md` (stamp only) |
+| `9c8f1050` | `docs/agent_workflow.md`, `docs/turn_flow_sequence.md`, `nexus.toml`, `tests/conftest.py`, `tests/pg_fixtures.py` |
+| `6f338c55` | `docs/turn_flow_sequence.md`, `nexus.toml` |
+| `7399bd99` | `docs/turn_flow_sequence.md`, `nexus.toml`, `nexus/agents/memnon/memnon.py` |
+| `d476db91` | `tests/conftest.py` |
+| `dbc1f392` | `CLAUDE.md` |
+| `91678330` | `docs/turn_flow_sequence.md`, `tests/pg_fixtures.py` |
+| `fc6f7b45` | `tests/pg_fixtures.py`, `tests/test_lore/conftest.py` |
+| `8f4ad48e` | `nexus.toml` |
+| `4f1d1b81` | `CLAUDE.md`, `nexus/agents/memnon/memnon.py` |
+| `2e8b415c` | `tests/pg_fixtures.py` |
+| `c58f86d2` | `docs/turn_flow_sequence.md`, `nexus.toml` |
+
+The diffs of every listed commit against these sources were read, including
+the three the order names (`2e8b415c`, `4f1d1b81`, `8f4ad48e`). The `CLAUDE.md`
+changes rename the Python-migration allowlist location, add
+`natural_earth_features` to the template seed list, and rewrite the
+`get_schema_summary` note; `docs/agent_workflow.md` adds the legacy `mock`
+target to the dbname audit; `tests/conftest.py` adds receipt isolation and
+the unrouted TEST provider database; `tests/test_lore/conftest.py` seeds a
+story base. None of these touches what an `AGENTS.md` clause says. Each
+`AGENTS.md` clause that a changed source backs (per the "AGENTS.md, Sentence by
+Sentence" table of `docs/qa/817-freshness-gate/verification.md`), checked at
+`M`:
+
+| AGENTS.md line | Clause | Changed source | Evidence at M | Verdict |
+|---|---|---|---|---|
+| 44 | `lore` orchestrates each turn (`lore.py`, `utils/turn_cycle.py`). | `turn_cycle.py` | `nexus/agents/lore/lore.py:198`, `:329`; `nexus/agents/lore/utils/turn_cycle.py:219`, `:284`, `:351`, `:441`, `:639`, `:749` | true |
+| 44 | `logon` holds the storyteller wire schemas and validators. | `apex_schema.py` | `nexus/agents/logon/apex_schema.py:1-3` (structured output schema), `:870`; `nexus/agents/logon/skald_wire.py:358` | true |
+| 44 | `memnon` handles retrieval. | `memnon.py` | `nexus/agents/memnon/memnon.py:1-8`, `:1438` `query_memory` | true |
+| 44 | `orrery` is the deterministic off-screen world engine. | `worker.py` | `nexus/agents/orrery/worker.py:1-5` ("deterministic off-screen record worker"), `:178`, `:236` | true |
+| 44 | The FastAPI gateway and its turn routes live in `nexus/api/` (`narrative.py`). | `narrative.py` | `nexus/api/narrative.py:146` (`app = FastAPI(...)`), `:851-852` (`/api/narrative/continue`), `:1080` (`/api/narrative/retry`) | true |
+| 44 | Deferred work runs under `nexus/jobs/`. | `scheduler.py` | `nexus/jobs/scheduler.py:1` ("One durable, preemptible recovery owner for each slot database"), `:59` `SlotScheduler` | true |
+| 44 | `docs/turn_flow_sequence.md` traces the turn cycle through the code. | `docs/turn_flow_sequence.md` | Re-read against the corrected document: `docs/turn_flow_sequence.md:59` "# The Turn Cycle", its 52 file-level sources, and the clause table above (every clause true or corrected at `M`) | true |
+| 44 | Runtime settings live in `nexus.toml`. | `nexus.toml`, `CLAUDE.md` | `CLAUDE.md:18`; `nexus.toml` exists | true |
+| 47 | `CLAUDE.md` is the canonical command reference, including the PostgreSQL test gate, migrations and pre-commit hooks. | `CLAUDE.md` | `CLAUDE.md:9` (full gate), `:20-34` (pre-commit hooks), `:64-90` (migrations) | true |
+| 47 | Run the suite with `poetry run pytest`; format, type-check and lint with Black, mypy and flake8. | `CLAUDE.md` | `CLAUDE.md:8`, `:12-14` | true |
+| 50 | Adopt Black (88 columns), group and alphabetize imports, PascalCase classes and snake_case elsewhere, docstrings and type hints. | `CLAUDE.md` | `CLAUDE.md:38-41`, `:44` | true |
+| 50 | Load configurable values from `nexus.toml` instead of literals. | `nexus.toml`, `CLAUDE.md` | `CLAUDE.md:18`; `nexus.toml` | true |
+| 50 | Follow the structured-output practices in `CLAUDE.md` and prefer Pydantic models. | `CLAUDE.md` | `CLAUDE.md:42`, `:240-242` | true |
+| 53 | Reuse fixtures from `tests/test_lore/conftest.py`, and `tests/pg_fixtures.py` for PostgreSQL. | `tests/test_lore/conftest.py`, `tests/pg_fixtures.py` | `tests/test_lore/conftest.py:28-29`, `:37-38`, `:54`; `tests/pg_fixtures.py:1` ("Shared PostgreSQL helpers for disposable integration-test databases") | true |
+| 53 | Tests that need PostgreSQL carry the `requires_postgres` marker and run only with `NEXUS_RUN_POSTGRES=1`. | `tests/conftest.py` | `pytest.ini:6`; `tests/conftest.py:334-338` (skip unless set), `:129-139` (an unmarked connection fails) | true |
+| 53 | Prefer real code paths and real API calls over mocks. | `CLAUDE.md` | `CLAUDE.md:189` | true |
+| 56 | Follow the autonomous branch/PR/review workflow in `docs/agent_workflow.md`. | `docs/agent_workflow.md` | `docs/agent_workflow.md:1-8` | true |
+| 56 | PRs note any updates to `nexus.toml` or database schema. | `nexus.toml` | Convention. | true |
+| 59 | `NEXUS_template` is the canonical schema reference, and the old `NEXUS` database is deprecated. | `CLAUDE.md` | `CLAUDE.md:58` | true |
+| 59 | Align local LLM endpoints with the models referenced in `nexus.toml`. | `nexus.toml` | `nexus.toml:56-60` (`[global.model.api_models.local]` and its models) | true |
+
+Every clause is true at `M`. `AGENTS.md`'s `verified_commit` moves from
+`f073b3711a3bd0273943c9defad85913452fd00b` to
+`a01c162f1e4daaf5009a9bba7397ae4065a8614b`; no other line of `AGENTS.md`
+changes.
