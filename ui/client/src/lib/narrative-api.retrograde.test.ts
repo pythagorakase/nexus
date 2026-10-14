@@ -6,6 +6,7 @@ import {
   RETROGRADE_STAGES,
   getRetrogradeStatus,
   retrogradeStageOf,
+  skippedRetrogradeStages,
 } from "./narrative-api";
 
 const ORCHESTRATOR = resolve(
@@ -51,6 +52,96 @@ describe("Retrograde status client", () => {
   it("places a failed run at the stage named in its detail", async () => {
     serve({ ...RECORD, run_status: "failed", error: "Failed", stage: "failed", detail: { stage: "embedding" }, stages: [] });
     expect(retrogradeStageOf(await getRetrogradeStatus(5))).toBe("embedding");
+  });
+
+  it("parses a derivation failure and places it at derivation", async () => {
+    serve({
+      ...RECORD,
+      run_status: "failed",
+      error: "Trait input derivation failed",
+      stage: "failed",
+      detail: { stage: "derivation" },
+      stages: [
+        { stage: "derivation", at: "2026-09-26T12:00:00+00:00", detail: {} },
+        { stage: "failed", at: "2026-09-26T12:00:01+00:00", detail: { stage: "derivation" } },
+      ],
+    });
+    const status = await getRetrogradeStatus(5);
+    expect(retrogradeStageOf(status)).toBe("derivation");
+    expect(status.stages.map((record) => record.stage)).toEqual(["derivation", "failed"]);
+  });
+
+  it.each([
+    {
+      name: "running packet with derivation recorded",
+      stage: "packet",
+      run_status: "running",
+      detail: {},
+      recorded: ["derivation", "packet"],
+      skipped: [],
+    },
+    {
+      name: "running packet without derivation",
+      stage: "packet",
+      run_status: "running",
+      detail: {},
+      recorded: ["packet"],
+      skipped: ["derivation"],
+    },
+    {
+      name: "done with every stage recorded",
+      stage: "done",
+      run_status: "done",
+      detail: {},
+      recorded: ["derivation", "packet", "seed_candidates", "expansion", "persistence", "embedding", "done"],
+      skipped: [],
+    },
+    {
+      name: "done idle with only derivation recorded",
+      stage: "idle",
+      run_status: "done",
+      detail: {},
+      recorded: ["derivation"],
+      skipped: ["packet", "seed_candidates", "expansion", "persistence", "embedding"],
+    },
+    {
+      name: "done idle without pipeline records",
+      stage: "idle",
+      run_status: "done",
+      detail: {},
+      recorded: [],
+      skipped: ["derivation", "packet", "seed_candidates", "expansion", "persistence", "embedding"],
+    },
+    {
+      name: "failed seed selection with its earlier records",
+      stage: "failed",
+      run_status: "failed",
+      detail: { stage: "seed_candidates" },
+      recorded: ["derivation", "packet", "seed_candidates", "failed"],
+      skipped: [],
+    },
+    {
+      name: "failed before any stage",
+      stage: "idle",
+      run_status: "failed",
+      detail: {},
+      recorded: [],
+      skipped: [],
+    },
+  ])("derives skipped stages from the ledger: $name", async (scenario) => {
+    serve({
+      ...RECORD,
+      stage: scenario.stage,
+      run_status: scenario.run_status,
+      error: scenario.run_status === "failed" ? "Stage failed" : null,
+      detail: scenario.detail,
+      stages: scenario.recorded.map((stage) => ({
+        stage,
+        at: "2026-09-26T12:00:00+00:00",
+        detail: stage === "failed" ? scenario.detail : {},
+      })),
+    });
+    expect(skippedRetrogradeStages(await getRetrogradeStatus(5))).toEqual(scenario.skipped);
   });
 
   it.each([

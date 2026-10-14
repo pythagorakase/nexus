@@ -1,0 +1,27 @@
+{
+  "status": "prepared, not executed",
+  "product_base": "4ae8b8d21b2c4f7913d0ab7f8ebf63614dd096a8",
+  "python": [
+    "tests/test_api/test_genesis_ledger_pg.py::test_stage_rows_and_outputs_persist",
+    "tests/test_api/test_genesis_ledger_pg.py::test_failure_is_recorded_at_each_stage[derivation]",
+    "tests/test_api/test_genesis_ledger_pg.py::test_running_derivation_reports_its_stage",
+    "tests/test_api/test_genesis_ledger_pg.py::test_skipped_retrograde_keeps_its_derivation_record",
+    "tests/test_api/test_genesis_ledger_pg.py::test_failure_is_recorded_at_each_stage[None]",
+    "tests/test_cli.py::test_retrograde_status_stage_names_derivation"
+  ],
+  "python_expected_by_source_only": {
+    "failures": 6,
+    "parity_passes": 1,
+    "note": "The CLI function expands to running and failed parameters. Inspect actual reasons, guards and counts before recording proof."
+  },
+  "ui": [
+    "client/src/lib/narrative-api.retrograde.test.ts",
+    "client/src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx"
+  ],
+  "requires_before_implementation": [
+    "Clean tests-only committed head and unchanged product boundary",
+    "Coordinator grants serial heavy slot",
+    "Exact worktree import admission and isolated runtime/receipt/test environment",
+    "Actual initial-red failures with expected reasons and guard summaries"
+  ]
+}
