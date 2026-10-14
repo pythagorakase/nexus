@@ -1,0 +1,1 @@
+390x844 coarse/mobile: map and settings bottom rail, DOM order, focus hiding and blur restoration passed
