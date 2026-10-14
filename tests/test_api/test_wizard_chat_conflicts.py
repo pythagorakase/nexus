@@ -1,19 +1,19 @@
 """A generated wizard artifact must report stale drafts as a 409, never success."""
 
-from contextlib import contextmanager
-from copy import deepcopy
+from contextlib import closing, contextmanager
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic_ai.tools import DeferredToolRequests
 import pytest
 
-from nexus.api import new_story_cache, slot_state, wizard_agent, wizard_chat
-from nexus.api.conversations import ConversationsClient
+from nexus.api import new_story_cache, wizard_chat
+from nexus.api.conversations import ConversationsClient, new_conversation_id
 from nexus.api.new_story_cache import WizardCache
-from nexus.api.slot_state import SlotState, WizardState
+from tests.pg_fixtures import connect
+
+pytestmark = pytest.mark.requires_postgres
 
 
 @pytest.mark.parametrize(
@@ -33,59 +33,63 @@ from nexus.api.slot_state import SlotState, WizardState
     ],
 )
 def test_generated_artifact_ends_with_conflict(
-    monkeypatch, changed_at: str, detail: str
+    monkeypatch, offline_gate_db: str, seed_wizard_cache, changed_at: str, detail: str
 ) -> None:
     """Concurrent edits during generation must yield recovery, never stale success."""
-    storage = ConversationsClient("TEST")
-    thread_id = storage.create_thread()
-    storage.add_message(thread_id, "assistant", "Welcome")
-    cache = WizardCache(thread_id=thread_id, choices=["Current choice"])
-    state = SlotState(
-        slot=4,
-        is_empty=False,
-        is_wizard_mode=True,
-        narrative_state=None,
-        model="TEST",
-        wizard_state=WizardState(
-            phase="setting",
-            thread_id=thread_id,
-            choices=cache.choices,
-            has_concept=False,
-            has_traits=False,
-            has_wildcard=False,
-        ),
+    cache = seed_wizard_cache(
+        WizardCache(choices=["Current choice"], choices_recorded=True)
     )
+    storage = ConversationsClient(offline_gate_db)
+    thread_id = cache.thread_id
+    storage.add_message(thread_id, "assistant", "Welcome")
+
+    def update(sql: str, values: tuple = ()) -> None:
+        with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, values)
 
     class Agent:
         async def run(self, *args, deps, **kwargs):
-            cache.setting.genre = "fantasy"
-            cache.setting.world_name = "Original draft"
+            update(
+                "UPDATE assets.new_story_creator SET setting_genre = 'fantasy', "
+                "setting_world_name = 'Original draft' WHERE id = TRUE"
+            )
+            generated = new_story_cache.read_cache(offline_gate_db)
+            assert generated is not None
             deps.last_tool_result = {
                 "phase_complete": True,
                 "choices": ["Stale artifact choice"],
-                **cache.confirmation_metadata(),
+                **generated.confirmation_metadata(),
             }
             if changed_at == "session":
-                cache.thread_id = "replacement-story"
+                update(
+                    "UPDATE assets.new_story_creator SET thread_id = %s "
+                    "WHERE id = TRUE",
+                    (new_conversation_id(),),
+                )
             elif changed_at == "artifact":
-                cache.setting.world_name = "Newer draft"
+                update(
+                    "UPDATE assets.new_story_creator "
+                    "SET setting_world_name = 'Newer draft' WHERE id = TRUE"
+                )
             return SimpleNamespace(output=DeferredToolRequests())
 
-    @contextmanager
-    def connection(*args, **kwargs):
-        # The canonical guard sees the edit after _artifact_response's first read.
-        cache.setting.world_name = "Newer draft"
-        yield Mock(cursor=lambda: Mock(__enter__=Mock(), __exit__=Mock()))
+    original_guard = wizard_chat.guarded_wizard_write
 
-    monkeypatch.setattr(slot_state, "get_slot_state", lambda slot: state)
-    monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
-    for module in (wizard_chat, wizard_agent):
-        monkeypatch.setattr(module, "read_cache", lambda dbname: deepcopy(cache))
-    monkeypatch.setattr(new_story_cache, "get_connection", connection)
+    @contextmanager
+    def concurrent_change_before_lock(dbname, expected):
+        # Schedule a real committed edit after the artifact response's first read;
+        # the unchanged production guard must detect it under the row lock.
+        if changed_at == "write_lock":
+            update(
+                "UPDATE assets.new_story_creator "
+                "SET setting_world_name = 'Newer draft' WHERE id = TRUE"
+            )
+        with original_guard(dbname, expected):
+            yield
+
     monkeypatch.setattr(
-        new_story_cache, "read_cache_cursor", lambda *a, **kw: deepcopy(cache)
+        wizard_chat, "guarded_wizard_write", concurrent_change_before_lock
     )
-    monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: storage)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
     monkeypatch.setattr(
         wizard_chat,
@@ -93,8 +97,6 @@ def test_generated_artifact_ends_with_conflict(
         lambda model: (None, "test"),
     )
     monkeypatch.setattr(wizard_chat, "record_pydantic_ai_result", lambda *a, **k: None)
-    write_choices = Mock()
-    monkeypatch.setattr(wizard_chat, "write_wizard_choices", write_choices)
     app = FastAPI()
     app.include_router(wizard_chat.router)
     client = TestClient(app, raise_server_exceptions=False)
@@ -105,5 +107,10 @@ def test_generated_artifact_ends_with_conflict(
 
     assert response.status_code == 409, response.text
     assert response.json()["detail"] == detail
-    assert cache.choices == ["Current choice"]
-    write_choices.assert_not_called()
+    persisted = new_story_cache.read_cache(offline_gate_db)
+    assert persisted is not None and persisted.choices == ["Current choice"]
+    assert [
+        item["content"]
+        for item in storage.list_messages(thread_id, limit=0)
+        if item["role"] == "assistant"
+    ] == ["Welcome"]

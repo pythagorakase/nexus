@@ -195,7 +195,6 @@ def test_missing_credential_remains_loud(monkeypatch, wrapper, registry_provider
 @pytest.mark.parametrize(
     "consumer",
     [
-        "conversations",
         "pydantic_openai",
         "pydantic_anthropic",
         "pydantic_local",
@@ -204,7 +203,6 @@ def test_missing_credential_remains_loud(monkeypatch, wrapper, registry_provider
 )
 def test_consumer_client_construction_is_guarded(monkeypatch, consumer):
     """Dummy credentials cannot authorize an independent consumer SDK client."""
-    from nexus.api.conversations import ConversationsClient
     from nexus.api.pydantic_ai_utils import build_pydantic_ai_model_with_provider
 
     monkeypatch.setenv("NEXUS_TEST_PROVIDER_ONLY", "1")
@@ -212,17 +210,10 @@ def test_consumer_client_construction_is_guarded(monkeypatch, consumer):
     monkeypatch.setenv("OPENAI_API_KEY", "dummy-openai")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy-anthropic")
     monkeypatch.setenv("OPENROUTER_API_KEY", "dummy-openrouter")
-    registry_provider = (
-        "openai" if consumer == "conversations" else consumer.removeprefix("pydantic_")
-    )
+    registry_provider = consumer.removeprefix("pydantic_")
     model = load_settings().global_.model.api_models[registry_provider].models[0].id
-    build = (
-        ConversationsClient
-        if consumer == "conversations"
-        else build_pydantic_ai_model_with_provider
-    )
     with pytest.raises(ProviderForbiddenInTests, match="NEXUS_TEST_PROVIDER_ONLY=1"):
-        build(model)
+        build_pydantic_ai_model_with_provider(model)
 
 
 def test_anthropic_token_counter_is_local_under_provider_guard(monkeypatch):
