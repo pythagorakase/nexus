@@ -1384,6 +1384,21 @@ def _contracts(
         "project_plan": projects,
         "thread_plan": threads,
         "coverage_notes": [],
+        # This packet has no first-class place cards. Even an existing target
+        # therefore needs a point entry; persistence keeps its stored point.
+        "new_place_points": [
+            {
+                "place_ref": target_ref,
+                "coordinates": {"lon": -73.9857, "lat": 40.7484},
+            }
+            for target_ref in sorted(
+                {
+                    target
+                    for _seed, project_type, _actor, target in specs
+                    if project_type == "plan_relocation" and target is not None
+                }
+            )
+        ],
         "commit_readiness": {
             "writes": "none",
             "planned_source": "retrograde",

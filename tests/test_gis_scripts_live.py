@@ -72,6 +72,11 @@ def script_conn() -> Iterator[Any]:
                         "INSERT INTO entities (kind) VALUES ('place') RETURNING id"
                     )
                     place_entity_ids.append(int(cur.fetchone()["id"]))
+                # Reproduce pre-149 legacy rows for the audit/backfill subject;
+                # only this insert may bypass the new-row point requirement.
+                cur.execute(
+                    "ALTER TABLE places DISABLE TRIGGER trg_places_require_point"
+                )
                 cur.execute(
                     """
                     INSERT INTO places (
@@ -113,6 +118,9 @@ def script_conn() -> Iterator[Any]:
                     )
                     """,
                     tuple(place_entity_ids),
+                )
+                cur.execute(
+                    "ALTER TABLE places ENABLE TRIGGER trg_places_require_point"
                 )
                 character_entity_ids: list[int] = []
                 for _index in range(2):

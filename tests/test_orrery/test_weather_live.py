@@ -150,9 +150,10 @@ def test_live_anchor_override_and_disabled_mode(weather_database: str) -> None:
         anchor_place_id = int(
             connection.execute(
                 text(
-                    "INSERT INTO places (name, type, zone, entity_id) "
+                    "INSERT INTO places (name, type, zone, entity_id, coordinates) "
                     "VALUES ('Issue 735 Anchor', 'fixed_location', :zone_id, "
-                    ":entity_id) RETURNING id"
+                    ":entity_id, ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                    "4326)::geography) RETURNING id"
                 ),
                 {"zone_id": zone_id, "entity_id": entity_ids[0]},
             ).scalar_one()
@@ -160,9 +161,10 @@ def test_live_anchor_override_and_disabled_mode(weather_database: str) -> None:
         remote_place_id = int(
             connection.execute(
                 text(
-                    "INSERT INTO places (name, type, zone, entity_id) "
+                    "INSERT INTO places (name, type, zone, entity_id, coordinates) "
                     "VALUES ('Issue 735 Remote', 'fixed_location', :zone_id, "
-                    ":entity_id) RETURNING id"
+                    ":entity_id, ST_SetSRID(ST_MakePoint(-73.98, 40.75, 0, 0), "
+                    "4326)::geography) RETURNING id"
                 ),
                 {"zone_id": zone_id, "entity_id": entity_ids[1]},
             ).scalar_one()

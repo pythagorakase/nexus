@@ -104,6 +104,7 @@ def gaia_payload(*, declared=False):
                     "kind": "place",
                     "name": "Machine-Shop",
                     "summary": "The workshop beyond the gate.",
+                    "coordinates": {"lon": -73.9857, "lat": 40.7484},
                 }
             ]
             if declared

@@ -31,8 +31,8 @@ from nexus.api import (
 )
 from nexus.api.narrative_generation import generate_narrative_async
 from nexus.config.settings_models import Settings
+from nexus.maintenance import new_story_setup
 from nexus.util.log_safety import quote_log_value
-from scripts import new_story_setup
 from tests.pg_fixtures import connect, route_slot_to_disposable
 from tests.settings_helpers import settings_with
 
@@ -211,10 +211,11 @@ def _seed_post_transition_world(dbname: str) -> None:
                 """
                 INSERT INTO places (
                     name, type, zone, summary, history, current_status,
-                    secrets, inhabitants, extra_data, entity_id
+                    secrets, inhabitants, extra_data, entity_id, coordinates
                 ) VALUES (
                     %s, 'fixed_location', %s, %s, %s, %s,
-                    %s, %s, %s::jsonb, %s
+                    %s, %s, %s::jsonb, %s,
+                    ST_SetSRID(ST_MakePoint(-90.0715, 29.9511, 0, 0), 4326)::geography
                 ) RETURNING id
                 """,
                 (

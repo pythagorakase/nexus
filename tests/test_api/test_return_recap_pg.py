@@ -283,7 +283,9 @@ def _seed_memorial(dbname: str, player_id: int) -> dict[str, int]:
             ("archive", "Drowned Archive"),
         ):
             cur.execute(
-                "INSERT INTO places (name, type) VALUES (%s, 'fixed_location') "
+                "INSERT INTO places (name, type, coordinates) "
+                "VALUES (%s, 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography) "
                 "RETURNING id",
                 (name,),
             )

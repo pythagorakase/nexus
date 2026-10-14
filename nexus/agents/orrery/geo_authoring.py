@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 from html import escape
-from typing import Any, Mapping, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,7 +13,7 @@ from nexus.prompts.registry import PromptId, load
 
 
 class GeoAuthoringResponse(BaseModel):
-    """Structured coordinate proposal shared by maturation and backfill."""
+    """Structured coordinate proposal for the operator backfill script."""
 
     coordinates: Coordinates = Field(
         description="Plausible real-Earth coordinates for the physical place."
@@ -37,20 +37,6 @@ def render_geo_authoring_prompt(
         ZONE_NAME=escape(zone_name, quote=False),
         ZONE_SUMMARY=escape(zone_summary or "(no zone summary supplied)", quote=False),
     ).strip()
-
-
-def geo_prompt_from_context(context: Mapping[str, Any]) -> Optional[str]:
-    """Render a prompt when a maturation packet carries place GIS context."""
-
-    geo = context.get("geo_authoring")
-    if not isinstance(geo, Mapping) or not geo.get("required"):
-        return None
-    return render_geo_authoring_prompt(
-        place_name=str(geo["place_name"]),
-        place_summary=geo.get("place_summary"),
-        zone_name=str(geo["zone_name"]),
-        zone_summary=geo.get("zone_summary"),
-    )
 
 
 def author_place_coordinates(

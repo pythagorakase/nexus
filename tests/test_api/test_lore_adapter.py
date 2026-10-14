@@ -56,6 +56,7 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
                     "kind": "place",
                     "name": "Kettering Street Transit Stop",
                     "summary": "A rain-slick transit stop across from the pharmacy.",
+                    "coordinates": {"lon": -73.9857, "lat": 40.7484},
                 },
                 {
                     "kind": "faction",

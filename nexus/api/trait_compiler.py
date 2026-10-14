@@ -12,7 +12,8 @@ from nexus.agents.orrery.relationship_provenance import (
     relationship_producer,
 )
 from nexus.agents.logon.apex_enums import EmotionalValence
-from nexus.agents.orrery.geo import story_active_zone
+from nexus.agents.logon.apex_schema import Coordinates
+from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.agents.orrery.status_family import (
     normalize_status_level,
     status_tag_for_level,
@@ -118,6 +119,7 @@ class _NamedTargetCandidate:
     name: str
     trait: str
     role: str
+    coordinates: Optional[Coordinates] = None
 
 
 _ResolvedNamedTargets = dict[tuple[str, str], _ResolvedTarget]
@@ -482,7 +484,12 @@ def _pre_resolve_named_targets(
     candidates: dict[tuple[str, str], _NamedTargetCandidate] = {}
 
     def add_candidate(
-        *, entity_kind: str, name: Optional[str], trait: str, role: str
+        *,
+        entity_kind: str,
+        name: Optional[str],
+        trait: str,
+        role: str,
+        coordinates: Optional[Coordinates] = None,
     ) -> None:
         if name is None:
             return
@@ -494,6 +501,7 @@ def _pre_resolve_named_targets(
                 name=name,
                 trait=trait,
                 role=role,
+                coordinates=coordinates,
             ),
         )
 
@@ -506,7 +514,11 @@ def _pre_resolve_named_targets(
         and _registered_pair_tag_exists(cur, DOMAIN_PAIR_TAG)
     ):
         add_candidate(
-            entity_kind="place", name=domain.name, trait="domain", role="domain"
+            entity_kind="place",
+            name=domain.name,
+            trait="domain",
+            role="domain",
+            coordinates=domain.coordinates,
         )
 
     patron = inputs.patron
@@ -581,6 +593,7 @@ def _pre_resolve_named_targets(
                 name=candidate.name,
                 role=candidate.role,
                 dry_run=dry_run,
+                coordinates=candidate.coordinates,
             )
             resolved_targets[key] = replace(
                 resolved, relationship_owner_trait=candidate.trait
@@ -601,6 +614,7 @@ def _pre_resolve_named_targets(
                 name=candidate.name,
                 role=candidate.role,
                 dry_run=dry_run,
+                coordinates=candidate.coordinates,
             )
             resolved_targets[key] = replace(
                 resolved,
@@ -1028,6 +1042,7 @@ def _compile_domain(
         place_id=typed_input.place_id,
         place_entity_id=typed_input.place_entity_id,
         name=typed_input.name,
+        coordinates=typed_input.coordinates,
         resolved_named_targets=resolved_named_targets,
         dry_run=dry_run,
     )
@@ -1561,6 +1576,7 @@ def _resolve_place_target(
     place_id: Optional[int],
     place_entity_id: Optional[int],
     name: Optional[str],
+    coordinates: Optional[Coordinates],
     resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> Optional[_ResolvedTarget]:
@@ -1598,6 +1614,7 @@ def _resolve_place_target(
                 entity_kind="place",
                 name=name,
                 role="domain",
+                coordinates=coordinates,
                 dry_run=dry_run,
             )
     else:
@@ -1732,6 +1749,7 @@ def _create_target_stub(
     name: str,
     role: str,
     dry_run: bool,
+    coordinates: Optional[Coordinates] = None,
 ) -> _ResolvedTarget:
     """Create (or, on dry-run, plan) a minimum-viable stub for a trait target.
 
@@ -1761,6 +1779,12 @@ def _create_target_stub(
             return _ResolvedTarget(
                 row_id=existing.id, entity_id=existing.entity_id, name=existing.name
             )
+
+    if entity_kind == "place" and coordinates is None:
+        raise ValueError(
+            f"{trait} place {name!r} matches no place and carries no point; "
+            "a new place needs coordinates"
+        )
 
     if dry_run:
         # Coalesce repeated references to one absent target: apply mode
@@ -1794,7 +1818,10 @@ def _create_target_stub(
             cur, name=name, trait=trait, role=role
         )
     elif entity_kind == "place":
-        row_id, entity_id = _insert_place_stub(cur, name=name, trait=trait, role=role)
+        assert coordinates is not None
+        row_id, entity_id = _insert_place_stub(
+            cur, name=name, trait=trait, role=role, coordinates=coordinates
+        )
     elif entity_kind == "faction":
         row_id, entity_id = _insert_faction_stub(cur, name=name, trait=trait, role=role)
     else:
@@ -1841,16 +1868,19 @@ def _insert_character_stub(
 
 
 def _insert_place_stub(
-    cur: Any, *, name: str, trait: str, role: str
+    cur: Any, *, name: str, trait: str, role: str, coordinates: Coordinates
 ) -> tuple[int, int]:
-    zone_id = story_active_zone(cur)
+    zone_id = resolve_zone_for_point(
+        cur, longitude=coordinates.lon, latitude=coordinates.lat
+    )
     cur.execute(
         """
         /* trait_compiler:insert_place_stub */
         INSERT INTO places (
-            name, type, summary, current_status, extra_data, zone
+            name, type, summary, current_status, extra_data, zone, coordinates
         )
-        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb, %s)
+        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb, %s,
+                ST_SetSRID(ST_MakePoint(%s, %s, 0, 0), 4326)::geography)
         RETURNING id, entity_id
         """,
         (
@@ -1859,6 +1889,8 @@ def _insert_place_stub(
             "latent in compiled trait backstory",
             json.dumps(_stub_extra_data(trait=trait, role=role)),
             zone_id,
+            coordinates.lon,
+            coordinates.lat,
         ),
     )
     row = cur.fetchone()

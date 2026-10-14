@@ -47,7 +47,7 @@ from nexus.config.settings_models import (
     OrreryKnowledgeSettings,
     OrreryRecallSettings,
 )
-from scripts import new_story_setup
+from nexus.maintenance import new_story_setup
 from tests.model_registry_helpers import registry_model
 from tests.settings_helpers import settings_with, table
 from tests.pg_fixtures import (
@@ -217,8 +217,10 @@ def _place(session: Session, label: str) -> tuple[int, int]:
     place_id = int(
         session.execute(
             text(
-                "INSERT INTO places (entity_id, name, type) "
-                "VALUES (:entity_id, :name, 'fixed_location') RETURNING id"
+                "INSERT INTO places (entity_id, name, type, coordinates) "
+                "VALUES (:entity_id, :name, 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                "4326)::geography) RETURNING id"
             ),
             {"entity_id": entity_id, "name": f"recall-{label}-{uuid4().hex[:6]}"},
         ).scalar_one()

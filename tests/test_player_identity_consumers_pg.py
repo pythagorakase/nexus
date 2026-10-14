@@ -40,8 +40,8 @@ from nexus.api import db_pool, narrative, save_slots, slot_state, slot_utils
 from nexus.api.narrative_generation import generate_bootstrap_narrative
 from nexus.config import load_settings
 from nexus.config.settings_models import OrreryWeatherSettings
+from nexus.maintenance import new_story_setup
 from nexus.memory.manager import ContextMemoryManager
-from scripts import new_story_setup
 from tests.pg_fixtures import connect, route_slot_to_disposable, sqlalchemy_url
 
 
@@ -262,9 +262,10 @@ def _seed_consumer_save(
         session.execute(
             text(
                 """
-                INSERT INTO places (name, type, summary, zone, entity_id)
+                INSERT INTO places (name, type, summary, zone, entity_id, coordinates)
                 VALUES (
-                    :name, 'fixed_location', :summary, :zone_id, :entity_id
+                    :name, 'fixed_location', :summary, :zone_id, :entity_id,
+                    ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography
                 )
                 RETURNING id
                 """
@@ -448,9 +449,11 @@ def _seed_soft_site_save(engine: Engine, state: str) -> dict[str, Any]:
                 session.execute(
                     text(
                         """
-                        INSERT INTO places (name, type, summary, entity_id)
+                        INSERT INTO places (name, type, summary, entity_id, coordinates)
                         VALUES (
-                            :name, 'fixed_location', :summary, :entity_id
+                            :name, 'fixed_location', :summary, :entity_id,
+                            ST_SetSRID(ST_MakePoint(-73.98, 40.75, 0, 0),
+                                4326)::geography
                         )
                         RETURNING id
                         """

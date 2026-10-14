@@ -97,7 +97,10 @@ def test_identity_ambiguity_never_retries_test_provider(
         names = ["Silas Wren"]
         with connect(dbname) as conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+                "INSERT INTO places (name, type, coordinates) VALUES "
+                "('Garden', 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.98, 40.75, 0, 0), "
+                "4326)::geography) RETURNING id"
             )
             cur.execute(
                 "UPDATE characters SET current_location = %s WHERE id = %s",
