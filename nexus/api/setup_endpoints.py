@@ -21,10 +21,9 @@ from nexus.api.narrative_schemas import (
     RecordDraftRequest,
     ResetSetupRequest,
     ResumeSetupResponse,
-    SelectSlotRequest,
     StartSetupRequest,
 )
-from nexus.api.new_story_cache import write_wizard_choices
+from nexus.api.new_story_cache import record_wizard_reply, write_wizard_choices
 from nexus.api.new_story_schemas import CharacterCreationState
 from nexus.api.wizard_confirmation import (
     WizardStateConflict,
@@ -32,7 +31,6 @@ from nexus.api.wizard_confirmation import (
     begin_character_revision,
 )
 from nexus.api.new_story_flow import (
-    activate_slot,
     record_drafts,
     reset_setup,
     resume_setup,
@@ -69,13 +67,16 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
         welcome_message = doc.get("welcome_message", "")
         welcome_choices: List[str] = doc.get("welcome_choices", [])
 
-        # Seed welcome message if exists (without choices - UI renders those)
+        # Welcome transcript and presented choices commit together.
         if welcome_message:
-            client = ConversationsClient(model=model_to_use)
-            client.add_message(thread_id, "assistant", welcome_message)
-
-        # Store welcome choices for CLI --choice resolution
-        if welcome_choices:
+            record_wizard_reply(
+                slot_dbname(request.slot),
+                expected_thread_id=thread_id,
+                message=welcome_message,
+                choices=welcome_choices,
+                introduction=False,
+            )
+        elif welcome_choices:
             write_wizard_choices(welcome_choices, slot_dbname(request.slot))
 
         return {
@@ -106,14 +107,9 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
         model = get_slot_model(slot, dbname=slot_dbname(slot))
         if not model:
             raise RuntimeError("The saved wizard is missing its model")
-        client = ConversationsClient(model=model)
-        try:
-            # The model's context window limit must not truncate the UI transcript.
-            messages = client.list_messages(thread_id, limit=0)
-        finally:
-            if client.client is not None:
-                client.client.close()
-        data = data.settle_introduction_claim(list(reversed(messages)))
+        client = ConversationsClient(slot_dbname(slot))
+        # The model's context window limit must not truncate the UI transcript.
+        messages = client.list_messages(thread_id, limit=0)
         awaiting_introduction = data.awaiting_introduction()
         # The character card is restored while it awaits acceptance and while
         # its accepted transition still lacks the introduction it requested.
@@ -214,20 +210,6 @@ async def reset_setup_endpoint(request: ResetSetupRequest):
         return {"status": "reset", "slot": request.slot}
     except Exception as e:
         logger.error(f"Error resetting setup: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/slot/select")
-async def select_slot_endpoint(request: SelectSlotRequest):
-    """Select a slot through the nonmutating compatibility activation path."""
-    # activate_slot only calls clear_active and upsert_slot(is_active=...),
-    # both no-ops. Locked stories remain selectable; setup writes are guarded
-    # by their own endpoints before starting any work.
-    try:
-        results = activate_slot(request.slot)
-        return {"status": "activated", "results": results}
-    except Exception as e:
-        logger.error(f"Error activating slot: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

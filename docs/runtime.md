@@ -152,7 +152,7 @@ model.
 | Plane | Serves |
 |---|---|
 | Player | Liveness (`/health`, `/status`), reading routes, narrative turns (continue, retry, regenerate, approve, select-choice, undo, discarding the pending turn), the new-story wizard, preferences, `/ws/narrative`, the upload mounts, and the app shell |
-| Operator | The player plane plus secrets, `/api/settings`, local models, diagnostics (`/runtime/status`, `/api/dev/*`, the OpenAPI schema and docs), slot lock, unlock, and model pins, `setup/reset`, `slot/select`, and asset uploads, main-image changes, and deletes |
+| Operator | The player plane plus secrets, `/api/settings`, local models, diagnostics (`/runtime/status`, `/api/dev/*`, the OpenAPI schema and docs), slot lock, unlock, and model pins, `setup/reset`, and asset uploads, main-image changes, and deletes |
 
 The player plane can overwrite any unlocked slot through the wizard, occupied
 or not; the slot lock is the only guard. `setup/start` discards the slot's
@@ -180,10 +180,15 @@ also fails on entries no route uses.
 The gateway still serves the whole runtime on one listener. Binding the
 operator projection to loopback or a Unix socket, pointing the Cloudflare
 tunnel at the player projection, and routing the Tauri shell to the operator
-projection is the next slice, after the runtime home (#820). Before the
-tunnel moves, the player client's reads of `/api/settings` (including its
-`HEAD` connectivity probe) and `/api/local-models/status` need player-plane
-sources.
+projection is the next slice, after the runtime home (#820).
+`GET /health` reports the plane of the app that served it (`"plane": "player"`
+or `"operator"`); the unprojected gateway reports `operator`, because it serves
+every route. The client's connectivity probe reads `/health` and keeps the
+plane. On the player plane the client sends no operator request and renders no
+operator-backed control (API keys, model and context-length settings, the
+memory meter, developer mode, slot clearing, overwriting an occupied slot,
+portrait upload); theme and fonts come from `GET /api/preferences`. The
+client's plane only shapes the interface; the projections enforce the planes.
 
 ## Profiles
 
@@ -338,6 +343,7 @@ nexus restart [service] [--slot N] [--config PATH]
 nexus status [--config PATH]
 nexus logs [service] [-n LINES] [-f] [--mark | --since MARK] [--config PATH]
 nexus doctor [--target owner-host|owner-client|ci-runner] [--config PATH]
+nexus init --plan [--config PATH]
 nexus receipts
 ```
 
@@ -390,6 +396,9 @@ is the second.
 | `models.artifacts` | owner-host | `config.valid` | the configured production embedder and reranker match the artifact lock by file list, size, revision and sha256; failures name the fetch or configuration remedy |
 | `gateway.reachable` | owner-client | `config.valid` | the profile's gateway answers `/runtime/status` with the runtime's auth headers |
 | `gateway.version` | owner-client | `gateway.reachable` | client and runtime report the same `nexus` version |
+| `desktop.config` | owner-client | `config.valid` | the effective desktop config parses, its runtime origin matches the profile's gateway, and its status path is `/runtime/status` |
+| `desktop.credentials` | owner-client | `desktop.config`, `gateway.reachable` | the target is not behind Cloudflare Access, its auth block is valid, and any enforced header matches the shell's header with a nonempty credential environment variable |
+| `desktop.runtime_command` | owner-client | `desktop.config` | the working directory exists and the runtime command resolves to an executable file using the shell's lookup order |
 | `reachability.gate` | ci-runner | `config.valid` | `python -S scripts/check_reachability.py` passes |
 
 Each report entry carries `id`, `targets`, `status` (`pass`, `fail`, or
@@ -399,6 +408,21 @@ failed at the root of the chain. The report adds `schema_version`, `target`,
 `ok` (no check failed), and `omitted`. Stamps a database carries that this
 checkout lacks fail the migration checks too: the code is older than the
 schema.
+
+A check that raises `ImportError` fails with an `observed` that names the
+check and the module; its remediation says to restore the locked installation
+from the main checkout. `--json` still prints the report, and `nexus doctor`
+exits 1.
+
+The `desktop.*` checks read the desktop config in the shell's order
+(`read_config_source` in `ui/src-tauri/src/lib.rs`): `NEXUS_DESKTOP_CONFIG`,
+then `ui/src-tauri/nexus.desktop.json` in the checkout above the working
+directory, then that file beside the doctor's own `nexus` package (the
+checkout, or the copy an installed package ships), the file a shell built
+from this checkout compiles in. The order is a shared contract; change both
+readers together. `PATH` comes from the doctor's environment. A shell started
+from the Finder sees a shorter `PATH`, so `observed` says whether the program
+came from `PATH` or from the shell's fixed directories.
 
 `[runtime.readiness]` in `nexus.toml` bounds the checks:
 `gateway_timeout_seconds` for the owner-client probe,
@@ -417,10 +441,21 @@ main checkout's venv, run `PYTHONPATH=$PWD python -m nexus.cli doctor --target
 ci-runner --json` instead. The doctor checks the checkout that its imported
 `nexus` package belongs to; the working directory does not change this.
 
+`nexus init --plan` turns the owner-host report into ordered setup steps. It
+runs the checks `nexus doctor` runs and applies no setup changes. Existing
+diagnostic failure receipts are still recorded when configuration loading
+fails. Each failed check is one step, in registry order, which puts every
+dependency before its dependents, and the step carries that check's remediation
+verbatim. A check skipped behind a failed check is listed as blocked; run the
+plan again once the steps are done. It exits 1 while any step remains and 0
+otherwise. `--json` prints `schema_version`, `target`, `ok`, `steps` (each with
+`number`, `check_id`, `observed` and `remediation`) and `blocked`. There is no
+`--apply`: the operator runs each step.
+
 `/runtime/status` carries the checks the gateway evaluates in-process
 (`config.valid`, `tools.pg_dump`, `ui.bundle`): the gateway's own `PATH` and
-build directory are the ones that matter to it. Guest-host checks, slot
-playability, and `nexus init` are later slices of #803.
+build directory are the ones that matter to it. Guest-host checks and slot
+playability are later slices of #803.
 
 ## The Runtime Home
 
@@ -464,7 +499,7 @@ selects a configuration.
 
 | Layout entry | Location | Holds |
 |---|---|---|
-| `state_dir` | `[runtime].state_dir` | pidfiles, `logging.json`, `preferences.toml`, local-model state, file-backed wizard threads (`wizard_threads/`) |
+| `state_dir` | `[runtime].state_dir` | pidfiles, `logging.json`, `preferences.toml`, local-model state |
 | `logs_dir` | the same directory | captured `<service>.log` files and rotated segments |
 | `usage_dir` | `[usage].usage_dir` | usage and prompt-window ledgers |
 | `uploads_dir` | `ui/client/public` | `character_portraits/` and `place_images/` |
@@ -705,7 +740,7 @@ on a command line or in a file on the host.
 ## Development Workflows (unchanged)
 
 - `npm --prefix ui run dev` — Vite dev server with HMR on :5001, proxying
-  `/api`, `/ws`, and uploads to the gateway on :8002. Start the gateway
+  `/api`, `/ws`, `/health`, and uploads to the gateway on :8002. Start the gateway
   with `nexus up` (or point Vite at an `external`-profile stack).
 - `npm --prefix ui run build` — produces `ui/dist/public`, which the
   gateway serves statically. `nexus up` warns if the build is missing.

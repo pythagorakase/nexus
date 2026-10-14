@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useNarrativeEngine } from "@/hooks/useNarrativeEngine";
 import type { GenerationSession, SlotState } from "@/types/narrative";
@@ -66,7 +67,7 @@ beforeEach(() => {
   vi.stubGlobal("WebSocket", class { close() {} });
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://reader.test");
-    if (url.pathname === "/api/settings") return new Response(null, { status: 200 });
+    if (url.pathname === "/health") return json({ status: "healthy", service: "narrative_api", plane: "operator" });
     if (url.pathname === "/api/preferences") return json({ narrative_generation: settings });
     if (url.pathname === "/api/slot/4/state") return json(slotState);
     if (url.pathname === "/api/narrative/latest-chunk") return new Response("", { status: 404 });
@@ -87,7 +88,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  client.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   function Reader() {
     engine = useNarrativeEngine(4);
     const recapState = useState<RecapSlotStates>({});

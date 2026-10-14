@@ -7,6 +7,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReturnRecap } from "@shared/schema";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import type { ChunkWithMetadata, SlotState } from "@/types/narrative";
@@ -181,6 +182,7 @@ function engineOf(slotState: SlotState): NarrativeEngine {
     elapsedMs: 0,
     generationError: null,
     failedGeneration: null,
+    toastedFailureSessionId: null,
     isRecoveryLoading: false,
     retryGeneration: vi.fn(async () => true),
     isGenerating: false,
@@ -262,7 +264,7 @@ function renderReader(story: Story) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  client.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   const engines = new Map([[SLOT, seed(client, SLOT, story)]]);
   let view: ReaderView = { slot: SLOT, tab: "narrative", readingChunkId: null };
   const tree = () => (

@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
-import { Loader2, MapPin, Globe, Navigation } from "lucide-react";
+import { MapPin, Globe, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useMutation } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
@@ -45,37 +44,6 @@ export function LocationPhase({ slot, onNext, initialData }: LocationPhaseProps)
             });
         }
     };
-
-    const finalizeMutation = useMutation({
-        mutationFn: async () => {
-            // Finalize setup
-            const res = await fetch("/api/story/new/slot/select", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ slot }),
-            });
-
-            if (!res.ok) throw new Error("Failed to activate slot");
-            return res.json();
-        },
-        onSuccess: () => {
-            toast({
-                title: "Initialization Complete",
-                description: "Entering narrative interface...",
-            });
-            // Redirect to main app
-            setTimeout(() => {
-                window.location.href = "/"; // Force reload to clear wizard state
-            }, 1000);
-        },
-        onError: () => {
-            toast({
-                title: "Error",
-                description: "Failed to finalize setup.",
-                variant: "destructive",
-            });
-        },
-    });
 
     if (isGenerating) {
         return (
@@ -145,18 +113,10 @@ export function LocationPhase({ slot, onNext, initialData }: LocationPhaseProps)
 
             <div className="flex justify-center pt-4">
                 <Button
-                    onClick={() => finalizeMutation.mutate()}
-                    disabled={finalizeMutation.isPending}
+                    onClick={() => onNext(locationData)}
                     className="font-mono bg-primary text-primary-foreground hover:bg-primary/90 h-14 px-10 text-lg shadow-[0_0_20px_rgba(0,255,0,0.3)] hover:shadow-[0_0_30px_rgba(0,255,0,0.5)] transition-all"
                 >
-                    {finalizeMutation.isPending ? (
-                        <>
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            FINALIZING...
-                        </>
-                    ) : (
-                        "ENTER SIMULATION"
-                    )}
+                    ENTER SIMULATION
                 </Button>
             </div>
         </div>

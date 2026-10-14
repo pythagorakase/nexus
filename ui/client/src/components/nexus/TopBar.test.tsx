@@ -1,10 +1,13 @@
+import { UI_CONFIG_KEY } from "@/hooks/useUiConfig";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
+import { HEALTH_QUERY_KEY } from "@/hooks/usePlane";
+import { getQueryFn } from "@/lib/queryClient";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type {
   GenerationSession,
@@ -52,6 +55,12 @@ function renderTopBar(
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], status);
+  queryClient.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
+  queryClient.setQueryData(HEALTH_QUERY_KEY, {
+    status: "healthy",
+    service: "narrative_api",
+    plane: "operator",
+  });
   // /api/settings intentionally unseeded: the meter must render from knob
   // defaults while settings are in flight.
 
@@ -61,6 +70,7 @@ function renderTopBar(
       characterName={null}
       skaldStatus="READY"
       failedGeneration={null}
+      toastedFailureSessionId={null}
       frontierClock={frontierClock}
     />,
     {
@@ -89,6 +99,7 @@ describe("TopBar frontier clock", () => {
         characterName={null}
         skaldStatus="GENERATING"
         failedGeneration={null}
+        toastedFailureSessionId={null}
         frontierClock={{
           instant: "2189-10-17T22:42:00Z",
           face: "17 Oct 2189 · 22:42",
@@ -105,6 +116,7 @@ describe("TopBar frontier clock", () => {
         characterName={null}
         skaldStatus="READY"
         failedGeneration={null}
+        toastedFailureSessionId={null}
         frontierClock={null}
       />,
     );
@@ -204,6 +216,66 @@ describe("TopBar memory meter", () => {
 
     expect(screen.getByTestId("mem-text")).toHaveTextContent("— / 48 gb");
   });
+
+  it("player plane renders no memory meter", async () => {
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchStub);
+    try {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: {
+            queryFn: getQueryFn({ on401: "throw" }),
+            retry: false,
+            staleTime: Infinity,
+          },
+        },
+      });
+      queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], {
+        ...BASE,
+        active: {
+          gguf_path: `${MODELS_DIR}/Hermes-4.3-36B-GGUF/h36-q4.gguf`,
+          ready: true,
+          failed: false,
+        },
+      });
+      queryClient.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: 5000 } });
+      queryClient.setQueryData(HEALTH_QUERY_KEY, {
+        status: "healthy",
+        service: "narrative_api",
+        plane: "player",
+      });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <TopBar
+            slot={1}
+            characterName={null}
+            skaldStatus="READY"
+            failedGeneration={null}
+            toastedFailureSessionId={null}
+            frontierClock={null}
+          />
+        </QueryClientProvider>,
+      );
+      // Let any query the bar mounts reach the stub before asserting.
+      await act(async () => {
+        await new Promise((done) => setTimeout(done, 0));
+      });
+
+      expect(screen.getByTestId("nexus-topbar")).toBeInTheDocument();
+      expect(screen.queryByTestId("mem-meter")).not.toBeInTheDocument();
+      const urls = fetchStub.mock.calls.map((call) => String((call as unknown[])[0]));
+      expect(urls).not.toContain("/api/settings");
+      expect(urls).not.toContain("/api/local-models/status");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 /** A durable attempt that ended in error, as the engine reports it. */
@@ -234,12 +306,18 @@ function renderStrip(
   skaldStatus: SkaldStatus,
   characterName: string | null,
   failedGeneration: GenerationSession | null = null,
+  holdMs = 5000,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], BASE);
-  let engine = { skaldStatus, failedGeneration };
+  queryClient.setQueryData(UI_CONFIG_KEY, { announcer: { hold_ms: holdMs } });
+  let engine = {
+    skaldStatus,
+    failedGeneration,
+    toastedFailureSessionId: null as string | null,
+  };
   const strip = () => (
     <div className="nexus-shell">
       <TopBar
@@ -247,6 +325,7 @@ function renderStrip(
         characterName={characterName}
         skaldStatus={engine.skaldStatus}
         failedGeneration={engine.failedGeneration}
+        toastedFailureSessionId={engine.toastedFailureSessionId}
         frontierClock={null}
       />
     </div>
@@ -362,7 +441,7 @@ describe("TopBar generation announcer", () => {
     expect(spoken).toEqual(["Generation started", "Generation complete"]);
   });
 
-  it("announces the engine's failure for a turn it saw start, once", () => {
+  it("speaks a failure the toast did not report, once", () => {
     const { setEngine, setStatus, setFailure, spoken } = renderStrip("READY", null);
 
     setStatus("TRANSMITTING");
@@ -381,6 +460,39 @@ describe("TopBar generation announcer", () => {
       "Generation failed",
       "Generation started",
     ]);
+  });
+
+  it("stays silent for a failure its toast reported", () => {
+    const { setStatus, setEngine, spoken } = renderStrip("READY", null);
+    setStatus("TRANSMITTING");
+    setEngine({
+      skaldStatus: "READY",
+      failedGeneration: failedAttempt("failed-toast"),
+      toastedFailureSessionId: "failed-toast",
+    });
+    expect(announcer()).toBeEmptyDOMElement();
+    expect(spoken).toEqual(["Generation started"]);
+  });
+
+  it("clears the region after the configured hold", () => {
+    vi.useFakeTimers();
+    try {
+      const { setStatus, unmount } = renderStrip("READY", null, null, 4321);
+      setStatus("TRANSMITTING");
+      act(() => vi.advanceTimersByTime(4320));
+      expect(announcer()).toHaveTextContent("Generation started");
+      act(() => vi.advanceTimersByTime(1));
+      expect(announcer()).toBeEmptyDOMElement();
+      setStatus("RECEIVING");
+      setStatus("READY");
+      act(() => vi.advanceTimersByTime(4321));
+      expect(announcer()).toBeEmptyDOMElement();
+      setStatus("TRANSMITTING");
+      expect(announcer()).toHaveTextContent("Generation started");
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stays silent for a failure it never saw start", () => {

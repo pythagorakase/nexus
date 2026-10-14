@@ -11,6 +11,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HEALTH_QUERY_KEY, type Plane } from "@/hooks/usePlane";
 import { SlotSelector } from "./SlotSelector";
 
 interface SeedSlot {
@@ -21,9 +22,14 @@ interface SeedSlot {
     wizard_phase?: "setting" | "character" | "seed";
 }
 
-function renderSelector(slots: SeedSlot[]) {
+function renderSelector(slots: SeedSlot[], plane: Plane = "operator") {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    queryClient.setQueryData(HEALTH_QUERY_KEY, {
+        status: "healthy",
+        service: "narrative_api",
+        plane,
     });
     queryClient.setQueryData(["/api/story/new/slots"], slots);
     const onSlotSelected = vi.fn();
@@ -216,5 +222,25 @@ describe("SlotSelector empty and locked slots", () => {
         fireEvent.click(card(4));
         expect(onSlotSelected).not.toHaveBeenCalled();
         expect(screen.queryByTestId("overwrite-confirm")).not.toBeInTheDocument();
+    });
+});
+
+describe("SlotSelector on the player plane", () => {
+    it("player plane offers no clear and no overwrite", () => {
+        const { onSlotSelected } = renderSelector(FIVE_SLOTS, "player");
+        expect(screen.getByRole("button", { name: "Resume story in Memory Slot 2" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Clear Memory Slot 2" })).not.toBeInTheDocument();
+        expect(card(2)).toHaveClass("cursor-default");
+        expect(card(2)).not.toHaveClass("cursor-pointer");
+        expect(card(5)).toHaveClass("cursor-pointer");
+
+        fireEvent.click(card(2));
+        fireEvent.keyDown(card(3), { key: "Enter" });
+        expect(screen.queryByTestId("overwrite-confirm")).not.toBeInTheDocument();
+        expect(onSlotSelected).not.toHaveBeenCalled();
+
+        fireEvent.click(card(5));
+        expect(onSlotSelected).toHaveBeenCalledTimes(1);
+        expect(onSlotSelected).toHaveBeenCalledWith(5);
     });
 });

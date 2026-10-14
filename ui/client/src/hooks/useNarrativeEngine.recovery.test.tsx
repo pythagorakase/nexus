@@ -2,11 +2,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NarrativePane } from "@/components/nexus/NarrativePane";
 import type { RecapSlotStates } from "@/components/nexus/ReturnRecapCard";
 import type { GenerationSession, NarrativeRecovery, SlotState } from "@/types/narrative";
 import * as api from "@/lib/narrative-api";
+import { HEALTH_QUERY_KEY, type HealthPayload } from "./usePlane";
 import { useNarrativeEngine } from "./useNarrativeEngine";
 
 vi.mock("@/lib/narrative-api", () => ({
@@ -43,7 +45,9 @@ const state: SlotState = {
 };
 // The same frontier with no recorded action: its menu is a live decision.
 const openFrontier: SlotState = { ...state, choices: ["Live choice"], recovery: null };
+const health: HealthPayload = { status: "healthy", service: "narrative_api", plane: "player" };
 let currentState: SlotState;
+let currentClient: QueryClient;
 let currentSession: GenerationSession | null;
 let engine: ReturnType<typeof useNarrativeEngine>;
 
@@ -60,13 +64,15 @@ beforeEach(() => {
   vi.mocked(api.getGenerationStatus).mockImplementation(async () => currentSession!);
   vi.mocked(api.getRecoveryPreferences).mockResolvedValue({ narrative_generation: settings });
   vi.stubGlobal("WebSocket", class { close() {} });
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true })));
+  vi.stubGlobal("fetch", vi.fn(async (input: unknown) =>
+    String(input) === "/health" ? { ok: true, json: async () => health } : { ok: true }));
 });
 afterEach(() => vi.unstubAllGlobals());
 
 function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  currentClient = client;
+  client.setQueryData(["/api/preferences"], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
   function Reader() {
     engine = useNarrativeEngine(4);
     const recapState = useState<RecapSlotStates>({});
@@ -82,6 +88,18 @@ async function expectFailure() {
   expect(screen.queryByTestId("choice-1")).not.toBeInTheDocument();
   expect(screen.queryByTestId("input-freeform")).not.toBeInTheDocument();
 }
+
+describe("connectivity probe", () => {
+  it("probe reads /health and caches the plane", async () => {
+    mount();
+    await waitFor(() =>
+      expect(currentClient.getQueryData<HealthPayload>(HEALTH_QUERY_KEY)?.plane).toBe("player"));
+    const calls = vi.mocked(fetch).mock.calls;
+    expect(calls.some(([input]) => String(input) === "/health")).toBe(true);
+    expect(calls.some(([input, init]) =>
+      String(input) === "/api/settings" || (init as RequestInit | undefined)?.method === "HEAD")).toBe(false);
+  });
+});
 
 describe("durable reader generation recovery", () => {
   it("restores a persistent failure after remount and reconnect without replaying", async () => {
