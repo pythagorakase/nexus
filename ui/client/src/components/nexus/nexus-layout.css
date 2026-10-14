@@ -922,6 +922,14 @@
   border-color: var(--brass);
   background: hsl(320 55% 50% / .12);
 }
+/* Keyboard focus on a roster row: the dialog Close button's shadcn ring
+   (`--ring`, 2px, 2px offset), drawn inside the row so the scrolling list
+   cannot clip it. The gap keeps it apart from the selected row's 1px brass
+   border: a focused row reads as an inner ring, the selected row as an edge. */
+.charspane-list li:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -5px;
+}
 .char-glyph {
   width: 30px;
   height: 30px;
@@ -1082,6 +1090,10 @@
   height: 100%;
   min-height: 0;
 }
+/* The pane root takes focus only programmatically (tabIndex -1), when the
+   place dialog closes without a connected opener; it is not a control. */
+.mappane:focus,
+.mappane:focus-visible { outline: none; }
 .mappane-list {
   padding: 8px 0;
   overflow-y: auto;

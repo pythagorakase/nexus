@@ -1,0 +1,22 @@
+
+> nexus-ui@1.0.0 test
+> vitest run CharactersPane MapPane shell-accessibility NexusLayout
+
+
+ RUN  v2.1.9 /Users/pythagor/nexus/.claude/worktrees/777-keyboard-roster-and-map/ui/client
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ✓ src/shell-accessibility.test.ts (11 tests) 58ms
+Browserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/components/nexus/NexusLayout.test.tsx (5 tests) 137ms
+ ✓ src/components/nexus/CharactersPane.test.tsx (19 tests) 193ms
+ ✓ src/components/nexus/NexusLayout.announcer.test.tsx (3 tests) 268ms
+ ✓ src/components/nexus/MapPane.test.tsx (10 tests) 434ms
+
+ Test Files  5 passed (5)
+      Tests  48 passed (48)
+   Start at  03:22:06
+   Duration  1.23s (transform 614ms, setup 152ms, collect 1.52s, tests 1.09s, environment 969ms, prepare 247ms)
+
