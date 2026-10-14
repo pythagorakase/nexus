@@ -8,6 +8,11 @@ Every command ``nexus.cli.build_parser()`` registers declares, in
 - ``http``: the handler reaches story state only through the NEXUS API at
   ``get_api_url()`` (the remote profile's base URL, ``NEXUS_API_URL``, or the
   local gateway). Reading the active ``nexus.toml`` does not count.
+- ``operator_api``: the handler reads operator-plane routes
+  (``nexus/api/route_capabilities.py``) of the NEXUS API at ``get_api_url()``.
+  The ``http`` commands that already call operator routes (``clear``,
+  ``lock``, ``unlock``, ``model --set``/``--clear``) stay ``http`` until issue
+  #824 splits the listeners.
 - ``database``: the handler connects to a slot database itself
   (``psycopg2``, ``nexus.api.db_pool``, or a reader built on them, such as the
   wizard cache and story-settings readers), whatever else it also does.
@@ -29,14 +34,15 @@ Remote Refusal
 --------------
 The runtime is remote when the active configuration's ``[runtime] profile`` is
 ``"remote"`` or ``NEXUS_API_URL`` names a host that is not loopback. Under a
-remote runtime, ``database`` and ``local_operator`` commands are refused
-before dispatch with ``transport_refused`` (exit 3), so they never read this
-machine's slot databases or runtime files in place of the remote runtime's.
-``doctor`` and ``receipts`` are the self-diagnostic commands
+remote runtime, ``database``, ``local_operator`` and ``operator_api`` commands
+are refused before dispatch with ``transport_refused`` (exit 3), so they never read this
+machine's slot databases or runtime files in place of the remote runtime's,
+and never reach a remote runtime's operator routes.
+``doctor``, ``init`` and ``receipts`` are the self-diagnostic commands
 (:data:`SELF_DIAGNOSTIC_COMMANDS`): they evaluate this machine's configuration
 and runtime themselves, so they are dispatched without the configuration load
-or the remote refusal. An invalid configuration is ``doctor``'s
-``config.valid`` finding, and the client machine of a remote runtime runs
+or the remote refusal. An invalid configuration is a ``config.valid`` finding
+for ``doctor`` and ``init``, and the client machine of a remote runtime runs
 ``doctor --target owner-client``; ``receipts`` reads this machine's failure
 receipts when no configuration loads.
 
@@ -52,10 +58,10 @@ refused connection, a timeout, an unusable API URL, and a missing or refused
 runtime credential propagate from the HTTP handlers to ``nexus.cli.main()``,
 so every HTTP command reports them alike. An API answer the command cannot
 use propagates to ``main()`` from the play and slot handlers (``load``,
-``continue``, ``retry``, ``undo``, ``regenerate``, ``clear``, ``lock``,
-``unlock``, ``model --set``/``--clear``) and the ``inspect`` verbs, which
-report it alike: a non-2xx answer is ``api_error`` (``inspect`` reports a 404
-as ``not_found``), a 401, 403 or redirect that is not followed is
+``continue``, ``retry``, ``accept``, ``undo``, ``regenerate``, ``clear``,
+``lock``, ``unlock``, ``model --set``/``--clear``) and the ``inspect`` verbs,
+which report it alike: a non-2xx answer is ``api_error`` (``inspect`` reports a
+404 as ``not_found``), a 401, 403 or redirect that is not followed is
 ``config_error`` (the gateway itself answers none of them, so an edge in front
 of it such as Cloudflare Access rejected the request), and a 2xx body that is
 not a JSON object is ``invalid_response``. ``model`` reports
@@ -87,7 +93,7 @@ from urllib.parse import urlsplit
 
 from nexus.config.settings_models import RuntimeSettings
 
-Transport = Literal["http", "local_operator", "database"]
+Transport = Literal["http", "operator_api", "local_operator", "database"]
 
 API_URL_ENV = "NEXUS_API_URL"
 
@@ -102,6 +108,7 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "logs": "local_operator",
         "home": "local_operator",
         "doctor": "local_operator",
+        "init": "local_operator",
         "receipts": "local_operator",
         # Local ledgers and model artifacts.
         "usage": "local_operator",
@@ -114,6 +121,7 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "load": "http",
         "continue": "http",
         "retry": "http",
+        "accept": "http",
         "undo": "http",
         "regenerate": "http",
         "clear": "http",
@@ -126,6 +134,9 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "inspect characters": "http",
         "inspect places": "http",
         "inspect factions": "http",
+        # Operator-plane reads; refused while the runtime is remote (815-Q3).
+        "inspect settings": "operator_api",
+        "inspect secrets": "operator_api",
         # Reading seat identities opens the slot database; see FLAG_TRANSPORTS.
         "model": "database",
         # Direct slot-database readers and writers.
@@ -192,6 +203,8 @@ ENVELOPE_COMMANDS: FrozenSet[str] = frozenset(
         "inspect characters",
         "inspect places",
         "inspect factions",
+        "inspect settings",
+        "inspect secrets",
         "tags audit",
     }
 )
@@ -199,16 +212,17 @@ ENVELOPE_COMMANDS: FrozenSet[str] = frozenset(
 # Commands that diagnose this machine's configuration and role themselves:
 # main() dispatches them without loading the configuration or applying the
 # remote refusal, so a broken nexus.toml never stops them before they run.
-SELF_DIAGNOSTIC_COMMANDS: FrozenSet[str] = frozenset({"doctor", "receipts"})
+SELF_DIAGNOSTIC_COMMANDS: FrozenSet[str] = frozenset({"doctor", "init", "receipts"})
 
 REFUSED_REMOTE_TRANSPORTS: FrozenSet[Transport] = frozenset(
-    {"database", "local_operator"}
+    {"database", "local_operator", "operator_api"}
 )
 
 # What each transport opens, in the order the generated reference lists them.
 TRANSPORT_OPENS: Mapping[Transport, str] = MappingProxyType(
     {
         "http": "The NEXUS API only",
+        "operator_api": "The NEXUS API's operator routes on this machine",
         "database": "A slot database directly",
         "local_operator": (
             "This machine's processes, logs, runtime home, usage ledger, model "
