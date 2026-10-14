@@ -31,7 +31,29 @@ sources:
   - nexus/agents/orrery/worker.py
   - nexus/agents/orrery/experience_embedding.py
   - nexus.toml
-verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"
+  - nexus/api/slot_endpoints.py
+  - ui/client/src/components/nexus/NarrativePane.tsx
+  - ui/client/src/hooks/useInputDraft.ts
+  - nexus/cli.py
+  - nexus/memory/entity_detector.py
+  - nexus/memory/incremental.py
+  - nexus/agents/lore/utils/entity_queries.py
+  - nexus/agents/lore/utils/entity_inclusion.py
+  - nexus/agents/memnon/utils/search.py
+  - nexus/agents/memnon/utils/db_access.py
+  - nexus/agents/memnon/utils/cross_encoder.py
+  - nexus/agents/memnon/utils/embedding_manager.py
+  - nexus/agents/orrery/resolver.py
+  - nexus/agents/lore/utils/scene_order.py
+  - nexus/agents/logon/apex_schema.py
+  - scripts/api_openai.py
+  - scripts/api_anthropic.py
+  - nexus/agents/orrery/retrograde_maturation.py
+  - nexus/agents/memnon/utils/artifact_manifest.py
+  - nexus/runtime/readiness.py
+  - nexus/agents/memnon/utils/source_embeddings.py
+  - ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx
+verified_commit: "a01c162f1e4daaf5009a9bba7397ae4065a8614b"
 ---
 
 # The Turn Cycle
@@ -44,9 +66,10 @@ authoritative; this document is their map.
 
 ## 1. The Player Acts
 
-The IRIS Narrative pane (`ui/client/src/hooks/useNarrativeEngine.ts`) polls
-`GET /api/slot/{slot}/state` for the newest passage, which is the pending draft
-when one exists, and its choices. Selecting a choice, by click or number key,
+The IRIS Narrative pane (`ui/client/src/hooks/useNarrativeEngine.ts`) reads
+`GET /api/slot/{slot}/state`, again after each submission and whenever a
+generation ends, for the newest passage, which is the pending draft when one
+exists, and its choices. Selecting a choice, by click or number key,
 only loads its text into the reader's draft, which remembers the choice while
 the player edits the text and forgets it once the text is cleared. Enter or the
 send glyph commits: `continueNarrative` (`ui/client/src/lib/narrative-api.ts`)
@@ -236,8 +259,8 @@ The pending draft appears in the Narrative pane. From there:
 `commit_incubator_to_database_sync` (`nexus/api/commit_handler_sync.py`) runs
 one transaction:
 
-1. Locks the incubator row, reruns draft validation, and binds staged
-   name-reveal identities.
+1. Locks the incubator row, binds staged name-reveal identities, and reruns
+   draft validation.
 2. Derives chronology from the parent's `chunk_metadata`: the scene number
    advances, and an episode or season transition plans summary jobs.
 3. Checks declared characters against the identity index.
@@ -300,10 +323,10 @@ order:
    `experience_embedding_limit`, and `0` skips the lane without loading a
    model, as the Orrery queue limits cap their own lanes.
 
-The scheduler lease and the compaction, summary, and embedding queues are
-configured in `[runtime.scheduler]`; the Orrery queues take their limits from
-their own `[orrery]` tables. `python -m nexus.agents.orrery.worker` runs one
-pass under the same ownership.
+The scheduler lease, the promotion limit, and the compaction, summary, and
+embedding queues are configured in `[runtime.scheduler]`; the other Orrery
+queues take their limits from their own `[orrery]` tables.
+`python -m nexus.agents.orrery.worker` runs one pass under the same ownership.
 
 ## Bootstrap Turns
 
