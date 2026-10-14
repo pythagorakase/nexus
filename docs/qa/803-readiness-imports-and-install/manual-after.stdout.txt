@@ -1,0 +1,32 @@
+{
+  "checks": [
+    {
+      "depends_on": [],
+      "id": "config.valid",
+      "observed": "import of opentelemetry._events failed in config.valid: No module named 'opentelemetry._events'",
+      "remediation": "Restore the locked installation from the main checkout (poetry install there, never in a worktree, which repoints the shared environment), then run nexus doctor again.",
+      "status": "fail",
+      "targets": [
+        "owner-host",
+        "owner-client",
+        "ci-runner"
+      ]
+    },
+    {
+      "depends_on": [
+        "config.valid"
+      ],
+      "id": "reachability.gate",
+      "observed": "config.valid failed",
+      "remediation": "Resolve config.valid first.",
+      "status": "skip",
+      "targets": [
+        "ci-runner"
+      ]
+    }
+  ],
+  "ok": false,
+  "omitted": [],
+  "schema_version": 1,
+  "target": "ci-runner"
+}

@@ -1,0 +1,5 @@
+........................................................................ [ 60%]
+................................................                         [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+120 passed in 20.20s

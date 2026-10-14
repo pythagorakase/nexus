@@ -1,0 +1,9 @@
+........................................................................ [ 55%]
+..........................................................               [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 11 targets: postgres, qa640_1013_readiness_* x2, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+130 passed in 87.70s (0:01:27)

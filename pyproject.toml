@@ -53,7 +53,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 packages = [{include = "nexus"}, {include = "scripts"}]
-include = [{path = "prompts/**/*.md", format = ["sdist", "wheel"]}]
+include = [{path = "prompts/**/*.md", format = ["sdist", "wheel"]}, {path = "ui/src-tauri/nexus.desktop.json", format = ["sdist", "wheel"]}]
 
 [tool.poetry.dependencies]
 torch = {allow-prereleases = true}
