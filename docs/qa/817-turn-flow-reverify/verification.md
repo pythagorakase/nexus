@@ -708,3 +708,43 @@ docs/turn_flow_sequence.md
 
 `git fetch origin` left `origin/main` at `a01c162f`, so both stamps stay at
 the merge base and there is still no second range.
+
+## Second Review-Fix Tails
+
+The second review round (`57bd86fd`) changed two clauses of
+`docs/turn_flow_sequence.md` (corrections 3 and 4; no source and no stamp
+moved, and the body keeps its line count) and this file. `AGENTS.md:44`
+was re-read against the corrected document and stays true.
+`tests/test_doc_front_matter.py` is the only test that reads either file,
+so these runs cover the round; the offline-suite tails above stand. All at
+`57bd86fd` with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT`
+unset; every pytest command prefixed `nice -n 15`. The one-minute load read
+9.35 before the PostgreSQL run.
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+66 passed, 5 warnings in 5.52s
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p tests.dbname_audit tests/test_doc_front_matter.py tests/test_owner_target_guard.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+147 passed in 8.31s
+
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+
+$ git diff --name-only origin/main...HEAD
+AGENTS.md
+docs/qa/817-turn-flow-reverify/verification.md
+docs/turn_flow_sequence.md
+```
+
+`git fetch origin` left `origin/main` at `a01c162f`, so both stamps stay at
+the merge base and there is still no second range. Black, flake8 and mypy
+were not run: this branch changes no Python file.
