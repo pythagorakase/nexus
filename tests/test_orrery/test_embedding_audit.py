@@ -28,8 +28,9 @@ from nexus.agents.orrery.experience_embedding import (
     drain_experience_embeddings_sync,
     unembedded_rendered_experience_ids,
 )
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.jobs.scheduler import SlotScheduler, experience_embedding_rounds
+from tests.settings_helpers import settings_with
 
 MODELS = {"alpha": 3, "beta": 5}
 
@@ -215,7 +216,7 @@ def test_drain_without_owed_rows_never_reaches_the_embedder(
     drained = drain_experience_embeddings_sync(
         _SqliteConnection(experiences),
         dbname="save_05",
-        settings=load_settings_as_dict(),
+        settings=load_settings(),
         limit=12,
     )
     assert drained == 0
@@ -226,8 +227,7 @@ def test_disabled_experiences_drain_nothing(
     experiences: sqlite3.Connection,
 ) -> None:
     """A disabled subsystem leaves owed rows alone, like its render lane."""
-    settings = load_settings_as_dict()
-    settings["orrery"]["experiences"]["enabled"] = False
+    settings = settings_with({"orrery.experiences.enabled": False})
     drained = drain_experience_embeddings_sync(
         _SqliteConnection(experiences), dbname="save_05", settings=settings, limit=12
     )
@@ -238,20 +238,24 @@ def test_disabled_experiences_drain_nothing(
 def test_zero_embedding_limit_skips_the_lane_before_reading_its_settings() -> None:
     """An isolated pass never reads the lane's table, so it never embeds.
 
-    The same invalid ``[orrery.experiences]`` table fails a default pass, so a
-    clean zero proves the skipped lane stopped before validating it.
+    The same absent Orrery section fails a default pass, so a clean zero
+    proves the skipped lane stopped before reading it.
     """
-    settings = load_settings_as_dict()
-    settings["orrery"]["experiences"]["max_embeddings_per_drain"] = 0
-    with pytest.raises(ValidationError, match="max_embeddings_per_drain"):
+    settings = load_settings().model_copy(update={"orrery": None})
+    with pytest.raises(RuntimeError, match=r"\[orrery\]"):
         experience_embedding_rounds(settings, None)
     assert experience_embedding_rounds(settings, 0) == 0
 
 
+def test_zero_configured_embedding_limit_is_invalid() -> None:
+    """A typed configuration cannot disable the lane with an invalid bound."""
+    with pytest.raises(ValidationError, match="max_embeddings_per_drain"):
+        settings_with({"orrery.experiences.max_embeddings_per_drain": 0})
+
+
 def test_embedding_limit_defaults_to_and_is_capped_by_the_configured_bound() -> None:
     """``None`` takes the configured bound; an explicit limit only lowers it."""
-    settings = load_settings_as_dict()
-    settings["orrery"]["experiences"]["max_embeddings_per_drain"] = 5
+    settings = settings_with({"orrery.experiences.max_embeddings_per_drain": 5})
     assert experience_embedding_rounds(settings, None) == 5
     assert experience_embedding_rounds(settings, 2) == 2
     assert experience_embedding_rounds(settings, 9) == 5
@@ -263,14 +267,14 @@ def test_scheduler_pass_resolves_the_embedding_limit_before_connecting() -> None
     The default gate fails any psycopg2 connection loudly, so this ValueError
     proves the pass reads ``experience_embedding_limit`` before any lane runs.
     """
-    scheduler = SlotScheduler(5, dbname="save_05", settings=load_settings_as_dict())
+    scheduler = SlotScheduler(5, dbname="save_05", settings=load_settings())
     with pytest.raises(ValueError, match="experience_embedding_limit must be non-"):
         scheduler._drain(experience_embedding_limit=-1)
 
 
 def test_scheduler_pass_refuses_an_unknown_lane_limit() -> None:
     """A misspelled limit fails before ownership instead of isolating nothing."""
-    scheduler = SlotScheduler(5, dbname="save_05", settings=load_settings_as_dict())
+    scheduler = SlotScheduler(5, dbname="save_05", settings=load_settings())
     with pytest.raises(TypeError, match="experience_embeddings_limit"):
         scheduler.run_pass(experience_embeddings_limit=0)  # type: ignore[call-arg]
 

@@ -15,6 +15,10 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 import pytest
+
+from nexus.config import load_settings
+from nexus.config.settings_models import OrreryRetrogradeMaturationSettings
+from tests.settings_helpers import settings_with, table
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
@@ -54,7 +58,19 @@ pytestmark = pytest.mark.requires_postgres
 # The slot label the clone is routed under for the whole module.
 ROUTED_SLOT = 5
 WORLD_TIME = datetime(2073, 8, 1, tzinfo=timezone.utc)
-ENABLED_MATURATION = {"orrery": {"retrograde": {"maturation": {"enabled": True}}}}
+ENABLED_MATURATION = settings_with(
+    {
+        "orrery.retrograde.maturation": table(
+            OrreryRetrogradeMaturationSettings,
+            {
+                "enabled": True,
+                "model_ref": load_settings()
+                .require_orrery("stage2a enqueue proof")
+                .retrograde.maturation.model_ref,
+            },
+        )
+    }
+)
 
 
 @pytest.fixture(scope="module")

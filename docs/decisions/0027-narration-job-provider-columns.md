@@ -5,7 +5,7 @@ sources:
   - migrations/023_orrery_schema.py
   - docs/dead_retrieval_subtraction.md
   - nexus/agents/orrery/worker.py
-verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
+verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"
 ---
 
 # 0027: Narration Job Provider Columns

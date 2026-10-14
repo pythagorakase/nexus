@@ -11,7 +11,7 @@ import pytest
 import requests
 import tomlkit
 
-from nexus.config import load_settings, load_settings_as_dict
+from nexus.config import load_settings
 from nexus.jobs.scheduler import SlotScheduler
 from tests.pg_fixtures import (
     FIXTURE_TURN_CHOICES,
@@ -155,9 +155,7 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
                     "UPDATE orrery_resolutions SET promotion_status='promoted' WHERE promotion_status='pending'"
                 )
             print("Frozen jobs after repin: " + json.dumps(before), flush=True)
-            result = SlotScheduler(
-                4, dbname=dbname, settings=load_settings_as_dict()
-            ).run_pass(
+            result = SlotScheduler(4, dbname=dbname, settings=load_settings()).run_pass(
                 narration_limit=0,
                 experience_limit=1,
                 maturation_limit=1,

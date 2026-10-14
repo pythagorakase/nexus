@@ -9,7 +9,9 @@ from typing import Any, Iterator
 import pytest
 
 import nexus.config as config_module
+import nexus.config.loader as config_loader
 from nexus.config import load_settings
+from nexus.config.settings_models import OrrerySettings, Settings
 from nexus.api import commit_handler_sync, narrative_lease
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.memory.manager import empty_pass2_baseline
@@ -111,33 +113,38 @@ def test_sync_commit_loads_application_config_once(
     qa654_db: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The genuine sync commit reuses one Orrery settings mapping."""
+    """The genuine sync commit reuses one typed configuration and rejects the façade."""
 
     session_id = "00000000-0000-0000-0000-000000000654"
     parent_chunk_id = asyncio.run(_seed_commit(qa654_db, session_id))
     _disable_presence_audit(monkeypatch)
 
-    original_loader = config_module.load_settings_as_dict
+    original_loader = commit_handler_sync._load_orrery_settings
     original_tick = commit_handler_sync.commit_orrery_tick_sync
     original_checkpoint = commit_handler_sync._orrery_checkpoint_interval
-    loaded_settings: list[dict[str, Any]] = []
+    loaded_settings: list[Settings] = []
     tick_kwargs: list[dict[str, Any]] = []
-    checkpoint_settings: list[Any] = []
+    checkpoint_settings: list[OrrerySettings] = []
 
-    def counted_loader() -> dict[str, Any]:
+    def counted_loader() -> Settings:
         settings = original_loader()
         loaded_settings.append(settings)
         return settings
+
+    def forbid_dict_facade(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("Accepted-chunk readers must use the typed configuration")
 
     def recording_tick(conn: Any, proposal: Any, **kwargs: Any) -> Any:
         tick_kwargs.append(kwargs)
         return original_tick(conn, proposal, **kwargs)
 
-    def recording_checkpoint(settings: Any) -> int:
+    def recording_checkpoint(settings: OrrerySettings) -> int:
         checkpoint_settings.append(settings)
         return original_checkpoint(settings)
 
-    monkeypatch.setattr(config_module, "load_settings_as_dict", counted_loader)
+    monkeypatch.setattr(commit_handler_sync, "_load_orrery_settings", counted_loader)
+    monkeypatch.setattr(config_module, "load_settings_as_dict", forbid_dict_facade)
+    monkeypatch.setattr(config_loader, "load_settings_as_dict", forbid_dict_facade)
     monkeypatch.setattr(commit_handler_sync, "commit_orrery_tick_sync", recording_tick)
     monkeypatch.setattr(
         commit_handler_sync,
@@ -155,8 +162,11 @@ def test_sync_commit_loads_application_config_once(
 
     assert committed_chunk_id > parent_chunk_id
     assert len(loaded_settings) == 1
-    orrery = loaded_settings[0]["orrery"]
-    assert checkpoint_settings == [orrery]
+    orrery = loaded_settings[0].orrery
+    assert orrery is not None
+    assert len(checkpoint_settings) == 1
+    assert checkpoint_settings[0] is orrery
+    dumped = orrery.model_dump(by_alias=True)
     assert tick_kwargs == [
         {
             "tick_chunk_id": committed_chunk_id,
@@ -164,14 +174,14 @@ def test_sync_commit_loads_application_config_once(
             "world_layer": "primary",
             "adjudications": [],
             "storyteller_state_updates": {},
-            "prompt_settings": orrery.get("prompt"),
-            "ecology_settings": orrery.get("ecology"),
-            "project_settings": orrery.get("projects"),
-            "mood_settings": orrery.get("mood"),
-            "epistemics_settings": orrery.get("epistemics"),
-            "contagion_settings": orrery.get("contagion"),
-            "distortion_settings": orrery.get("distortion"),
-            "drift_settings": orrery.get("drift"),
-            "reveal_settings": orrery.get("reveal"),
+            "prompt_settings": dumped["prompt"],
+            "ecology_settings": dumped["ecology"],
+            "project_settings": dumped["projects"],
+            "mood_settings": dumped["mood"],
+            "epistemics_settings": dumped["epistemics"],
+            "contagion_settings": dumped["contagion"],
+            "distortion_settings": dumped["distortion"],
+            "drift_settings": dumped["drift"],
+            "reveal_settings": dumped["reveal"],
         }
     ]

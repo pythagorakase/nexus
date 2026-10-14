@@ -50,6 +50,7 @@ from nexus.api.slot_utils import all_slots, slot_dbname
 from nexus.api.story_identity import detach_clone_identity
 from nexus.config import load_settings
 from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
+from nexus.config.settings_models import Settings
 from nexus.config.story_model import (
     StorySettings,
     resolve_seat,
@@ -62,7 +63,7 @@ from nexus.database import (
     database_url,
     subprocess_env,
 )
-from scripts import migrate, new_story_setup
+from nexus.maintenance import migrate, new_story_setup
 
 
 def connection_parameters(dbname: str) -> dict[str, Any]:
@@ -160,7 +161,7 @@ def seat_backfill_job_seats() -> dict[str, str]:
     """Return migration 126's ``JOB_SEATS`` (job table to model seat).
 
     The mapping is read from the migration module itself, loaded through
-    ``scripts.migrate``'s importlib loader, so the guard below cannot drift
+    ``nexus.maintenance.migrate``'s importlib loader, so the guard below cannot drift
     from the tables the migration backfills.
     """
 
@@ -1783,7 +1784,6 @@ def seed_adjudication_ledger(
         drain_narration_outbox_sync,
         promote_pending_resolutions_sync,
     )
-    from nexus.config import load_settings_as_dict
 
     tick_ids = tuple(int(tick) for tick in ticks)
     if len(tick_ids) < 2 or list(tick_ids) != sorted(set(tick_ids)):
@@ -1791,11 +1791,11 @@ def seed_adjudication_ledger(
             "seed_adjudication_ledger needs two or more distinct ascending "
             f"tick chunk IDs, got {tick_ids!r}"
         )
-    settings = load_settings_as_dict()
-    orrery_settings = settings["orrery"]
-    promote = orrery_settings["promote"]
-    priority_threshold = float(promote["priority_threshold"])
-    magnitude_threshold = float(promote["magnitude_threshold"])
+    settings = load_settings()
+    orrery = settings.require_orrery("the adjudication ledger fixture")
+    orrery_settings = orrery.model_dump(by_alias=True)
+    priority_threshold = orrery.promote.priority_threshold
+    magnitude_threshold = orrery.promote.magnitude_threshold
     token = uuid.uuid4().hex[:12]
 
     def draft(
@@ -2928,7 +2928,7 @@ def _insert_experience_actor(
 def seed_experience_candidates(
     dbname: str,
     *,
-    settings: Mapping[str, Any],
+    settings: Settings,
     label: str,
     seed_count: int = 2,
 ) -> ExperienceCandidatesSeed:
@@ -2996,7 +2996,7 @@ def seed_experience_candidates(
 def seed_experience_render_job(
     dbname: str,
     *,
-    settings: Mapping[str, Any],
+    settings: Settings,
     label: str,
     slot: int,
     seed_count: int = 2,

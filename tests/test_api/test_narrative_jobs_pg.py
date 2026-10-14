@@ -22,6 +22,7 @@ from nexus.jobs.scheduler import SlotScheduler
 from nexus.telemetry import usage
 from tests.pg_fixtures import connect, seed_committed_chunk, seed_story_base
 from tests.scheduler_helpers import test_provider_config as configure_test
+from tests.settings_helpers import settings_with
 from tests.test_api.test_acceptance_staging_pg import (
     acceptance_slot,
     draft,
@@ -188,8 +189,7 @@ def test_summary_queue_transaction_and_terminal_failure(offline_gate_db):
             )
             cur.execute("SELECT count(*) FROM narrative_summary_jobs")
             assert cur.fetchone() == (1,)
-    settings = load_settings_as_dict()
-    settings["runtime"]["scheduler"]["summaries"]["max_attempts"] = 1
+    settings = settings_with({"runtime.scheduler.summaries.max_attempts": 1})
     scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
     with pytest.raises(RuntimeError, match="Summary provider returned no summary"):
         scheduler.run_pass(narration_limit=0, experience_limit=0, maturation_limit=0)
@@ -214,15 +214,18 @@ def test_embedding_job_names_the_embedder_restore_command(
     locked revision, and the job records that error.
     """
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")
-    settings = load_settings_as_dict()
-    settings["runtime"]["scheduler"]["embeddings"]["max_attempts"] = 1
-    models = settings["Agent Settings"]["MEMNON"]["models"]
-    (active,) = [name for name, config in models.items() if config["is_active"]]
+    models = load_settings().memnon.models
+    (active,) = [name for name, config in models.items() if config.is_active]
     folder = tmp_path / "embedder"
     if artifact == "incomplete":
         folder.mkdir()
-    models[active]["local_path"] = str(folder)
-    repo = models[active]["remote_path"]
+    settings = settings_with(
+        {
+            "runtime.scheduler.embeddings.max_attempts": 1,
+            f"memnon.models.{active}.local_path": str(folder),
+        }
+    )
+    repo = models[active].remote_path
     (revision,) = [
         entry["revision"]
         for entry in read_manifest(lock_file_path(load_settings()))["artifacts"]
@@ -421,8 +424,9 @@ def test_summary_scheduler_renews_lease_through_prepare(offline_gate_db, lose_le
     from nexus.jobs.narrative_jobs import drain_job
     from tests.test_api.test_scheduler_pg import scheduler_settings, wait_until
 
-    settings = scheduler_settings()
-    settings["runtime"]["scheduler"]["summaries"]["lease_duration_seconds"] = 0.5
+    settings = scheduler_settings(
+        {"runtime.scheduler.summaries.lease_duration_seconds": 0.5}
+    )
     scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
     nonces = []
 
@@ -508,8 +512,7 @@ def test_summary_span_failure_never_succeeds(offline_gate_db, blocked):
     from sqlalchemy.exc import OperationalError
     from nexus.jobs.summaries import drain_summary
 
-    settings = load_settings_as_dict()
-    settings["runtime"]["scheduler"]["summaries"]["max_attempts"] = 1
+    settings = settings_with({"runtime.scheduler.summaries.max_attempts": 1})
     scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
     with closing(connect(offline_gate_db)) as conn:
         with conn, conn.cursor() as cur:
