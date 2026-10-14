@@ -75,6 +75,15 @@ def healthy_stand_ins(monkeypatch: pytest.MonkeyPatch) -> Iterator[StandIns]:
         yield StandIns(template, slots, stack)
 
 
+@pytest.fixture
+def reachable_server() -> None:
+    """Error at setup, as the clone fixtures do, when the server is unreachable.
+
+    Without it an outage reads as a plan assertion naming postgres.reachable.
+    """
+    pg_fixtures.assert_one_target("postgres")
+
+
 def _registry() -> list[CheckSpec]:
     """Select only the ordered eight database checks, retaining registry order."""
     registry = [spec for spec in REGISTRY if spec.id in PLAN_DATABASE_CHECKS]
@@ -177,19 +186,23 @@ def test_plan_names_pending_migrations_in_registry_order(
 
 
 def test_plan_without_template_blocks_its_dependents(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, reachable_server: None
 ) -> None:
     """A missing template blocks all slot checks before an owner name is used."""
     monkeypatch.setattr(migrate, "TEMPLATE_DB", "qa640_803s6_absent")
     registry = _registry()
     plan = build_init_plan(ReadinessContext(), registry=registry)
     assert not plan.ok
-    assert len(plan.steps) == 1
-    step = plan.steps[0]
-    assert step.check_id == "template.present"
-    assert step.observed == "qa640_803s6_absent does not exist"
-    assert step.remediation == (
-        "Restore qa640_803s6_absent from a known-good slot (CLAUDE.md, Refreshing "
-        "the Template); new slots are cloned from it."
-    )
+    # The whole step is compared so a mismatch prints the observed failure.
+    assert [step.model_dump() for step in plan.steps] == [
+        {
+            "number": 1,
+            "check_id": "template.present",
+            "observed": "qa640_803s6_absent does not exist",
+            "remediation": (
+                "Restore qa640_803s6_absent from a known-good slot (CLAUDE.md, "
+                "Refreshing the Template); new slots are cloned from it."
+            ),
+        }
+    ]
     assert plan.blocked == _dependents("template.present", registry)
