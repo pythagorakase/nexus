@@ -238,7 +238,10 @@ def test_dossier_place_and_relationship_names(dossier_database, caplog) -> None:
             )
             place_id = session.execute(
                 text(
-                    "INSERT INTO places (name, type) VALUES ('Dossier Hall', 'fixed_location') RETURNING id"
+                    "INSERT INTO places (name, type, coordinates) VALUES "
+                    "('Dossier Hall', 'fixed_location', "
+                    "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                    "4326)::geography) RETURNING id"
                 )
             ).scalar_one()
             session.execute(
@@ -310,11 +313,18 @@ def test_dossier_place_and_relationship_names(dossier_database, caplog) -> None:
 
             # Deliberately corrupt only this disposable transaction. The normal
             # FK prevents absent endpoints; dropping it exercises the defect guard.
-            session.execute(
-                text(
-                    "ALTER TABLE character_relationships DROP CONSTRAINT character_relationships_character2_id_fkey"
-                )
-            )
+            # Migration 151's fill trigger re-derives character2_entity_id from
+            # the changed character2_id and its composite FK pairs the two, so
+            # both stay strict in the schema and are lifted here alongside it.
+            for statement in (
+                "ALTER TABLE character_relationships DROP CONSTRAINT "
+                "character_relationships_character2_id_fkey",
+                "ALTER TABLE character_relationships DROP CONSTRAINT "
+                "character_relationships_character2_entity_fkey",
+                "ALTER TABLE character_relationships DISABLE TRIGGER "
+                "trg_character_relationships_entity_ids",
+            ):
+                session.execute(text(statement))
             missing_id = 999999
             session.execute(
                 text("UPDATE character_relationships SET character2_id = :missing"),

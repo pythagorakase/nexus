@@ -22,7 +22,7 @@ from nexus.agents.orrery.retrograde_expansion import (
     validate_expansion_plan,
 )
 from nexus.agents.orrery.geo_authoring import render_geo_authoring_prompt
-from nexus.api.native_structured_output import anthropic_json_schema
+from nexus.api.native_structured_output import anthropic_json_schema, strict_json_schema
 from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
 from nexus.agents.orrery.retrograde_seed_candidates import (
     SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
@@ -252,18 +252,19 @@ def test_expansion_prompt_names_future_only_relationship_constraint() -> None:
 def test_wire_expansion_response_omits_deterministic_fields() -> None:
     """Provider grammar excludes fields the runtime already knows."""
 
-    schema = anthropic_json_schema(RetrogradeExpansionWireResponse)
-
-    assert set(schema["properties"]) == {
-        "event_plan",
-        "mechanical_plan",
-        "project_plan",
-        "thread_plan",
-        "coverage_notes",
-        "coordinates",
-    }
-    assert "selected_seed_ids" not in schema["properties"]
-    assert "commit_readiness" not in schema["properties"]
+    for schema_form in (strict_json_schema, anthropic_json_schema):
+        schema = schema_form(RetrogradeExpansionWireResponse)
+        assert set(schema["properties"]) == {
+            "event_plan",
+            "mechanical_plan",
+            "project_plan",
+            "thread_plan",
+            "coverage_notes",
+            "new_place_points",
+        }
+        assert "new_place_points" in schema["required"]
+        assert "selected_seed_ids" not in schema["properties"]
+        assert "commit_readiness" not in schema["properties"]
 
 
 def test_wire_expansion_response_coerces_to_full_contract() -> None:
@@ -321,6 +322,7 @@ def test_wire_expansion_response_coerces_to_full_contract() -> None:
             }
         ],
         "coverage_notes": payload["coverage_notes"],
+        "new_place_points": payload["new_place_points"],
     }
 
     response = coerce_expansion_response_payload(
@@ -334,6 +336,9 @@ def test_wire_expansion_response_coerces_to_full_contract() -> None:
     assert len(response.entity_tag_plan) == 1
     assert len(response.pair_tag_plan) == 1
     assert len(response.relationship_plan) == 1
+    assert [point.model_dump(mode="json") for point in response.new_place_points] == (
+        payload["new_place_points"]
+    )
 
 
 def test_project_plan_carries_exact_woven_seed_intent() -> None:
@@ -429,7 +434,7 @@ def test_project_plan_rejects_kind_prefixed_target_ref() -> None:
         )
     assert "max_new_entity_stubs" not in str(exc_info.value)
 
-    wire_payload = {"project_plan": payload["project_plan"]}
+    wire_payload = {"project_plan": payload["project_plan"], "new_place_points": []}
     with pytest.raises(ValidationError, match="entity-kind prefix"):
         RetrogradeExpansionWireResponse.model_validate(wire_payload)
 
@@ -511,12 +516,16 @@ def test_wire_expansion_rejects_kind_prefixed_refs(
     """Every wire ref, including empty-means-none ones, rejects a prefix."""
 
     with pytest.raises(ValidationError, match="entity-kind prefix"):
-        RetrogradeExpansionWireResponse.model_validate({section: [row]})
+        RetrogradeExpansionWireResponse.model_validate(
+            {section: [row], "new_place_points": []}
+        )
 
     blank_row = copy.deepcopy(row)
     if field == "location_ref":
         blank_row[field] = ""
-        RetrogradeExpansionWireResponse.model_validate({section: [blank_row]})
+        RetrogradeExpansionWireResponse.model_validate(
+            {section: [blank_row], "new_place_points": []}
+        )
 
 
 def test_seek_redemption_requires_target_to_actor_wrong_at_r6() -> None:
@@ -813,98 +822,77 @@ def test_project_plan_rejects_unknown_type() -> None:
         )
 
 
-def test_maturation_geo_prompt_and_coordinates_share_r6_schema() -> None:
+def test_new_place_without_point_is_refused() -> None:
+    """An event's place outside the packet must have an authored point."""
+
     vocabulary = _expansion_test_vocabulary()
     packet = _packet(vocabulary)
-    packet["geo_authoring"] = {
-        "required": True,
-        "place_name": "Remote Observatory",
-        "place_summary": "A storm-watching station above the valley.",
-        "zone_name": "High Country",
-        "zone_summary": "A cold alpine region.",
-    }
     seed_response = _seed_response(vocabulary)
-
-    prompt = render_expansion_prompt(
-        packet=packet,
-        seed_candidate_response=seed_response,
-    )
-    assert "Author one plausible real-Earth latitude/longitude point" in prompt
-    assert "Remote Observatory" in prompt
-
     payload = _valid_expansion(vocabulary)
-    payload["coordinates"] = {"lat": 50.0, "lon": 50.0}
+    point = payload["new_place_points"][0]
+    payload["pair_tag_plan"] = []
+    payload["new_place_points"] = []
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="new place 'shutter hall' has no new_place_points entry",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+    payload["new_place_points"] = [point]
     response = validate_expansion_plan(
         payload=payload,
         packet=packet,
         seed_candidate_response=seed_response,
     )
-    assert response.coordinates is not None
-    assert response.coordinates.lat == 50.0
-    assert response.coordinates.lon == 50.0
+
+    assert response.event_plan[0].location_ref == "Shutter Hall"
+    assert response.new_place_points[0].model_dump(mode="json") == point
 
 
-def test_required_maturation_geo_rejects_absent_coordinates() -> None:
-    """A required point is part of the retryable R6 contract, not optional prose."""
+@pytest.mark.parametrize("defect", ["extra", "duplicate", "starting_place"])
+def test_new_place_points_refuse_extra_and_duplicate(defect: str) -> None:
+    """Only places introduced beyond the packet get one normalized entry."""
 
     vocabulary = _expansion_test_vocabulary()
     packet = _packet(vocabulary)
-    packet["geo_authoring"] = {
-        "required": True,
-        "place_name": "Remote Observatory",
-        "place_summary": "A storm-watching station above the valley.",
-        "zone_name": "High Country",
-        "zone_summary": "A cold alpine region.",
-    }
     payload = _valid_expansion(vocabulary)
-    payload["coordinates"] = None
+    point = payload["new_place_points"][0]
+    if defect == "duplicate":
+        payload["new_place_points"].append({**point, "place_ref": " SHUTTER  HALL "})
+        message = "new_place_points lists 'shutter hall' more than once"
+    elif defect == "starting_place":
+        packet["candidate_scaffolds"] = {
+            "core_entities": [{"kind": "place", "name": "Shutter Hall"}]
+        }
+        message = (
+            "new_place_points entry 'shutter hall' names no place this plan introduces"
+        )
+    else:
+        payload["new_place_points"].append({**point, "place_ref": "Unused Annex"})
+        message = (
+            "new_place_points entry 'unused annex' names no place this plan introduces"
+        )
 
-    with pytest.raises(
-        RetrogradeExpansionValidationError,
-        match="coordinates are required",
-    ):
+    with pytest.raises(RetrogradeExpansionValidationError, match=message):
         validate_expansion_plan(
             payload=payload,
             packet=packet,
             seed_candidate_response=_seed_response(vocabulary),
         )
 
-
-def test_required_geo_accepts_coordinates_with_no_selected_seeds() -> None:
-    """The geo-only R6 path remains valid when there is no history to weave."""
-
-    vocabulary = _expansion_test_vocabulary()
-    packet = _packet(vocabulary)
-    packet["geo_authoring"] = {
-        "required": True,
-        "place_name": "Remote Observatory",
-        "place_summary": "A storm-watching station above the valley.",
-        "zone_name": "High Country",
-        "zone_summary": "A cold alpine region.",
-    }
-    seed_response = _seed_response(vocabulary)
-    seed_response["selected_seed_ids"] = []
-    payload = _valid_expansion(vocabulary)
-    for key in (
-        "event_plan",
-        "entity_tag_plan",
-        "pair_tag_plan",
-        "relationship_plan",
-        "death_plan",
-        "thread_plan",
-    ):
-        payload[key] = []
-    payload["selected_seed_ids"] = []
-    payload["coordinates"] = {"lat": 50.0, "lon": 50.0}
-
-    response = validate_expansion_plan(
-        payload=payload,
-        packet=packet,
-        seed_candidate_response=seed_response,
-    )
-
-    assert response.selected_seed_ids == []
-    assert response.coordinates is not None
+    if defect == "starting_place":
+        payload["new_place_points"] = []
+        response = validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+        assert response.new_place_points == []
 
 
 def test_geo_prompt_delimits_and_escapes_untrusted_summaries() -> None:
@@ -1412,6 +1400,7 @@ def test_wire_death_mechanic_expands_to_death_plan() -> None:
             }
         ],
         "coverage_notes": [],
+        "new_place_points": [],
     }
 
     response = coerce_expansion_response_payload(
@@ -1759,6 +1748,7 @@ def _rejected_junction_expansion(
     payload["pair_tag_plan"] = []
     payload["relationship_plan"] = []
     payload["death_plan"] = []
+    payload["new_place_points"] = []
     payload["thread_plan"] = [
         {
             "seed_id": seed_id,
@@ -1839,6 +1829,12 @@ def _valid_expansion(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
             }
         ],
         "coverage_notes": ["The seed keeps the unresolved ledger alive."],
+        "new_place_points": [
+            {
+                "place_ref": "Shutter Hall",
+                "coordinates": {"lat": 50.0, "lon": 50.0},
+            }
+        ],
         "commit_readiness": {
             "writes": "none",
             "planned_source": "retrograde",

@@ -151,8 +151,10 @@ def test_session_is_read_only() -> None:
             with pytest.raises(sqlalchemy.exc.InternalError) as exc:
                 session.execute(
                     text(
-                        "INSERT INTO places (name, summary) "
-                        "VALUES ('Probe Write', 'Must be refused.')"
+                        "INSERT INTO places (name, summary, coordinates) "
+                        "VALUES ('Probe Write', 'Must be refused.', "
+                        "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), "
+                        "4326)::geography)"
                     )
                 )
         assert isinstance(exc.value.orig, psycopg2.errors.ReadOnlySqlTransaction)

@@ -9,6 +9,7 @@ import pytest
 
 from nexus.agents.orrery.retrograde_expansion import (
     RetrogradeExpansionValidationError,
+    packet_known_entity_keys,
     validate_expansion_plan,
 )
 from nexus.agents.orrery.retrograde_orchestrator import (
@@ -413,6 +414,13 @@ def _issue_907_bundle(
     ]
 
     expansion = _valid_expansion(vocabulary)
+    # Unlike the compact persistence packet used by _valid_expansion, this
+    # real wizard packet already declares Shutter Hall as a starting place.
+    assert ("place", "shutter hall") in packet_known_entity_keys(packet)
+    assert [point["place_ref"] for point in expansion["new_place_points"]] == [
+        "Shutter Hall"
+    ]
+    expansion["new_place_points"] = []
     participants = expansion["event_plan"][0]["participants"]
     for kind, name in (
         *ISSUE_907_STARTING_TRAIT_TARGETS,

@@ -380,6 +380,7 @@ def test_registry_gaia_subclass_round_trips_through_static_app_contract() -> Non
                 "kind": "place",
                 "name": "The Bell Archive",
                 "summary": "A submerged registry.",
+                "coordinates": {"lat": 41.8781, "lon": -87.6298},
                 "tag_hints": ["threshold"],
                 "pair_tag_hints": [
                     {

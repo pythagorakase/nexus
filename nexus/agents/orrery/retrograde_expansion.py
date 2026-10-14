@@ -18,7 +18,6 @@ from typing import (
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nexus.agents.logon.apex_schema import Coordinates
-from nexus.agents.orrery.geo_authoring import geo_prompt_from_context
 from nexus.agents.orrery.retrograde_junctions import resolve_junctions
 from nexus.agents.orrery.retrograde_packet import (
     CORE_ENTITIES_HEADING,
@@ -380,6 +379,17 @@ class RetrogradeExpansionWireThreadPlan(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class NewPlacePoint(BaseModel):
+    """A new place this plan introduces, with its real-Earth point."""
+
+    place_ref: EntityRef = Field(description="Prompt-local name of the new place.")
+    coordinates: Coordinates = Field(
+        description="Plausible real-Earth point for the place."
+    )
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class RetrogradeExpansionWireResponse(BaseModel):
     """Provider-facing R6 response with deterministic fields omitted."""
 
@@ -390,11 +400,10 @@ class RetrogradeExpansionWireResponse(BaseModel):
     project_plan: list[RetrogradeWireProjectPlan] = Field(default_factory=list)
     thread_plan: list[RetrogradeExpansionWireThreadPlan] = Field(default_factory=list)
     coverage_notes: list[str] = Field(default_factory=list)
-    coordinates: Optional[Coordinates] = Field(
-        default=None,
+    new_place_points: list[NewPlacePoint] = Field(
         description=(
-            "For a maturation-target place that lacks coordinates, its "
-            "plausible real-Earth point; otherwise null."
+            "Every place this plan names that is not a known entity, each with "
+            "its real-Earth point; empty when it names none."
         ),
     )
 
@@ -408,10 +417,7 @@ class RetrogradeExpansionPlanResponse(BaseModel):
         RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION
     )
     selected_seed_ids: list[str] = Field(
-        description=(
-            "Selected seed ids considered by this expansion; empty is valid "
-            "for required geo-only maturation."
-        ),
+        description="Selected seed ids considered by this expansion.",
     )
     event_plan: list[RetrogradeExpansionEventPlan] = Field(default_factory=list)
     entity_tag_plan: list[RetrogradeExpansionEntityTagPlan] = Field(
@@ -425,9 +431,12 @@ class RetrogradeExpansionPlanResponse(BaseModel):
     project_plan: list[RetrogradeProjectPlan] = Field(default_factory=list)
     thread_plan: list[RetrogradeExpansionThreadPlan] = Field(default_factory=list)
     coverage_notes: list[str] = Field(default_factory=list)
-    coordinates: Optional[Coordinates] = Field(
-        default=None,
-        description="Authored coordinates for a place maturation target.",
+    new_place_points: list[NewPlacePoint] = Field(
+        default_factory=list,
+        description=(
+            "Every place this plan names that is not a known entity, each with "
+            "its real-Earth point; empty when it names none."
+        ),
     )
     commit_readiness: RetrogradeExpansionCommitReadiness = Field(
         default_factory=RetrogradeExpansionCommitReadiness
@@ -601,7 +610,7 @@ def _expand_wire_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "project_plan": project_plan,
         "thread_plan": thread_plan,
         "coverage_notes": data.get("coverage_notes") or [],
-        "coordinates": data.get("coordinates"),
+        "new_place_points": data.get("new_place_points") or [],
     }
 
 
@@ -663,9 +672,6 @@ def render_expansion_prompt(
         "hard_validation_rules": _hard_validation_rules(),
         "response_contract": _prompt_response_contract(),
     }
-    geo_prompt = geo_prompt_from_context(packet)
-    if geo_prompt is not None:
-        prompt_payload["geo_authoring"] = geo_prompt
     return load(
         PromptId.RETROGRADE_EXPANSION,
         REQUEST_JSON=f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}",
@@ -707,7 +713,6 @@ def validate_expansion_plan(
         payload,
         selected_seed_ids=list(candidates.selected_seed_ids),
     )
-    geo_authoring = packet.get("geo_authoring")
     (
         forbidden_relationship_traits,
         forbidden_pair_tag_traits,
@@ -729,14 +734,6 @@ def validate_expansion_plan(
         known_entity_keys=packet_known_entity_keys(packet),
         max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
-    if (
-        isinstance(geo_authoring, Mapping)
-        and geo_authoring.get("required")
-        and response.coordinates is None
-    ):
-        issues.append(
-            "coordinates are required when packet.geo_authoring.required is true"
-        )
     if issues:
         formatted = "\n".join(f"- {issue}" for issue in issues)
         raise RetrogradeExpansionValidationError(formatted)
@@ -842,6 +839,11 @@ def _expansion_contract_issues(
             response=response,
             known_entity_keys=known_entity_keys or set(),
             max_new_entity_stubs=max_new_entity_stubs,
+        )
+    )
+    issues.extend(
+        _new_place_point_issues(
+            response=response, known_entity_keys=known_entity_keys or set()
         )
     )
     response_seed_ids = set(response.selected_seed_ids)
@@ -1177,6 +1179,39 @@ def _new_entity_budget_issues(
         f"{max_new_entity_stubs}: {listed}. Drop or merge minor entities, or "
         "reattach their threads to first-class starting entities."
     ]
+
+
+def _new_place_point_issues(
+    *,
+    response: RetrogradeExpansionPlanResponse,
+    known_entity_keys: set[tuple[str, str]],
+) -> list[str]:
+    """Require one authored point for each place outside the packet starting set."""
+    new_places = {
+        ref
+        for kind, ref in charged_new_entity_keys(
+            _collect_plan_entity_keys(response), known_entity_keys=known_entity_keys
+        )
+        if kind == "place"
+    }
+    pointed_refs = [
+        normalize_entity_ref(p.place_ref) for p in response.new_place_points
+    ]
+    issues = [
+        f"new_place_points lists {ref!r} more than once"
+        for ref in sorted(_duplicates(pointed_refs))
+    ]
+    for ref in sorted(new_places - set(pointed_refs)):
+        issues.append(
+            f"new place {ref!r} has no new_place_points entry; give every place "
+            "this plan introduces its real-Earth point"
+        )
+    for ref in sorted(set(pointed_refs) - new_places):
+        issues.append(
+            f"new_place_points entry {ref!r} names no place this plan introduces; "
+            "list only new places"
+        )
+    return issues
 
 
 def _collect_plan_entity_keys(
@@ -1841,6 +1876,7 @@ def _prompt_response_contract() -> dict[str, Any]:
             "project_plan",
             "thread_plan",
             "coverage_notes",
+            "new_place_points",
         ],
         "project_plan_fields": [
             "seed_id",

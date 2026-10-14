@@ -33,7 +33,7 @@ from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_flow import build_transition_data_from_cache
 from nexus.config import load_settings
 from nexus.config.loader import settings_path_scope
-from scripts import migrate
+from nexus.maintenance import migrate
 from tests.pg_fixtures import connect, route_slot_to_disposable
 
 
@@ -202,8 +202,9 @@ def _insert_place(cur: Any, name: str) -> int:
     entity_id = int(cur.fetchone()[0])
     cur.execute(
         """
-        INSERT INTO places (name, type, entity_id)
-        VALUES (%s, 'fixed_location', %s)
+        INSERT INTO places (name, type, entity_id, coordinates)
+        VALUES (%s, 'fixed_location', %s,
+            ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)::geography)
         RETURNING id
         """,
         (name, entity_id),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import closing
 from datetime import datetime, timezone
 import json
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 from uuid import uuid4
 
 from psycopg2.extras import RealDictCursor
@@ -41,7 +41,9 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     route_slot_to_disposable,
+    seed_place,
     seed_protagonist,
+    seed_zone,
 )
 from tests.test_commit_choice_presence_pg import _insert_staged_turn
 
@@ -1198,6 +1200,9 @@ def _valid_expansion(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
             }
         ],
         "coverage_notes": ["The seed keeps the unresolved ledger alive."],
+        "new_place_points": [
+            {"place_ref": "Shutter Hall", "coordinates": {"lat": 50, "lon": 50}}
+        ],
         "commit_readiness": {
             "writes": "none",
             "planned_source": "retrograde",
@@ -1287,8 +1292,10 @@ def test_latest_playable_chunk_is_the_last_accepted_chunk_not_the_prologue(
         character_id, _ = seed_protagonist(dbname)
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO places (name, type) "
-                "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
+                "INSERT INTO places (name, type, coordinates) "
+                "VALUES ('Harbor Office', 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)"
+                "::geography) RETURNING id"
             )
             place_id = cur.fetchone()[0]
             prologue_id = _insert_prologue_chunk(cur)
@@ -1352,7 +1359,206 @@ def _reapply_expansion_inputs(
     expansion["entity_tag_plan"] = []
     expansion["pair_tag_plan"] = []
     expansion["relationship_plan"] = []
+    expansion["new_place_points"] = []
     return packet, seed_response, expansion
+
+
+@pytest.fixture(scope="module")
+def point_persistence_db() -> Iterator[tuple[str, int, int]]:
+    """Keep the story zone distinct from the authored new-place point's zone."""
+
+    with disposable_slot_database("qa640_840s2_persistence") as dbname:
+        story_zone = seed_zone(
+            dbname,
+            name="Point Contract Story Zone",
+            min_longitude=0,
+            min_latitude=0,
+            max_longitude=2,
+            max_latitude=2,
+        )
+        authored_zone = seed_zone(
+            dbname,
+            name="Point Contract Authored Zone",
+            min_longitude=49,
+            min_latitude=49,
+            max_longitude=51,
+            max_latitude=51,
+        )
+        story_place, _ = seed_place(
+            dbname, name="Point Contract Story Place", longitude=1, latitude=1
+        )
+        seed_protagonist(dbname, name="Mara", current_location=story_place)
+        yield dbname, story_zone, authored_zone
+
+
+def _point_expansion_inputs(
+    vocabulary: SeedEligibleVocabulary,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Use one real event with a place outside the packet's starting set."""
+
+    packet, seeds, expansion = _reapply_expansion_inputs(vocabulary)
+    expansion["event_plan"][0]["location_ref"] = "Shutter Hall"
+    expansion["new_place_points"] = [
+        {"place_ref": "Shutter Hall", "coordinates": {"lat": 50, "lon": 50}}
+    ]
+    return packet, seeds, expansion
+
+
+@pytest.mark.requires_postgres
+def test_place_stub_persists_authored_point(
+    point_persistence_db: tuple[str, int, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real writer resolves the authored point instead of the story zone."""
+
+    dbname, story_zone, authored_zone = point_persistence_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+    packet, seeds, expansion = _point_expansion_inputs(
+        enumerate_seed_eligible_vocabulary(dbname)
+    )
+    with (
+        closing(connect(dbname, cursor_factory=RealDictCursor)) as conn,
+        conn.cursor() as cur,
+    ):
+        plan = build_retrograde_persistence_plan(
+            cur,
+            packet=packet,
+            seed_candidate_response=seeds,
+            expansion_plan_payload=expansion,
+            slot=5,
+            dbname=dbname,
+            dry_run=False,
+            create_missing_entities=True,
+        )
+        assert _blocker_ids(plan) == set()
+        assert plan["counters"]["entity_stubs_inserted"] == 1
+        assert plan["counters"]["events_inserted"] == 1
+        cur.execute(
+            """
+            SELECT zone, ST_X(coordinates::geometry) AS lon,
+                   ST_Y(coordinates::geometry) AS lat,
+                   ST_Z(coordinates::geometry) AS z,
+                   ST_M(coordinates::geometry) AS m,
+                   ST_SRID(coordinates::geometry) AS srid
+            FROM places WHERE name = 'Shutter Hall'
+            """
+        )
+        assert dict(cur.fetchone()) == {
+            "zone": authored_zone,
+            "lon": 50,
+            "lat": 50,
+            "z": 0,
+            "m": 0,
+            "srid": 4326,
+        }
+        assert authored_zone != story_zone
+
+
+@pytest.mark.requires_postgres
+def test_existing_place_keeps_stored_point(
+    point_persistence_db: tuple[str, int, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The required outside-packet entry never relocates an existing place."""
+
+    dbname, story_zone, _ = point_persistence_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+    packet, seeds, expansion = _point_expansion_inputs(
+        enumerate_seed_eligible_vocabulary(dbname)
+    )
+    with (
+        closing(connect(dbname, cursor_factory=RealDictCursor)) as conn,
+        conn.cursor() as cur,
+    ):
+        cur.execute(
+            """
+            INSERT INTO places (name, type, zone, coordinates)
+            VALUES ('Shutter Hall', 'other', %s,
+                    ST_SetSRID(ST_MakePoint(1.25, 1.5, 0, 0), 4326)::geography)
+            RETURNING id, entity_id
+            """,
+            (story_zone,),
+        )
+        stored = dict(cur.fetchone())
+        for dry_run in (True, False):
+            plan = build_retrograde_persistence_plan(
+                cur,
+                packet=packet,
+                seed_candidate_response=seeds,
+                expansion_plan_payload=expansion,
+                slot=5,
+                dbname=dbname,
+                dry_run=dry_run,
+                create_missing_entities=True,
+            )
+            assert _blocker_ids(plan) == set()
+            place_row = next(
+                row
+                for row in plan["entity_stub_rows"]
+                if row["entity_ref"] == "Shutter Hall"
+            )
+            assert place_row["status"] == "already_present"
+            assert "coordinates" not in place_row
+            cur.execute(
+                """
+                SELECT id, entity_id, zone,
+                       ST_X(coordinates::geometry) AS lon,
+                       ST_Y(coordinates::geometry) AS lat
+                FROM places WHERE name = 'Shutter Hall'
+                """
+            )
+            assert dict(cur.fetchone()) == {
+                **stored,
+                "zone": story_zone,
+                "lon": 1.25,
+                "lat": 1.5,
+            }
+
+
+@pytest.mark.requires_postgres
+def test_packet_place_without_point_blocks_stub_creation(
+    point_persistence_db: tuple[str, int, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A known packet card cannot mint a database place without a point."""
+
+    dbname, _, _ = point_persistence_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+    packet, seeds, expansion = _point_expansion_inputs(
+        enumerate_seed_eligible_vocabulary(dbname)
+    )
+    packet["candidate_scaffolds"] = {
+        "core_entities": [{"kind": "place", "name": "Shutter Hall"}]
+    }
+    expansion["new_place_points"] = []
+    with (
+        closing(connect(dbname, cursor_factory=RealDictCursor)) as conn,
+        conn.cursor() as cur,
+    ):
+        plan = build_retrograde_persistence_plan(
+            cur,
+            packet=packet,
+            seed_candidate_response=seeds,
+            expansion_plan_payload=expansion,
+            slot=5,
+            dbname=dbname,
+            dry_run=True,
+            create_missing_entities=True,
+        )
+        assert _blocker_ids(plan) == {"place_stub_without_point"}
+        with pytest.raises(ValueError, match="place_stub_without_point.*Shutter Hall"):
+            build_retrograde_persistence_plan(
+                cur,
+                packet=packet,
+                seed_candidate_response=seeds,
+                expansion_plan_payload=expansion,
+                slot=5,
+                dbname=dbname,
+                dry_run=False,
+                create_missing_entities=True,
+            )
+        cur.execute("SELECT count(*) AS n FROM places WHERE name = 'Shutter Hall'")
+        assert cur.fetchone()["n"] == 0
 
 
 @pytest.mark.requires_postgres
@@ -1370,8 +1576,10 @@ def test_reapplying_expansion_after_play_keeps_existing_summary_boundary(
         character_id, _ = seed_protagonist(dbname, name="Mara")
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO places (name, type) "
-                "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
+                "INSERT INTO places (name, type, coordinates) "
+                "VALUES ('Harbor Office', 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)"
+                "::geography) RETURNING id"
             )
             place_id = cur.fetchone()[0]
         vocabulary = enumerate_seed_eligible_vocabulary(dbname)
@@ -1444,8 +1652,10 @@ def test_maturation_rejects_existing_summary_at_another_boundary(
         character_id, _ = seed_protagonist(dbname, name="Mara")
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO places (name, type) "
-                "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
+                "INSERT INTO places (name, type, coordinates) "
+                "VALUES ('Harbor Office', 'fixed_location', "
+                "ST_SetSRID(ST_MakePoint(-73.9857, 40.7484, 0, 0), 4326)"
+                "::geography) RETURNING id"
             )
             place_id = cur.fetchone()[0]
             prologue_id = _insert_prologue_chunk(cur)
