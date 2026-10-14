@@ -132,8 +132,9 @@ moving focus within the row keeps the tooltip open; Escape and ancestor
 scrolling retain Radix's dismissal behavior. The focus trace makes the row
 fully visible and settles scrolling while the preceding family toggle has
 focus, then uses real Tab and one reading at each focus position. It proves
-focus transitions in a stationary viewport, not persistence through natural
-Tab auto-scroll. The oracle still measures the dismissed state.
+focus transitions in a stationary viewport only. Natural Tab auto-scroll is
+ancestor scrolling, so it still dismisses the tooltip. The oracle still
+measures the dismissed state.
 Before #1102, Radix row focus/blur made that
 variant nondeterministic; across the 114 varying samples in the two
 regenerations compared at `61fb421c`, its painted-core effect was at most

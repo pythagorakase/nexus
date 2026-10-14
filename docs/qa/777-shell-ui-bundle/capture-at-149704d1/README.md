@@ -1,4 +1,4 @@
-# Captured Inventory With Failed Interaction Acceptance
+# Captured Inventory with Failed Interaction Acceptance
 
 Source: `149704d16fa126b8ac9d142a22bf51b42a669552`; unchanged UI input closure
 from implementation `3a146419ef535850f7cab28beb540ef74d32783d`.
