@@ -35,17 +35,16 @@ from nexus.api.narrative_schemas import (
 )
 from nexus.api.new_story_cache import (
     WizardCache,
-    claim_wizard_introduction,
     clear_suggested_traits,
-    complete_wizard_introduction,
     guarded_wizard_write,
     read_cache,
+    record_wizard_reply,
     write_weird_level,
     write_wizard_choices,
 )
 from nexus.api.new_story_flow import (
     build_transition_data_from_cache,
-    perform_transition_with_retrograde,
+    run_genesis_transition,
     record_drafts,
     switch_wizard_model,
 )
@@ -56,6 +55,7 @@ from nexus.api.new_story_schemas import (
     StorySeed,
     TraitSelection,
     TraitRationales,
+    TransitionData,
 )
 from nexus.api.pydantic_ai_utils import (
     build_message_history,
@@ -64,7 +64,6 @@ from nexus.api.pydantic_ai_utils import (
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_confirmation import WizardStateConflict
-from nexus.api.wizard_transcript import introduction_delivered
 from nexus.api.wizard_agent import (
     WizardContext,
     wizard_debug_agent,
@@ -144,51 +143,18 @@ def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]
 _ALREADY_INTRODUCED = "This phase was already introduced. Resume before continuing."
 
 
-def _reconcile_introduction(
-    cache: Optional[WizardCache],
-    message_origin: str,
-    *,
-    slot: int,
-    request_model: Optional[str],
-    slot_model: Optional[str],
-) -> Optional[str]:
-    """Refuse a delivered introduction; return an undelivered claim to replace.
-
-    Until a character concept or seed draft exists, the only wizard control
-    message is the introduction that artifact acceptance requests. A completed
-    reply records its choices, so that introduction already arrived. An
-    unfinished claim is settled against the transcript: a reply after its
-    control message was delivered, so the claim is completed and this request
-    refused; otherwise its writer failed or is still running, and this request
-    may replace exactly that claim.
-    """
+def _refuse_delivered_introduction(
+    cache: Optional[WizardCache], message_origin: str
+) -> None:
+    """Refuse an introduction once its reply and choices have committed."""
     if (
         cache is None
         or message_origin != "wizard_control"
         or not cache.phase_untouched()
     ):
-        return None
+        return
     if cache.choices_recorded:
         raise HTTPException(status_code=409, detail=_ALREADY_INTRODUCED)
-    claim = cache.introduction_claim
-    if claim is None:
-        return None
-    thread_id = cache.thread_id
-    if thread_id is None:
-        raise WizardStateConflict("The saved wizard is missing its conversation.")
-    # The same store the introduction's control and reply were written to.
-    client = ConversationsClient(model=resolve_wizard_model(request_model, slot_model))
-    try:
-        transcript = client.list_messages(thread_id, limit=0)
-    finally:
-        if client.client is not None:
-            client.client.close()
-    if introduction_delivered(list(reversed(transcript))):
-        complete_wizard_introduction(
-            claim.id, claim.choices, slot_dbname(slot), expected_thread_id=thread_id
-        )
-        raise HTTPException(status_code=409, detail=_ALREADY_INTRODUCED)
-    return claim.id
 
 
 def _is_introduction(cache: Optional[WizardCache], message_origin: str) -> bool:
@@ -197,38 +163,6 @@ def _is_introduction(cache: Optional[WizardCache], message_origin: str) -> bool:
         cache is not None
         and message_origin == "wizard_control"
         and cache.awaiting_introduction()
-    )
-
-
-def _record_text_reply(
-    client: ConversationsClient,
-    *,
-    slot: int,
-    thread_id: str,
-    message: str,
-    choices: List[str],
-    introduction: bool,
-    replaces_claim: Optional[str],
-) -> None:
-    """Persist a text reply's transcript message and presented choices.
-
-    The conversation store cannot share a transaction with the recorded choices
-    that prove an introduction arrived. An introduction therefore claims its
-    reply first, so concurrent introductions keep one reply, then writes the
-    transcript and completes the claim. A failure or crash between those steps
-    leaves an unfinished claim that the next request reconciles.
-    """
-    dbname = slot_dbname(slot)
-    if not introduction:
-        client.add_message(thread_id, "assistant", message)
-        write_wizard_choices(choices, dbname, expected_thread_id=thread_id)
-        return
-    claim_id = claim_wizard_introduction(
-        choices, dbname, expected_thread_id=thread_id, replaces_claim=replaces_claim
-    )
-    client.add_message(thread_id, "assistant", message)
-    complete_wizard_introduction(
-        claim_id, choices, dbname, expected_thread_id=thread_id
     )
 
 
@@ -412,6 +346,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 status_code=409,
                 detail="The wizard phase or conversation changed. Resume before continuing.",
             )
+        if request.thread_id is None:
+            raise WizardStateConflict("The saved wizard is missing its conversation.")
         persisted_cache = read_cache(slot_dbname(request.slot))
         if persisted_cache and persisted_cache.character_revision_pending:
             if request.trait_choice is not None or request.accept_fate:
@@ -424,13 +360,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 status_code=409,
                 detail="Confirm or revise the completed character before continuing.",
             )
-        replaces_claim = _reconcile_introduction(
-            persisted_cache,
-            request.message_origin,
-            slot=request.slot,
-            request_model=request.model,
-            slot_model=state.model,
-        )
+        _refuse_delivered_introduction(persisted_cache, request.message_origin)
         introduction = _is_introduction(persisted_cache, request.message_origin)
         state_subphase = _wizard_subphase_for_state(
             state_phase,
@@ -555,7 +485,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
         selected_model = resolve_wizard_model(request.model, slot_model)
 
         if wizard_model_lock_candidate(request.model, slot_model):
-            history_client = ConversationsClient(model=slot_model)
+            history_client = ConversationsClient(slot_dbname(request.slot))
             history = history_client.list_messages(
                 request.thread_id, limit=history_limit
             )
@@ -576,8 +506,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 )
 
         if request.model:
-            # Moves the thread when the new provider uses another store, and
-            # saves the model and thread ID together before any read below.
+            # Repoint the model while retaining this slot's conversation.
             request.thread_id = switch_wizard_model(
                 request.slot,
                 thread_id=request.thread_id,
@@ -586,7 +515,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             )
             logger.info("Persisted model %s to slot %s", request.model, request.slot)
 
-        client = ConversationsClient(model=selected_model)
+        client = ConversationsClient(slot_dbname(request.slot))
 
         doc = frontmatter.loads(load(PromptId.STORYTELLER_NEW))
         welcome_message = doc.get("welcome_message", "")
@@ -645,9 +574,12 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 run_id=request.thread_id,
             )
             content = result.output
-            client.add_message(request.thread_id, "assistant", content)
-            write_wizard_choices(
-                [], slot_dbname(request.slot), expected_thread_id=request.thread_id
+            record_wizard_reply(
+                slot_dbname(request.slot),
+                expected_thread_id=request.thread_id,
+                message=content,
+                choices=[],
+                introduction=False,
             )
             return {
                 "message": content,
@@ -823,14 +755,12 @@ async def new_story_chat_endpoint(request: ChatRequest):
             len(wizard_response.message or ""),
             ui_choices,
         )
-        _record_text_reply(
-            client,
-            slot=request.slot,
-            thread_id=request.thread_id,
+        record_wizard_reply(
+            slot_dbname(request.slot),
+            expected_thread_id=request.thread_id,
             message=wizard_response.message,
             choices=ui_choices,
             introduction=introduction,
-            replaces_claim=replaces_claim,
         )
 
         return {
@@ -906,82 +836,88 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
     require_writable_slot(request.slot)
     dbname = slot_dbname(request.slot)
 
-    # Read the setup cache
-    cache = read_cache(dbname)
-    if not cache:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No setup data found for slot {request.slot}. Complete the wizard first.",
-        )
+    def prepare() -> tuple[TransitionData, Optional[WeirdLevel]]:
+        # Read the setup cache
+        cache = read_cache(dbname)
+        if not cache:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"No setup data found for slot {request.slot}. "
+                    "Complete the wizard first."
+                ),
+            )
 
-    if cache.character_revision_pending:
-        raise HTTPException(
-            status_code=409,
-            detail="Finish the character revision before starting the story.",
-        )
+        if cache.character_revision_pending:
+            raise HTTPException(
+                status_code=409,
+                detail="Finish the character revision before starting the story.",
+            )
 
-    if not cache.setting_confirmed or not cache.character_confirmed:
-        raise HTTPException(
-            status_code=409,
-            detail="Confirm the setting and character before starting the story.",
-        )
+        if not cache.setting_confirmed or not cache.character_confirmed:
+            raise HTTPException(
+                status_code=409,
+                detail="Confirm the setting and character before starting the story.",
+            )
 
-    # Validate all phases are complete
-    if not cache.setting_complete():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: setting"
-        )
-    if not cache.character_complete():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: character"
-        )
-    if not cache.seed_complete():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: seed"
-        )
-    if cache.base_timestamp is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Incomplete setup data. Missing: base_timestamp",
-        )
-    if not cache.get_layer_dict():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: layer"
-        )
-    if not cache.get_zone_dict():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: zone"
-        )
-    if not cache.get_initial_location():
-        raise HTTPException(
-            status_code=422, detail="Incomplete setup data. Missing: initial_location"
-        )
+        # Validate all phases are complete
+        if not cache.setting_complete():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: setting"
+            )
+        if not cache.character_complete():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: character"
+            )
+        if not cache.seed_complete():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: seed"
+            )
+        if cache.base_timestamp is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Incomplete setup data. Missing: base_timestamp",
+            )
+        if not cache.get_layer_dict():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: layer"
+            )
+        if not cache.get_zone_dict():
+            raise HTTPException(
+                status_code=422, detail="Incomplete setup data. Missing: zone"
+            )
+        if not cache.get_initial_location():
+            raise HTTPException(
+                status_code=422,
+                detail="Incomplete setup data. Missing: initial_location",
+            )
 
-    # A supplied strangeness is persisted first, so a retry after a failed
-    # transition runs with the same level; the stored selection applies
-    # otherwise (None resolves to the configured default in Retrograde).
-    if request.weird_level is not None:
-        cache = _record_weird_level(dbname, cache, request.weird_level)
+        # A supplied strangeness is persisted first, so a retry after a failed
+        # transition runs with the same level; the stored selection applies
+        # otherwise (None resolves to the configured default in Retrograde).
+        if request.weird_level is not None:
+            cache = _record_weird_level(dbname, cache, request.weird_level)
 
-    # Build TransitionData from cache
-    try:
-        transition_data = build_transition_data_from_cache(cache)
-    except ValidationError as e:
-        # Fail loudly per user directive
-        logger.error(f"Validation error building TransitionData: {e}")
-        raise HTTPException(
-            status_code=422, detail=f"Setup data validation failed: {e.errors()}"
-        )
+        # Build TransitionData from cache
+        try:
+            transition_data = build_transition_data_from_cache(cache)
+        except ValidationError as e:
+            # Fail loudly per user directive
+            logger.error(f"Validation error building TransitionData: {e}")
+            raise HTTPException(
+                status_code=422, detail=f"Setup data validation failed: {e.errors()}"
+            )
+
+        return transition_data, cache.weird_level
 
     # Perform atomic transition with Retrograde cold-start history. The
     # frontier generation takes minutes, so it runs in a worker thread to
     # keep the event loop (and the progress endpoint) responsive.
     try:
         result = await asyncio.to_thread(
-            perform_transition_with_retrograde,
+            run_genesis_transition,
             request.slot,
-            transition_data,
-            weird_level=cache.weird_level,
+            prepare,
         )
         logger.info(
             "Transition complete for slot %s: character_id=%s retrograde=%s",
@@ -992,14 +928,17 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
 
         return TransitionResponse(
             status="transitioned",
+            run=result["run"],
             character_id=result["character_id"],
             place_id=result["place_id"],
             layer_id=result["layer_id"],
             zone_id=result["zone_id"],
-            message=f"Welcome to {transition_data.setting.world_name}. Your story begins.",
+            message=f"Welcome to {result['world_name']}. Your story begins.",
             retrograde=result.get("retrograde"),
             trait_inputs=result.get("trait_inputs"),
         )
+    except HTTPException:
+        raise
     except ValueError as e:
         # Includes RetrogradePersistenceBlockedError: the transaction rolled
         # back, the wizard cache is intact, and the transition is retryable.
@@ -1015,8 +954,9 @@ async def retrograde_status_endpoint(slot: int) -> Dict[str, Any]:
     """
     Report wizard-time Retrograde progress for a slot.
 
-    Stages: packet -> seed_candidates -> expansion -> persistence ->
-    embedding -> done (or failed). ``run`` identifies the transition run that
+    Stages: derivation -> packet -> seed_candidates -> expansion -> persistence ->
+    embedding -> done (or failed); derivation is recorded only when trait inputs
+    are derived. ``run`` identifies the transition run that
     owns the record; it is null, with stage "idle", when no run has started
     for the slot. The record lives in genesis_runs and genesis_run_stages.
     Every answer also carries the configured ``status_poll_interval_seconds``,

@@ -115,10 +115,13 @@ def transitions(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     """Capture what the endpoint hands the (provider-calling) transition."""
     calls: list[dict[str, Any]] = []
 
-    def perform(slot: int, transition_data: Any, **kwargs: Any) -> dict[str, Any]:
+    def perform(slot: int, prepare: Any) -> dict[str, Any]:
+        transition_data, level = prepare()
         calls.append({"slot": slot, "world": transition_data.setting.world_name})
-        calls[-1].update(kwargs)
+        calls[-1].update(weird_level=level)
         return {
+            "run": "1" * 32,
+            "world_name": transition_data.setting.world_name,
             "character_id": 1,
             "place_id": 1,
             "layer_id": 1,
@@ -127,7 +130,7 @@ def transitions(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
             "trait_inputs": {"derived": False},
         }
 
-    monkeypatch.setattr(wizard_chat, "perform_transition_with_retrograde", perform)
+    monkeypatch.setattr(wizard_chat, "run_genesis_transition", perform)
     return calls
 
 
@@ -323,23 +326,18 @@ async def test_transition_reports_a_concurrent_wizard_change_without_running(
 # ── Resume and slot state ────────────────────────────────────────────────
 
 
+@pytest.mark.requires_postgres
 @pytest.mark.parametrize("stored", [*LEVELS, None])
 def test_resume_restores_the_stored_selection(
-    monkeypatch: pytest.MonkeyPatch, stored: WeirdLevel | None
+    seed_wizard_cache, stored: WeirdLevel | None
 ) -> None:
-    cache = ready_cache(weird_level=stored)
-    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
-    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "saved")
-    monkeypatch.setattr(
-        setup_endpoints,
-        "ConversationsClient",
-        lambda model: SimpleNamespace(list_messages=lambda *a, **k: [], client=None),
-    )
+    cache = seed_wizard_cache(ready_cache(weird_level=stored))
     app = FastAPI()
     app.include_router(setup_endpoints.router)
-
-    data = TestClient(app).get("/api/story/new/setup/resume?slot=4").json()
-
+    response = TestClient(app).get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["thread_id"] == cache.thread_id
     assert data["current_phase"] == "ready"
     assert data["weird_level"] == stored
 
@@ -463,6 +461,12 @@ def transition_boundaries(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(new_story_flow, "record_genesis_failure", record)
     monkeypatch.setattr(retrograde_orchestrator, "record_retrograde_progress", record)
     monkeypatch.setattr(retrograde_orchestrator, "record_genesis_stage_output", record)
+    monkeypatch.setattr(
+        retrograde_orchestrator, "load_genesis_run", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        retrograde_orchestrator, "record_genesis_input_fingerprint", record
+    )
     monkeypatch.setattr(
         save_slots, "get_slot_model", lambda slot, dbname=None: seen.slot_model
     )
@@ -607,6 +611,7 @@ def test_a_story_without_retrograde_history_records_no_provenance(
     assert result["retrograde"] == {
         "enabled": False,
         "skip_reason": "mock_wizard_model",
+        "reused_stages": [],
     }
     assert transition_boundaries.generation == []
     assert TransactionMapper.cursor.statements[-2] == (GENESIS_SQL, (None,))
