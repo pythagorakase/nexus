@@ -43,7 +43,10 @@ disposal does not coordinate transactions in other processes.
 
 `scripts/migrate.py` is the only migration runner: it discovers, applies, and
 stamps migrations in each database's `schema_migrations` table, and
-`scripts/new_story_setup.py` calls it for fresh slots. Do not apply migration SQL
+`scripts/new_story_setup.py` calls it for fresh slots. The implementations live in
+`nexus/maintenance/migrate.py` and `nexus/maintenance/new_story_setup.py`;
+`scripts/migrate.py` and `scripts/new_story_setup.py` are command-line wrappers
+that re-export them. Do not apply migration SQL
 with `psql` or ad hoc scripts; an unstamped change is invisible to the runner.
 Slot initialization and data cloning in `scripts/new_story_setup.py` raise on
 any migration or restore error and never log success, but the partial target
@@ -152,6 +155,10 @@ python scripts/rebuild_memory_idf.py --all
 python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 ```
 
+## Staged Slot Builds
+
+`scripts/new_story_setup.py --slot N --stage` builds a slot database under the name `<slot database>_staging_<first 12 hex digits of the operation id>` and never opens, reads or drops the slot's own database; `--mode clone --source DB` copies a source with its data, and the default copies `NEXUS_template`. Before it creates anything, each operation writes a JSON record to `<[runtime].state_dir>/slot_operations/<operation id>.json` (fsync, then an atomic rename) and records each phase: `created`, `building`, `built`, then `validated` or `refused`, or `failed`, and last `swept`. Every session on a staging database, including the migration runner's and the IDF rebuild's, first re-reads the record and is refused unless the record authorizes that name (`db_pool.get_maintenance_connection` for all other queries); the gameplay pool still opens only `save_01` to `save_05`. Inside staging, a clone checks its migration stamps, runs the migration runner, sets `global_variables.slot_number` to the target slot and rebuilds IDF; a template build does what slot initialization does and sets `slot_number`. Validation refuses on a migration on disk that is not stamped or a stamp with no migration on disk; a `slot_number` other than the target; a story pin or seat that does not resolve; a tail chunk with no Pass-2 baseline, or one the runtime compatibility predicate rejects; an IDF corpus that is missing or keyed to another server version; a finding of `scripts/replay_state.py --verify`; or a referenced upload file that is missing. A staging database stays until `scripts/new_story_setup.py --sweep-staging` drops it. The sweep drops only databases that a journal record names and whose operation no live process holds, marks each record `swept`, and lists any other `*_staging_<12 hex>` database without dropping it. Swapping a staged database into a slot is later work on #823.
+
 ## Two Clocks
 
 PostgreSQL comments define both clocks; read them with `\d+ chunk_metadata`, `\df+ refresh_world_time_from_chunk*` and `\dd trg_chunk_metadata_refresh_world_time`. The story clock is `chunk_metadata.world_time`, recomputed by `refresh_world_time_from_chunk()` from `global_variables.base_timestamp` and primary-layer `time_delta` after every insert and every `time_delta` or `world_layer` update; event occurrence time is `world_events.world_time`. A `chunk_metadata` write raises while `base_timestamp` is NULL, and `base_timestamp` cannot change once `chunk_metadata` holds a row. Diegetic state belongs on the story clock. The tick clock is the accepted chunk in each `tick_chunk_id` column; it serves ordering, replay, exposure fairness, habituation, and narration cadence.
@@ -239,6 +246,12 @@ share the world transaction's cursor so their records commit or roll back with
 that world. The Retrograde status route reads the latest run from these tables,
 so every gateway worker reports the same durable record. Rows are kept after
 completion.
+
+A transition takes the slot's genesis claim, a session advisory lock held for the whole run, so a slot has one open run. A POST that finds the claim held joins the running run and answers with that run's outcome. A run still `running` while the claim is free belonged to a process that stopped; the next POST records it failed (`GenesisRunInterrupted`). A new run whose `input_fingerprint` equals that of the previous failed run reuses that run's saved derivation, packet, seed-candidate and expansion outputs, validated on load, and calls no provider for them; any changed input rebuilds every stage. A reused stage row names its source in `detail.reused_from`. When the previous run failed after its world committed, the next POST finishes the pending embedding from the saved persistence output, without the wizard cache.
+
+## Wizard Transcript
+
+assets.wizard_messages holds the new-story wizard transcript for every provider, keyed by the conversation UUID in assets.new_story_creator.thread_id. Each message records its role, origin and the wizard phase at the time it was written. A reply and its presented choices commit in one transaction under the wizard cache row lock. A model switch changes only the slot model. Rows are kept after the cache is cleared. Migration 150 discarded incomplete wizards on hosted OpenAI conversations and refuses any other legacy thread.
 
 ## Story Identity
 

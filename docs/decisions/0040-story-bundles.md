@@ -1,8 +1,8 @@
 ---
 status: canonical
 sources:
-  - scripts/new_story_setup.py
-verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
+  - nexus/maintenance/new_story_setup.py
+verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"
 ---
 
 # 0040: Story Bundles
