@@ -1,0 +1,83 @@
+{
+  "readings": {
+    "viewport": {
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "coarseNarrow": true
+    },
+    "map": {
+      "nav": {
+        "x": 0,
+        "y": 796,
+        "width": 390,
+        "height": 48,
+        "bottom": 844
+      },
+      "followsMain": true,
+      "viewportBottom": 844,
+      "display": "flex"
+    },
+    "settings": {
+      "nav": {
+        "x": 0,
+        "y": 796,
+        "width": 390,
+        "height": 48,
+        "bottom": 844
+      },
+      "followsMain": true,
+      "viewportBottom": 844,
+      "display": "flex"
+    },
+    "keyboardFocused": "none",
+    "keyboardBlurred": "flex",
+    "fixtureTransport": [
+      {
+        "method": "GET",
+        "url": "/api/slot/4/state"
+      },
+      {
+        "method": "GET",
+        "url": "/api/narrative/active?slot=4"
+      },
+      {
+        "method": "HEAD",
+        "url": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "url": "/api/slot/4/state"
+      },
+      {
+        "method": "GET",
+        "url": "/api/narrative/active?slot=4"
+      },
+      {
+        "method": "GET",
+        "url": "/api/secrets/status?slot=4"
+      },
+      {
+        "method": "GET",
+        "url": "/api/slot/4/state"
+      },
+      {
+        "method": "GET",
+        "url": "/api/narrative/active?slot=4"
+      },
+      {
+        "method": "HEAD",
+        "url": "/api/settings"
+      },
+      {
+        "method": "GET",
+        "url": "/api/slot/4/state"
+      },
+      {
+        "method": "GET",
+        "url": "/api/narrative/active?slot=4"
+      }
+    ]
+  },
+  "errors": [],
+  "requests": []
+}
