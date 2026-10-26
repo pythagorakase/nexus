@@ -267,8 +267,9 @@ one transaction:
 4. Inserts the `narrative_chunks` row (prose plus the enacted choice), marks
    the session accepted, persists the Pass-1 baseline to `lore_pass_baselines`,
    and stores both private letters.
-5. Inserts `chunk_metadata` with its `SxxEyy_zzz` slug and reads back the
-   accepting chunk's world clock.
+5. Inserts `chunk_metadata`, whose `set_chunk_slug()` trigger authors the
+   `SxxEyy_zzz` slug and refuses a season or episode above 99, a scene above
+   999 or a negative part, and reads back the accepting chunk's world clock.
 6. Applies name reveals. New-entity declarations create stubs and enqueue
    Retrograde maturation jobs.
 7. Resolves character, place, and faction references, reconciles roster
