@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import tomlkit
 
-from nexus import cli
+from nexus import cli, cli_contract
 from nexus.api.deprecated_tag_audit import audit_database_names
 from nexus.api.route_capabilities import ROUTE_CAPABILITIES
 from nexus.cli_contract import (
@@ -2400,3 +2400,67 @@ def test_checkout_config_is_local_and_the_remote_profile_is_remote() -> None:
     assert remote is not None and remote.profile is True
     assert runtime.remote is not None
     assert runtime.remote.base_url in remote.reason
+
+
+# ---------------------------------------------------------------------------
+# The runtime and local-ledger family moves to {ok, data} (ruling 43, 815-S6a)
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_family_is_the_result_envelope_family() -> None:
+    """The fifteen moved commands, and their data: the result minus success."""
+    assert cli_contract.RESULT_ENVELOPE_COMMANDS == frozenset(
+        {
+            "up",
+            "down",
+            "restart",
+            "status",
+            "logs",
+            "home",
+            "usage",
+            "window-replay",
+            "models lock",
+            "models verify",
+            "models plan",
+            "models fetch",
+            "doctor",
+            "init",
+            "receipts",
+        }
+    )
+    assert cli_contract.RESULT_ENVELOPE_COMMANDS <= set(COMMAND_TRANSPORTS)
+    assert not cli_contract.RESULT_ENVELOPE_COMMANDS & ENVELOPE_COMMANDS
+    success_data = cli_contract.success_data
+    assert success_data({"success": True, "a": 1, "b": None}) == {"a": 1, "b": None}
+    assert success_data({"a": 1}) == {"a": 1}
+    with pytest.raises(ValueError):
+        success_data({"success": False})
+
+
+def test_failing_doctor_report_is_the_failure_envelope(tmp_path: Path) -> None:
+    """A failing report is domain_failure with the whole report as partial."""
+    config = tmp_path / "nexus.toml"
+    config.write_text("[runtime\n", encoding="utf-8")
+    completed = _run(
+        "doctor",
+        "--target",
+        "ci-runner",
+        "--config",
+        str(config),
+        "--json",
+        env={"NEXUS_API_URL": "https://nexus.example.invalid"},
+    )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stdout
+    envelope = _failure(completed)
+    assert envelope["code"] == "domain_failure"
+    assert envelope["error"] == "readiness checks failed for ci-runner: config.valid"
+    report = envelope["partial"]
+    assert report["target"] == "ci-runner"
+    assert report["ok"] is False
+    assert [check["id"] for check in report["checks"]] == [
+        "config.valid",
+        "reachability.gate",
+    ]
+    # partial_fields would drop this empty list: the report is passed verbatim.
+    assert report["omitted"] == []

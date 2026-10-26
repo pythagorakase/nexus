@@ -39,6 +39,7 @@ from tests.pg_fixtures import (
 
 NOW = datetime(2026, 7, 30, 4, 30, tzinfo=timezone.utc)
 FIXTURES = Path(__file__).parent / "fixtures"
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _event(
@@ -80,7 +81,6 @@ def _usage(
     day: str = "2026-07-30",
 ) -> dict[str, object]:
     return {
-        "success": True,
         "usage": {
             "day": day,
             "events": events or [],
@@ -431,6 +431,33 @@ def test_every_tracked_model_route_is_pinned(tmp_path: Path) -> None:
     for route, model in routes.items():
         if route not in NON_REMOTE_ROUTES:
             assert model == config.target_model, f"{route} escaped the QA model pin"
+
+
+def test_read_usage_parses_the_cli_success_envelope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The kit reads ``data`` from the real ``nexus usage --json`` envelope."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    launcher = bin_dir / "nexus"
+    launcher.write_text(f'#!/bin/sh\nexec {sys.executable} -m nexus.cli "$@"\n')
+    launcher.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "nexus.toml").write_text(
+        (ROOT / "nexus.toml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PYTHONPATH", str(ROOT))
+    monkeypatch.setenv(HOME_ENV, str(home))
+    monkeypatch.setenv("NEXUS_KEYRING_DISABLE", "1")
+    monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
+
+    payload = qa_shift._read_usage(ROOT, "2000-01-01")
+
+    assert "success" not in payload and "ok" not in payload
+    assert payload["usage"]["day"] == "2000-01-01"
+    assert payload["usage"]["events"] == []
 
 
 def test_begin_refuses_untrustworthy_or_exhausted_usage(tmp_path: Path) -> None:
