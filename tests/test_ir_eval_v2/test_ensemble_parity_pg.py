@@ -39,6 +39,8 @@ from nexus.agents.memnon.utils import cross_encoder
 from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.agents.memnon.utils.embedding_manager import EmbeddingManager
 from nexus.agents.memnon.utils.embedding_tables import ensure_embedding_table
+from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary
+from nexus.agents.memnon.utils.search import SearchManager
 from nexus.config import load_settings
 from nexus.database import database_url
 from tests.pg_fixtures import (
@@ -288,3 +290,33 @@ def test_ir_eval_production_run_matches_the_runtime_path(parity: ParitySlot) -> 
         assert set(row["model_scores"]) == set(result["model_scores"])
         for model, score in result["model_scores"].items():
             assert row["model_scores"][model] == pytest.approx(score, abs=1e-9)
+
+
+def test_runtime_search_refuses_an_ensemble(parity: ParitySlot) -> None:
+    """Runtime search refuses to run with two loaded embedders."""
+
+    settings = load_settings().memnon.model_dump(by_alias=True)
+    settings["models"][PROBE] = {
+        "is_active": True,
+        "local_path": str(parity.embedder_dirs[1]),
+        "remote_path": None,
+        "dimensions": DIMENSIONS,
+    }
+    embedding_manager = EmbeddingManager(settings=settings)
+    assert set(embedding_manager.get_available_models()) == {PRODUCTION, PROBE}
+    manager = SearchManager(
+        db_url=parity.url,
+        embedding_manager=embedding_manager,
+        idf_dictionary=IDFDictionary(parity.url),
+        settings=settings,
+        retrieval_settings={"default_top_k": 4},
+    )
+
+    with pytest.raises(RuntimeError) as hybrid:
+        manager.perform_hybrid_search(QUERY)
+    with pytest.raises(RuntimeError) as vector:
+        manager.query_vector_search(QUERY, ["narrative_chunks"], {}, 4)
+    for raised in (hybrid, vector):
+        message = str(raised.value)
+        assert PRODUCTION in message and PROBE in message
+        assert "only in ir_eval" in message

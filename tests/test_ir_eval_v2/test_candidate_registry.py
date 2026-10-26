@@ -29,7 +29,6 @@ PRODUCTION = "Octen-Embedding-4B"
 EMBEDDING_CANDIDATES = {
     "bge-large",
     "e5-large",
-    "bge-small-custom",
     "inf-retriever-v1-1.5b",
     "Octen-Embedding-0.6B",
     "Octen-Embedding-4B-INT8",
@@ -55,12 +54,18 @@ def _raw() -> Dict[str, Any]:
 
 
 def test_committed_runtime_holds_one_embedder(tmp_path: Path) -> None:
-    """One runtime embedder; the eight embedders and three rerankers moved."""
+    """One runtime embedder; the seven embedders and three rerankers moved."""
 
     path = _config(tmp_path)
     settings = load_settings(path)
 
     assert set(settings.memnon.models) == {PRODUCTION}
+    assert set(settings.memnon.models[PRODUCTION].model_dump()) == {
+        "is_active",
+        "local_path",
+        "remote_path",
+        "dimensions",
+    }
     assert settings.ir_eval is not None
     assert set(settings.ir_eval.embedding_candidates) == EMBEDDING_CANDIDATES
     assert set(settings.ir_eval.reranker_candidates) == RERANKER_CANDIDATES
@@ -82,7 +87,6 @@ def test_settings_reject_a_second_runtime_embedder(
         entry["is_active"] = is_active
         for key, value in candidate.items():
             entry[key] = value
-        entry["weight"] = 0.0
         document["memnon"]["models"]["Octen-Embedding-8B"] = entry
 
     with pytest.raises(ValidationError) as raised:
@@ -232,9 +236,7 @@ def test_run_settings_activate_exactly_the_selected_models(
     models = run_settings["models"]
     assert set(models) == {PRODUCTION, "Octen-Embedding-8B"}
     assert all(model["is_active"] is True for model in models.values())
-    assert models[PRODUCTION]["weight"] == pytest.approx(0.25)
-    assert models["Octen-Embedding-8B"]["weight"] == pytest.approx(0.75)
-    assert sum(model["weight"] for model in models.values()) == pytest.approx(1.0)
+    assert all("weight" not in model for model in models.values())
     assert weights == {
         PRODUCTION: pytest.approx(0.25),
         "Octen-Embedding-8B": pytest.approx(0.75),

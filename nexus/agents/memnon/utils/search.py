@@ -70,6 +70,23 @@ class SearchManager:
 
         logger.info("SearchManager initialized")
 
+    def runtime_embedder(self) -> str:
+        """Return the one loaded runtime embedder.
+
+        Runtime retrieval embeds every query with exactly one model; weighted
+        ensembles run only in ir_eval (Decision 812-Q4a).
+
+        Raises:
+            RuntimeError: unless exactly one embedder is loaded.
+        """
+        loaded = self.embedding_manager.get_available_models()
+        if len(loaded) != 1:
+            raise RuntimeError(
+                f"Runtime retrieval runs exactly one embedder; loaded: {loaded}. "
+                "Weighted ensembles run only in ir_eval (Decision 812-Q4a)."
+            )
+        return loaded[0]
+
     def perform_hybrid_search(
         self,
         query_text: str,
@@ -81,7 +98,7 @@ class SearchManager:
     ) -> List[Dict[str, Any]]:
         """
         Perform hybrid search using both vector embeddings and text search.
-        Uses all active embedding models with their configured weights.
+        Embeds the query with the one runtime embedder at weight 1.0.
 
         Args:
             query_text: The query text
@@ -91,6 +108,54 @@ class SearchManager:
             presence_boost_enabled: Optional measurement override for the config flag
             query_embeddings: Caller-owned mapping populated with the exact vectors
                 used by hybrid retrieval
+
+        Returns:
+            List of matching chunks with scores and metadata
+        """
+        model_key = self.runtime_embedder()
+        if query_embeddings is None:
+            query_embeddings = {}
+        else:
+            query_embeddings.clear()
+        query_embeddings[model_key] = self.embedding_manager.generate_embedding(
+            query_text, model_key
+        )
+        return self.hybrid_search_from_embeddings(
+            query_text,
+            query_embeddings,
+            {model_key: 1.0},
+            filters=filters,
+            top_k=top_k,
+            present_character_ids=present_character_ids,
+            presence_boost_enabled=presence_boost_enabled,
+        )
+
+    def hybrid_search_from_embeddings(
+        self,
+        query_text: str,
+        query_embeddings: Dict[str, List[float]],
+        model_weights: Dict[str, float],
+        filters: Optional[Dict[str, Any]] = None,
+        top_k: Optional[int] = None,
+        present_character_ids: Optional[Sequence[int]] = None,
+        presence_boost_enabled: Optional[bool] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Score hybrid search from query vectors the caller already computed.
+
+        The runtime passes the one embedder's vector at weight 1.0; ir_eval
+        passes several vectors and its run's normalized weights (Decision
+        812-Q4a). This method selects no model, embeds nothing and passes
+        ``query_embeddings`` and ``model_weights`` to the scorers as given.
+
+        Args:
+            query_text: The query text (query analysis and the text leg)
+            query_embeddings: Model name to query vector
+            model_weights: Model name to ensemble weight, passed as given
+            filters: Optional metadata filters to apply
+            top_k: Maximum number of results to return
+            present_character_ids: Character IDs present in the retrieval anchor
+            presence_boost_enabled: Optional measurement override for the config flag
 
         Returns:
             List of matching chunks with scores and metadata
@@ -144,45 +209,6 @@ class SearchManager:
             text_weight = text_weight / total_weight
 
         logger.debug(f"Using weights: vector={vector_weight}, text={text_weight}")
-
-        # Gather all active models and their weights
-        active_models = {}
-        model_weights = {}
-
-        for model_key in self.embedding_manager.get_available_models():
-            if model_key in self.retrieval_settings["model_weights"]:
-                # Get the weight from the retrieval settings
-                model_weights[model_key] = self.retrieval_settings["model_weights"][
-                    model_key
-                ]
-                active_models[model_key] = True
-
-        if not active_models:
-            raise RuntimeError(
-                "No active embedding models found. Loaded models: "
-                f"{self.embedding_manager.get_available_models()}"
-            )
-
-        # Normalize model weights to sum to 1.0
-        total_model_weight = sum(model_weights.values())
-        if total_model_weight > 0:
-            model_weights = {
-                k: w / total_model_weight for k, w in model_weights.items()
-            }
-
-        logger.info(
-            f"Using {len(active_models)} active models with weights: {model_weights}"
-        )
-
-        # Generate embeddings for all active models
-        if query_embeddings is None:
-            query_embeddings = {}
-        else:
-            query_embeddings.clear()
-        for model_key in active_models:
-            query_embeddings[model_key] = self.embedding_manager.generate_embedding(
-                query_text, model_key
-            )
 
         # Analyze the query's temporal intent on a continuous scale
         query_temporal_intent = analyze_temporal_intent(query_text)
@@ -265,7 +291,7 @@ class SearchManager:
     ) -> List[Dict[str, Any]]:
         """
         Query the vector database for chunks similar to the query text.
-        Uses all active embedding models with their configured weights.
+        Embeds the query with the one runtime embedder at weight 1.0.
 
         Args:
             query_text: The text to search for
@@ -276,44 +302,42 @@ class SearchManager:
         Returns:
             List of matching chunks with scores and metadata
         """
-        if top_k is None:
-            top_k = self.retrieval_settings["default_top_k"]
-
-        # Gather all active models and their weights
-        active_models = {}
-        model_weights = {}
-
-        for model_key in self.embedding_manager.get_available_models():
-            if model_key in self.retrieval_settings["model_weights"]:
-                # Get the weight from the retrieval settings
-                model_weights[model_key] = self.retrieval_settings["model_weights"][
-                    model_key
-                ]
-                active_models[model_key] = True
-
-        if not active_models:
-            raise RuntimeError(
-                "No active embedding models found. Loaded models: "
-                f"{self.embedding_manager.get_available_models()}"
-            )
-
-        # Normalize model weights to sum to 1.0
-        total_model_weight = sum(model_weights.values())
-        if total_model_weight > 0:
-            model_weights = {
-                k: w / total_model_weight for k, w in model_weights.items()
-            }
-
-        logger.info(
-            f"Using {len(active_models)} active models with weights: {model_weights}"
+        model_key = self.runtime_embedder()
+        query_embeddings = {
+            model_key: self.embedding_manager.generate_embedding(query_text, model_key)
+        }
+        return self.vector_search_from_embeddings(
+            query_text, query_embeddings, {model_key: 1.0}, filters, top_k
         )
 
-        # Generate embeddings for all active models
-        query_embeddings = {}
-        for model_key in active_models:
-            query_embeddings[model_key] = self.embedding_manager.generate_embedding(
-                query_text, model_key
-            )
+    def vector_search_from_embeddings(
+        self,
+        query_text: str,
+        query_embeddings: Dict[str, List[float]],
+        model_weights: Dict[str, float],
+        filters: Optional[Dict[str, Any]],
+        top_k: Optional[int],
+    ) -> List[Dict[str, Any]]:
+        """
+        Score vector-only search from query vectors the caller already computed.
+
+        The runtime passes the one embedder's vector at weight 1.0; ir_eval
+        passes several vectors and its run's normalized weights (Decision
+        812-Q4a). ``query_embeddings`` and ``model_weights`` reach the scorer
+        as given.
+
+        Args:
+            query_text: The query text
+            query_embeddings: Model name to query vector
+            model_weights: Model name to ensemble weight, passed as given
+            filters: Metadata filters to apply (season, episode, etc.)
+            top_k: Maximum number of results to return
+
+        Returns:
+            List of matching chunks with scores and metadata
+        """
+        if top_k is None:
+            top_k = self.retrieval_settings["default_top_k"]
 
         # Use the multi-model hybrid search with 100% vector weight to effectively perform vector-only search
         results = execute_multi_model_hybrid_search(
