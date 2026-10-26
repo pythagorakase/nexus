@@ -1356,3 +1356,28 @@ def test_boot_check_ignores_tokenizers(tmp_path: Path) -> None:
     summary = check_artifacts_at_boot(load_settings(workspace.config))
     assert "by file list, size and revision" in summary
     assert TINY_LABEL not in summary
+
+
+@pytest.mark.parametrize("shape", ["missing", "malformed"])
+def test_lock_tokenizer_section_shape_is_enforced(tmp_path: Path, shape: str) -> None:
+    """A lock without ``tokenizers`` or with malformed entries fails by name."""
+    workspace = _workspace(tmp_path, tokenizer=TINY)
+    manifest = _lock(workspace)
+    hf_home = tmp_path / "hf"
+    if shape == "missing":
+        del manifest["tokenizers"]
+        workspace.lock.write_text(json.dumps(manifest, indent=2))
+        for command in ("plan", "verify"):
+            result = _cli_offline_models(command, workspace, hf_home)
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert "the lock records no tokenizers" in result.stderr
+        fetch = _cli_offline_models("fetch", workspace, hf_home)
+        assert fetch.returncode == 1, fetch.stdout + fetch.stderr
+        assert "the lock records no tokenizers" in fetch.stderr
+        assert not list(hf_home.rglob("models--*"))
+    else:
+        manifest["tokenizers"] = [{"repo_id": 1}]
+        workspace.lock.write_text(json.dumps(manifest, indent=2))
+        outcome = run_models_command("plan", str(workspace.config))
+        assert outcome["success"] is False, outcome
+        assert "is malformed: `tokenizers` must list objects" in outcome["error"]

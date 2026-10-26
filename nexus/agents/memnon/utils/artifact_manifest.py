@@ -1228,9 +1228,11 @@ def _format_size(size: int) -> str:
 def _lock_summary(manifest: Dict[str, Any], path: Path) -> str:
     """Describe a freshly written lock for the CLI."""
 
-    lines = [f"Locked {len(manifest['artifacts'])} artifact(s) in {path}:"]
-    for entry in manifest.get("tokenizers", []):
-        lines.append(f"  tokenizer {entry['repo_id']} @ {entry['revision']}")
+    tokenizers = manifest.get("tokenizers", [])
+    lines = [
+        f"Locked {len(manifest['artifacts'])} artifact(s) and "
+        f"{len(tokenizers)} tokenizer(s) in {path}:"
+    ]
     for entry in manifest["artifacts"]:
         if entry["revision"]:
             revision = f"{entry['revision']} ({entry['revision_source']})"
@@ -1242,6 +1244,8 @@ def _lock_summary(manifest: Dict[str, Any], path: Path) -> str:
             f" @ {revision}{dimensions}, {len(entry['files'])} files, "
             f"{_format_size(entry['total_size'])}"
         )
+    for entry in tokenizers:
+        lines.append(f"  tokenizer {entry['repo_id']} @ {entry['revision']}")
     return "\n".join(lines)
 
 

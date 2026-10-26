@@ -4,9 +4,9 @@ import ast
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
-import re
 import logging
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path

@@ -99,7 +99,8 @@ them first (on macOS, `dot_clean -m <path>`).
 Neither command downloads anything, and startup does not run `verify`.
 
 The lock is committed: `config/model_artifacts.lock.json` records the
-production embedder and reranker as they sit on the owner's host, and
+production embedder and reranker as they sit on the owner's host, and the
+pinned repository and revision of every registry tokenizer, and
 `tests/test_model_artifact_lock_committed.py` fails when `nexus.toml` names a
 different active embedder, reranker, repository, or embedder dimension than
 the lock does. `nexus models verify` then checks, read-only, that every locked
