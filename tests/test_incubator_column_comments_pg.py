@@ -227,6 +227,10 @@ def test_pre_152_keys_in_convention_are_rejected(column: str) -> None:
     fields = set(model.model_fields)
     assert sets[None] - fields == extra
     assert fields - sets[None] == missing
+    assert _model_mismatches(text, model, {}) == [
+        f"top level ({model.__name__}): extra {sorted(extra)}, "
+        f"missing {sorted(missing)}"
+    ]
 
 
 def test_corrected_comments_drop_retired_tokens(
