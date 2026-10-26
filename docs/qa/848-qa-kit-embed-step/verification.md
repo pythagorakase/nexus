@@ -91,15 +91,22 @@ recorded on 2026-08-06.
 
 ## Red Then Green
 
-Red, at 937e4e4e (test committed, kit files unchanged):
+Red, at 937e4e4e (test committed, kit files unchanged). The tail is verbatim
+from the run's log; the `...` line marks the one cut, the warnings summary
+between the failure location and the session footer:
 
 ```
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_qa_shift.py::test_seed_alignment_repairs_retrograde_vectors_before_the_gateway_starts
         for phrase in ordered:
 >           assert phrase in section, phrase
 E           AssertionError: `nexus retrograde-embed-history --slot N`
+E           assert '`nexus retrograde-embed-history --slot N`' in '7. Stop only the isolated QA lane if it is stale. Back up `save_04` with `pg_dump -Fc` and checksum the dump. Then in...efine the current-run log slice; persistent gateway logs can contain earlier shifts and must not be mined as one run. '
+
 tests/test_qa_shift.py:308: AssertionError
+...
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
 FAILED tests/test_qa_shift.py::test_seed_alignment_repairs_retrograde_vectors_before_the_gateway_starts
 1 failed, 5 warnings in 0.54s
 ```
@@ -148,6 +155,28 @@ receipt isolation: checkout and user receipts untouched
 120 passed, 5 warnings in 18.55s
 ```
 
-  This evidence commit merges nothing from `origin/main` (which had not moved
-  past c7ae2988 when it was written), so the merge base and the 0021 stamp are
-  unchanged and the re-stamp still stands.
+  The re-stamp is not the branch's last commit: two evidence-only commits
+  follow it (41912d5a and the commit that adds this paragraph). Required
+  Changes 5 asks for the re-stamp as the last commit after the final merge of
+  `origin/main`; that wording is knowingly relaxed for evidence-only commits,
+  because history is not rewritten and a re-stamp to the same SHA changes no
+  byte. Neither evidence commit merges anything: `git fetch origin` then `git
+  merge origin/main` printed "Already up to date." again on 2026-10-26 at
+  18:06, `git ls-remote origin main` and `git merge-base origin/main HEAD` are
+  both `c7ae2988d07b443f627a04d3a4eed1816b1cd438`, and record 0080 is still
+  absent. The 0021 stamp therefore still equals the merge base. If
+  `origin/main` moves before landing, the branch merges it, then re-stamps
+  0021 (and 0080, if #1162 has landed) to the new merge base in one final
+  commit after every other change, evidence included.
+
+  The re-stamp check again, at 41912d5a with only this evidence edit in the
+  working tree (`git merge-base origin/main HEAD` =
+  `c7ae2988d07b443f627a04d3a4eed1816b1cd438`):
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+120 passed, 5 warnings in 19.57s
+```
