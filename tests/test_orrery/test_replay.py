@@ -2308,7 +2308,6 @@ def chunk_clock_db() -> Iterator[tuple[str, list[int]]]:
                     world_layer=cast(str, layer),
                     time_delta=None if minutes is None else timedelta(minutes=minutes),
                     generation_date=CLOCK_BASE,
-                    slug=f"S01E01_{scene:03d}",
                     generation_model="TEST",
                     scene_weather=None,
                 )

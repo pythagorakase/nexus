@@ -304,11 +304,10 @@ class LORE:
         """Deterministically release this turn-stack's per-instance resources.
 
         The narrative API constructs a fresh LORE per turn; the resulting
-        object graph is a reference-cycle island (LORE <-> TurnCycleManager,
-        MEMNON <-> ContentProcessor bound method) that plain refcounting
-        cannot reclaim, and CPython's throttled full GC effectively never
-        runs mid-session (issue #401's turn-8 hang). Callers that build a
-        LORE per request MUST close it when the turn finishes.
+        object graph is a reference-cycle island (LORE <-> TurnCycleManager) that plain
+        refcounting cannot reclaim, and CPython's throttled full GC effectively never
+        runs mid-session (issue #401's turn-8 hang). Callers that build a LORE per
+        request MUST close it when the turn finishes.
 
         Closes MEMNON (disposing its engine/pool) and drops the component
         back-references so the island collapses under refcounting alone.

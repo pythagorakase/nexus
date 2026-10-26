@@ -165,7 +165,7 @@ def test_single_responses_call_records_jsonl_log_and_cli_json(
         ["nexus", "usage", "--json", "--day", day],
     )
     assert cli.main() == 0
-    payload = json.loads(capsys.readouterr().out)
+    payload = json.loads(capsys.readouterr().out)["data"]
     assert payload["usage"]["events"][0]["request_id"] == "resp_single"
     assert payload["usage"]["openai_day_total"]["total_tokens"] == 168
 

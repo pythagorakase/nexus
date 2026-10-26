@@ -360,7 +360,7 @@ def test_cli_window_replay_json_and_table(
     assert cli.main() == 0
     captured = capsys.readouterr()
     assert captured.err == ""
-    payload = json.loads(captured.out)
+    payload = json.loads(captured.out)["data"]
     assert payload["window_replay"]["day"] == LEDGER_DAY
     [row] = payload["window_replay"]["rows"]
     assert row["capped"] is True
@@ -421,7 +421,7 @@ def test_cli_window_replay_refuses_an_unapplied_candidate_window(
 
     monkeypatch.setattr(sys, "argv", [*argv, "--window", str(smaller)])
     assert cli.main() == 0
-    [row] = json.loads(capsys.readouterr().out)["window_replay"]["rows"]
+    [row] = json.loads(capsys.readouterr().out)["data"]["window_replay"]["rows"]
     assert row["window"] == smaller
     assert row["headroom_delta"] == smaller - (
         record.effective_ceiling + record.policy_headroom
@@ -513,7 +513,7 @@ def test_recorded_removals_survive_candidate_replay_and_usage_rendering(
                 argv += ["--model", "TEST", "--window", "90000"]
             monkeypatch.setattr(sys, "argv", [*argv, "--json"])
             assert cli.main() == 0
-            payload = json.loads(capsys.readouterr().out)
+            payload = json.loads(capsys.readouterr().out)["data"]
             rows = (
                 payload["windows"]
                 if command == "usage"

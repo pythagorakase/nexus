@@ -58,6 +58,15 @@ deep into a campaign. Drop a checksummed mid-campaign `pg_dump -Fc` dump into
 disposable slot from the newest one instead of a bare reset, then owes the
 deep-state and coverage gates in `mission_prompt.md`.
 
+Seeding also repairs Retrograde summaries that a seed carries stamped without
+a vector. Seeds promoted before PR #671 carry them (#665, #848): restoring the
+2026-07-31 seed on 2026-08-21 brought twelve back to `save_04`. After
+`scripts/migrate.py --slot N` and before the gateway starts, the shift runs
+`nexus retrograde-embed-history --slot N` (a read-only dry run), then the same
+command with `--execute`, and requires `nexus jobs --slot N` to print no
+`stamped_without_vectors` line. The repair embeds through the local embedder
+and makes no provider call. The shift records the counts in its report.
+
 A dry final state is only a seed candidate. Promotion requires a trustworthy
 usage ledger, no unresolved anomaly, current migrations, zero active generation
 leases, empty Orrery job queues, coherent measured counts, a final public load,

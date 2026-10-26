@@ -1,0 +1,33 @@
+diff --git a/config/model_artifacts.lock.json b/config/model_artifacts.lock.json
+index 965709e8..295f5bbf 100644
+--- a/config/model_artifacts.lock.json
++++ b/config/model_artifacts.lock.json
+@@ -165,5 +165,27 @@
+       "total_size": 1742869078
+     }
+   ],
+-  "schema_version": 1
++  "schema_version": 1,
++  "tokenizers": [
++    {
++      "repo_id": "MiniMaxAI/Minimax-M3",
++      "revision": "f0e1c1e04d40177e4673a22097036854f536e9c0"
++    },
++    {
++      "repo_id": "NousResearch/Hermes-4-405B",
++      "revision": "88e3dce03c4a5535e2f4a2bcc08e939a2b302f82"
++    },
++    {
++      "repo_id": "NousResearch/Hermes-4-70B",
++      "revision": "d5dec2bd6b3930a09ddefd0b7fc6523fe0720d09"
++    },
++    {
++      "repo_id": "NousResearch/Hermes-4.3-36B",
++      "revision": "3899db2b6c4b35f16bde3b570bb7dd2775d56161"
++    },
++    {
++      "repo_id": "deepseek-ai/DeepSeek-V4-Pro",
++      "revision": "b5968e9190ef611bbf34a7229255be88a0e937c1"
++    }
++  ]
+ }

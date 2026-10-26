@@ -1710,7 +1710,11 @@ class LogonUtility:
         entry = self.settings.model_entry(provider.model)
         if not hasattr(self, "_window_text_counters"):
             self._window_text_counters = {}
-        key = (entry.tokenizer_encoding, entry.tokenizer_repository)
+        key = (
+            entry.tokenizer_encoding,
+            entry.tokenizer_repository,
+            entry.tokenizer_revision,
+        )
         if key not in self._window_text_counters:
             self._window_text_counters[key] = estimator_for(
                 entry.id, settings=self.settings
