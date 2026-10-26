@@ -77,7 +77,7 @@ Field semantics:
 - `ok` — conjunction of everything above; a client can gate its "connected"
   indicator on this single bit.
 - `readiness` — the owner-host readiness checks the gateway evaluates
-  in-process, in the schema `nexus doctor --json` prints (see Readiness
+  in-process, in the report schema of `nexus doctor --json` (see Readiness
   Checks). It never feeds `ok`; `omitted` names the checks only
   `nexus doctor` runs.
 
@@ -348,6 +348,8 @@ nexus receipts
 ```
 
 All verbs honor the global `--json` flag for machine-readable output.
+A success prints `{"ok": true, "data": ...}` on stdout and a failure prints
+the failure envelope on stderr (`docs/cli.md`, JSON Failure Envelope).
 `--config` points at an alternate `nexus.toml` (test harnesses, parallel
 checkouts); spawned services receive its absolute path in the
 `NEXUS_RUNTIME_CONFIG` environment variable so their `/runtime/status`
@@ -373,7 +375,8 @@ registry of read-only checks in `nexus/runtime/readiness.py` (issue #803).
 It never creates, migrates, locks, or writes anything: database sessions are
 read-only, and secrets are reported present, missing, or unreadable, never
 printed. It exits 1 when any check fails and 0 otherwise. Text output is one
-line per check; `--json` prints the machine-readable report. Liveness
+line per check; `--json` prints the report as `data` when every check passes,
+and as the failure envelope's `partial` (exit 1) when one fails. Liveness
 (`/health`), readiness, and slot playability are three separate answers; this
 is the second.
 
@@ -411,8 +414,8 @@ schema.
 
 A check that raises `ImportError` fails with an `observed` that names the
 check and the module; its remediation says to restore the locked installation
-from the main checkout. `--json` still prints the report, and `nexus doctor`
-exits 1.
+from the main checkout. `--json` still carries the full report, and
+`nexus doctor` exits 1.
 
 The `desktop.*` checks read the desktop config in the shell's order
 (`read_config_source` in `ui/src-tauri/src/lib.rs`): `NEXUS_DESKTOP_CONFIG`,
@@ -433,7 +436,9 @@ databases read. PostgreSQL checks connect exactly as the runtime does, so
 variables only and says so.
 
 CI runs `nexus doctor --target ci-runner --json` in
-`.github/workflows/reachability-check.yml` and uploads the report. To
+`.github/workflows/reachability-check.yml` and uploads stdout
+(`readiness-report.json`) and stderr (`readiness-error.json`, which holds the
+report as `partial` when a check fails). To
 reproduce it, run `poetry run nexus doctor --target ci-runner --json` from a
 checkout whose own `poetry install` provides the `nexus` package, with
 `NEXUS_HOME` and `NEXUS_RUNTIME_CONFIG` unset. In a worktree that shares the
@@ -448,7 +453,8 @@ fails. Each failed check is one step, in registry order, which puts every
 dependency before its dependents, and the step carries that check's remediation
 verbatim. A check skipped behind a failed check is listed as blocked; run the
 plan again once the steps are done. It exits 1 while any step remains and 0
-otherwise. `--json` prints `schema_version`, `target`, `ok`, `steps` (each with
+otherwise. `--json` carries the plan (as `data`, or as `partial` while a step
+remains): `schema_version`, `target`, `ok`, `steps` (each with
 `number`, `check_id`, `observed` and `remediation`) and `blocked`. There is no
 `--apply`: the operator runs each step.
 
@@ -606,7 +612,7 @@ masks the original error.
 
 `nexus receipts` reads both roots and prints one group per fingerprint with
 its count, first and last time, and roots, followed by the first receipt's
-configuration path, details and frames (`--json` prints `home_dir`,
+configuration path, details and frames (`--json` prints `data` with `home_dir`,
 `fallback_dir` and `groups`). Like `doctor` it runs without loading the
 configuration. When the home cannot be located, locating it appends a
 `runtime.home` receipt to the fallback root; the command reads the fallback

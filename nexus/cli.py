@@ -71,6 +71,7 @@ from urllib3.exceptions import ReadTimeoutError
 from nexus.cli_contract import (
     API_URL_ENV,
     ENVELOPE_COMMANDS,
+    RESULT_ENVELOPE_COMMANDS,
     RUNTIME_CONFIG_COMMANDS,
     SELF_DIAGNOSTIC_COMMANDS,
     ExitCode,
@@ -80,6 +81,7 @@ from nexus.cli_contract import (
     error_envelope,
     exit_code_for,
     partial_fields,
+    success_data,
     success_envelope,
     transport_refusal,
 )
@@ -1163,6 +1165,14 @@ def _fail(
     """Report one failure and return its stable exit code."""
     emit_error(message, args.json, code=code, partial=partial)
     return int(exit_code_for(code))
+
+
+def emit_success(data: Any) -> int:
+    """Print the `--json` success envelope `{"ok": true, "data": data}` on stdout
+    and return the OK exit code (ruling 43 on #815).
+    """
+    print(json.dumps(success_envelope(data), indent=2, sort_keys=True))
+    return int(ExitCode.OK)
 
 
 def _api_unreachable() -> Dict[str, Any]:
@@ -4696,10 +4706,20 @@ def run_doctor(args: argparse.Namespace) -> int:
     config = Path(args.config) if args.config else None
     report = run_readiness(args.target, ReadinessContext(config_path=config))
     if args.json:
-        print(json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True))
-    else:
-        for line in render_report(report):
-            print(line)
+        # Decision 815-D5: a failing report is the failure envelope with the
+        # whole report, empty fields included, as partial.
+        document = report.model_dump(mode="json")
+        if report.ok:
+            return emit_success(document)
+        failed = ", ".join(c.id for c in report.checks if c.status == "fail")
+        return _fail(
+            args,
+            "domain_failure",
+            f"readiness checks failed for {report.target}: {failed}",
+            partial=document,
+        )
+    for line in render_report(report):
+        print(line)
     return 0 if report.ok else 1
 
 
@@ -4711,10 +4731,20 @@ def run_init(args: argparse.Namespace) -> int:
     config = Path(args.config) if args.config else None
     plan = build_init_plan(ReadinessContext(config_path=config))
     if args.json:
-        print(json.dumps(plan.model_dump(mode="json"), indent=2, sort_keys=True))
-    else:
-        for line in render_plan(plan):
-            print(line)
+        # Decision 815-D5: a plan with steps left is the failure envelope with
+        # the whole plan, empty fields included, as partial.
+        document = plan.model_dump(mode="json")
+        if plan.ok:
+            return emit_success(document)
+        remaining = ", ".join(step.check_id for step in plan.steps)
+        return _fail(
+            args,
+            "domain_failure",
+            f"setup steps remain: {remaining}",
+            partial=document,
+        )
+    for line in render_plan(plan):
+        print(line)
     return 0 if plan.ok else 1
 
 
@@ -4801,7 +4831,7 @@ def run_receipts(args: argparse.Namespace) -> int:
     }
     if args.json:
         if home_error is None:
-            print(json.dumps(document, indent=2, sort_keys=True))
+            return emit_success(document)
     else:
         for group in groups:
             for line in _render_receipt_group(group):
@@ -6571,15 +6601,17 @@ def main() -> int:
 
     if command in ENVELOPE_COMMANDS:
         if args.json:
-            envelope = success_envelope(result["data"])
-            print(json.dumps(envelope, indent=2, sort_keys=True))
-        elif command == "tags audit":
+            return emit_success(result["data"])
+        if command == "tags audit":
             _print_tags_audit(result["data"])
         else:
             _print_inspection(
                 result["data"], truncate=args.truncate, verb=args.inspect_command
             )
         return int(ExitCode.OK)
+
+    if args.json and command in RESULT_ENVELOPE_COMMANDS:
+        return emit_success(success_data(result))
 
     emit_output(result, args.json, truncate=args.truncate)
     if result.get("failed_policy"):

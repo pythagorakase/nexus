@@ -182,7 +182,8 @@ def test_json_status_reports_resolved_runtime_environment_config(
     assert cli.main() == 0
 
     result = json.loads(capsys.readouterr().out)
-    assert result["config"] == str(runtime_config.resolve())
+    assert result["ok"] is True
+    assert result["data"]["config"] == str(runtime_config.resolve())
 
 
 # ---------------------------------------------------------------------------
@@ -1035,7 +1036,9 @@ def _json_status(
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
     monkeypatch.setattr(sys, "argv", ["nexus", "--json", "status"])
     assert cli.main() == 0
-    return cast(dict[str, Any], json.loads(capsys.readouterr().out))
+    envelope = json.loads(capsys.readouterr().out)
+    assert envelope["ok"] is True
+    return cast(dict[str, Any], envelope["data"])
 
 
 def test_status_reports_each_services_log_writer(

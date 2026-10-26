@@ -222,9 +222,11 @@ def _read_usage(repo_root: Path, day: str | None = None) -> dict[str, Any]:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
         raise ShiftError("`nexus usage --json` returned invalid JSON") from exc
-    if payload.get("success") is not True:
-        raise ShiftError(f"`nexus usage --json` reported failure: {payload}")
-    return payload
+    if payload.get("ok") is not True or not isinstance(payload.get("data"), dict):
+        raise ShiftError(
+            f"`nexus usage --json` did not print a success envelope: {payload}"
+        )
+    return payload["data"]
 
 
 def _read_jobs(repo_root: Path, slot: int) -> dict[str, Any]:

@@ -53,11 +53,13 @@ refused, 4 API unreachable. Every ``--json`` failure prints
 :func:`error_envelope` on stderr, argparse's rejection of the command line
 included (``nexus.cli.CliArgumentParser``): ``ok`` false, a stable ``code``
 from :data:`ERROR_CODES`, the ``error`` message string earlier releases
-printed, and ``partial``, every non-empty field of the failed result. A
-refused connection, a timeout, an unusable API URL, and a missing or refused
-runtime credential propagate from the HTTP handlers to ``nexus.cli.main()``,
-so every HTTP command reports them alike. An API answer the command cannot
-use propagates to ``main()`` from the play and slot handlers (``load``,
+printed, and ``partial``, every non-empty field of the failed result (a
+failing ``doctor``, ``init`` or ``receipts`` report is passed whole, empty
+fields included). A refused connection, a timeout, an unusable API URL, and
+a missing or refused runtime credential propagate from the HTTP handlers to
+``nexus.cli.main()``, so every HTTP command reports them alike. An API
+answer the command cannot use propagates to ``main()`` from the play and slot
+handlers (``load``,
 ``continue``, ``retry``, ``accept``, ``undo``, ``regenerate``, ``clear``,
 ``lock``, ``unlock``, ``model --set``/``--clear``) and the ``inspect`` verbs,
 which report it alike: a non-2xx answer is ``api_error`` (``inspect`` reports a
@@ -72,13 +74,17 @@ work and its recovery command: as ``api_unreachable`` when the gateway
 refused or dropped the connection (``nexus.cli.wait_for_session`` never
 retries a failed status read), as ``api_error`` for a non-2xx answer, as
 ``config_error`` for an access rejection, otherwise as a domain failure. JSON-first
-commands (:data:`ENVELOPE_COMMANDS`) print :func:`success_envelope` on stdout;
-other commands keep their established success payloads. One exception is
-kept for existing consumers: a policy gate (``trait-audit
---fail-on-remainders``) prints its full success-shaped report, with
-``failed_policy`` true, and exits 1. Expected failures (unreachable API,
-refusals, bad arguments, missing or invalid configuration, domain errors) are
-reported through the envelope; a traceback means a programming fault.
+commands (:data:`ENVELOPE_COMMANDS`) print :func:`success_envelope` of their
+``data`` on stdout. The commands ruling 43 has moved
+(:data:`RESULT_ENVELOPE_COMMANDS`) print it of :func:`success_data`, and a
+failing ``doctor`` or ``init`` report is the failure envelope with the report
+as ``partial``. The commands not moved yet keep their established success
+payloads until the later #815 slices. One exception is kept for existing
+consumers: a policy gate (``trait-audit --fail-on-remainders``) prints its
+full success-shaped report, with ``failed_policy`` true, and exits 1.
+Expected failures (unreachable API, refusals, bad arguments, missing or invalid
+configuration, domain errors) are reported through the envelope; a traceback
+means a programming fault.
 """
 
 from __future__ import annotations
@@ -210,6 +216,29 @@ ENVELOPE_COMMANDS: FrozenSet[str] = frozenset(
     }
 )
 
+# Commands moved by ruling 43 (#815): their --json success is
+# success_envelope(success_data(result)); doctor, init and receipts print it
+# themselves through nexus.cli.emit_success.
+RESULT_ENVELOPE_COMMANDS: FrozenSet[str] = frozenset(
+    {
+        "up",
+        "down",
+        "restart",
+        "status",
+        "logs",
+        "home",
+        "usage",
+        "window-replay",
+        "models lock",
+        "models verify",
+        "models plan",
+        "models fetch",
+        "doctor",
+        "init",
+        "receipts",
+    }
+)
+
 # Commands that diagnose this machine's configuration and role themselves:
 # main() dispatches them without loading the configuration or applying the
 # remote refusal, so a broken nexus.toml never stops them before they run.
@@ -302,6 +331,19 @@ def error_envelope(
 def success_envelope(data: Any) -> Dict[str, Any]:
     """Build the ``--json`` success envelope of a JSON-first command."""
     return {"ok": True, "data": data}
+
+
+def success_data(result: Mapping[str, Any]) -> Dict[str, Any]:
+    """The `data` of a moved command's success envelope: the handler's result
+    without its `success` key (Decision 815-D4). Raises ValueError for a result
+    whose `success` is not True.
+    """
+    if "success" in result and result["success"] is not True:
+        raise ValueError(
+            f"success_data() takes a successful result; success is "
+            f"{result['success']!r}"
+        )
+    return {key: value for key, value in result.items() if key != "success"}
 
 
 def _subparsers(parser: argparse.ArgumentParser) -> Optional[argparse.Action]:

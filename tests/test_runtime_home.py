@@ -733,7 +733,7 @@ def test_home_plan_progress_only_on_a_terminal_and_never_with_json(
         terminal_error = b"".join(chunks).decode()
         if json_mode:
             assert terminal_error == ""
-            plan = json.loads(pipe.stdout)["home_plan"]
+            plan = json.loads(pipe.stdout)["data"]["home_plan"]
             count = sum(entry["status"] != "missing" for entry in plan["entries"])
         else:
             assert "\r" in terminal_error and terminal_error.endswith("\n")
@@ -935,7 +935,7 @@ def test_home_plan_cli_is_read_only_and_deterministic(
     assert _tree_snapshot(tmp_path) == before
     assert not target.exists()
     assert [path.exists() for path in checkout_layout] == layout_before
-    plan = cast(Dict[str, Any], json.loads(outputs[0])["home_plan"])
+    plan = cast(Dict[str, Any], json.loads(outputs[0])["data"]["home_plan"])
     by_current = {entry["current"]: entry for entry in plan["entries"]}
     # Absolute configured directories outside the checkout stay put: the
     # model store as well as the state directory.
