@@ -4,8 +4,9 @@ The trigger is the sole author of ``chunk_metadata.slug`` (Decision 1069-D3).
 It keeps the legacy ``SxxEyy_zzz`` output for every in-range value and raises
 ``numeric_value_out_of_range`` naming the chunk, the part, its value and its
 bound when season or episode leaves 0..99 or scene leaves 0..999 (Decision
-1069-D4), so it never writes ``#``. Every case owns a template clone
-(``qa640_1069_*``); tables: chunk_metadata, narrative_chunks, incubator,
+1069-D4), so it never writes ``#``. The module owns one template clone
+(``qa640_1069_slug_*``) and the production-commit test owns its own
+(``qa640_1069_commit_*``); tables: chunk_metadata, narrative_chunks, incubator,
 memory_idf_documents, memory_idf_corpora and schema_migrations.
 """
 
