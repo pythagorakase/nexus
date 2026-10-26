@@ -199,7 +199,7 @@ class RunExecutor:
             settings=memnon_settings,
             retrieval_settings=retrieval_settings,
         )
-        query_analyzer = QueryAnalyzer(settings=memnon_settings)
+        query_analyzer = QueryAnalyzer(db_url=self.db_url, settings=memnon_settings)
 
         return search_manager, query_analyzer
 
