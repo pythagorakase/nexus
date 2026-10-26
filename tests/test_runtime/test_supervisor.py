@@ -1006,6 +1006,7 @@ def test_check_children_stops_a_service_whose_writer_died(tmp_path: Path) -> Non
         tmp_path, max_bytes=1000, backup_count=2, stop_grace_seconds=1
     )
     pid, writer_pid = _spawn_sleeper_record(supervisor, detached=False)
+    reaped = False
     try:
         os.kill(writer_pid, signal.SIGKILL)
         _reap_quietly(writer_pid)
@@ -1018,12 +1019,42 @@ def test_check_children_stops_a_service_whose_writer_died(tmp_path: Path) -> Non
         with pytest.raises(RuntimeError_) as raised:
             supervisor._check_children(services, 5, {}, echo=False)
         assert str(raised.value) == expected
-        _, status = os.waitpid(pid, 0)
-        assert os.WIFSIGNALED(status)
+        # _stop_pid reaped its own child (#842).
+        with pytest.raises(ChildProcessError):
+            os.waitpid(pid, os.WNOHANG)
+        reaped = True
         assert not supervisor._pidfile("echo").exists()
     finally:
-        _kill_quietly(pid)
-        _reap_quietly(pid)
+        if not reaped:
+            _kill_quietly(pid)
+            _reap_quietly(pid)
+
+
+def test_stop_pid_reaps_its_own_child_inside_the_grace(tmp_path: Path) -> None:
+    """A child that exits on SIGTERM ends the wait at once and is reaped (#842)."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=2, stop_grace_seconds=5
+    )
+    service = supervisor.runtime.services["echo"]
+    service.command = list(SLEEPER_COMMAND)
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=True)
+    reaped = False
+    writer_reaped = False
+    try:
+        started = time.monotonic()
+        supervisor._stop_pid(pid)
+        elapsed = time.monotonic() - started
+        assert elapsed < 2, elapsed
+        with pytest.raises(ChildProcessError):
+            os.waitpid(pid, os.WNOHANG)
+        reaped = True
+        supervisor._await_writer("echo", writer_pid)
+        writer_reaped = True
+    finally:
+        for child, done in ((pid, reaped), (writer_pid, writer_reaped)):
+            if not done:
+                _kill_quietly(child)
+                _reap_quietly(child)
 
 
 def _json_status(

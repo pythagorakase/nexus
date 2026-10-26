@@ -1006,14 +1006,20 @@ class Supervisor:
             return False
 
     def _stop_pid(self, pid: int) -> None:
+        """Stop ``pid``: SIGTERM, then SIGKILL after ``stop_grace_seconds``.
+
+        Liveness uses ``process_running``, which reaps an exited child of this
+        process, so a child that exits on SIGTERM ends the wait at once and leaves
+        no zombie (#842). Any other pid is probed with ``pid_alive``.
+        """
         grace = self.runtime.health.stop_grace_seconds
-        if not _pid_alive(pid):
+        if not process_running(pid):
             return
         _signal_pid(pid, signal.SIGTERM)
         deadline = time.monotonic() + grace
-        while _pid_alive(pid) and time.monotonic() < deadline:
+        while process_running(pid) and time.monotonic() < deadline:
             time.sleep(0.1)
-        if _pid_alive(pid):
+        if process_running(pid):
             kill_sig = signal.SIGKILL if os.name == "posix" else signal.SIGTERM
             _signal_pid(pid, kill_sig)
             time.sleep(0.2)
