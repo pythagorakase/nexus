@@ -21,7 +21,9 @@ commit-1 test run and the readiness timings, printed:
 | `ded7980f` (1) | Six behavioral tests in `tests/test_reachability.py` only |
 | `fa00557f` (2) | `namespace_parents` set and the membership test |
 | `a34cf1f5` (3) | `scaling_benchmark.py` only; every measurement below that names commit 3 |
-| (4) | This file |
+| `2ea85e2e` (4) | This file |
+| `dc8da9af` (5) | Review fix, round 1: the order's remaining cited lines in this file (docs only) |
+| (6) | Review fix, round 2: this table and the final-branch tails below (docs only) |
 
 `git merge origin/main` after commit 3 printed `Already up to date.`
 (`origin/main` = `c7ae2988d07b443f627a04d3a4eed1816b1cd438`, rechecked before
@@ -301,7 +303,14 @@ After:
 }
 ```
 
-## Final Test Tails (Branch at Commit 3, Merged With `origin/main`)
+## Test Tails at Commit 3 (`a34cf1f5`, Merged With `origin/main`)
+
+Commits 4 to 6 change only
+`docs/qa/1129-reachability-namespace-index/verification.md`
+(`git diff --name-only a34cf1f5 dc8da9af` prints only that path), so these
+commit-3 tails stand for the final branch's code and tests. The front-matter
+and reachability runs on the final branch, which also cover this file, are under
+Final-Branch Tails below.
 
 `PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_reachability.py`:
 
@@ -348,6 +357,29 @@ receipt isolation: checkout and user receipts untouched
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 66 passed, 5 warnings in 6.29s
+```
+
+## Final-Branch Tails (Commit 6)
+
+Run on the working tree that became commit 6: `dc8da9af` plus this file's
+round-2 edits, with this file's final text in place except these two tails.
+`origin/main` was still `c7ae2988` (`git merge origin/main` not needed;
+`git log HEAD..origin/main` empty).
+
+`PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+66 passed, 5 warnings in 5.57s
+```
+
+`PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_reachability.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+60 passed, 5 warnings in 9.08s
 ```
 
 ## Static Checks
