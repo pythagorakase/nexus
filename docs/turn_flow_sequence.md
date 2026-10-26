@@ -294,6 +294,10 @@ lock by file list, size and revision, and refuses startup on drift. A process
 marked `NEXUS_TEST_PROVIDER_ONLY=1` skips this boot check; full sha256 checks run
 through `nexus models verify` and the doctor's `models.artifacts` check.
 
+Registry tokenizers are outside the boot check: the doctor's models.artifacts
+check fails while one is not cached at its pinned revision, and the first
+counted turn on that model fails naming nexus models fetch.
+
 A gateway started with `NEXUS_SLOT` runs one `SlotScheduler`
 (`nexus/jobs/scheduler.py`) for that slot. It holds the durable
 `deferred_work_scheduler` lease, observes locked slots without draining them,

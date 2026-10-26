@@ -89,7 +89,11 @@ when an unlisted file appears, when the folder records a revision other than
 the locked one, or when the configured embedder, reranker, repository, or
 dimensions no longer match the lock. Its remediation names
 `hf download <repo> --revision <commit> --local-dir <path>` for a changed
-artifact and re-running `nexus models lock` after an intentional upgrade. A
+artifact and re-running `nexus models lock` after an intentional upgrade.
+It also fails when a registry tokenizer is not in the Hugging Face cache at its
+pinned `tokenizer_revision` (remedy: `nexus models fetch`) or when a tokenizer
+pin in `nexus.toml` differs from the lock's `tokenizers` section (remedy:
+re-run `nexus models lock`). A
 lock that is absent, truncated, holds merge-conflict markers, or lacks the
 expected fields fails the same way (exit 1, and valid JSON under `--json`)
 with `nexus models lock` as the remedy.
@@ -99,7 +103,8 @@ them first (on macOS, `dot_clean -m <path>`).
 Neither command downloads anything, and startup does not run `verify`.
 
 The lock is committed: `config/model_artifacts.lock.json` records the
-production embedder and reranker as they sit on the owner's host, and
+production embedder and reranker as they sit on the owner's host, and the
+pinned repository and revision of every registry tokenizer, and
 `tests/test_model_artifact_lock_committed.py` fails when `nexus.toml` names a
 different active embedder, reranker, repository, or embedder dimension than
 the lock does. `nexus models verify` then checks, read-only, that every locked
@@ -112,9 +117,11 @@ embedding job, and the operator scripts
 `query_narratives_vector.py` and `regenerate_embeddings.py`) and both
 rerankers. An artifact with missing files therefore fails to load rather than
 being repaired from the Hub; a modified or extra file still loads, and only
-`nexus models verify` catches it. The prompt-window tokenizer in
-`nexus/telemetry/prompt_window.py` is not a retrieval artifact and is outside
-this rule.
+`nexus models verify` catches it. The prompt-window tokenizers of the model
+registry follow the same rule: each pins `tokenizer_revision` in `nexus.toml`,
+loads with `local_files_only=True` from the Hugging Face cache, and is
+downloaded only by `nexus models fetch`. A `nexus home` move does not carry that
+cache; `nexus models fetch` rebuilds it on any host.
 
 ## Database Storage Strategy
 

@@ -542,9 +542,11 @@ Available models:
 
 ### `models` — Lock, Verify, Plan, or Fetch Model Artifacts
 
-Manages the configured production embedder and reranker files (not the LLM
-that `model` selects). All four verbs use the `local_operator` transport and
-accept `--config`; they operate on this runtime host.
+Manages the configured production embedder and reranker files and the
+registry tokenizers, the prompt-window tokenizer of every model registry entry
+that declares `tokenizer_repository` (not the LLM that `model` selects). All
+four verbs use the `local_operator` transport and accept `--config`; they
+operate on this runtime host.
 
 ```bash
 # Hash the local artifacts and write [memnon.artifacts].lock_file
@@ -560,15 +562,19 @@ poetry run nexus models plan
 poetry run nexus models fetch
 ```
 
-`plan` reports each artifact as present, absent, drifted, or unpinned. It does
-not hash or download. `fetch` verifies every existing folder before starting
-any download and refuses if one differs from the lock, the configuration
-differs from the lock, or a missing artifact has no pinned repository and
-revision. It never replaces an existing folder: move a drifted folder aside,
-then run `nexus models fetch` again. A failed download may leave a partial
-folder; nothing is removed, and that folder must also be moved aside before
-retrying. Fetch never rewrites the lock. Only `lock` records an intentional
-artifact upgrade.
+`plan` reports each artifact as present, absent, drifted, or unpinned, and each
+registry tokenizer as present or absent in the Hugging Face cache. It does not
+hash or download. `fetch` first downloads absent registry tokenizers into the
+Hugging Face cache, whatever the embedder's state. It then verifies every
+existing artifact folder before it downloads any artifact, and refuses the
+artifacts if one folder differs from the lock, the configuration differs from
+the lock, or a missing artifact has no pinned repository and revision. It never
+replaces an existing folder: move a drifted folder aside, then run
+`nexus models fetch` again. A failed download may leave a partial folder;
+nothing is removed, and that folder must also be moved aside before retrying.
+Fetch never rewrites the lock. Only `lock` records an intentional artifact
+upgrade. The lock also records each registry tokenizer's repository and pinned
+`tokenizer_revision`.
 
 See `docs/vector_embeddings.md` for what the lock records.
 

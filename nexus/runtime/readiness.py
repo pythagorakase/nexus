@@ -1090,24 +1090,36 @@ def _check_log_writers(ctx: ReadinessContext) -> Outcome:
 
 
 def _check_model_artifacts(ctx: ReadinessContext) -> Outcome:
-    """Verify the production artifacts against their lock, including sha256."""
+    """Verify the production artifacts against their lock, including sha256.
+
+    Every registry tokenizer must also be cached at its pinned revision
+    (Decision 1126-D4): boot does not check tokenizers, so this check does.
+    """
     from nexus.agents.memnon.utils.artifact_manifest import (
         ArtifactLockError,
         verify_artifacts,
+        verify_tokenizers,
     )
 
+    settings = ctx.require_settings()
     try:
-        check = verify_artifacts(ctx.require_settings(), hash_files=True)
+        check = verify_artifacts(settings, hash_files=True)
+        tokenizer_check = verify_tokenizers(settings, check.manifest)
     except (
         ArtifactLockError
     ) as exc:  # nexus-exception-disposition: fail; reason=lock; safety=failed check
         return _failed(one_line(exc), "Run nexus models verify for the full report.")
-    if not check.report.ok:
+    reports = (check.report, tokenizer_check.report)
+    if not all(report.ok for report in reports):
         return _failed(
-            "; ".join(check.report.problems), " ".join(check.report.remediation)
+            "; ".join(problem for report in reports for problem in report.problems),
+            " ".join(step for report in reports for step in report.remediation),
         )
     verified = ", ".join(f"{spec.role} {spec.name}" for spec in check.specs)
-    return _passed(f"{verified} match {check.lock_path} (sha256)")
+    return _passed(
+        f"{len(tokenizer_check.specs)} pinned tokenizer(s) cached; "
+        f"{verified} match {check.lock_path} (sha256)"
+    )
 
 
 # ---------------------------------------------------------------------------

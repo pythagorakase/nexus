@@ -1,0 +1,42 @@
+"""Issue #1126 manual proof: each pinned tokenizer counts one fixed sentence the
+same from the fresh HF_HOME (argv[1], offline) as from the default cache."""
+
+import json
+import os
+import subprocess
+import sys
+
+SENTENCE = "The quick brown fox jumps over the lazy dog; <|endoftext|> stays text."
+CODE = """import json, sys
+from nexus.config import load_settings
+from nexus.telemetry.prompt_window import local_text_counter
+settings = load_settings()
+out = {}
+for provider in settings.global_.model.api_models.values():
+    for entry in provider.models:
+        if entry.tokenizer_repository:
+            out[entry.id] = [entry.tokenizer_repository, entry.tokenizer_revision, local_text_counter(entry)(sys.argv[1])]
+print(json.dumps(out))
+"""
+
+
+def counts(hf_home):
+    env = {**os.environ, "HF_HUB_OFFLINE": "1"}
+    env.pop("HF_HOME", None)
+    if hf_home:
+        env["HF_HOME"] = hf_home
+    result = subprocess.run(
+        [sys.executable, "-c", CODE, SENTENCE],
+        env=env, capture_output=True, text=True, check=True, timeout=300,
+    )
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+fresh = counts(sys.argv[1])
+default = counts(None)
+print("sentence:", json.dumps(SENTENCE))
+for model_id in fresh:
+    repo, revision, count = fresh[model_id]
+    print(f"{model_id}: {repo} @ {revision}: fresh HF_HOME {count}, default cache {default[model_id][2]}, equal={count == default[model_id][2]}")
+assert fresh == default, (fresh, default)
+print("all five counts equal")

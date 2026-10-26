@@ -1,0 +1,31 @@
+--- a/nexus/agents/memnon/utils/artifact_manifest.py
++++ b/nexus/agents/memnon/utils/artifact_manifest.py
+@@ -662,11 +662,6 @@
+             f"{path} is malformed: every entry in `artifacts` needs a role and a "
+             "`files` list of path, size and sha256. Re-run `nexus models lock`."
+         )
+-    if "tokenizers" in manifest and not _well_formed_tokenizers(manifest["tokenizers"]):
+-        raise ArtifactLockError(
+-            f"{path} is malformed: `tokenizers` must list objects with a string "
+-            "repo_id and revision. Re-run `nexus models lock`."
+-        )
+     return manifest
+ 
+ 
+@@ -882,14 +877,8 @@
+     problems: List[str] = []
+     remediation: List[str] = []
+     config_problems: List[str] = []
+-    locked_entries = manifest.get("tokenizers")
+-    if locked_entries is None:
+-        config_problems.append(
+-            "the lock records no tokenizers; re-run nexus models lock and commit "
+-            "the lock"
+-        )
+-        remediation.append(_RELOCK_REMEDY)
+-    else:
++    locked_entries = manifest.get("tokenizers", [])
++    if True:
+         locked = [(entry["repo_id"], entry["revision"]) for entry in locked_entries]
+         configured = {(spec.repo_id, spec.revision) for spec in specs}
+         config_problems.extend(
