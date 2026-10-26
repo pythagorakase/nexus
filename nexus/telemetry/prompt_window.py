@@ -111,6 +111,14 @@ def estimate_request_tokens(model_id: str, request: dict[str, Any]) -> int:
 
 
 def _tokenizer_error(entry: APIModelEntry, cause: object) -> str:
+    from nexus.agents.memnon.utils.artifact_manifest import TokenizerNotCachedError
+
+    if isinstance(cause, TokenizerNotCachedError):
+        return (
+            f"Model {entry.id!r}: tokenizer_repository {entry.tokenizer_repository!r} "
+            f"at tokenizer_revision {entry.tokenizer_revision!r} is not in the local "
+            "Hugging Face cache. Run `nexus models fetch` to download it."
+        )
     return (
         f"Model {entry.id!r}: cannot load tokenizer_repository "
         f"{entry.tokenizer_repository!r} with trust_remote_code=False. "
@@ -130,10 +138,7 @@ def local_text_counter(entry: APIModelEntry) -> Callable[[str], int]:
             lambda text: len(tokenizer.encode(text, disallowed_special=()))
         )
     if entry.tokenizer_repository:
-        try:
-            tokenizer = _load_tokenizer(entry.tokenizer_repository)
-        except Exception as exc:
-            raise ValueError(_tokenizer_error(entry, exc)) from exc
+        tokenizer = _entry_tokenizer(entry)
         return lru_cache(maxsize=None)(
             lambda text: len(tokenizer.encode(text, add_special_tokens=False))
         )
@@ -160,7 +165,7 @@ def local_request_counter(
         if schema:
             overhead += text_count(json.dumps(schema, ensure_ascii=False))
         if entry.tokenizer_repository:
-            tokenizer = _load_tokenizer(entry.tokenizer_repository)
+            tokenizer = _entry_tokenizer(entry)
             messages = [{"role": "user", "content": ""}]
             if provider.system_prompt:
                 messages.insert(
@@ -329,7 +334,7 @@ def rendered_request_counter(
             text_format=text_format,
             anthropic_request=anthropic_request,
         )
-    tokenizer = _load_tokenizer(entry.tokenizer_repository)
+    tokenizer = _entry_tokenizer(entry)
 
     def count_local(prompt: str) -> int:
         messages = [{"role": "user", "content": prompt}]
@@ -345,11 +350,40 @@ def rendered_request_counter(
 
 
 @lru_cache(maxsize=None)
-def _load_tokenizer(repository: str) -> Any:
-    """Load the model owner's tokenizer without loading inference weights."""
+def _load_tokenizer(repository: str, revision: str) -> Any:
+    """Load the pinned tokenizer from the Hugging Face cache, never the network.
+
+    ``nexus models fetch`` is the only download path (issue #1126); the
+    revision is part of the cache key, so two pins never share a tokenizer.
+
+    Raises:
+        TokenizerNotCachedError: When the pin is not in the cache.
+    """
+    from nexus.agents.memnon.utils.artifact_manifest import (
+        TokenizerNotCachedError,
+        tokenizer_cached,
+    )
+
+    if not tokenizer_cached(repository, revision):
+        raise TokenizerNotCachedError(
+            f"{repository} @ {revision} is not in the Hugging Face cache"
+        )
     from transformers import AutoTokenizer
 
-    return AutoTokenizer.from_pretrained(repository, trust_remote_code=False)
+    return AutoTokenizer.from_pretrained(
+        repository,
+        revision=revision,
+        local_files_only=True,
+        trust_remote_code=False,
+    )
+
+
+def _entry_tokenizer(entry: APIModelEntry) -> Any:
+    """Load an entry's pinned tokenizer, naming the entry when it cannot load."""
+    try:
+        return _load_tokenizer(entry.tokenizer_repository, entry.tokenizer_revision)
+    except Exception as exc:
+        raise ValueError(_tokenizer_error(entry, exc)) from exc
 
 
 def measure_blocks(

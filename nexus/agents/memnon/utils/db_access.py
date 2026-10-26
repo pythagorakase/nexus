@@ -607,6 +607,10 @@ def execute_multi_model_hybrid_search(
 
             if not text_rows:
                 logger.info(
+                    "Text search using websearch_to_tsquery fallback (%d chars)",
+                    len(query_text),
+                )
+                logger.debug(
                     f"Text search using websearch_to_tsquery fallback: '{query_text}'"
                 )
                 cursor.execute(

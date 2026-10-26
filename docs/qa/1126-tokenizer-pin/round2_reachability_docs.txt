@@ -1,0 +1,21 @@
+# on d875e7d5283fcfad3407e859955cf4a5ab0a7b11; 17:34  up  6:12, 5 users, load averages: 14.16 18.42 19.06
+$ $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tests/test_cli_reference_doc.py
+........................................................................ [ 55%]
+..........................................................               [100%]
+=============================== warnings summary ===============================
+tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports
+tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports
+tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_reachability.py::test_static_graph_follows_relative_namespace_and_literal_dynamic_imports
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+130 passed, 5 warnings in 17.22s

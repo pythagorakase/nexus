@@ -1,0 +1,9 @@
+$ PYTHONPATH=$PWD $PY -c 'import json; from pathlib import Path; from nexus.agents.memnon.utils.artifact_manifest import _lock_summary; p = Path("config/model_artifacts.lock.json"); print(_lock_summary(json.loads(p.read_text()), p))'
+Locked 2 artifact(s) and 5 tokenizer(s) in config/model_artifacts.lock.json:
+  embedder Octen-Embedding-4B: Octen/Octen-Embedding-4B @ fea468fae3f0caffbae8a12ba792d1c394b6277d (git), 2560d, 18 files, 7686.2 MiB
+  reranker deberta-v3-trecdl22: naver/trecdl22-crossencoder-debertav3 @ 24f6a61d11707432d5780a1d5cf4e3af25cfaddb (huggingface), 10 files, 1662.1 MiB
+  tokenizer MiniMaxAI/Minimax-M3 @ f0e1c1e04d40177e4673a22097036854f536e9c0
+  tokenizer NousResearch/Hermes-4-405B @ 88e3dce03c4a5535e2f4a2bcc08e939a2b302f82
+  tokenizer NousResearch/Hermes-4-70B @ d5dec2bd6b3930a09ddefd0b7fc6523fe0720d09
+  tokenizer NousResearch/Hermes-4.3-36B @ 3899db2b6c4b35f16bde3b570bb7dd2775d56161
+  tokenizer deepseek-ai/DeepSeek-V4-Pro @ b5968e9190ef611bbf34a7229255be88a0e937c1

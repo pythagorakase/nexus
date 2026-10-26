@@ -1,0 +1,26 @@
+#!/bin/zsh
+# Red run: the 13 new #1126 tests against origin/main c7ae2988 product code.
+# The export is `git archive origin/main | tar -x -C main_export`, with the
+# branch's tests/test_lore/test_token_estimator.py,
+# tests/test_embedding_artifacts.py and
+# tests/test_model_artifact_lock_committed.py copied in. The export is not a
+# git checkout, so the nexus/ tree is indexed (no commit) for the test that
+# lists tracked files with `git ls-files`.
+cd "${0:A:h}/main_export"
+[ -d .git ] || { git init -q && git add nexus; }
+PY=/Users/pythagor/nexus/.venv/bin/python
+set -x
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rf -p no:cacheprovider \
+  'tests/test_lore/test_token_estimator.py::test_settings_require_a_pinned_tokenizer_revision[unpinned]' \
+  'tests/test_lore/test_token_estimator.py::test_settings_require_a_pinned_tokenizer_revision[branch]' \
+  'tests/test_lore/test_token_estimator.py::test_settings_require_a_pinned_tokenizer_revision[encoding]' \
+  tests/test_lore/test_token_estimator.py::test_first_use_on_an_empty_hf_cache_names_the_fetch_command \
+  tests/test_lore/test_token_estimator.py::test_commit_probe_names_an_unfetchable_pin \
+  tests/test_lore/test_token_estimator.py::test_commit_probe_accepts_a_cached_pin \
+  tests/test_lore/test_token_estimator.py::test_every_tracked_from_pretrained_call_is_local_only \
+  tests/test_lore/test_token_estimator.py::test_window_counter_cache_keys_on_the_revision \
+  tests/test_embedding_artifacts.py::test_tokenizer_section_reports_absent_then_present \
+  tests/test_embedding_artifacts.py::test_fetch_handles_tokenizers_when_the_embedder_drifts \
+  tests/test_embedding_artifacts.py::test_tokenizer_pin_drift_is_a_configuration_problem \
+  tests/test_embedding_artifacts.py::test_boot_check_ignores_tokenizers \
+  tests/test_model_artifact_lock_committed.py::test_committed_lock_pins_every_registry_tokenizer

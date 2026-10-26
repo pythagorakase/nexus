@@ -54,7 +54,7 @@ sources:
   - nexus/agents/memnon/utils/source_embeddings.py
   - nexus/agents/orrery/job_queues.py
   - ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx
-verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
+verified_commit: "9a0714d7671457d47f91bfbd76749fee4444c686"
 ---
 
 # The Turn Cycle
@@ -267,8 +267,9 @@ one transaction:
 4. Inserts the `narrative_chunks` row (prose plus the enacted choice), marks
    the session accepted, persists the Pass-1 baseline to `lore_pass_baselines`,
    and stores both private letters.
-5. Inserts `chunk_metadata` with its `SxxEyy_zzz` slug and reads back the
-   accepting chunk's world clock.
+5. Inserts `chunk_metadata`, whose `set_chunk_slug()` trigger authors the
+   `SxxEyy_zzz` slug and refuses a season or episode above 99, a scene above
+   999 or a negative part, and reads back the accepting chunk's world clock.
 6. Applies name reveals. New-entity declarations create stubs and enqueue
    Retrograde maturation jobs.
 7. Resolves character, place, and faction references, reconciles roster
@@ -293,6 +294,10 @@ Before starting its scheduler, the gateway checks the production model artifact
 lock by file list, size and revision, and refuses startup on drift. A process
 marked `NEXUS_TEST_PROVIDER_ONLY=1` skips this boot check; full sha256 checks run
 through `nexus models verify` and the doctor's `models.artifacts` check.
+
+Registry tokenizers are outside the boot check: the doctor's models.artifacts
+check fails while one is not cached at its pinned revision, and the first
+counted turn on that model fails naming nexus models fetch.
 
 A gateway started with `NEXUS_SLOT` runs one `SlotScheduler`
 (`nexus/jobs/scheduler.py`) for that slot. It holds the durable

@@ -71,10 +71,6 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
         "\nNEXUS Anthropic API Library\n\nThis module provides reusable components for Anthropic Claude API access\nacross NEXUS scripts.\nIt centralizes common functionality to maintain consistency and avoid code duplication.\n\nFeatures:\n- Support for Claude models (standard, Sonnet, Opus, Haiku, etc.)\n- Token counting and management\n- Rate limiting protection\n- Error handling and retries\n- Support for Claude's reasoning capabilities via system prompts\n\nThis file is designed to be imported by other scripts rather than used directly.\n\nCommon Arguments for Scripts Using This Library:\n--------------------------------------------\nLLM Provider Options:\n    --model MODEL           Model name to use (defaults to DEFAULT_MODEL)\n    --api-key KEY           API key (optional, tries environment variables by default)\n    --temperature FLOAT     Model temperature (0.0-1.0, default: API default)\n    --max-tokens INT        Maximum tokens to generate in response (default: 4000)\n    --system-prompt TEXT    Optional system prompt to use\n    --top-p FLOAT           Top-p sampling parameter (0.0-1.0, default None)\n    --top-k INT             Top-k sampling parameter (default None)\n    --timeout INT           Request timeout in seconds (default: 120)\n\nProcessing Options:\n    --batch-size INT        Number of items processed before confirmation (default: 10)\n    --dry-run               Don't actually save results to the database\n    --db-url URL            Database URL (optional, defaults to environment variables)\n",
     ): "Developer API documentation describing the function or module, not model instructions.",
     (
-        "scripts/estimate_time_delta.py",
-        "\n    Get all chunks with missing or zero time_delta values.\n\n    Args:\n        db: Database engine\n        primary_only: If True, return only chunks with world_layer='primary'\n    ",
-    ): "Developer API documentation describing the function or module, not model instructions.",
-    (
         "nexus/agents/lore/logon_utility.py",
         "Anthropic two-pass execution cannot use anthropic_storyteller_transport='native': the gaia wire cannot compile under Anthropic native enforcement (probe G2b, issue #566). Choose 'prompted' or 'tool_envelope' for the gaia.",
     ): "Application configuration or routing diagnostic for the operator or API client.",
@@ -255,10 +251,6 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
         "Use a manually curated context file (JSON) instead of querying the database.",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
     (
-        "scripts/estimate_time_delta.py",
-        "Write results to database",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
         "scripts/faction_relationship_analyst.py",
         "Generate faction relationship data using OpenAI o3",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
@@ -269,38 +261,6 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
     (
         "scripts/generate_octen_embeddings.py",
         "Generate Octen embeddings for MEMNON",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/map_builder_legacy.py",
-        "Choose option [1-2]: ",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/map_builder_legacy.py",
-        "Choose option []: ",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/map_builder_legacy.py",
-        "Choose option [1-3, q]: ",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/map_builder_legacy.py",
-        "Invalid option. Please choose 1, 2, 3, or q.",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/map_builder_legacy.py",
-        "\nChoose a different location:",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/map_builder_legacy.py",
-        "Choose option [1-4, q]: ",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/process_characters.py",
-        "Choose option [1-2]: ",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/process_characters.py",
-        "Choose option [1-3]: ",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
     (
         "scripts/qa_shift/qa_shift.py",
@@ -335,10 +295,6 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
         'Output mode: "file" to save to disk, "json" to print to stdout',
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
     (
-        "scripts/simple_update.py",
-        "You may need to alter the constraint to add ON UPDATE CASCADE",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
         "nexus/jobs/summarize_narrative.py",
         "Generate comprehensive narrative summaries",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
@@ -357,10 +313,6 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
     (
         "scripts/token_counter.py",
         "\nNo files to process. Use 'python token_counter.py --help' for usage.",
-    ): "Operator-facing CLI help, input prompt, or diagnostic.",
-    (
-        "scripts/update_raw_text.py",
-        "Create a backup of the narrative_chunks table before updating (default: True)",
     ): "Operator-facing CLI help, input prompt, or diagnostic.",
 }
 

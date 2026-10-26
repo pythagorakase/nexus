@@ -193,15 +193,21 @@ def test_init_plan_matches_doctor_under_a_broken_config(
     code, output, error = _run_cli(
         monkeypatch, capsys, "doctor", "--config", str(config), "--json"
     )
-    assert code == 1
-    assert "config_error" not in error and "transport_refused" not in error
-    doctor = json.loads(output)
+    assert (code, output) == (1, "")
+    # A failing report is the failure envelope with the report as partial.
+    doctor_failure = json.loads(error)
+    assert doctor_failure["code"] == "domain_failure"
+    doctor = doctor_failure["partial"]
     code, output, error = _run_cli(
         monkeypatch, capsys, "init", "--plan", "--config", str(config), "--json"
     )
-    assert code == 1
-    assert "config_error" not in error and "transport_refused" not in error
-    plan = InitPlan.model_validate_json(output)
+    assert (code, output) == (1, "")
+    init_failure = json.loads(error)
+    assert init_failure["code"] == "domain_failure"
+    plan = InitPlan.model_validate(init_failure["partial"])
+    assert init_failure["error"] == "setup steps remain: " + ", ".join(
+        step.check_id for step in plan.steps
+    )
     failures = [check for check in doctor["checks"] if check["status"] == "fail"]
     assert [step.model_dump() for step in plan.steps] == [
         {
@@ -287,7 +293,9 @@ def test_receipts_still_runs_with_broken_config_and_remote_override(
     code, output, error = _run_cli(monkeypatch, capsys, "receipts", "--json")
     assert code == 0
     assert error == ""
-    document = json.loads(output)
+    envelope = json.loads(output)
+    assert envelope["ok"] is True
+    document = envelope["data"]
     assert document["home_dir"] == str(private_environment / "home")
     assert document["fallback_dir"] == str(private_environment / "fallback")
     assert sum(group["count"] for group in document["groups"]) == 1

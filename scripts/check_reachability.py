@@ -209,6 +209,14 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
     modules = {_module_name(path): path for path in paths}
     if len(modules) != len(paths):
         raise ValueError("Ambiguous module names in maintained/test source inventory")
+    # Every proper dotted prefix of an inventoried module name: some module
+    # starts with name + "." exactly when name is in this set.
+    namespace_parents = {
+        module[:index]
+        for module in modules
+        for index, character in enumerate(module)
+        if character == "."
+    }
     symbols = {path: _symbols(tree) for path, tree in trees.items()}
     roots: list[EntryPoint] = []
     edges: set[ImportEdge] = set()
@@ -420,7 +428,7 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
                         ".".join(self.scope) or "<module>",
                     )
                 )
-            elif any(module.startswith(name + ".") for module in modules):
+            elif name in namespace_parents:
                 # Namespace packages have no file node, but importing them still
                 # executes any regular package ancestors.
                 parts = name.split(".")[:-1]
