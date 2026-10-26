@@ -46,6 +46,8 @@ from nexus.runtime.readiness import REGISTRY, ReadinessContext, run_readiness
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
+TINY = ("nexus-test/tiny-tokenizer", COMMIT)
+TINY_LABEL = f"tokenizer {TINY[0]} @ {TINY[1]}"
 
 
 @dataclass(frozen=True)
@@ -113,6 +115,42 @@ def _embedder_files(dimensions: int) -> Dict[str, bytes]:
     }
 
 
+def _plant_hub_tokenizer(
+    hf_home: Path, repo_id: str, revision: str, *, split: bool = True
+) -> Path:
+    """Save a real word-level tokenizer where a completed fetch leaves one.
+
+    The snapshot lands at ``<hf_home>/hub/models--<repo>/snapshots/<revision>``,
+    the Hugging Face cache layout. With ``split`` a whitespace pre-tokenizer
+    splits words, so ``"hello world"`` counts 2 tokens; without it the phrase is
+    one unknown word and counts 1.
+    """
+    from tokenizers import (  # type: ignore[import-untyped]
+        Tokenizer,
+        models,
+        pre_tokenizers,
+    )
+    from transformers import PreTrainedTokenizerFast
+
+    backend = Tokenizer(
+        models.WordLevel({"[UNK]": 0, "hello": 1, "world": 2}, unk_token="[UNK]")
+    )
+    if split:
+        backend.pre_tokenizer = pre_tokenizers.Whitespace()
+    snapshot = (
+        hf_home
+        / "hub"
+        / f"models--{repo_id.replace('/', '--')}"
+        / "snapshots"
+        / revision
+    )
+    tokenizer: Any = PreTrainedTokenizerFast(
+        tokenizer_object=backend, unk_token="[UNK]"
+    )
+    tokenizer.save_pretrained(str(snapshot))
+    return snapshot
+
+
 def _hf_local_dir_metadata(
     root: Path, files: Dict[str, bytes], commit: str = COMMIT
 ) -> None:
@@ -142,8 +180,25 @@ def _write_config(
     *,
     name: str,
     dimensions: Optional[int] = None,
+    tokenizer: Optional[Tuple[str, str]] = None,
 ) -> Path:
+    """Point a copy of nexus.toml at the synthetic artifacts.
+
+    Every registry tokenizer repository becomes the ``o200k_base`` encoding, so
+    no test depends on the Hub cache; ``tokenizer`` then pins one repository
+    and revision on the entry that serves ``local_models.model``.
+    """
     document = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    registry: Any = document["global"]
+    for provider in registry["model"]["api_models"].values():
+        for entry in provider["models"]:
+            if "tokenizer_repository" in entry:
+                entry.pop("tokenizer_repository")
+                entry.pop("tokenizer_revision", None)
+                entry["tokenizer_encoding"] = "o200k_base"
+            if tokenizer is not None and "local_models.model" in entry.get("uses", []):
+                entry.pop("tokenizer_encoding", None)
+                entry["tokenizer_repository"], entry["tokenizer_revision"] = tokenizer
     memnon: Any = document["memnon"]
     embedder = memnon["models"][PRODUCTION.embedder]
     embedder["local_path"] = str(embedder_dir)
@@ -157,7 +212,9 @@ def _write_config(
     return path
 
 
-def _workspace(tmp_path: Path) -> Workspace:
+def _workspace(
+    tmp_path: Path, *, tokenizer: Optional[Tuple[str, str]] = None
+) -> Workspace:
     embedder_dir = tmp_path / "models" / "embedder"
     embedder_files = _embedder_files(PRODUCTION.dimensions)
     _write_files(embedder_dir, embedder_files)
@@ -174,7 +231,9 @@ def _workspace(tmp_path: Path) -> Workspace:
         },
     )
     lock = tmp_path / "config" / "model_artifacts.lock.json"
-    config = _write_config(tmp_path, embedder_dir, reranker_dir, lock, name="nexus")
+    config = _write_config(
+        tmp_path, embedder_dir, reranker_dir, lock, name="nexus", tokenizer=tokenizer
+    )
     return Workspace(embedder_dir, reranker_dir, config, lock)
 
 
@@ -240,6 +299,7 @@ def test_lock_records_artifacts_and_verify_passes(tmp_path: Path) -> None:
 
     embedder, reranker = manifest["artifacts"]
     assert manifest["schema_version"] == 1
+    assert manifest["tokenizers"] == []
     assert embedder["role"] == "embedder"
     assert embedder["name"] == PRODUCTION.embedder
     assert embedder["repo_id"] == PRODUCTION.embedder_repo
@@ -616,7 +676,9 @@ def _commit_checkout(root: Path, *, git_dir: Optional[Path] = None) -> str:
     return _git("rev-parse", "HEAD", cwd=root)
 
 
-def _checkout_workspace(tmp_path: Path) -> Tuple[Workspace, str]:
+def _checkout_workspace(
+    tmp_path: Path, *, tokenizer: Optional[Tuple[str, str]] = None
+) -> Tuple[Workspace, str]:
     """A workspace with a git-checkout embedder and an hf-downloaded reranker.
 
     The reranker carries ``hf download --local-dir`` metadata at ``COMMIT``.
@@ -625,7 +687,7 @@ def _checkout_workspace(tmp_path: Path) -> Tuple[Workspace, str]:
         The workspace and the embedder checkout's HEAD commit.
     """
 
-    workspace = _workspace(tmp_path)
+    workspace = _workspace(tmp_path, tokenizer=tokenizer)
     shutil.rmtree(workspace.embedder_dir / ".cache")
     head = _commit_checkout(workspace.embedder_dir)
     _hf_local_dir_metadata(
@@ -1174,3 +1236,208 @@ def test_loader_remedies_name_fetch_for_production_paths(tmp_path: Path) -> None
             f"embedder '{PRODUCTION.embedder}' again."
         )
         assert broken_embedder.value.__cause__ is not None
+
+
+def _doctor_offline(workspace: Workspace, hf_home: Path) -> Dict[str, Any]:
+    """Run the doctor's models.artifacts check in a process with ``hf_home``."""
+    code = """import sys
+from pathlib import Path
+from nexus.runtime.readiness import REGISTRY, ReadinessContext, run_readiness
+registry = [s for s in REGISTRY if s.id in {"config.valid", "models.artifacts"}]
+report = run_readiness(
+    "owner-host", ReadinessContext(config_path=Path(sys.argv[1])), registry=registry
+)
+print(report.checks[-1].model_dump_json())
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(workspace.config)],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(REPO_ROOT),
+            "HF_HUB_OFFLINE": "1",
+            "HF_HOME": str(hf_home),
+        },
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    check: Dict[str, Any] = json.loads(result.stdout.strip().splitlines()[-1])
+    assert check["id"] == "models.artifacts", check
+    return check
+
+
+def _plan_tokenizers_offline(
+    workspace: Workspace, hf_home: Path
+) -> list[Dict[str, Any]]:
+    """Return plan's structured ``tokenizers`` key from a process with ``hf_home``."""
+    code = """import json, sys
+from nexus.agents.memnon.utils.artifact_manifest import run_models_command
+print(json.dumps(run_models_command("plan", sys.argv[1])["tokenizers"]))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(workspace.config)],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(REPO_ROOT),
+            "HF_HUB_OFFLINE": "1",
+            "HF_HOME": str(hf_home),
+        },
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    entries: list[Dict[str, Any]] = json.loads(result.stdout.strip().splitlines()[-1])
+    return entries
+
+
+def test_tokenizer_section_reports_absent_then_present(tmp_path: Path) -> None:
+    """Issue #1126: plan, verify, the doctor and fetch cover a pinned tokenizer."""
+    workspace = _workspace(tmp_path, tokenizer=TINY)
+    manifest = _lock(workspace)
+    assert manifest["tokenizers"] == [{"repo_id": TINY[0], "revision": COMMIT}]
+    hf_home = tmp_path / "hf"
+    planned = {
+        "repo_id": TINY[0],
+        "revision": COMMIT,
+        "models": ["nousresearch/hermes-4-70b"],
+    }
+
+    plan = _cli_offline_models("plan", workspace, hf_home)
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+    assert f"{TINY_LABEL}: absent;" in plan.stdout
+    assert _plan_tokenizers_offline(workspace, hf_home) == [
+        {**planned, "state": "absent"}
+    ]
+    verify = _cli_offline_models("verify", workspace, hf_home)
+    assert verify.returncode == 1, verify.stdout + verify.stderr
+    assert f"{TINY_LABEL} is not in the Hugging Face cache" in verify.stderr
+    assert "Run `nexus models fetch`" in verify.stderr
+    doctor = _doctor_offline(workspace, hf_home)
+    assert doctor["status"] == "fail", doctor
+    assert f"{TINY_LABEL} is not in the Hugging Face cache" in doctor["observed"]
+    assert "Run `nexus models fetch` to download the missing tokenizers" in (
+        doctor["remediation"] or ""
+    )
+
+    _plant_hub_tokenizer(hf_home, *TINY)
+    plan = _cli_offline_models("plan", workspace, hf_home)
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+    assert f"{TINY_LABEL}: present in the Hugging Face cache" in plan.stdout
+    assert _plan_tokenizers_offline(workspace, hf_home) == [
+        {**planned, "state": "present"}
+    ]
+    verify = _cli_offline_models("verify", workspace, hf_home)
+    assert verify.returncode == 0, verify.stdout + verify.stderr
+    assert TINY_LABEL in verify.stdout
+    doctor = _doctor_offline(workspace, hf_home)
+    assert doctor["status"] == "pass", doctor
+    assert doctor["observed"].startswith("1 pinned tokenizer(s) cached; ")
+    assert doctor["observed"].endswith(f"match {workspace.lock} (sha256)")
+    fetch = _cli_offline_models("fetch", workspace, hf_home)
+    assert fetch.returncode == 0, fetch.stdout + fetch.stderr
+    assert f"{TINY_LABEL}: already cached" in fetch.stdout
+    assert "downloaded" not in fetch.stdout
+
+
+def test_fetch_handles_tokenizers_when_the_embedder_drifts(tmp_path: Path) -> None:
+    """Embedder drift never hides the tokenizer section of fetch, nor the reverse."""
+    workspace, _ = _checkout_workspace(tmp_path, tokenizer=TINY)
+    _lock(workspace)
+    _flip_byte(workspace.embedder_dir / "model.safetensors")
+    result = _cli_offline_models("fetch", workspace, tmp_path / "hf")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "sha256 differs from the lock" in result.stderr
+    assert f"{TINY_LABEL}: download failed" in result.stderr
+
+
+def test_tokenizers_survive_an_embedder_folder_that_cannot_be_read(
+    tmp_path: Path,
+) -> None:
+    """A lock error from an embedder folder never hides the tokenizer section."""
+    workspace = _workspace(tmp_path, tokenizer=TINY)
+    _lock(workspace)
+    metadata = (
+        workspace.embedder_dir / ".cache/huggingface/download/config.json.metadata"
+    )
+    metadata.write_text(f"{'6' * 40}\netag-config.json\n1758000000.0\n")
+    hf_home = tmp_path / "hf"
+    for command, tokenizer_line in (
+        ("plan", f"{TINY_LABEL}: absent;"),
+        ("fetch", f"{TINY_LABEL}: download failed"),
+        ("verify", f"{TINY_LABEL} is not in the Hugging Face cache"),
+    ):
+        result = _cli_offline_models(command, workspace, hf_home)
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "mixes files downloaded at several revisions" in result.stderr
+        assert tokenizer_line in result.stderr, result.stderr
+    assert not list(hf_home.rglob("models--*"))
+
+
+def test_tokenizer_pin_drift_is_a_configuration_problem(tmp_path: Path) -> None:
+    """A changed pin fails plan and verify by name; fetch downloads nothing."""
+    workspace = _workspace(tmp_path, tokenizer=TINY)
+    _lock(workspace)
+    moved = "3" * 40
+    _write_config(
+        tmp_path,
+        workspace.embedder_dir,
+        workspace.reranker_dir,
+        workspace.lock,
+        name="nexus",
+        tokenizer=(TINY[0], moved),
+    )
+    hf_home = tmp_path / "hf"
+    for command in ("plan", "verify"):
+        result = _cli_offline_models(command, workspace, hf_home)
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert (
+            f"tokenizer {TINY[0]} @ {moved} is configured but absent from the lock"
+        ) in result.stderr
+        assert (
+            f"the lock records tokenizer {TINY[0]} @ {COMMIT}, which nexus.toml "
+            "no longer configures"
+        ) in result.stderr
+        assert "re-run `nexus models lock`" in result.stderr
+    fetch = _cli_offline_models("fetch", workspace, hf_home)
+    assert fetch.returncode == 1, fetch.stdout + fetch.stderr
+    assert "is configured but absent from the lock" in fetch.stderr
+    assert "download failed" not in fetch.stderr
+    assert not list(hf_home.rglob("models--*"))
+
+
+def test_boot_check_ignores_tokenizers(tmp_path: Path) -> None:
+    """Decision 1126-D4: an uncached registry tokenizer never refuses boot."""
+    workspace, _ = _checkout_workspace(tmp_path, tokenizer=TINY)
+    _lock(workspace)
+    summary = check_artifacts_at_boot(load_settings(workspace.config))
+    assert "by file list, size and revision" in summary
+    assert TINY_LABEL not in summary
+
+
+@pytest.mark.parametrize("shape", ["missing", "malformed"])
+def test_lock_tokenizer_section_shape_is_enforced(tmp_path: Path, shape: str) -> None:
+    """A lock without ``tokenizers`` or with malformed entries fails by name."""
+    workspace = _workspace(tmp_path, tokenizer=TINY)
+    manifest = _lock(workspace)
+    hf_home = tmp_path / "hf"
+    if shape == "missing":
+        del manifest["tokenizers"]
+        workspace.lock.write_text(json.dumps(manifest, indent=2))
+        for command in ("plan", "verify"):
+            result = _cli_offline_models(command, workspace, hf_home)
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert "the lock records no tokenizers" in result.stderr
+        fetch = _cli_offline_models("fetch", workspace, hf_home)
+        assert fetch.returncode == 1, fetch.stdout + fetch.stderr
+        assert "the lock records no tokenizers" in fetch.stderr
+        assert not list(hf_home.rglob("models--*"))
+    else:
+        manifest["tokenizers"] = [{"repo_id": 1}]
+        workspace.lock.write_text(json.dumps(manifest, indent=2))
+        outcome = run_models_command("plan", str(workspace.config))
+        assert outcome["success"] is False, outcome
+        assert "is malformed: `tokenizers` must list objects" in outcome["error"]

@@ -341,7 +341,13 @@ def test_doctor_json_reports_a_broken_install(tmp_path: Path) -> None:
     )
     assert completed.returncode == 1, completed.stderr
     assert "Traceback" not in completed.stderr, completed.stderr
-    report = ReadinessReport.model_validate_json(completed.stdout)
+    # A failing report is the stderr failure envelope with it as partial.
+    assert completed.stdout == ""
+    # The settings loader's own validation message precedes the envelope; #1157
+    # restores json.loads(completed.stderr) once the loader stops printing it.
+    envelope = json.loads(completed.stderr[completed.stderr.index("\n{\n") + 1 :])
+    assert envelope["code"] == "domain_failure"
+    report = ReadinessReport.model_validate(envelope["partial"])
     assert report.ok is False
     config = _by_id(report)["config.valid"]
     assert config.status == "fail"
@@ -679,7 +685,7 @@ def test_gateway_reachable_names_an_unreadable_access_store(
         document["runtime"]["profile"] = "remote"
 
     config = _write_config(tmp_path, remote)
-    exit_code, out, _ = _run_cli(
+    exit_code, out, err = _run_cli(
         monkeypatch,
         capsys,
         "doctor",
@@ -690,8 +696,9 @@ def test_gateway_reachable_names_an_unreadable_access_store(
         "--json",
     )
 
-    assert exit_code == 1
-    checks = {check["id"]: check for check in json.loads(out)["checks"]}
+    assert (exit_code, out) == (1, "")
+    report = json.loads(err)["partial"]
+    checks = {check["id"]: check for check in report["checks"]}
     assert checks["config.valid"]["status"] == "pass"
     error = _locked_store_error("cloudflare_access_client_id")
     assert checks["gateway.reachable"]["status"] == "fail"
@@ -992,7 +999,9 @@ def test_doctor_owner_client_reaches_the_runtime_with_its_auth_header(
         )
 
     assert (exit_code, err) == (0, "")
-    report = json.loads(out)
+    envelope = json.loads(out)
+    assert envelope["ok"] is True
+    report = envelope["data"]
     assert report["target"] == "owner-client"
     assert report["ok"] is True
     assert [(c["id"], c["status"]) for c in report["checks"]] == [
@@ -1061,7 +1070,7 @@ def test_doctor_owner_client_reports_an_unreachable_runtime(
         closed = endpoint.url
     config = _external_config(tmp_path, closed)
     _desktop_config(tmp_path, monkeypatch, closed)
-    exit_code, out, _ = _run_cli(
+    exit_code, out, err = _run_cli(
         monkeypatch,
         capsys,
         "doctor",
@@ -1072,8 +1081,9 @@ def test_doctor_owner_client_reports_an_unreachable_runtime(
         "--json",
     )
 
-    assert exit_code == 1
-    checks = {check["id"]: check for check in json.loads(out)["checks"]}
+    assert (exit_code, out) == (1, "")
+    report = json.loads(err)["partial"]
+    checks = {check["id"]: check for check in report["checks"]}
     assert checks["gateway.reachable"]["status"] == "fail"
     assert "Connection refused" in checks["gateway.reachable"]["observed"]
     assert checks["gateway.reachable"]["remediation"] == (
@@ -1099,7 +1109,9 @@ def test_doctor_ci_runner_passes_on_this_checkout(
     )
 
     assert (exit_code, err) == (0, "")
-    report = json.loads(out)
+    envelope = json.loads(out)
+    assert envelope["ok"] is True
+    report = envelope["data"]
     assert report["schema_version"] == 1
     assert report["ok"] is True
     assert report["omitted"] == []

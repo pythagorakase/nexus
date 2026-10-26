@@ -1,0 +1,87 @@
+# artifact_manifest.py held red_shape.patch (in this folder) while this ran; the fixed file was restored afterwards
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rf -p no:cacheprovider tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+____________ test_lock_tokenizer_section_shape_is_enforced[missing] ____________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-240/test_lock_tokenizer_section_sh0')
+shape = 'missing'
+
+    @pytest.mark.parametrize("shape", ["missing", "malformed"])
+    def test_lock_tokenizer_section_shape_is_enforced(tmp_path: Path, shape: str) -> None:
+        """A lock without ``tokenizers`` or with malformed entries fails by name."""
+        workspace = _workspace(tmp_path, tokenizer=TINY)
+        manifest = _lock(workspace)
+        hf_home = tmp_path / "hf"
+        if shape == "missing":
+            del manifest["tokenizers"]
+            workspace.lock.write_text(json.dumps(manifest, indent=2))
+            for command in ("plan", "verify"):
+                result = _cli_offline_models(command, workspace, hf_home)
+                assert result.returncode == 1, result.stdout + result.stderr
+>               assert "the lock records no tokenizers" in result.stderr
+E               assert 'the lock records no tokenizers' in "Error: embedder 'Octen-Embedding-4B': present at /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-p...l, re-run `nexus models lock` on the host that holds the artifacts and commit the lock; otherwise revert nexus.toml.\n"
+E                +  where "Error: embedder 'Octen-Embedding-4B': present at /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-p...l, re-run `nexus models lock` on the host that holds the artifacts and commit the lock; otherwise revert nexus.toml.\n" = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'models', 'plan', '--config', '/pr..., re-run `nexus models lock` on the host that holds the artifacts and commit the lock; otherwise revert nexus.toml.\n").stderr
+
+tests/test_embedding_artifacts.py:1373: AssertionError
+___________ test_lock_tokenizer_section_shape_is_enforced[malformed] ___________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-240/test_lock_tokenizer_section_sh1')
+shape = 'malformed'
+
+    @pytest.mark.parametrize("shape", ["missing", "malformed"])
+    def test_lock_tokenizer_section_shape_is_enforced(tmp_path: Path, shape: str) -> None:
+        """A lock without ``tokenizers`` or with malformed entries fails by name."""
+        workspace = _workspace(tmp_path, tokenizer=TINY)
+        manifest = _lock(workspace)
+        hf_home = tmp_path / "hf"
+        if shape == "missing":
+            del manifest["tokenizers"]
+            workspace.lock.write_text(json.dumps(manifest, indent=2))
+            for command in ("plan", "verify"):
+                result = _cli_offline_models(command, workspace, hf_home)
+                assert result.returncode == 1, result.stdout + result.stderr
+                assert "the lock records no tokenizers" in result.stderr
+            fetch = _cli_offline_models("fetch", workspace, hf_home)
+            assert fetch.returncode == 1, fetch.stdout + fetch.stderr
+            assert "the lock records no tokenizers" in fetch.stderr
+            assert not list(hf_home.rglob("models--*"))
+        else:
+            manifest["tokenizers"] = [{"repo_id": 1}]
+            workspace.lock.write_text(json.dumps(manifest, indent=2))
+>           result = run_models_command("plan", str(workspace.config))
+
+tests/test_embedding_artifacts.py:1381: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/agents/memnon/utils/artifact_manifest.py:1280: in run_models_command
+    tokenizer_check = verify_tokenizers(settings, check.manifest)
+nexus/agents/memnon/utils/artifact_manifest.py:882: in verify_tokenizers
+    locked = [(entry["repo_id"], entry["revision"]) for entry in locked_entries]
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <list_iterator object at 0x16ca028c0>
+
+>   locked = [(entry["repo_id"], entry["revision"]) for entry in locked_entries]
+E   KeyError: 'revision'
+
+nexus/agents/memnon/utils/artifact_manifest.py:882: KeyError
+=============================== warnings summary ===============================
+tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[missing]
+tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[missing]
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[missing]
+tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[missing]
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[missing]
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[missing]
+FAILED tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[malformed]
+2 failed, 5 warnings in 3.22s

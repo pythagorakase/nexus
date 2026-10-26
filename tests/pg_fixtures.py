@@ -883,9 +883,9 @@ def seed_committed_chunk(
             """
             INSERT INTO chunk_metadata (
                 chunk_id, season, episode, scene, world_layer,
-                time_delta, generation_date, slug
+                time_delta, generation_date
             ) VALUES (
-                %s, %s, %s, %s, 'primary', %s, now(), %s
+                %s, %s, %s, %s, 'primary', %s, now()
             )
             """,
             (
@@ -894,11 +894,20 @@ def seed_committed_chunk(
                 episode,
                 scene,
                 time_delta,
-                f"S{season:02d}E{episode:02d}_{scene:03d}",
             ),
         )
         assert cur.rowcount == 1
     return chunk_id
+
+
+def slug_bounded_episode_scene(ordinal: int) -> tuple[int, int]:
+    """Return (episode, scene) for a 1-based ordinal inside one season; the
+    episode advances every 999 chunks so scene stays inside set_chunk_slug()'s
+    bound (#1069, Decision 1069-D7)."""
+
+    if ordinal < 1:
+        raise ValueError(f"ordinal must be at least 1, got {ordinal}")
+    return 1 + (ordinal - 1) // 999, 1 + (ordinal - 1) % 999
 
 
 def _require_need_clock_anchor(cur: Any, helper: str) -> None:
@@ -2884,11 +2893,12 @@ def _insert_experience_chunk(cur: Any, label: str) -> int:
     )
     assert cur.rowcount == 1
     chunk_id = int(cur.fetchone()[0])
+    episode, scene = slug_bounded_episode_scene(chunk_id)
     cur.execute(
         "INSERT INTO chunk_metadata "
-        "(chunk_id, season, episode, scene, world_layer, slug) "
-        "VALUES (%s, 1, 1, %s, 'primary', %s)",
-        (chunk_id, chunk_id, f"qa677_{chunk_id}"),
+        "(chunk_id, season, episode, scene, world_layer) "
+        "VALUES (%s, 1, %s, %s, 'primary')",
+        (chunk_id, episode, scene),
     )
     assert cur.rowcount == 1
     cur.execute(

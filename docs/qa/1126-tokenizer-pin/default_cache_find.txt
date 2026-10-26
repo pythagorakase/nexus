@@ -1,0 +1,6 @@
+$ date
+Mon Oct 26 17:06:44 CDT 2026
+$ stat -f '%Sm %N' <scratch>/1126-S1/red.log
+Oct 26 16:16:01 2026 /private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1126-S1/red.log
+$ find ~/.cache/huggingface/hub/models--NousResearch--Hermes-4-70B ~/.cache/huggingface/hub/models--NousResearch--Hermes-4.3-36B ~/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Pro ~/.cache/huggingface/hub/models--NousResearch--Hermes-4-405B ~/.cache/huggingface/hub/models--MiniMaxAI--Minimax-M3 -newer /private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1126-S1/red.log
+(exit 0; no lines printed)

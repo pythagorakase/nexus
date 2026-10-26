@@ -39,7 +39,12 @@ sys.path.insert(0, str(REPO_ROOT))
 
 
 def validate_tokenizer_registry(settings: Settings) -> None:
-    """Probe the declared repositories in one bounded, isolated subprocess."""
+    """Fetch and load the pinned tokenizers in one bounded, isolated subprocess.
+
+    The probe downloads through ``fetch_tokenizer``, the same function
+    ``nexus models fetch`` uses, then loads each pin local-only: there is no
+    second download path (Decision 1126-D5).
+    """
     from nexus.telemetry.prompt_window import _tokenizer_error
 
     entries = [
@@ -50,21 +55,28 @@ def validate_tokenizer_registry(settings: Settings) -> None:
     ]
     if not entries:
         return
-    repositories = sorted({entry.tokenizer_repository for entry in entries})
+    pins = sorted({(e.tokenizer_repository, e.tokenizer_revision) for e in entries})
     code = """import json, sys
+from nexus.agents.memnon.utils.artifact_manifest import fetch_tokenizer
 from nexus.telemetry.prompt_window import _load_tokenizer
 errors = {}
-for repository in json.loads(sys.argv[1]):
+for repository, revision in json.loads(sys.argv[1]):
+    key = f"{repository}@{revision}"
     try:
-        _load_tokenizer(repository)
+        fetch_tokenizer(repository, revision)
     except Exception as exc:
-        errors[repository] = f"{type(exc).__name__}: {exc}"
+        errors[key] = f"fetch at {revision} failed: {type(exc).__name__}: {exc}"
+        continue
+    try:
+        _load_tokenizer(repository, revision)
+    except Exception as exc:
+        errors[key] = f"{type(exc).__name__}: {exc}"
 print(json.dumps(errors))
 """
     timeout = settings.global_.model.tokenizer_probe_timeout_seconds
     try:
         result = subprocess.run(
-            [sys.executable, "-c", code, json.dumps(repositories)],
+            [sys.executable, "-c", code, json.dumps(pins)],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -82,9 +94,11 @@ print(json.dumps(errors))
             f"Tokenizer probe failed for entries [{names}] (timeout={timeout}s): {exc}"
         ) from exc
     failures = [
-        _tokenizer_error(entry, errors[entry.tokenizer_repository])
+        _tokenizer_error(
+            entry, errors[f"{entry.tokenizer_repository}@{entry.tokenizer_revision}"]
+        )
         for entry in entries
-        if entry.tokenizer_repository in errors
+        if f"{entry.tokenizer_repository}@{entry.tokenizer_revision}" in errors
     ]
     if failures:
         raise ValueError("\n".join(failures))
