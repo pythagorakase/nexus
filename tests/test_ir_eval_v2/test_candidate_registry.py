@@ -60,12 +60,9 @@ def test_committed_runtime_holds_one_embedder(tmp_path: Path) -> None:
     settings = load_settings(path)
 
     assert set(settings.memnon.models) == {PRODUCTION}
-    assert set(settings.memnon.models[PRODUCTION].model_dump()) == {
-        "is_active",
-        "local_path",
-        "remote_path",
-        "dimensions",
-    }
+    entry_keys = {"is_active", "local_path", "remote_path", "dimensions"}
+    assert set(_raw()["memnon"]["models"][PRODUCTION]) == entry_keys
+    assert set(settings.memnon.models[PRODUCTION].model_dump()) == entry_keys
     assert settings.ir_eval is not None
     assert set(settings.ir_eval.embedding_candidates) == EMBEDDING_CANDIDATES
     assert set(settings.ir_eval.reranker_candidates) == RERANKER_CANDIDATES
