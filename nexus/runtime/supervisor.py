@@ -1010,7 +1010,9 @@ class Supervisor:
 
         Liveness uses ``process_running``, which reaps an exited child of this
         process, so a child that exits on SIGTERM ends the wait at once and leaves
-        no zombie (#842). Any other pid is probed with ``pid_alive``.
+        no zombie (#842). After SIGKILL it polls ``process_running`` for up to a
+        second ``stop_grace_seconds``, which reaps the killed child, so the method
+        returns with the pid free. Any other pid is probed with ``pid_alive``.
         """
         grace = self.runtime.health.stop_grace_seconds
         running = process_running(pid)
@@ -1026,7 +1028,9 @@ class Supervisor:
         if running and process_running(pid):
             kill_sig = signal.SIGKILL if os.name == "posix" else signal.SIGTERM
             _signal_pid(pid, kill_sig)
-            time.sleep(0.2)
+            kill_deadline = time.monotonic() + grace
+            while process_running(pid) and time.monotonic() < kill_deadline:
+                time.sleep(0.1)
 
     def _wait_port_closed(self, host: str, port: int) -> bool:
         """Return true once a stopped service's TCP port is closed."""

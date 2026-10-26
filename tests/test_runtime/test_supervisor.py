@@ -1057,6 +1057,45 @@ def test_stop_pid_reaps_its_own_child_inside_the_grace(tmp_path: Path) -> None:
                 _reap_quietly(child)
 
 
+def test_stop_pid_reaps_a_child_it_had_to_kill(tmp_path: Path) -> None:
+    """A child that ignores SIGTERM is killed and reaped before return (#842)."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=2, stop_grace_seconds=0.5
+    )
+    ready = tmp_path / "sigterm-ignored"
+    service = supervisor.runtime.services["echo"]
+    service.command = [
+        "{python}",
+        "-c",
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "pathlib.Path(sys.argv[1]).touch(); time.sleep(30)",
+        str(ready),
+    ]
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=True)
+    reaped = False
+    writer_reaped = False
+    try:
+        deadline = time.monotonic() + 10
+        while not ready.exists():
+            assert time.monotonic() < deadline, "child never ignored SIGTERM"
+            time.sleep(0.05)
+        started = time.monotonic()
+        supervisor._stop_pid(pid)
+        elapsed = time.monotonic() - started
+        assert elapsed >= 0.5, elapsed
+        with pytest.raises(ChildProcessError):
+            os.waitpid(pid, os.WNOHANG)
+        reaped = True
+        supervisor._await_writer("echo", writer_pid)
+        writer_reaped = True
+    finally:
+        for child, done in ((pid, reaped), (writer_pid, writer_reaped)):
+            if not done:
+                _kill_quietly(child)
+                _reap_quietly(child)
+
+
 def _json_status(
     supervisor: Supervisor,
     monkeypatch: pytest.MonkeyPatch,
