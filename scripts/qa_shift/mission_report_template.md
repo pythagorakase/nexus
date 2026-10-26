@@ -11,6 +11,7 @@ Status: in progress. Replace with `completed — EXIT_CONDITION` during teardown
 - Isolated lane:
 - Gateway log boundary:
 - Pre-shift backup and checksum:
+- Seed alignment and Retrograde embedding repair:
 - Usage at start:
 
 ## Published issues

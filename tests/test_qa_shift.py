@@ -280,6 +280,53 @@ def test_tracked_config_declares_boundary_catchup_skips() -> None:
         )
 
 
+def test_seed_alignment_repairs_retrograde_vectors_before_the_gateway_starts() -> None:
+    """Pin the kit's seed-alignment order for the Retrograde embedding repair.
+
+    A seed promoted before PR #671 carries Retrograde summaries stamped without
+    a vector (#665, #848). The kit repairs them after the seed's migrations and
+    before the isolated gateway starts, and requires ``nexus jobs`` to report no
+    ``stamped_without_vectors`` line.
+    """
+
+    def _normalized(name: str) -> str:
+        text = Path(qa_shift.__file__).with_name(name).read_text(encoding="utf-8")
+        return " ".join(text.split())
+
+    prompt = _normalized("mission_prompt.md")
+    start = prompt.index("7. Stop only the isolated QA lane")
+    end = prompt.index("If any preflight step fails", start)
+    section = prompt[start:end]
+    ordered = [
+        "`scripts/migrate.py --slot N`",
+        "`nexus retrograde-embed-history --slot N`",
+        "`nexus retrograde-embed-history --slot N --execute`",
+        "`nexus jobs --slot N`",
+        "`nexus logs gateway --mark`",
+    ]
+    for phrase in ordered:
+        assert phrase in section, phrase
+    positions = [section.index(phrase) for phrase in ordered]
+    assert all(
+        earlier < later for earlier, later in zip(positions, positions[1:])
+    ), dict(zip(ordered, positions))
+    assert "print no `stamped_without_vectors` line" in section
+    assert "is a preflight failure" in section
+
+    readme = _normalized("README.md")
+    seeds_start = readme.index("## Seeds")
+    seeds = readme[seeds_start : readme.index("## Usage Guard", seeds_start)]
+    for phrase in (
+        "`nexus retrograde-embed-history --slot N`",
+        "`--execute`",
+        "`nexus jobs --slot N`",
+    ):
+        assert phrase in seeds, phrase
+
+    template = _normalized("mission_report_template.md")
+    assert "- Seed alignment and Retrograde embedding repair:" in template
+
+
 def test_begin_creates_archive_and_pins_every_remote_model(
     tmp_path: Path,
 ) -> None:
