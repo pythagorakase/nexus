@@ -1249,6 +1249,24 @@ def _lock_summary(manifest: Dict[str, Any], path: Path) -> str:
     return "\n".join(lines)
 
 
+def _verify_embedder(
+    settings: Settings, *, hash_files: bool
+) -> Union[ArtifactCheck, Dict[str, Any]]:
+    """Run :func:`verify_artifacts`, or return its lock error as a failed result.
+
+    A folder whose revision cannot be read raises :class:`ArtifactLockError`;
+    the models commands still report the tokenizer section beside that error
+    (Decision 1126-D8).
+    """
+
+    try:
+        return verify_artifacts(settings, hash_files=hash_files)
+    except (
+        ArtifactLockError
+    ) as exc:  # nexus-exception-disposition: fail; reason=folder; safety=failed result
+        return {"success": False, "error": str(exc)}
+
+
 def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, Any]:
     """Run ``nexus models lock|verify|plan|fetch`` for the CLI.
 
@@ -1285,20 +1303,35 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
                 "lock_file": str(lock_path),
                 "message": _lock_summary(manifest, lock_path),
             }
-        check = verify_artifacts(settings, hash_files=command == "verify")
         # The tokenizer section never depends on the embedder outcome, and the
-        # embedder section never on the tokenizers (Decision 1126-D8).
-        tokenizer_check = verify_tokenizers(settings, check.manifest)
-        if command == "plan":
-            ok, lines, entries = _plan_tokenizers(tokenizer_check)
-            return _with_tokenizer_section(
-                _plan_artifacts(check), ok, lines, tokenizers=entries
-            )
+        # embedder section never on the tokenizers (Decision 1126-D8). The
+        # tokenizers are checked, and fetched, before the embedder folders are
+        # read, so a folder whose revision cannot be read still leaves them
+        # their section.
+        tokenizer_check = verify_tokenizers(settings, read_manifest(lock_path))
         if command == "fetch":
             ok, lines = fetch_tokenizers(tokenizer_check)
-            return _with_tokenizer_section(
-                _fetch_artifacts(check), ok, lines, first=True
+        elif command == "plan":
+            ok, lines, entries = _plan_tokenizers(tokenizer_check)
+        check = _verify_embedder(settings, hash_files=command == "verify")
+        if command == "plan":
+            planned = check if isinstance(check, dict) else _plan_artifacts(check)
+            return _with_tokenizer_section(planned, ok, lines, tokenizers=entries)
+        if command == "fetch":
+            fetched = check if isinstance(check, dict) else _fetch_artifacts(check)
+            return _with_tokenizer_section(fetched, ok, lines, first=True)
+        if isinstance(check, dict):
+            tokenizer_report = tokenizer_check.report
+            tokenizer_lines = (
+                []
+                if tokenizer_report.ok
+                else [
+                    f"Registry tokenizers do not match {lock_path} or the Hugging "
+                    "Face cache:",
+                    *_mismatch_lines(tokenizer_report),
+                ]
             )
+            return _with_tokenizer_section(check, tokenizer_report.ok, tokenizer_lines)
         specs, report = check.specs, check.report
     except ArtifactLockError as exc:
         return {"success": False, "error": str(exc)}

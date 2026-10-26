@@ -89,7 +89,11 @@ when an unlisted file appears, when the folder records a revision other than
 the locked one, or when the configured embedder, reranker, repository, or
 dimensions no longer match the lock. Its remediation names
 `hf download <repo> --revision <commit> --local-dir <path>` for a changed
-artifact and re-running `nexus models lock` after an intentional upgrade. A
+artifact and re-running `nexus models lock` after an intentional upgrade.
+It also fails when a registry tokenizer is not in the Hugging Face cache at its
+pinned `tokenizer_revision` (remedy: `nexus models fetch`) or when a tokenizer
+pin in `nexus.toml` differs from the lock's `tokenizers` section (remedy:
+re-run `nexus models lock`). A
 lock that is absent, truncated, holds merge-conflict markers, or lacks the
 expected fields fails the same way (exit 1, and valid JSON under `--json`)
 with `nexus models lock` as the remedy.

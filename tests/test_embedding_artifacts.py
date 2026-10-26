@@ -1268,16 +1268,50 @@ print(report.checks[-1].model_dump_json())
     return check
 
 
+def _plan_tokenizers_offline(
+    workspace: Workspace, hf_home: Path
+) -> list[Dict[str, Any]]:
+    """Return plan's structured ``tokenizers`` key from a process with ``hf_home``."""
+    code = """import json, sys
+from nexus.agents.memnon.utils.artifact_manifest import run_models_command
+print(json.dumps(run_models_command("plan", sys.argv[1])["tokenizers"]))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(workspace.config)],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(REPO_ROOT),
+            "HF_HUB_OFFLINE": "1",
+            "HF_HOME": str(hf_home),
+        },
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    entries: list[Dict[str, Any]] = json.loads(result.stdout.strip().splitlines()[-1])
+    return entries
+
+
 def test_tokenizer_section_reports_absent_then_present(tmp_path: Path) -> None:
     """Issue #1126: plan, verify, the doctor and fetch cover a pinned tokenizer."""
     workspace = _workspace(tmp_path, tokenizer=TINY)
     manifest = _lock(workspace)
     assert manifest["tokenizers"] == [{"repo_id": TINY[0], "revision": COMMIT}]
     hf_home = tmp_path / "hf"
+    planned = {
+        "repo_id": TINY[0],
+        "revision": COMMIT,
+        "models": ["nousresearch/hermes-4-70b"],
+    }
 
     plan = _cli_offline_models("plan", workspace, hf_home)
     assert plan.returncode == 0, plan.stdout + plan.stderr
     assert f"{TINY_LABEL}: absent;" in plan.stdout
+    assert _plan_tokenizers_offline(workspace, hf_home) == [
+        {**planned, "state": "absent"}
+    ]
     verify = _cli_offline_models("verify", workspace, hf_home)
     assert verify.returncode == 1, verify.stdout + verify.stderr
     assert f"{TINY_LABEL} is not in the Hugging Face cache" in verify.stderr
@@ -1293,6 +1327,9 @@ def test_tokenizer_section_reports_absent_then_present(tmp_path: Path) -> None:
     plan = _cli_offline_models("plan", workspace, hf_home)
     assert plan.returncode == 0, plan.stdout + plan.stderr
     assert f"{TINY_LABEL}: present in the Hugging Face cache" in plan.stdout
+    assert _plan_tokenizers_offline(workspace, hf_home) == [
+        {**planned, "state": "present"}
+    ]
     verify = _cli_offline_models("verify", workspace, hf_home)
     assert verify.returncode == 0, verify.stdout + verify.stderr
     assert TINY_LABEL in verify.stdout
@@ -1315,6 +1352,29 @@ def test_fetch_handles_tokenizers_when_the_embedder_drifts(tmp_path: Path) -> No
     assert result.returncode == 1, result.stdout + result.stderr
     assert "sha256 differs from the lock" in result.stderr
     assert f"{TINY_LABEL}: download failed" in result.stderr
+
+
+def test_tokenizers_survive_an_embedder_folder_that_cannot_be_read(
+    tmp_path: Path,
+) -> None:
+    """A lock error from an embedder folder never hides the tokenizer section."""
+    workspace = _workspace(tmp_path, tokenizer=TINY)
+    _lock(workspace)
+    metadata = (
+        workspace.embedder_dir / ".cache/huggingface/download/config.json.metadata"
+    )
+    metadata.write_text(f"{'6' * 40}\netag-config.json\n1758000000.0\n")
+    hf_home = tmp_path / "hf"
+    for command, tokenizer_line in (
+        ("plan", f"{TINY_LABEL}: absent;"),
+        ("fetch", f"{TINY_LABEL}: download failed"),
+        ("verify", f"{TINY_LABEL} is not in the Hugging Face cache"),
+    ):
+        result = _cli_offline_models(command, workspace, hf_home)
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "mixes files downloaded at several revisions" in result.stderr
+        assert tokenizer_line in result.stderr, result.stderr
+    assert not list(hf_home.rglob("models--*"))
 
 
 def test_tokenizer_pin_drift_is_a_configuration_problem(tmp_path: Path) -> None:

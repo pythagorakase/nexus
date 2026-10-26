@@ -110,8 +110,8 @@ def test_commit_probe_and_first_use_reject_remote_code_tokenizer(
     (repository / "tokenization_custom.py").write_text(
         "raise AssertionError('Remote tokenizer code executed')\n"
     )
-    settings = tomlkit.parse(Path("nexus.toml").read_text())
-    entry: Any = settings["global"]["model"]["api_models"]["openrouter"]["models"][0]
+    settings: Any = tomlkit.parse(Path("nexus.toml").read_text())
+    entry = settings["global"]["model"]["api_models"]["openrouter"]["models"][0]
     entry.pop("tokenizer_encoding", None)
     entry["tokenizer_repository"] = str(repository)
     entry["tokenizer_revision"] = "0" * 40
@@ -611,8 +611,8 @@ def test_drift_failure_does_not_break_real_exchange(
 ) -> None:
     from nexus.config.loader import settings_path_scope
 
-    config = tomlkit.parse(Path("nexus.toml").read_text())
-    entry: Any = config["global"]["model"]["api_models"]["test"]["models"][0]
+    config: Any = tomlkit.parse(Path("nexus.toml").read_text())
+    entry = config["global"]["model"]["api_models"]["test"]["models"][0]
     entry.pop("tokenizer_encoding")
     entry["tokenizer_repository"] = str(tmp_path / "absent-tokenizer")
     entry["tokenizer_revision"] = "0" * 40

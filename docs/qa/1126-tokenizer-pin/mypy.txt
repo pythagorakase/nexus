@@ -27,17 +27,11 @@ tests/test_lore/test_token_estimator.py:81: error: Invalid index type "int" for 
 tests/test_lore/test_token_estimator.py:82: error: Item "Item" of "Any | Item | Container" has no attribute "pop"  [union-attr]
 tests/test_lore/test_token_estimator.py:83: error: Item "Item" of "Any | Item | Container" has no attribute "pop"  [union-attr]
 tests/test_lore/test_token_estimator.py:87: error: Value of type "Any | Item | Container" is not indexable  [index]
-tests/test_lore/test_token_estimator.py:114: error: Value of type "Item | Container" is not indexable  [index]
-tests/test_lore/test_token_estimator.py:114: error: Value of type "Any | Item | Container" is not indexable  [index]
-tests/test_lore/test_token_estimator.py:114: error: Invalid index type "int" for "Container"; expected type "Key | str"  [index]
 tests/test_lore/test_token_estimator.py:136: error: Value of type "Item | Container" is not indexable  [index]
 tests/test_lore/test_token_estimator.py:136: error: Value of type "Any | Item | Container" is not indexable  [index]
 tests/test_lore/test_token_estimator.py:136: error: Invalid index type "int" for "Container"; expected type "Key | str"  [index]
 tests/test_lore/test_token_estimator.py:137: error: Unsupported target for indexed assignment ("Any | Item | Container")  [index]
-tests/test_lore/test_token_estimator.py:615: error: Value of type "Item | Container" is not indexable  [index]
-tests/test_lore/test_token_estimator.py:615: error: Value of type "Any | Item | Container" is not indexable  [index]
-tests/test_lore/test_token_estimator.py:615: error: Invalid index type "int" for "Container"; expected type "Key | str"  [index]
-Found 34 errors in 4 files (checked 9 source files)
+Found 28 errors in 4 files (checked 9 source files)
 rc=1
 
 $ cd <git archive origin/main export> && $PY -m mypy --explicit-package-bases nexus/agents/memnon/utils/artifact_manifest.py nexus/telemetry/prompt_window.py nexus/agents/lore/logon_utility.py nexus/config/settings_models.py nexus/runtime/readiness.py scripts/validate_config_commit.py tests/test_embedding_artifacts.py tests/test_lore/test_token_estimator.py tests/test_model_artifact_lock_committed.py
