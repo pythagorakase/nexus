@@ -53,8 +53,16 @@ unpinned loader against the Hub, so it followed `main`. This is the drift the
 issue describes. The order's pin f0e1c1e… is still in the cache. Both
 snapshots link every file to the same blob (43c846ca…, 93022eb9…, c55c5c84…,
 44840ad8…, 9065e14e…), so pinning f0e1c1e… does not change any count. This
-build never wrote to the default cache; `find … -newer red.log` over the five
-repository folders lists nothing.
+build never wrote to the default cache. The reference file is the build's first
+red log in the scratch directory, last written 2026-10-26 16:16:01 CDT when that
+red run finished (the red run itself used private `HF_HOME` directories);
+`default_cache_find.txt` in this folder holds the run, made at 17:06 CDT in the
+review-fix round after its commit 5d0a9cc5 and its tests:
+
+```
+$ find ~/.cache/huggingface/hub/models--NousResearch--Hermes-4-70B ~/.cache/huggingface/hub/models--NousResearch--Hermes-4.3-36B ~/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Pro ~/.cache/huggingface/hub/models--NousResearch--Hermes-4-405B ~/.cache/huggingface/hub/models--MiniMaxAI--Minimax-M3 -newer <scratch>/1126-S1/red.log
+(exit 0; no lines printed)
+```
 
 ## Lock Diff
 
@@ -80,19 +88,21 @@ condensed.)
 
 ## Red Run (New Tests Against Unchanged Product Code)
 
+Re-run in the review-fix round against an export of `origin/main` c7ae2988:
+`git archive origin/main | tar -x -C <scratch>/1126-S1/fix-r1/main_export`, with
+the branch's `tests/test_lore/test_token_estimator.py`,
+`tests/test_embedding_artifacts.py` and
+`tests/test_model_artifact_lock_committed.py` copied in. The export is not a
+git checkout, so the script indexes its `nexus/` tree (`git init`, `git add
+nexus`, no commit) for the test that lists tracked files with `git ls-files`.
+The script is `red_run.sh.txt` and the raw output is `red.txt` (both in this
+folder); it names the 13 test ids. Verbatim tail:
+
 ```
-$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rf <the 13 new test ids>
-E       Failed: DID NOT RAISE <class 'ValueError'>                      # [unpinned]
-E             Extra inputs are not permitted [type=extra_forbidden, input_value='main', ...]   # [branch]
-E             Extra inputs are not permitted [type=extra_forbidden, input_value='aaaa…', ...]  # [encoding]
-E         - Model 'nousresearch/hermes-4-70b': tokenizer_repository 'NousResearch/Hermes-4-70B' at tokenizer_revision None is not in the local Hugging Face cache. Run `nexus models fetch` to download it.
-E         + Model 'nousresearch/hermes-4-70b': cannot load tokenizer_repository 'NousResearch/Hermes-4-70B' with trust_remote_code=False. ... Cause: We couldn't connect to 'https://hug...
-E             Extra inputs are not permitted [type=extra_forbidden, input_value='1111…', ...]  # unfetchable pin
-E             Extra inputs are not permitted [type=extra_forbidden, input_value='2222…', ...]  # cached pin (x5)
-E       AssertionError: assert ['nexus/telem...indow.py:352'] == []
-E           Extra inputs are not permitted [type=extra_forbidden, input_value='4444…' / '5555…', ...]  # D9 key
-E             Extra inputs are not permitted [type=extra_forbidden, input_value='0123456789abcdef…', ...]  # x4 artifact tests
-E       AssertionError: assert None == [{'repo_id': 'MiniMaxAI/Minimax-M3', 'revision': None}, ...]
+$ red_run.sh   (script saved beside this log as red_run.sh.txt)
+...
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
 FAILED tests/test_lore/test_token_estimator.py::test_settings_require_a_pinned_tokenizer_revision[unpinned]
 FAILED tests/test_lore/test_token_estimator.py::test_settings_require_a_pinned_tokenizer_revision[branch]
 FAILED tests/test_lore/test_token_estimator.py::test_settings_require_a_pinned_tokenizer_revision[encoding]
@@ -106,19 +116,65 @@ FAILED tests/test_embedding_artifacts.py::test_fetch_handles_tokenizers_when_the
 FAILED tests/test_embedding_artifacts.py::test_tokenizer_pin_drift_is_a_configuration_problem
 FAILED tests/test_embedding_artifacts.py::test_boot_check_ignores_tokenizers
 FAILED tests/test_model_artifact_lock_committed.py::test_committed_lock_pins_every_registry_tokenizer
-13 failed, 5 warnings in 9.30s
+13 failed, 5 warnings in 8.92s
 ```
 
-Decision 1126-D9 key check: with items 1 to 8 in place and only the
-`logon_utility.py` cache key put back to two elements, the D9 test still fails
-because the second entry reuses the first counter:
+The failure causes in `red.txt`: `[unpinned]` does not raise (`DID NOT RAISE`);
+`[branch]`, `[encoding]`, the two commit-probe tests, the D9 test and the four
+artifact tests fail in `load_settings` with `Extra inputs are not permitted`
+(`settings_models.py:98`); the first-use test gets today's "cannot load
+tokenizer_repository … with trust_remote_code=False" text instead of the fetch
+command; the AST test reports `['nexus/telem...indow.py:352']`; the committed
+lock has no `tokenizers` key (`assert None == [...]`).
+
+### Decision 1126-D9 Key Check
+
+`d9_key.patch` (in this folder) puts the `logon_utility.py` cache key back to
+two elements. It was applied to the branch tree (cdd74bd5 plus the uncommitted
+fix-round edits that became 5d0a9cc5) with `git apply d9_key.patch`, the D9
+test was run, the patch was removed with `git apply -R d9_key.patch`, and the
+test was run again. Raw output: `d9_key.txt`. Verbatim tails:
 
 ```
+$ git apply d9_key.patch
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rf -p no:cacheprovider tests/test_lore/test_token_estimator.py::test_window_counter_cache_keys_on_the_revision
+...
+>       assert counts[0] != counts[1], counts
+E       AssertionError: [2, 2]
 E       assert 2 != 2
-1 failed, 5 warnings in 4.95s
+
+tests/test_lore/test_token_estimator.py:371: AssertionError
+...
+FAILED tests/test_lore/test_token_estimator.py::test_window_counter_cache_keys_on_the_revision
+1 failed, 5 warnings in 4.98s
+$ git apply -R d9_key.patch
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rf -p no:cacheprovider tests/test_lore/test_token_estimator.py::test_window_counter_cache_keys_on_the_revision
+...
+1 passed, 5 warnings in 4.85s
 ```
 
-With the three-element key it passes (`[2, 1]`).
+### Lock-Shape Test (Review-Fix Round)
+
+`test_lock_tokenizer_section_shape_is_enforced[missing|malformed]` covers a
+lock without `tokenizers` (plan, verify and fetch exit 1 with "the lock records
+no tokenizers"; fetch leaves no `models--*` under `HF_HOME`) and a malformed
+`tokenizers` value (`run_models_command("plan", ...)["error"]` names the
+malformed-lock error). Red first: `red_shape.patch` removes the
+`read_manifest` check and the missing-key branch of `verify_tokenizers`; the
+working tree held it while the test ran, and the fixed file was restored
+afterwards (`git apply --check red_shape.patch` succeeds on 5d0a9cc5). Raw
+output: `red_shape.txt`. Verbatim tail:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rf -p no:cacheprovider tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced
+...
+FAILED tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[missing]
+FAILED tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_enforced[malformed]
+2 failed, 5 warnings in 3.22s
+```
+
+(`[missing]`: the plan stderr lacks "the lock records no tokenizers";
+`[malformed]`: `verify_tokenizers` raised `KeyError: 'revision'`.)
 
 ## Green Runs
 
@@ -140,6 +196,35 @@ dbname audit: owner targets: none
 
 The two skips: `SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set
 NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.`
+
+Review-fix round, on 5d0a9cc54ae763d7171e4616b0b13e34845bf26f (the files the
+fixes touch, plus the document checks; load 16.66 at start). Raw output:
+`fix_round_green.txt`.
+
+```
+$ NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_lore/test_token_estimator.py tests/test_embedding_artifacts.py tests/test_model_artifact_lock_committed.py tests/test_doc_front_matter.py tests/test_cli_reference_doc.py
+...
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 4 targets: postgres, qa640_818_estimate_*, qa640_818_pin_* x2
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+168 passed, 7 warnings in 67.57s (0:01:07)
+```
+
+`_lock_summary` on the committed lock after the fix (`lock_summary.txt`):
+
+```
+Locked 2 artifact(s) and 5 tokenizer(s) in config/model_artifacts.lock.json:
+  embedder Octen-Embedding-4B: Octen/Octen-Embedding-4B @ fea468fae3f0caffbae8a12ba792d1c394b6277d (git), 2560d, 18 files, 7686.2 MiB
+  reranker deberta-v3-trecdl22: naver/trecdl22-crossencoder-debertav3 @ 24f6a61d11707432d5780a1d5cf4e3af25cfaddb (huggingface), 10 files, 1662.1 MiB
+  tokenizer MiniMaxAI/Minimax-M3 @ f0e1c1e04d40177e4673a22097036854f536e9c0
+  tokenizer NousResearch/Hermes-4-405B @ 88e3dce03c4a5535e2f4a2bcc08e939a2b302f82
+  tokenizer NousResearch/Hermes-4-70B @ d5dec2bd6b3930a09ddefd0b7fc6523fe0720d09
+  tokenizer NousResearch/Hermes-4.3-36B @ 3899db2b6c4b35f16bde3b570bb7dd2775d56161
+  tokenizer deepseek-ai/DeepSeek-V4-Pro @ b5968e9190ef611bbf34a7229255be88a0e937c1
+```
 
 Offline suites:
 
@@ -163,8 +248,8 @@ $ $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tes
 `manual_fetch.py.txt` ran `fetch_tokenizers(verify_tokenizers(s,
 read_manifest(lock_file_path(s))))` with network and a fresh
 `HF_HOME=<scratch>/1126-S1/hf`. It did not use the CLI, whose fetch would also
-re-hash the 9.8 GB embedder and reranker. Output (`manual_fetch.out.log`,
-progress bars omitted):
+re-hash the 9.8 GB embedder and reranker. Output (`manual_fetch.out.txt`,
+progress bars omitted here):
 
 ```
 [
@@ -181,7 +266,7 @@ progress bars omitted):
 
 Then, with `HF_HUB_OFFLINE=1`, `manual_counts.py.txt` counted one fixed
 sentence through each entry's `local_text_counter(entry)`, once from the fresh
-`HF_HOME` and once from the default cache (`manual_counts.out.log`):
+`HF_HOME` and once from the default cache (`manual_counts.out.txt`):
 
 ```
 sentence: "The quick brown fox jumps over the lazy dog; <|endoftext|> stays text."
@@ -193,27 +278,40 @@ minimax/minimax-m3: MiniMaxAI/Minimax-M3 @ f0e1c1e0…: fresh HF_HOME 19, defaul
 all five counts equal
 ```
 
-`du -sh <scratch>/1126-S1/hf`: `60M`. The fresh cache holds one snapshot per
-repository, with the same files as the default-cache listing above.
+The `du -sh` command and its output are appended to `manual_fetch.out.txt`
+(re-run in the review-fix round on the same, untouched `HF_HOME`):
+
+```
+$ du -sh <scratch>/1126-S1/hf
+ 60M	<scratch>/1126-S1/hf
+```
+
+The fresh cache holds one snapshot per repository (listed in the same file),
+with the same files as the default-cache listing above.
 
 ## Static Checks
 
+Re-run in the review-fix round on the nine changed Python files, branch
+(working tree equal to 5d0a9cc5 plus nothing else in Python) against a
+`git archive origin/main` export.
+
 `black --check` passes on all nine changed Python files.
 
-flake8 (`flake8.log`) gives the same 23 diagnostics on the branch and on the
-`origin/main` versions after normalizing line numbers. They are pre-existing
-E501/F401 on untouched lines of `logon_utility.py`, `settings_models.py` and
-`test_token_estimator.py`. There are no new diagnostics.
+flake8 (`flake8.txt`, both commands and both outputs) gives the same 23
+diagnostics on the branch and on the `origin/main` versions after normalizing
+line numbers. They are pre-existing E501/F401 on untouched lines of
+`logon_utility.py`, `settings_models.py` and `test_token_estimator.py`. There
+are no new diagnostics.
 
-mypy, `$PY -m mypy --explicit-package-bases <changed files>` (`mypy.log`),
-compared over the changed files with line numbers normalized: no new
-diagnostics. Gone on the branch: the `sorted` type-var error in
-`scripts/validate_config_commit.py` and eight tomlkit `Item | Container`
-errors in `test_token_estimator.py` (the edited tests annotate `entry: Any`).
-The branch run reports 34 errors in 4 files; the remaining ones are
-pre-existing on untouched lines. The `origin/main` run was made in a
-`git archive origin/main` export, which follows imports into the whole tree
-(294 errors in 53 files); only the changed files were compared.
+mypy, `$PY -m mypy --explicit-package-bases <changed files>` (`mypy.txt`, both
+commands and both outputs), compared over the changed files with line numbers
+normalized: no new diagnostics. Gone on the branch: the `sorted` type-var
+error in `scripts/validate_config_commit.py` and eight tomlkit `Item |
+Container` errors in `test_token_estimator.py` (the edited tests annotate
+`entry: Any`). The branch run reports 34 errors in 4 files; the remaining ones
+are pre-existing on untouched lines. The `origin/main` run was made in the
+export, which follows imports into the whole tree (294 errors in 53 files);
+only the changed files were compared.
 
 Exception dispositions:
 
