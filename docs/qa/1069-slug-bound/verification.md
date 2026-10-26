@@ -9,7 +9,7 @@ Migration 153 (`migrations/153_chunk_slug_bound_refusal.sql`); 152 is held by
 
 ## Cited Lines at `c7ae2988`
 
-- `nexus/api/commit_handler_sync.py:93-142` `insert_chunk_metadata_sync`;
+- `nexus/api/commit_handler_sync.py:95-142` `insert_chunk_metadata_sync`;
   `slug: str` at `:105`, in `metadata_values` at `:119`, in both INSERT
   column lists at `:127` and `:137`.
 - `:352` `with conn:  # This creates a transaction context`.
