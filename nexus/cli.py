@@ -4431,8 +4431,9 @@ def run_up(args: argparse.Namespace) -> Dict[str, Any]:
             echo=not args.json,
         )
     except _TRANSPORT_ERRORS:
-        # An unreachable remote runtime is api_unreachable (exit 4) and a
-        # missing or refused credential config_error, reported by main().
+        # A missing or refused credential, or an unusable URL, is
+        # config_error, reported by main(); a remote runtime's unreachable
+        # probe is classified by _remote_runtime_report (Decision 815-Q5).
         raise
     except (
         RuntimeError_,

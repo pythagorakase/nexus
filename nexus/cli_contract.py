@@ -409,7 +409,9 @@ class RemoteRuntime:
     Attributes:
         reason: Human-readable cause, naming the profile or the API host.
         profile: True when the active config's ``[runtime] profile`` is
-            ``remote`` (the supervisor then serves up and status over HTTP).
+            ``remote`` (``nexus.cli`` then answers up and status by probing
+            the hosted runtime's player-plane /health over HTTP, Decision
+            815-Q5).
     """
 
     reason: str

@@ -1001,6 +1001,8 @@ class Supervisor:
                 f"runtime's profile is {self.runtime.profile!r}"
             )
         remote = self.runtime.remote
+        if remote is None:
+            raise RuntimeError_("the remote profile has no [runtime.remote] block")
         url = remote.base_url.rstrip("/") + "/health"
         auth = build_runtime_request_auth(url, remote)
         return requests.get(

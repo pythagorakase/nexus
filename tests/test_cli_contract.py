@@ -1453,6 +1453,7 @@ def test_remote_up_and_status_report_the_player_health(tmp_path: Path) -> None:
         inspected = _run("inspect", "slot", "--slot", "5", "--json", env=env)
         status = _run("status", "--json", env=env)
         up = _run("up", "--json", env=env)
+        status_text = _run("status", env=env)
 
     assert inspected.returncode == ExitCode.OK, inspected.stderr
     assert json.loads(inspected.stdout) == {"ok": True, "data": SLOT_STATE}
@@ -1464,13 +1465,36 @@ def test_remote_up_and_status_report_the_player_health(tmp_path: Path) -> None:
     assert json.loads(status.stdout) == expected
     assert up.returncode == ExitCode.OK, up.stderr
     assert json.loads(up.stdout) == expected
+    assert status_text.returncode == ExitCode.OK, status_text.stderr
+    assert status_text.stderr == ""
+    assert status_text.stdout == (
+        f"NEXUS runtime - profile remote - {base_url}\n"
+        "health healthy - plane player\n"
+    )
     requests_seen = [request[:2] for request in gateway.requests]
     assert requests_seen == [
         ("GET", "/api/slot/5/state"),
         ("GET", "/health"),
         ("GET", "/health"),
+        ("GET", "/health"),
     ]
     assert ("GET", "/runtime/status") not in requests_seen
+
+
+def test_remote_status_text_error_answer_prints_one_error_line(
+    tmp_path: Path,
+) -> None:
+    """Remote text `status` on a 502 /health prints one Error: line, no report."""
+    gateway = Gateway(routes={("GET", "/health"): (502, Raw(_BAD_GATEWAY_PAGE))})
+    with _serve(gateway) as base_url:
+        config = _config(tmp_path, profile="remote", base_url=base_url)
+        completed = _run("status", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stderr
+    assert completed.stdout == ""
+    lines = completed.stderr.splitlines()
+    assert len(lines) == 1, completed.stderr
+    assert lines[0].startswith("Error: ")
 
 
 # ---------------------------------------------------------------------------
