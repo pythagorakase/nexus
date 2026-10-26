@@ -1693,7 +1693,6 @@ def _clock_contract_chunk(
         world_layer=layer,
         time_delta=delta,
         generation_date=NOW,
-        slug=f"S01E01_{scene:03d}",
         generation_model="TEST",
         scene_weather=None,
     )
@@ -2002,7 +2001,6 @@ def cooldown_db() -> Any:
                         timedelta(minutes=minutes) if minutes is not None else None
                     ),
                     generation_date=NOW,
-                    slug=f"S01E01_{scene:03d}",
                     generation_model=None,
                     scene_weather=None,
                 )

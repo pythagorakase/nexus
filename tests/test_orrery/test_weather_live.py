@@ -56,7 +56,7 @@ def _create_metadata_table_sql() -> str:
             world_layer text NOT NULL,
             time_delta bigint,
             generation_date timestamptz,
-            slug text NOT NULL,
+            slug text,
             generation_model text
         )
     """
@@ -316,7 +316,6 @@ def test_sync_commit_stack_persists_scene_weather(weather_database: str) -> None
                 world_layer="primary",
                 time_delta=0,
                 generation_date=datetime.now(timezone.utc),
-                slug="S01E01_001",
                 generation_model="test-model",
                 scene_weather="fog",
             )

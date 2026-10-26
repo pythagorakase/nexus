@@ -102,11 +102,11 @@ def insert_chunk_metadata_sync(
     world_layer: str,
     time_delta: Optional[Any],
     generation_date: datetime,
-    slug: str,
     generation_model: Optional[str],
     scene_weather: Optional[str],
 ) -> None:
-    """Insert chunk metadata, including a non-null scene weather override."""
+    """Insert chunk metadata, including a non-null scene weather override; the
+    set_chunk_slug() trigger authors the slug."""
 
     metadata_values = (
         chunk_id,
@@ -116,7 +116,6 @@ def insert_chunk_metadata_sync(
         world_layer,
         time_delta,
         generation_date,
-        slug,
         generation_model,
     )
     if scene_weather is None:
@@ -124,8 +123,8 @@ def insert_chunk_metadata_sync(
             """
             INSERT INTO chunk_metadata (
                 chunk_id, season, episode, scene, world_layer,
-                time_delta, generation_date, slug, generation_model
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                time_delta, generation_date, generation_model
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             metadata_values,
         )
@@ -134,9 +133,9 @@ def insert_chunk_metadata_sync(
             """
             INSERT INTO chunk_metadata (
                 chunk_id, season, episode, scene, world_layer,
-                time_delta, generation_date, slug, generation_model,
+                time_delta, generation_date, generation_model,
                 scene_weather
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (*metadata_values, scene_weather),
         )
@@ -570,12 +569,6 @@ def commit_incubator_to_database_sync(
 
             # Step 5: Insert metadata and capture the accepting child's clock.
             with conn.cursor() as cur:
-                # Generate slug (e.g., "S05E06_001")
-                slug = (
-                    f"S{db_meta['season']:02d}E{db_meta['episode']:02d}_"
-                    f"{db_meta['scene']:03d}"
-                )
-
                 insert_chunk_metadata_sync(
                     cur,
                     chunk_id=chunk_id,
@@ -585,11 +578,10 @@ def commit_incubator_to_database_sync(
                     world_layer=world_layer,
                     time_delta=db_meta["time_delta"],
                     generation_date=datetime.utcnow(),
-                    slug=slug,
                     generation_model=incubator.get("generation_model"),
                     scene_weather=metadata_update.scene_weather,
                 )
-                logger.info("Created metadata for chunk %s: %s", chunk_id, slug)
+                logger.info("Created metadata for chunk %s", chunk_id)
                 accepting_world_time = _require_chunk_world_time_sync(cur, chunk_id)
 
             # Two-time contract: Gaia validates activity at the parent anchor,

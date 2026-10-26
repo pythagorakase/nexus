@@ -201,10 +201,10 @@ async def install_claim_accounts_shadow_async(
         await conn.execute(DISTORTION_MIGRATION_SQL)
 
 
-# The chunk_metadata slug trigger renders scene with TO_CHAR(..., 'FM000');
-# scenes >= 1000 overflow the mask to literal '###' and collide. Fixtures
-# must therefore use small bounded scene numbers, never chunk ids (the
-# narrative_chunks sequence never rolls back and grows without bound).
+# The chunk_metadata slug trigger (set_chunk_slug(), migration 153) refuses
+# scene > 999 with numeric_value_out_of_range (#1069). Fixtures must therefore
+# use small bounded scene numbers, never chunk ids (the narrative_chunks
+# sequence never rolls back and grows without bound).
 _SCENE_NUMBERS = count(1)
 EPISTEMICS = {
     "enabled": True,
