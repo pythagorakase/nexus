@@ -1362,6 +1362,7 @@ def test_check_children_still_fails_a_live_child_without_its_writer(
     service = supervisor.runtime.services["echo"]
     pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=False)
     _write_spawn_record(supervisor, pid, writer_pid)
+    reaped = False
     try:
         os.kill(writer_pid, signal.SIGKILL)
         _reap_quietly(writer_pid)
@@ -1373,10 +1374,15 @@ def test_check_children_still_fails_a_live_child_without_its_writer(
         with pytest.raises(RuntimeError_) as raised:
             supervisor._check_children({"echo": service}, 5, {}, echo=False)
         assert str(raised.value) == expected
+        # _stop_pid reaped its own child (#842).
+        with pytest.raises(ChildProcessError):
+            os.waitpid(pid, os.WNOHANG)
+        reaped = True
         assert not supervisor._pidfile("echo").exists()
     finally:
-        _kill_quietly(pid)
-        _reap_quietly(pid)
+        if not reaped:
+            _kill_quietly(pid)
+            _reap_quietly(pid)
 
 
 def _only_echo_enabled(supervisor: Supervisor, command: list[str]) -> None:
