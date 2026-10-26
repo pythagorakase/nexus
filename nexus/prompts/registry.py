@@ -52,18 +52,12 @@ class PromptId(str, Enum):
     EXPERIENCE_RENDERER = "experience_renderer"
     GAIA_CLOSER = "gaia_closer"
     GEO_AUTHORING = "orrery/geo_authoring"
-    OPERATORS_ESTIMATE_TIME_DELTA_SYSTEM = "operators/estimate_time_delta_system"
-    OPERATORS_ESTIMATE_TIME_DELTA_USER = "operators/estimate_time_delta_user"
     OPERATORS_FACTION_CHARACTER_SYSTEM = "operators/faction_character_system"
     OPERATORS_FACTION_CHARACTER_USER = "operators/faction_character_user"
     OPERATORS_FACTION_RELATIONSHIP_SYSTEM = "operators/faction_relationship_system"
     OPERATORS_FACTION_RELATIONSHIP_USER = "operators/faction_relationship_user"
     OPERATORS_FREESTYLE_SYSTEM = "operators/freestyle_system"
     OPERATORS_FREESTYLE_USER = "operators/freestyle_user"
-    OPERATORS_MAP_BUILDER = "operators/map_builder"
-    OPERATORS_MAP_BUILDER_JSON_REMINDER = "operators/map_builder_json_reminder"
-    OPERATORS_MAP_BUILDER_SCHEMA = "operators/map_builder_schema"
-    OPERATORS_PROCESS_CHARACTERS = "operators/process_characters"
     OPERATORS_PROCESS_FACTIONS = "operators/process_factions"
     OPERATORS_RETRIEVAL_QUERY_BAKEOFF = "operators/retrieval_query_bakeoff"
     OPERATORS_RETRIEVAL_QUERY_SYSTEM = "operators/retrieval_query_system"
@@ -239,14 +233,6 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
             ("geo_authoring",),
             frozenset(("PLACE_NAME", "PLACE_SUMMARY", "ZONE_NAME", "ZONE_SUMMARY")),
         ),
-        PromptId.OPERATORS_ESTIMATE_TIME_DELTA_SYSTEM: PromptSpec(
-            "operators/estimate_time_delta_system.md",
-            ("legacy_operator",),
-            frozenset(("CHUNK_ID", "CHUNK_RAW_TEXT")),
-        ),
-        PromptId.OPERATORS_ESTIMATE_TIME_DELTA_USER: PromptSpec(
-            "operators/estimate_time_delta_user.md", ("legacy_operator",)
-        ),
         PromptId.OPERATORS_FACTION_CHARACTER_SYSTEM: PromptSpec(
             "operators/faction_character_system.md",
             ("legacy_operator",),
@@ -294,31 +280,6 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
             "operators/freestyle_user.md",
             ("legacy_operator",),
             frozenset(("ARGS_PROMPT",)),
-        ),
-        PromptId.OPERATORS_MAP_BUILDER: PromptSpec(
-            "operators/map_builder.md", ("legacy_operator",)
-        ),
-        PromptId.OPERATORS_MAP_BUILDER_JSON_REMINDER: PromptSpec(
-            "operators/map_builder_json_reminder.md",
-            ("legacy_operator",),
-            frozenset(()),
-        ),
-        PromptId.OPERATORS_MAP_BUILDER_SCHEMA: PromptSpec(
-            "operators/map_builder_schema.md",
-            ("legacy_operator",),
-            frozenset(("CHUNK_ID",)),
-        ),
-        PromptId.OPERATORS_PROCESS_CHARACTERS: PromptSpec(
-            "operators/process_characters.md",
-            ("legacy_operator",),
-            frozenset(
-                (
-                    "KNOWN_CHARACTERS_FORMATTED",
-                    "CHUNK_ID",
-                    "CHUNK_RAW_TEXT",
-                    "CHUNK_ID_4",
-                )
-            ),
         ),
         PromptId.OPERATORS_PROCESS_FACTIONS: PromptSpec(
             "operators/process_factions.md",
