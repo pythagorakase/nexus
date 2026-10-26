@@ -16,6 +16,20 @@ more specific instructions.
   `NEXUS_RUN_POSTGRES=1 poetry run pytest` with `NEXUS_GATEWAY_PORT` and
   `NEXUS_API_URL` unset. The PostgreSQL-gated tests are where fixture debt
   accumulates; a run that skips them is not the gate.
+- CI runs the offline tier on every push to `main` and every pull request into
+  `main`: the `offline-tests` job in `.github/workflows/offline-tests.yml`
+  runs `poetry run pytest -q -m 'not requires_local_models'` on
+  `tests --ignore=tests/test_api --ignore=tests/test_orrery`, then on
+  `tests/test_api tests/test_orrery`, with `NEXUS_RUN_POSTGRES` unset, and
+  fails unless each run ends with
+  `secret-store guard: active; nexus-api: denied`. Its `ui-tests` job runs
+  `npm --prefix ui test` and reports without blocking. CI does not replace the
+  gate above: PostgreSQL-backed tests run only locally.
+  `requires_local_models` (`pytest.ini`) marks tests that load the production
+  embedder or reranker from `nexus.toml`'s absolute `local_path` or
+  `model_path`; it adds no local skip, and only CI `-m` expressions deselect
+  it. A test that fails only on Linux is made portable; it is skipped only
+  where the behavior under test exists only on macOS.
 - The gate includes the document freshness check in
   `tests/test_doc_front_matter.py`: a branch that changes a source declared by
   a canonical document must re-stamp that document's `verified_commit` (see
