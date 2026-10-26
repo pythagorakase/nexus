@@ -94,6 +94,18 @@ issue, dry-well, wall-clock, and token settings.
      (`orrery_narration_jobs`, `orrery_maturation_jobs`). Setup-phase SQL is
      acceptable for this alignment; record the statements and affected row
      counts.
+     Then repair Retrograde summaries that the seed carries stamped without a
+     vector (#665, #848). In a shell that sourced `runtime_env.sh`, run
+     `nexus retrograde-embed-history --slot N` (a read-only dry run), then
+     `nexus retrograde-embed-history --slot N --execute`, then
+     `nexus jobs --slot N`. The execute run embeds through the local embedder
+     and makes no provider call; it also inserts every summary the dry run
+     reports as `would_insert`. Save each command and its complete output in
+     the archive. Record in `mission_report.md` the dry run's `summary_rows`
+     count, its row count per status, its `embedding_pending_summary_ids`,
+     and the number of summaries the execute run embedded. `nexus jobs` must
+     print no `stamped_without_vectors` line. A failed run of either command,
+     or a remaining `stamped_without_vectors` line, is a preflight failure.
    - Otherwise reset only the configured slot through
      `scripts/new_story_setup.py --force`.
 
@@ -290,12 +302,13 @@ Always complete teardown, including early exits:
    exchange count from chunk count. If any qualification fails, do not promote
    the seed—preserve the slot and report why.
 8. Complete `mission_report.md` with checkout and suite baseline, slot
-   initialization (seed dump path and sha256, or fresh reset), issue links,
-   probe-family negative results and coverage gates, rejection classification,
-   evidence inventory, start/end/delta/max usage and repair tax, seed-promotion
-   disposition, exit condition, and final lane/slot disposition. Replace the
-   report's `Status: in progress` line with `Status: completed — CONDITION`,
-   using the same truthful exit condition supplied to `finish`.
+   initialization (seed dump path and sha256 with the Retrograde embedding
+   repair counts, or fresh reset), issue links, probe-family negative results
+   and coverage gates, rejection classification, evidence inventory,
+   start/end/delta/max usage and repair tax, seed-promotion disposition, exit
+   condition, and final lane/slot disposition. Replace the report's
+   `Status: in progress` line with `Status: completed — CONDITION`, using the
+   same truthful exit condition supplied to `finish`.
 9. Return a concise scheduled-task result with the report path and issue links.
 
 The report is mandatory even if zero issues are published.

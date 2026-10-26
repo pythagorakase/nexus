@@ -1,14 +1,13 @@
 """Issue #812: operator scripts load embedders locally or fail loudly.
 
-``scripts/import_narratives.py`` and ``scripts/query_narratives_vector.py``
-fell back to ``SentenceTransformer(remote_path)`` (a Hugging Face download)
-when a local folder was missing or failed to load, and
-``scripts/regenerate_embeddings.py`` probed a Hub-cache snapshot and then
-loaded the bare model name from the Hub. Each script now loads through the
-shared local-only loader. These tests call every script's loader with a
-nonexistent local path in a fresh interpreter with ``HF_HUB_OFFLINE=1`` and
-``TRANSFORMERS_OFFLINE=1`` (read at import time), so any leak toward the
-network fails loudly instead of downloading.
+``scripts/query_narratives_vector.py`` fell back to
+``SentenceTransformer(remote_path)`` (a Hugging Face download) when a local
+folder was missing or failed to load, and ``scripts/regenerate_embeddings.py``
+probed a Hub-cache snapshot and then loaded the bare model name from the Hub.
+Each script now loads through the shared local-only loader. These tests call
+every script's loader with a nonexistent local path in a fresh interpreter
+with ``HF_HUB_OFFLINE=1`` and ``TRANSFORMERS_OFFLINE=1`` (read at import
+time), so any leak toward the network fails loudly instead of downloading.
 """
 
 from __future__ import annotations
@@ -43,13 +42,7 @@ def entry(name, remote):
 
 
 try:
-    if call == "load_embedding_models":
-        registry = {
-            name: entry(name, f"example-org/{name}")
-            for name in module.SCRIPT_EMBEDDERS
-        }
-        module.load_embedding_models(registry)
-    elif call == "load_embedding_model":
+    if call == "load_embedding_model":
         registry = {
             name: entry(name, f"example-org/{name}")
             for name in module.SCRIPT_EMBEDDERS
@@ -135,14 +128,6 @@ def _assert_missing_artifact(outcome: Dict[str, Any], name: str, repo: str) -> N
     )
     assert outcome["cause"] is None
     assert outcome["cached"] == 0
-
-
-def test_import_narratives_loader_raises_for_a_missing_folder(tmp_path: Path) -> None:
-    """import_narratives.py no longer downloads a missing embedder."""
-
-    outcome = _probe("scripts/import_narratives.py", "load_embedding_models", tmp_path)
-
-    _assert_missing_artifact(outcome, "bge-large", "example-org/bge-large")
 
 
 def test_query_narratives_vector_loader_raises_for_a_missing_folder(

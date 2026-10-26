@@ -1,0 +1,73 @@
+# on d875e7d5283fcfad3407e859955cf4a5ab0a7b11; 17:33  up  6:11, 5 users, load averages: 13.80 19.10 19.33
+$ nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery
+ssssssssssssssssssssssssssssssssssssssss..................sssssssssss... [  2%]
+.sssssssssssss.sssssssssssssssssssssssss................................ [  4%]
+..................................ssss.................................. [  6%]
+..................ssssssssss.......ssssssssssssss...s................... [  8%]
+.............................sssssssssssssssss.......sssssssssss...sssss [ 10%]
+sssss..............ssssssssssssssssssss...............sss.....ssssssssss [ 12%]
+sssssss............ss..sssssssssssssssssss.............................. [ 14%]
+............ssssssssss.........s..............................sss...ssss [ 16%]
+ssssssssssssssssssss........ss..............ssssssss.................... [ 18%]
+.................................................................sssssss [ 20%]
+....................ssss..sss...ss...s..sss......s..ssssssssssssssssssss [ 23%]
+ssssssssssssss....ss.......sssssssssssssssss............................ [ 25%]
+.......ssss.............sssssssssss...................ss................ [ 27%]
+..........sss.......................sssss....................sssssss.... [ 29%]
+......ss.........ssss.ss...ssss....................sssssssssssssssssssss [ 31%]
+ssssssssssssssssss.......sssssssssssssssssssssssssssssssssssss.....sssss [ 33%]
+sss..............sssssssssssssssssss..................sssssssssssssssss. [ 35%]
+...............................................ss................ssss... [ 37%]
+.sssssssssssss........ssssssssss..s.................sssssssssssss...s... [ 39%]
+........................................................................ [ 41%]
+........................................................................ [ 43%]
+................s....ssssssss.................................s......... [ 46%]
+..................ssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 48%]
+s......................................................................s [ 50%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 52%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 54%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 56%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 58%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 60%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 62%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 64%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss........ [ 66%]
+sssssssssssssssssssssssss....................s........................ss [ 69%]
+sssssssssssssssssssssssss.....ssssss..s.........sss...........ssss...... [ 71%]
+..................sss.....ssssssssssssssssssssss......sssss..s.......... [ 73%]
+.........ssssssssssssssssssssssssssssssssssssssssssssss................. [ 75%]
+........................................................................ [ 77%]
+.................ssssssss............................................... [ 79%]
+.......................................s............................ssss [ 81%]
+ssss...s..............................................ssssssssssssssssss [ 83%]
+ssssssssss........................................................ssssss [ 85%]
+sssssss.s......s...................s....ssssssssssssssssssssssssssssssss [ 87%]
+ssssssssssssssssssss.................................................... [ 89%]
+..................................sssssssssss.......ss...............sss [ 92%]
+s......................................ss....sssssssssss................ [ 94%]
+........................................................................ [ 96%]
+...................sssssssssss........................ssssssssssssssssss [ 98%]
+ssssssssss.............sssss..........s.ssssssssssssssssss               [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1910 passed, 1532 skipped, 7 warnings in 43.48s

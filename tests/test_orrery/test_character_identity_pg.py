@@ -189,7 +189,7 @@ def test_identity_ambiguity_never_retries_test_provider(
             )
             capsys.readouterr()
             assert cli.main() == 0
-            ledger = json.loads(capsys.readouterr().out)
+            ledger = json.loads(capsys.readouterr().out)["data"]
             assert len(ledger["windows"]) == 1
             assert (
                 "Ambiguous character declaration"

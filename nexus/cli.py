@@ -71,6 +71,7 @@ from urllib3.exceptions import ReadTimeoutError
 from nexus.cli_contract import (
     API_URL_ENV,
     ENVELOPE_COMMANDS,
+    RESULT_ENVELOPE_COMMANDS,
     RUNTIME_CONFIG_COMMANDS,
     SELF_DIAGNOSTIC_COMMANDS,
     ExitCode,
@@ -80,6 +81,7 @@ from nexus.cli_contract import (
     error_envelope,
     exit_code_for,
     partial_fields,
+    success_data,
     success_envelope,
     transport_refusal,
 )
@@ -1163,6 +1165,14 @@ def _fail(
     """Report one failure and return its stable exit code."""
     emit_error(message, args.json, code=code, partial=partial)
     return int(exit_code_for(code))
+
+
+def emit_success(data: Any) -> int:
+    """Print the `--json` success envelope `{"ok": true, "data": data}` on stdout
+    and return the OK exit code (ruling 43 on #815).
+    """
+    print(json.dumps(success_envelope(data), indent=2, sort_keys=True))
+    return int(ExitCode.OK)
 
 
 def _api_unreachable() -> Dict[str, Any]:
@@ -4357,20 +4367,73 @@ def _runtime_supervisor(args: argparse.Namespace):
     return Supervisor.from_config(getattr(args, "config", None))
 
 
+def _remote_runtime_report(supervisor: Any) -> Dict[str, Any]:
+    """Probe a remote runtime's player-plane /health and report its answer.
+
+    Decisions 815-Q5 and 815-D1: the probe reads GET /health only, never an
+    operator route; a runtime that refuses, drops or does not answer it in
+    time is ``api_unreachable`` (exit 4) with the report fields in
+    ``partial``. Decision 815-D3: the answer is classified by the S1
+    classifier, so a non-2xx is ``api_error`` and a 401, 403 or unfollowed
+    redirect is ``config_error``. Credential errors propagate to the caller.
+    """
+    gateway_url = supervisor.gateway_url()
+    report = {
+        "profile": "remote",
+        "config": str(supervisor.config_path),
+        "gateway_url": gateway_url,
+    }
+    try:
+        health = _api_object(supervisor.probe_remote_health())
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.ChunkedEncodingError,
+    ) as exc:  # nexus-exception-disposition: fail; reason=remote probe; safety=failure envelope
+        return {
+            "success": False,
+            "code": "api_unreachable",
+            "error": f"Cannot connect to API server at {gateway_url}: {exc}",
+            **report,
+        }
+    except (
+        requests.exceptions.Timeout
+    ) as exc:  # nexus-exception-disposition: fail; reason=remote probe; safety=failure envelope
+        return {
+            "success": False,
+            "code": "api_unreachable",
+            "error": f"Timed out waiting for API server at {gateway_url}: {exc}",
+            **report,
+        }
+    except (
+        ApiAnswerFailure
+    ) as exc:  # nexus-exception-disposition: fail; reason=remote probe; safety=failure envelope
+        return {
+            "success": False,
+            "code": exc.code,
+            "error": exc.message,
+            "status_code": exc.status_code,
+            **report,
+        }
+    return {"success": True, **report, "health": health}
+
+
 def run_up(args: argparse.Namespace) -> Dict[str, Any]:
     """Start the runtime per the configured profile."""
     from nexus.runtime import RuntimeError_
 
     try:
         supervisor = _runtime_supervisor(args)
+        if supervisor.runtime.profile == "remote":
+            return _remote_runtime_report(supervisor)
         return supervisor.up(
             slot=args.slot,
             foreground=args.foreground,
             echo=not args.json,
         )
     except _TRANSPORT_ERRORS:
-        # An unreachable remote runtime is api_unreachable (exit 4) and a
-        # missing or refused credential config_error, reported by main().
+        # A missing or refused credential, or an unusable URL, is
+        # config_error, reported by main(); a remote runtime's unreachable
+        # probe is classified by _remote_runtime_report (Decision 815-Q5).
         raise
     except (
         RuntimeError_,
@@ -4425,6 +4488,10 @@ def _format_uptime(seconds: float) -> str:
 def _print_runtime_status(result: Dict[str, Any]) -> None:
     runtime = result.get("runtime") or {}
     print(f"NEXUS runtime - profile {result['profile']} - {result['gateway_url']}")
+    if result["profile"] == "remote":
+        health = result["health"]
+        print(f"health {health.get('status', '?')} - plane {health.get('plane', '?')}")
+        return
     rows = []
     health_by_service = runtime.get("services", {})
     for name, proc in (result.get("processes") or {}).items():
@@ -4445,7 +4512,7 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
             )
         )
     if not rows:
-        # external/remote: render gateway health from the runtime endpoint
+        # external: render gateway health from the runtime endpoint
         for name, health in health_by_service.items():
             rows.append(
                 (
@@ -4500,11 +4567,17 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
 
 
 def run_status(args: argparse.Namespace) -> Dict[str, Any]:
-    """Render supervisor process state plus the gateway's /runtime/status."""
+    """Render supervisor process state plus /runtime/status, or a remote runtime's
+    /health."""
     from nexus.runtime import RuntimeError_
 
     try:
         supervisor = _runtime_supervisor(args)
+        if supervisor.runtime.profile == "remote":
+            result = _remote_runtime_report(supervisor)
+            if result["success"] and not args.json:
+                _print_runtime_status(result)
+            return result
         result = supervisor.status()
         if not args.json:
             _print_runtime_status(result)
@@ -4634,10 +4707,20 @@ def run_doctor(args: argparse.Namespace) -> int:
     config = Path(args.config) if args.config else None
     report = run_readiness(args.target, ReadinessContext(config_path=config))
     if args.json:
-        print(json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True))
-    else:
-        for line in render_report(report):
-            print(line)
+        # Decision 815-D5: a failing report is the failure envelope with the
+        # whole report, empty fields included, as partial.
+        document = report.model_dump(mode="json")
+        if report.ok:
+            return emit_success(document)
+        failed = ", ".join(c.id for c in report.checks if c.status == "fail")
+        return _fail(
+            args,
+            "domain_failure",
+            f"readiness checks failed for {report.target}: {failed}",
+            partial=document,
+        )
+    for line in render_report(report):
+        print(line)
     return 0 if report.ok else 1
 
 
@@ -4649,10 +4732,20 @@ def run_init(args: argparse.Namespace) -> int:
     config = Path(args.config) if args.config else None
     plan = build_init_plan(ReadinessContext(config_path=config))
     if args.json:
-        print(json.dumps(plan.model_dump(mode="json"), indent=2, sort_keys=True))
-    else:
-        for line in render_plan(plan):
-            print(line)
+        # Decision 815-D5: a plan with steps left is the failure envelope with
+        # the whole plan, empty fields included, as partial.
+        document = plan.model_dump(mode="json")
+        if plan.ok:
+            return emit_success(document)
+        remaining = ", ".join(step.check_id for step in plan.steps)
+        return _fail(
+            args,
+            "domain_failure",
+            f"setup steps remain: {remaining}",
+            partial=document,
+        )
+    for line in render_plan(plan):
+        print(line)
     return 0 if plan.ok else 1
 
 
@@ -4739,7 +4832,7 @@ def run_receipts(args: argparse.Namespace) -> int:
     }
     if args.json:
         if home_error is None:
-            print(json.dumps(document, indent=2, sort_keys=True))
+            return emit_success(document)
     else:
         for group in groups:
             for line in _render_receipt_group(group):
@@ -6509,15 +6602,17 @@ def main() -> int:
 
     if command in ENVELOPE_COMMANDS:
         if args.json:
-            envelope = success_envelope(result["data"])
-            print(json.dumps(envelope, indent=2, sort_keys=True))
-        elif command == "tags audit":
+            return emit_success(result["data"])
+        if command == "tags audit":
             _print_tags_audit(result["data"])
         else:
             _print_inspection(
                 result["data"], truncate=args.truncate, verb=args.inspect_command
             )
         return int(ExitCode.OK)
+
+    if args.json and command in RESULT_ENVELOPE_COMMANDS:
+        return emit_success(success_data(result))
 
     emit_output(result, args.json, truncate=args.truncate)
     if result.get("failed_policy"):

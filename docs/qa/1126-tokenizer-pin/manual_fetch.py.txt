@@ -1,0 +1,20 @@
+"""Issue #1126 manual proof: fetch the five pinned tokenizers into a fresh
+HF_HOME through fetch_tokenizers(verify_tokenizers(...)), the call the offline
+CI job will run (not the CLI, whose fetch also re-hashes the embedder)."""
+
+import json
+import os
+import sys
+
+from nexus.agents.memnon.utils.artifact_manifest import (
+    fetch_tokenizers,
+    lock_file_path,
+    read_manifest,
+    verify_tokenizers,
+)
+from nexus.config import load_settings
+
+print("HF_HOME =", os.environ.get("HF_HOME"), file=sys.stderr)
+s = load_settings()
+result = fetch_tokenizers(verify_tokenizers(s, read_manifest(lock_file_path(s))))
+print(json.dumps(result, indent=2))

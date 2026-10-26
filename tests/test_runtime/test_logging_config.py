@@ -7,6 +7,7 @@ real supervisor, and import side effects are observed in a fresh interpreter.
 
 from __future__ import annotations
 
+import ast
 import http.client
 import importlib.util
 import json
@@ -712,6 +713,121 @@ def test_mock_openai_main_block_launches_with_direct_launch_config(
     assert call["args"] == []
     expected = direct_launch_config(load_settings(REPO_CONFIG))
     assert call["kwargs"] == json.loads(json.dumps(expected))
+
+
+QA_PROBE_GATEWAY_PROBE = """
+import importlib
+import json
+import logging
+import sys
+
+import uvicorn
+
+CALL = "UVICORN_RUN_CALL "
+BEFORE = "ROOT_HANDLERS_BEFORE "
+
+
+def root_handlers():
+    return [repr(handler) for handler in logging.getLogger().handlers]
+
+
+def record_run(app, *args, **kwargs):
+    print(CALL + json.dumps({
+        "app": app,
+        "args": list(args),
+        "kwargs": kwargs,
+        "root_handlers": root_handlers(),
+    }), flush=True)
+    raise SystemExit("uvicorn.run recorded")
+
+
+uvicorn.run = record_run
+module = importlib.import_module(sys.argv[1])
+print(BEFORE + json.dumps(root_handlers()), flush=True)
+module.serve_gateway()
+"""
+
+
+def _calls_in(node: ast.AST, owner: str, attr: str) -> list[ast.Call]:
+    return [
+        call
+        for call in ast.walk(node)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and call.func.attr == attr
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == owner
+    ]
+
+
+@pytest.mark.parametrize(
+    ("module", "port"),
+    [
+        ("scripts.qa_shift.card_identity_probe", 8015),
+        ("scripts.qa_shift.long_absence_probe", 8018),
+    ],
+)
+def test_qa_probe_gateways_use_the_shared_log_config(
+    tmp_path: Path, module: str, port: int
+) -> None:
+    """The QA probes' in-process gateways hand uvicorn the shared dictConfig."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO_ROOT)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
+    )
+    env[RUNTIME_CONFIG_ENV] = str(REPO_CONFIG)
+    # NEXUS_HOME outranks NEXUS_RUNTIME_CONFIG; the child must read REPO_CONFIG.
+    env.pop("NEXUS_HOME", None)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", QA_PROBE_GATEWAY_PROBE, module],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    lines = completed.stdout.strip().splitlines()
+    calls: List[Dict[str, Any]] = [
+        json.loads(line[len("UVICORN_RUN_CALL ") :])
+        for line in lines
+        if line.startswith("UVICORN_RUN_CALL ")
+    ]
+    before = [
+        json.loads(line[len("ROOT_HANDLERS_BEFORE ") :])
+        for line in lines
+        if line.startswith("ROOT_HANDLERS_BEFORE ")
+    ]
+    assert len(calls) == 1, (completed.stdout, completed.stderr)
+    assert len(before) == 1, completed.stdout
+    call = calls[0]
+    assert call["app"] == "nexus.api.narrative:app"
+    assert call["args"] == []
+    runtime = load_settings(REPO_CONFIG).runtime
+    assert runtime is not None
+    assert call["kwargs"] == {
+        "host": "127.0.0.1",
+        "port": port,
+        "log_config": json.loads(json.dumps(build_logging_config(runtime.logs))),
+    }
+    assert call["root_handlers"] == before[0]
+
+    source_path = REPO_ROOT / (module.replace(".", "/") + ".py")
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    functions = {
+        node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert len(_calls_in(tree, "uvicorn", "run")) == 1
+    assert len(_calls_in(functions["serve_gateway"], "uvicorn", "run")) == 1
+    main = functions["main"]
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "serve_gateway"
+        for node in ast.walk(main)
+    )
+    assert len(_calls_in(main, "logging", "basicConfig")) == 1
 
 
 # ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from nexus.api import db_pool
+from nexus.cli_contract import RESULT_ENVELOPE_COMMANDS
 from nexus.config.loader import TEST_PROVIDER_DATABASE_ENV
 from nexus.database import connection_kwargs, database_url
 from tests.pg_fixtures import admit_disposable_database
@@ -298,6 +299,11 @@ def lifecycle_runtime(
             [sys.executable, "-m", "nexus.cli", "--json", *args], timeout=240, cwd=ROOT
         )
         payload = json.loads(result.stdout)
+        command = " ".join(args[:2]) if args[0] == "models" else args[0]
+        if command in RESULT_ENVELOPE_COMMANDS:
+            # The runtime family prints {ok, data} (ruling 43 on #815).
+            assert payload.get("ok") is True, payload
+            return dict(payload["data"])
         assert payload.get("success", True), payload
         return payload
 

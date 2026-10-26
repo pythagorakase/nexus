@@ -19,7 +19,12 @@ from nexus.agents.memnon.utils.db_access import execute_multi_model_hybrid_searc
 from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary, IDFStateError
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.database import database_url
-from tests.pg_fixtures import connect, disposable_slot_database, seed_story_base
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_story_base,
+    slug_bounded_episode_scene,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -45,13 +50,14 @@ def _insert(cursor: Any, text: str, *, metadata: bool = True) -> int:
 
 
 def _metadata(cursor: Any, chunk_id: int) -> None:
+    episode, scene = slug_bounded_episode_scene(chunk_id)
     cursor.execute(
         """
         INSERT INTO chunk_metadata
             (chunk_id, season, episode, scene, world_layer, time_delta, generation_date)
-        VALUES (%s, 1, 1, %s, 'primary', interval '0 seconds', now())
+        VALUES (%s, 1, %s, %s, 'primary', interval '0 seconds', now())
         """,
-        (chunk_id, chunk_id),
+        (chunk_id, episode, scene),
     )
 
 

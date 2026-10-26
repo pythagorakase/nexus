@@ -1,0 +1,10 @@
+--- a/nexus/agents/lore/logon_utility.py
++++ b/nexus/agents/lore/logon_utility.py
+@@ -1713,7 +1713,6 @@
+         key = (
+             entry.tokenizer_encoding,
+             entry.tokenizer_repository,
+-            entry.tokenizer_revision,
+         )
+         if key not in self._window_text_counters:
+             self._window_text_counters[key] = estimator_for(

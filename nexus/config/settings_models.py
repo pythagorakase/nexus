@@ -109,6 +109,7 @@ class APIModelEntry(BaseModel):
     ] = None
     allows_overlapping_limits: bool = False
     tokenizer_repository: Optional[str] = None
+    tokenizer_revision: Optional[str] = None
     tokenizer_encoding: Optional[str] = None
     token_count_safety_margin: int = Field(default=0, ge=0, strict=True)
 
@@ -123,6 +124,23 @@ class APIModelEntry(BaseModel):
         if self.tokenizer_repository and self.tokenizer_encoding:
             raise ValueError(
                 "Declare one local tokenizer, not both repository and encoding"
+            )
+        if self.tokenizer_repository and self.tokenizer_revision is None:
+            raise ValueError(
+                f"Model {self.id!r}: tokenizer_repository requires "
+                "tokenizer_revision, a 40-character Hugging Face commit id"
+            )
+        if self.tokenizer_revision is not None and not re.fullmatch(
+            r"[0-9a-f]{40}", self.tokenizer_revision
+        ):
+            raise ValueError(
+                f"Model {self.id!r}: tokenizer_revision must be a 40-character "
+                "lowercase hexadecimal commit id"
+            )
+        if self.tokenizer_revision is not None and not self.tokenizer_repository:
+            raise ValueError(
+                f"Model {self.id!r}: tokenizer_revision pins tokenizer_repository "
+                "and is not allowed without it"
             )
         if (
             any(value is not None for value in values)

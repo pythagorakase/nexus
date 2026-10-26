@@ -108,8 +108,11 @@ def parse_choice_object(raw: Any) -> Optional[ChoiceObject]:
     if isinstance(raw, str):
         try:
             raw = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning(
+        except (
+            json.JSONDecodeError
+        ):  # nexus-exception-disposition: degrade-read-only; reason=JSON; safety=None
+            logger.warning("Failed to parse choice_object JSON (%d chars)", len(raw))
+            logger.debug(
                 "Failed to parse choice_object JSON: %s", raw[:100] if raw else ""
             )
             return None

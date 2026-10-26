@@ -64,7 +64,7 @@ async def test_wire_repair_guard_records_attempt_and_cli_json(
     )
     capsys.readouterr()
     assert cli.main() == 0
-    payload = json.loads(capsys.readouterr().out)
+    payload = json.loads(capsys.readouterr().out)["data"]
     assert payload["windows"][1]["validation_notes"] == [
         {
             "repair": "scene-reset-crossings",

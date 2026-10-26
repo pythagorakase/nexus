@@ -246,9 +246,13 @@ class NewStoryDatabaseMapper:
                     "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
                     (json.dumps(setting),),
                 )
-                logger.info(f"Saved story seed to setting: {seed.title}")
+                logger.info(
+                    "Saved story seed to setting (title %d chars)", len(seed.title)
+                )
+                logger.debug(f"Saved story seed to setting: {seed.title}")
             except Exception as e:
-                logger.error(f"Failed to save story seed {seed.title}: {e}")
+                logger.error("Failed to save story seed: %s", type(e).__name__)
+                logger.debug(f"Failed to save story seed {seed.title}: {e}")
                 raise
         else:
             # Standalone operation - create own connection
@@ -266,9 +270,14 @@ class NewStoryDatabaseMapper:
                             "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
                             (json.dumps(setting),),
                         )
-                        logger.info(f"Saved story seed to setting: {seed.title}")
+                        logger.info(
+                            "Saved story seed to setting (title %d chars)",
+                            len(seed.title),
+                        )
+                        logger.debug(f"Saved story seed to setting: {seed.title}")
             except Exception as e:
-                logger.error(f"Failed to save story seed {seed.title}: {e}")
+                logger.error("Failed to save story seed: %s", type(e).__name__)
+                logger.debug(f"Failed to save story seed {seed.title}: {e}")
                 raise
 
     def create_protagonist(

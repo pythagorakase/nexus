@@ -1,0 +1,51 @@
+$ cd <worktree> && $PY -m flake8 nexus/agents/memnon/utils/artifact_manifest.py nexus/telemetry/prompt_window.py nexus/agents/lore/logon_utility.py nexus/config/settings_models.py nexus/runtime/readiness.py scripts/validate_config_commit.py tests/test_embedding_artifacts.py tests/test_lore/test_token_estimator.py tests/test_model_artifact_lock_committed.py
+nexus/agents/lore/logon_utility.py:14:1: F401 'os' imported but unused
+nexus/agents/lore/logon_utility.py:164:89: E501 line too long (100 > 88 characters)
+nexus/agents/lore/logon_utility.py:411:89: E501 line too long (90 > 88 characters)
+nexus/agents/lore/logon_utility.py:1228:9: F401 'nexus.api.slot_utils.require_slot_dbname' imported but unused
+nexus/agents/lore/logon_utility.py:1230:9: F401 'nexus.config.story_model.read_story_settings' imported but unused
+nexus/agents/lore/logon_utility.py:1883:89: E501 line too long (89 > 88 characters)
+nexus/agents/lore/logon_utility.py:2138:89: E501 line too long (96 > 88 characters)
+nexus/agents/lore/logon_utility.py:2139:89: E501 line too long (102 > 88 characters)
+nexus/agents/lore/logon_utility.py:2140:89: E501 line too long (96 > 88 characters)
+nexus/agents/lore/logon_utility.py:2176:89: E501 line too long (95 > 88 characters)
+nexus/config/settings_models.py:86:89: E501 line too long (89 > 88 characters)
+nexus/config/settings_models.py:151:89: E501 line too long (90 > 88 characters)
+nexus/config/settings_models.py:166:89: E501 line too long (101 > 88 characters)
+nexus/config/settings_models.py:174:89: E501 line too long (91 > 88 characters)
+nexus/config/settings_models.py:2536:89: E501 line too long (93 > 88 characters)
+nexus/config/settings_models.py:4581:89: E501 line too long (131 > 88 characters)
+tests/test_lore/test_token_estimator.py:382:89: E501 line too long (101 > 88 characters)
+tests/test_lore/test_token_estimator.py:384:89: E501 line too long (105 > 88 characters)
+tests/test_lore/test_token_estimator.py:509:89: E501 line too long (109 > 88 characters)
+tests/test_lore/test_token_estimator.py:573:89: E501 line too long (127 > 88 characters)
+tests/test_lore/test_token_estimator.py:599:89: E501 line too long (104 > 88 characters)
+tests/test_lore/test_token_estimator.py:683:89: E501 line too long (105 > 88 characters)
+tests/test_lore/test_token_estimator.py:724:89: E501 line too long (99 > 88 characters)
+rc=1
+
+$ cd <git archive origin/main export> && $PY -m flake8 nexus/agents/memnon/utils/artifact_manifest.py nexus/telemetry/prompt_window.py nexus/agents/lore/logon_utility.py nexus/config/settings_models.py nexus/runtime/readiness.py scripts/validate_config_commit.py tests/test_embedding_artifacts.py tests/test_lore/test_token_estimator.py tests/test_model_artifact_lock_committed.py
+nexus/agents/lore/logon_utility.py:14:1: F401 'os' imported but unused
+nexus/agents/lore/logon_utility.py:164:89: E501 line too long (100 > 88 characters)
+nexus/agents/lore/logon_utility.py:411:89: E501 line too long (90 > 88 characters)
+nexus/agents/lore/logon_utility.py:1228:9: F401 'nexus.api.slot_utils.require_slot_dbname' imported but unused
+nexus/agents/lore/logon_utility.py:1230:9: F401 'nexus.config.story_model.read_story_settings' imported but unused
+nexus/agents/lore/logon_utility.py:1879:89: E501 line too long (89 > 88 characters)
+nexus/agents/lore/logon_utility.py:2134:89: E501 line too long (96 > 88 characters)
+nexus/agents/lore/logon_utility.py:2135:89: E501 line too long (102 > 88 characters)
+nexus/agents/lore/logon_utility.py:2136:89: E501 line too long (96 > 88 characters)
+nexus/agents/lore/logon_utility.py:2172:89: E501 line too long (95 > 88 characters)
+nexus/config/settings_models.py:86:89: E501 line too long (89 > 88 characters)
+nexus/config/settings_models.py:133:89: E501 line too long (90 > 88 characters)
+nexus/config/settings_models.py:148:89: E501 line too long (101 > 88 characters)
+nexus/config/settings_models.py:156:89: E501 line too long (91 > 88 characters)
+nexus/config/settings_models.py:2518:89: E501 line too long (93 > 88 characters)
+nexus/config/settings_models.py:4563:89: E501 line too long (131 > 88 characters)
+tests/test_lore/test_token_estimator.py:157:89: E501 line too long (101 > 88 characters)
+tests/test_lore/test_token_estimator.py:159:89: E501 line too long (105 > 88 characters)
+tests/test_lore/test_token_estimator.py:284:89: E501 line too long (109 > 88 characters)
+tests/test_lore/test_token_estimator.py:348:89: E501 line too long (127 > 88 characters)
+tests/test_lore/test_token_estimator.py:374:89: E501 line too long (104 > 88 characters)
+tests/test_lore/test_token_estimator.py:457:89: E501 line too long (105 > 88 characters)
+tests/test_lore/test_token_estimator.py:498:89: E501 line too long (99 > 88 characters)
+rc=1
