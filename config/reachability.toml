@@ -362,7 +362,6 @@ paths = [
     { path = "scripts/generate_psychology.py.bak", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/gis_backfill.py", class = "test-only", reason = "test root tests/test_gis_scripts_live.py:<module>" },
     { path = "scripts/gis_hygiene.py", class = "test-only", reason = "test root tests/test_gis_scripts_live.py:<module>" },
-    { path = "scripts/import_narratives.py", class = "documented", reason = "No root reaches it; named by docs/database.md:78" },
     { path = "scripts/import_orrery_route_graph.py", class = "test-only", reason = "test root tests/test_orrery/test_routing.py:<module>" },
     { path = "scripts/import_setting.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/install_pgvector.sh", class = "test-only", reason = "Read by tests/test_database_contract.py:228; no root runs it." },

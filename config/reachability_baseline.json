@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Wave B (2026-10-09): 823-S1 slot operation journal and staging; 840-S2 required place points; 803-S1 readiness import and desktop checks; 811-S3a maintenance module moves; 777 shell UI-config route",
+  "reason": "#1091 S1: retire MEMNON file ingest (content_processor.py) and scripts/import_narratives.py",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -39,7 +39,6 @@
     "scripts/fix_episode_ranges.py",
     "scripts/freestyle_api_query.py",
     "scripts/generate_octen_embeddings.py",
-    "scripts/import_narratives.py",
     "scripts/import_setting.py",
     "scripts/map_builder_legacy.py",
     "scripts/migrate_chunk_character_references.py",
@@ -89,7 +88,6 @@
     "nexus/agents/memnon/memnon.py",
     "nexus/agents/memnon/utils/alias_search.py",
     "nexus/agents/memnon/utils/artifact_manifest.py",
-    "nexus/agents/memnon/utils/content_processor.py",
     "nexus/agents/memnon/utils/continuous_temporal_search.py",
     "nexus/agents/memnon/utils/cross_encoder.py",
     "nexus/agents/memnon/utils/db_access.py",

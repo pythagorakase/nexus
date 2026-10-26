@@ -53,7 +53,6 @@ _FORBIDDEN_AGENT_UTILITY_IMPORT_MODULES = {
 
 _FORBIDDEN_MEMNON_IMPORT_MODULES = {
     *_FORBIDDEN_ML_IMPORT_MODULES,
-    "nexus.agents.memnon.utils.content_processor",
     "nexus.agents.memnon.utils.cross_encoder",
     "nexus.agents.memnon.utils.embedding_manager",
     "nexus.agents.memnon.utils.search",

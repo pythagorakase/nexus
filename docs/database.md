@@ -90,9 +90,9 @@ and L2 HNSW indexes on `save_01`/`save_02`. Legacy scripts create no object that
 a migration owns. `scripts/update_scene_numbers.py` and
 `scripts/extract_scene_numbers.py` require `chunk_metadata.scene` (migration
 138), `scripts/new_story_setup.py --create-assets` requires
-`assets.new_story_creator` (migration 007), `scripts/import_narratives.py` and
-`scripts/regenerate_embeddings.py` require the `vector` extension (migration
-022), `scripts/extract_season_episode.py` requires the baseline `chunk_metadata`
+`assets.new_story_creator` (migration 007), `scripts/regenerate_embeddings.py`
+requires the `vector` extension (migration 022),
+`scripts/extract_season_episode.py` requires the baseline `chunk_metadata`
 table, and `scripts/create_vector_index.py` and
 `scripts/regenerate_embeddings.py --only-indexes` build no ANN index; each
 raises, naming the owner, when an object it needs is missing.

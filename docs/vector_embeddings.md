@@ -108,13 +108,12 @@ appears, and that `nexus.toml` still names the locked models. Every embedder
 and reranker loader passes `local_files_only=True` after checking that the
 configured folder exists: the embedder loader
 (`get_or_load_sentence_transformer`, shared by `EmbeddingManager`, the
-embedding job, and the operator scripts `import_narratives.py`,
-`query_narratives_vector.py`, and `regenerate_embeddings.py`) and both
-rerankers. An artifact with missing files therefore fails to load rather than
-being repaired from the Hub; a modified or extra file still loads, and only
-`nexus models verify` catches it. The prompt-window tokenizer in
-`nexus/telemetry/prompt_window.py` is not a retrieval artifact and is outside
-this rule.
+embedding job, and the operator scripts `query_narratives_vector.py` and
+`regenerate_embeddings.py`) and both rerankers. An artifact with missing files
+therefore fails to load rather than being repaired from the Hub; a modified or
+extra file still loads, and only `nexus models verify` catches it. The
+prompt-window tokenizer in `nexus/telemetry/prompt_window.py` is not a
+retrieval artifact and is outside this rule.
 
 ## Database Storage Strategy
 

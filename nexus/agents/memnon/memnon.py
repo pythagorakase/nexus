@@ -12,7 +12,6 @@ The architecture has been refactored to use modular utility classes:
 - SearchManager: Coordinates different search strategies across data sources
 - QueryAnalyzer: Analyzes user queries to determine optimal search approach
 - DatabaseManager: Provides database connection and schema management
-- ContentProcessor: Manages content chunking, processing, and storage
 - Cross-encoder reranker: loaded once per process at MEMNON construction when [memnon.retrieval.cross_encoder_reranking].enabled
 """
 
@@ -282,17 +281,6 @@ class MEMNON:
 
         # Share the database-derived cast used by retrieval.
         self.query_analyzer = self.search_manager.query_analyzer
-
-        # Initialize ContentProcessor
-        logger.info("Initializing ContentProcessor...")
-        from .utils.content_processor import ContentProcessor
-
-        self.content_processor = ContentProcessor(
-            db_manager=self.db_manager,
-            embedding_manager=self.embedding_manager,
-            settings=self.settings,
-            load_aliases_func=self._load_aliases,
-        )
 
         # Log the retrieval settings
         logger.debug(
@@ -868,47 +856,6 @@ class MEMNON:
                 limit=limit,
             )
 
-    def process_all_narrative_files(self, glob_pattern: str = None) -> int:
-        """
-        Process all narrative files matching the glob pattern.
-
-        Args:
-            glob_pattern: Pattern to match files to process.
-                          If None, uses the pattern from settings.json
-
-        Returns:
-            Total number of chunks processed
-        """
-        # Delegate to ContentProcessor but handle reporting through interface
-        try:
-            # Get verbosity setting to determine if we should report progress
-            verbose = self.settings.get("import", {}).get("verbose", True)
-
-            # Use ContentProcessor for the actual processing
-            total_chunks = self.content_processor.process_all_narrative_files(
-                glob_pattern
-            )
-
-            # Report completion via interface if available
-            if verbose and hasattr(self, "interface") and self.interface:
-                self.interface.assistant_message(
-                    f"Completed processing {total_chunks} total chunks"
-                )
-
-            return total_chunks
-
-        except Exception as e:
-            logger.error(f"Error in process_all_narrative_files: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-
-            # Report error via interface if available
-            if hasattr(self, "interface") and self.interface:
-                self.interface.assistant_message(f"Error processing files: {str(e)}")
-
-            raise
-
     def step(self, messages: List[Any]) -> Any:
         """
         Process incoming messages and perform MEMNON functions.
@@ -944,19 +891,7 @@ class MEMNON:
         command = self._parse_command(user_message)
 
         # Handle special commands
-        if command.get("action") == "process_files":
-            # Process narrative files
-            glob_pattern = command.get("pattern", "*_copy_notime.md")
-
-            # Execute file processing
-            try:
-                total_chunks = self.process_all_narrative_files(glob_pattern)
-                return f"Processed {total_chunks} total chunks from files matching '{glob_pattern}'"
-            except Exception as e:
-                logger.error(f"Error processing files: {e}")
-                return f"Error processing files: {str(e)}"
-
-        elif command.get("action") == "status":
+        if command.get("action") == "status":
             # Return status information
             return self._get_status()
 
@@ -1017,19 +952,7 @@ class MEMNON:
         command = {"action": "query", "text": message_text, "filters": {}}
 
         # Check for special command patterns
-        if message_text.startswith("process files"):
-            command["action"] = "process_files"
-            # Look for pattern: parameter
-            pattern_match = re.search(r"pattern:\s*[\"']?([^\"']+)[\"']?", message_text)
-            if pattern_match:
-                command["pattern"] = pattern_match.group(1)
-            else:
-                # Default pattern from settings
-                command["pattern"] = self.settings.get("import", {}).get(
-                    "file_pattern", "ALEX_*.md"
-                )
-
-        elif message_text.startswith("status"):
+        if message_text.startswith("status"):
             command["action"] = "status"
 
         elif message_text.startswith("test hybrid search"):
@@ -1721,45 +1644,3 @@ class MEMNON:
         }
 
         return response
-
-    def process_chunked_file(self, file_path: str) -> int:
-        """
-        Process a file containing chunked narrative text.
-
-        Args:
-            file_path: Path to the file to process
-
-        Returns:
-            Number of chunks processed
-        """
-        # Delegate to ContentProcessor
-        return self.content_processor.process_chunked_file(file_path)
-
-    def store_narrative_chunk(self, text: str, metadata: Dict[str, Any]) -> int:
-        """
-        Store a narrative chunk in the database and generate embeddings.
-
-        Args:
-            text: The chunk text
-            metadata: Metadata dictionary with season, episode, etc.
-
-        Returns:
-            The ID of the stored chunk
-        """
-        # Delegate to ContentProcessor
-        return self.content_processor.store_narrative_chunk(text, metadata)
-
-    def _generate_chunk_embeddings(self, session, chunk_id: int, text: str):
-        """
-        Generate embeddings for a chunk using all active models.
-        Stores embeddings in dimension-specific tables with proper vector types.
-
-        Args:
-            session: The active database session
-            chunk_id: The ID of the chunk
-            text: The text to encode
-        """
-        # Delegate to ContentProcessor
-        return self.content_processor._generate_chunk_embeddings(
-            session, chunk_id, text
-        )

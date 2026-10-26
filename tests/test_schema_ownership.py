@@ -400,8 +400,6 @@ try:
     elif call == "migrate_provider_names":
         module.DB_URL = url
         result = module.migrate()
-    elif call == "narrative_importer":
-        module.NarrativeImporter(url)
     elif call == "create_vector_index":
         result = module.create_vector_indexes("bge-large", url)
     elif call == "regenerator_indexes":
@@ -608,25 +606,6 @@ def test_provider_names_script_refuses_a_missing_enum(tmp_path: Path) -> None:
             "scripts/migrate.py is the only migration runner.",
         )
         assert _scalar(dbname, "SELECT to_regnamespace('apex_audition')::text") is None
-
-
-@pytest.mark.requires_postgres
-def test_importer_requires_its_schema(tmp_path: Path) -> None:
-    """The importer installs no extension and creates or drops no table."""
-
-    script = "scripts/import_narratives.py"
-    with disposable_database("qa640_810s3_importer") as dbname:
-        _refused(
-            _probe(script, "narrative_importer", dbname, tmp_path), _VECTOR_MESSAGE
-        )
-        assert not _vector_installed(dbname)
-
-        _execute(dbname, "CREATE EXTENSION vector")
-        _refused(
-            _probe(script, "narrative_importer", dbname, tmp_path),
-            _baseline_message("narrative_chunks"),
-        )
-        assert _regclass(dbname, "public.narrative_chunks") is None
 
 
 def _ann_count(dbname: str, table: str) -> int:

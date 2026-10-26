@@ -22,14 +22,12 @@ MEMNON focuses on:
     *   **SearchManager:** Coordinates different search strategies across data sources
     *   **QueryAnalyzer:** Analyzes user queries to determine optimal search approach
     *   **DatabaseManager:** Provides database connection and schema management
-    *   **ContentProcessor:** Manages content chunking, processing, and storage
 *   **Database Schema:** Uses SQLAlchemy ORM models (`NarrativeChunk`, `ChunkEmbedding`, `ChunkMetadata`, `Character`, `Place`) to interact with the PostgreSQL database.
 *   **`settings.json`:** Configuration for database connection, embedding models (endpoints, weights), logging, import parameters (file patterns, chunking regex), and retrieval settings (result limits, thresholds, weights) are loaded from the main `settings.json` file under `Agent Settings -> MEMNON`.
-*   **Content Processing:** The `ContentProcessor` class handles reading a file, identifying chunks via regex, generating embeddings for each configured model, and storing the chunk, metadata, and embeddings in the database.
 *   **Query Analysis:** The `QueryAnalyzer` class performs analysis of incoming queries to determine the likely query type (e.g., character, location, event) and extract keywords and potential entities (characters, places) by matching against database entries.
 *   **Search Strategies:** The `SearchManager` class implements and orchestrates different search strategies including vector search, text search, and structured data queries.
 *   **`query_memory()`:** The main entry point for retrieval. It orchestrates the query analysis, strategy selection, execution of individual search methods, score normalization/weighting, deduplication, and final ranking.
-*   **`step()`:** The standard agent interface method. It parses incoming user messages, checks for simple commands (`process files`, `status`), and otherwise passes the message text to `query_memory()` for retrieval. It returns a dictionary containing the results and metadata.
+*   **`step()`:** The standard agent interface method. It parses incoming user messages, checks for simple commands (`status`), and otherwise passes the message text to `query_memory()` for retrieval. It returns a dictionary containing the results and metadata.
 
 ## Usage
 
@@ -45,21 +43,6 @@ memnon_agent = MEMNON(interface=interface, direct_mode=True)
 
 # Legacy Letta Framework Mode (agent_state provided)
 # memnon_agent = MEMNON(interface=interface, agent_state=agent_state_object)
-```
-
-### Processing Narrative Files
-
-Use the `process_all_narrative_files()` method or the `process files` command via the `step()` method:
-
-```python
-# Method call (direct mode example)
-total_chunks = memnon_agent.process_all_narrative_files(glob_pattern="path/to/your/narrative/*.md", limit=10)
-print(f"Processed {total_chunks} chunks.")
-
-# Command via step() (legacy Letta mode example, assuming 'messages' list)
-messages.append(Message(role="user", content="process files pattern **/scripts/*.md"))
-response = memnon_agent.step(messages) 
-print(response) # Output: {'status': 'Processing initiated...'} 
 ```
 
 ### Querying Memory
