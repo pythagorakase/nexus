@@ -70,7 +70,12 @@ the document's `verified_commit` changed. It fails rather than skips when that
 history is missing: no git checkout at the repository root, a shallow clone, no
 `origin/main`, or no merge base. It also checks every record in this directory:
 its file name and title, the Kind and Links lines, the three sections in order,
-and that the Records list below names each record once, in number order.
+and that the Records list below names each record once, in number order. It
+also fails when a Markdown file in that scope has no front matter and is not
+listed in `config/doc_classification_baseline.json`, when that baseline lists a
+file that is classified, deleted or exempt, and when the baseline gains an
+entry that its merge-base copy lacks; `docs/qa/`, `README.md`, `CLAUDE.md` and
+the generated documents registered in `tests/generated_docs.py` are exempt.
 
 ## Decision and Parked-Work Records
 
