@@ -1023,16 +1023,144 @@ def test_followed_redirect_loop_is_a_domain_failure() -> None:
     assert {request[:2] for request in gateway.requests} == {route}
 
 
-def test_remote_up_against_a_closed_port_exits_four(tmp_path: Path) -> None:
-    """``up`` under the remote profile reports an unreachable runtime as exit 4."""
+# ---------------------------------------------------------------------------
+# Remote up and status probe the player-plane /health (Decision 815-Q5)
+# ---------------------------------------------------------------------------
+
+# The remote profile's two probing verbs (REMOTE_PROFILE_TRANSPORTS).
+_REMOTE_PROBE_VERBS = ("up", "status")
+# What the gateway's player-plane GET /health reports (nexus/api/narrative.py).
+HEALTH = {"status": "healthy", "service": "narrative_api", "plane": "player"}
+
+
+def _remote_report(config: Path, base_url: str) -> dict[str, Any]:
+    """The report fields a remote probe keeps, in success and in ``partial``."""
+    return {
+        "profile": "remote",
+        "config": str(config.resolve()),
+        "gateway_url": base_url,
+    }
+
+
+@pytest.mark.parametrize("verb", _REMOTE_PROBE_VERBS)
+def test_remote_probe_against_a_closed_port_exits_four(
+    tmp_path: Path, verb: str
+) -> None:
+    """A remote runtime that refuses the probe is api_unreachable (exit 4)."""
     base_url = f"http://127.0.0.1:{_closed_port()}"
     config = _config(tmp_path, profile="remote", base_url=base_url)
-    completed = _run("up", "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+    completed = _run(verb, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
 
-    assert completed.returncode == ExitCode.UNREACHABLE
+    assert completed.returncode == ExitCode.UNREACHABLE, completed.stdout
     envelope = _failure(completed)
     assert envelope["code"] == "api_unreachable"
     assert envelope["error"].startswith(f"Cannot connect to API server at {base_url}")
+    assert envelope["partial"] == _remote_report(config, base_url)
+
+
+@pytest.mark.parametrize("verb", _REMOTE_PROBE_VERBS)
+def test_remote_probe_unanswered_exits_four(tmp_path: Path, verb: str) -> None:
+    """A remote runtime that never answers /health in time is exit 4."""
+    gateway = Gateway(stall=True)
+    with _serve(gateway) as base_url:
+        config = _config(tmp_path, profile="remote", base_url=base_url)
+        completed = _run(verb, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+
+    assert completed.returncode == ExitCode.UNREACHABLE, completed.stdout
+    envelope = _failure(completed)
+    assert envelope["code"] == "api_unreachable"
+    assert envelope["error"].startswith(
+        f"Timed out waiting for API server at {base_url}"
+    )
+    assert envelope["partial"] == _remote_report(config, base_url)
+    assert [request[:2] for request in gateway.requests] == [("GET", "/health")]
+
+
+@pytest.mark.parametrize("verb", _REMOTE_PROBE_VERBS)
+def test_remote_probe_error_answer_is_an_api_error(tmp_path: Path, verb: str) -> None:
+    """A non-2xx /health answer is api_error with its status (Decision 815-D3)."""
+    gateway = Gateway(routes={("GET", "/health"): (502, Raw(_BAD_GATEWAY_PAGE))})
+    with _serve(gateway) as base_url:
+        config = _config(tmp_path, profile="remote", base_url=base_url)
+        completed = _run(verb, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stdout
+    envelope = _failure(completed)
+    assert envelope["code"] == "api_error"
+    assert envelope["partial"] == {
+        **_remote_report(config, base_url),
+        "status_code": 502,
+    }
+
+
+@pytest.mark.parametrize("verb", _REMOTE_PROBE_VERBS)
+@pytest.mark.parametrize(
+    ("status", "answer", "env"),
+    [
+        (403, Raw("<html><body>Forbidden</body></html>"), {}),
+        (
+            302,
+            Raw("", headers={"Location": "https://access.example.invalid/login"}),
+            {"NEXUS_AUTH": "runtime-token"},
+        ),
+    ],
+    ids=["forbidden", "unfollowed-redirect"],
+)
+def test_remote_probe_access_rejection_is_a_config_error(
+    tmp_path: Path, verb: str, status: int, answer: Raw, env: dict[str, str]
+) -> None:
+    """A 403 or an unfollowed redirect on /health is config_error (815-D3)."""
+    gateway = Gateway(routes={("GET", "/health"): (status, answer)})
+    with _serve(gateway) as base_url:
+        config = _config(tmp_path, profile="remote", base_url=base_url)
+        completed = _run(
+            verb, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config), **env}
+        )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stdout
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert envelope["partial"]["status_code"] == status
+    assert "an access rejection" in envelope["error"]
+    assert [request[:2] for request in gateway.requests] == [("GET", "/health")]
+
+
+@pytest.mark.parametrize("verb", _REMOTE_PROBE_VERBS)
+def test_remote_probe_non_object_health_is_an_invalid_response(
+    tmp_path: Path, verb: str
+) -> None:
+    """A 2xx /health body that is not a JSON object is invalid_response."""
+    gateway = Gateway(routes={("GET", "/health"): (200, ["healthy"])})
+    with _serve(gateway) as base_url:
+        config = _config(tmp_path, profile="remote", base_url=base_url)
+        completed = _run(verb, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stdout
+    envelope = _failure(completed)
+    assert envelope["code"] == "invalid_response"
+    assert envelope["partial"] == _remote_report(config, base_url)
+
+
+def test_local_status_with_the_gateway_down_still_exits_zero(tmp_path: Path) -> None:
+    """Local status reports a stopped gateway as a valid report (Decision 815-D2)."""
+    config = _config(tmp_path, profile="local")
+    completed = _run(
+        "status",
+        "--json",
+        env={
+            "NEXUS_RUNTIME_CONFIG": str(config),
+            "NEXUS_GATEWAY_PORT": str(_closed_port()),
+        },
+    )
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert completed.stderr == ""
+    payload = json.loads(completed.stdout)
+    assert payload["ok"] is True
+    data = payload["data"]
+    assert "success" not in data
+    assert data["runtime"]["error"].startswith("runtime status unreachable at http://")
+    assert "health" not in data
 
 
 @pytest.mark.parametrize(
@@ -1308,15 +1436,15 @@ def test_non_loopback_api_url_refuses_database_commands(tmp_path: Path) -> None:
     assert accepted == []
 
 
-def test_remote_profile_keeps_http_commands_and_the_runtime_probe(
-    tmp_path: Path,
-) -> None:
-    """HTTP verbs, and up/status probing the hosted runtime, still run."""
-    runtime_status = {"ok": True, "profile": "local", "version": "815"}
+def test_remote_up_and_status_report_the_player_health(tmp_path: Path) -> None:
+    """HTTP verbs run, and up/status report the hosted runtime's player /health.
+
+    Neither probe reads an operator route such as /runtime/status (815-D1).
+    """
     gateway = Gateway(
         routes={
             ("GET", "/api/slot/5/state"): (200, SLOT_STATE),
-            ("GET", "/runtime/status"): (200, runtime_status),
+            ("GET", "/health"): (200, HEALTH),
         }
     )
     with _serve(gateway) as base_url:
@@ -1328,15 +1456,21 @@ def test_remote_profile_keeps_http_commands_and_the_runtime_probe(
 
     assert inspected.returncode == ExitCode.OK, inspected.stderr
     assert json.loads(inspected.stdout) == {"ok": True, "data": SLOT_STATE}
+    expected = {
+        "ok": True,
+        "data": {**_remote_report(config, base_url), "health": HEALTH},
+    }
     assert status.returncode == ExitCode.OK, status.stderr
-    assert json.loads(status.stdout)["runtime"] == runtime_status
+    assert json.loads(status.stdout) == expected
     assert up.returncode == ExitCode.OK, up.stderr
-    assert json.loads(up.stdout)["profile"] == "remote"
-    assert [request[:2] for request in gateway.requests] == [
+    assert json.loads(up.stdout) == expected
+    requests_seen = [request[:2] for request in gateway.requests]
+    assert requests_seen == [
         ("GET", "/api/slot/5/state"),
-        ("GET", "/runtime/status"),
-        ("GET", "/runtime/status"),
+        ("GET", "/health"),
+        ("GET", "/health"),
     ]
+    assert ("GET", "/runtime/status") not in requests_seen
 
 
 # ---------------------------------------------------------------------------
