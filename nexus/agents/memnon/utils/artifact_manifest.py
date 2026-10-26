@@ -16,6 +16,14 @@ pins ``--revision`` whenever the lock or the folder records one.
 ``fetch`` downloads only absent, pinned artifacts, then verifies their hashes;
 it refuses existing drifted folders and never replaces them or rewrites the
 lock. ``lock`` runs on the host that already holds the artifacts (issue #812).
+
+The lock's ``tokenizers`` section records the prompt-window tokenizer of every
+model registry entry that declares ``tokenizer_repository``, by repository and
+pinned ``tokenizer_revision`` (issue #1126). Those files live in the Hugging
+Face cache, not in a model folder: runtime loads them local-only, ``plan``,
+``verify`` and the doctor report each one present or absent, and ``fetch``
+(:func:`fetch_tokenizer`) is the only code path that downloads them, whatever
+the embedder section's state.
 """
 
 from __future__ import annotations
@@ -51,6 +59,17 @@ REVISION_SOURCE_GIT = "git"
 _IGNORED_DIRECTORIES = frozenset({".cache", ".git"})
 _IGNORED_FILES = frozenset({".DS_Store", ".git"})
 
+# The files transformers reads for the registry tokenizers; fetch downloads only
+# these from a tokenizer repository (issue #1126).
+TOKENIZER_FILES = (
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+    "added_tokens.json",
+    "chat_template.jinja",
+    "tokenizer.model",
+)
+
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _HF_DOWNLOAD_METADATA = Path(".cache") / "huggingface" / "download"
 _FRONT_MATTER = re.compile(r"\A---[ \t]*\n(.*?)\n---[ \t]*(?:\n|\Z)", re.S)
@@ -61,6 +80,13 @@ _LICENSE_LINE = re.compile(
 
 class ArtifactLockError(RuntimeError):
     """A production artifact cannot be locked, or the lock cannot be read."""
+
+
+class TokenizerNotCachedError(FileNotFoundError):
+    """A pinned registry tokenizer is not in the local Hugging Face cache.
+
+    Runtime loads are local-only; ``nexus models fetch`` downloads the pin.
+    """
 
 
 @dataclass(frozen=True)
@@ -144,6 +170,109 @@ def production_artifact_specs(settings: Settings) -> List[ArtifactSpec]:
             )
         )
     return specs
+
+
+@dataclass(frozen=True)
+class TokenizerSpec:
+    """One pinned registry tokenizer and the registry entries that declare it."""
+
+    repo_id: str
+    revision: str
+    model_ids: Tuple[str, ...]
+
+    @property
+    def label(self) -> str:
+        """Human-readable identity used in plan, verify and fetch messages."""
+        return f"tokenizer {self.repo_id} @ {self.revision}"
+
+
+@dataclass(frozen=True)
+class TokenizerCheck:
+    """The configured tokenizer pins, those not cached, and their verification."""
+
+    specs: List[TokenizerSpec]
+    absent: List[TokenizerSpec]
+    report: VerifyReport
+
+
+def registry_tokenizer_specs(settings: Settings) -> List[TokenizerSpec]:
+    """Return one spec per distinct pinned tokenizer of the model registry.
+
+    Every registry entry that declares ``tokenizer_repository`` is covered,
+    whether or not a seat resolves to it (Decision 1126-D7).
+    """
+
+    pins: Dict[Tuple[str, str], List[str]] = {}
+    for provider in settings.global_.model.api_models.values():
+        for entry in provider.models:
+            if not entry.tokenizer_repository:
+                continue
+            if entry.tokenizer_revision is None:
+                raise ArtifactLockError(
+                    f"Model {entry.id!r}: tokenizer_repository requires "
+                    "tokenizer_revision, a 40-character Hugging Face commit id"
+                )
+            pins.setdefault(
+                (entry.tokenizer_repository, entry.tokenizer_revision), []
+            ).append(entry.id)
+    return [
+        TokenizerSpec(repo_id, revision, tuple(sorted(model_ids)))
+        for (repo_id, revision), model_ids in sorted(pins.items())
+    ]
+
+
+def tokenizer_cached(repo_id: str, revision: str) -> bool:
+    """True when the pinned tokenizer loads from the Hugging Face cache.
+
+    Never reaches the network. A local directory is loaded in place by
+    transformers, so nothing is ever fetched for it.
+
+    Raises:
+        ArtifactLockError: When ``repo_id`` is neither a directory nor a valid
+            Hugging Face repository id.
+    """
+
+    if os.path.isdir(repo_id):
+        return True
+    from huggingface_hub import try_to_load_from_cache
+    from huggingface_hub.utils import HFValidationError, validate_repo_id
+
+    try:
+        validate_repo_id(repo_id)
+    except HFValidationError as exc:
+        raise ArtifactLockError(
+            f"tokenizer_repository {repo_id!r} is neither a directory nor a "
+            "Hugging Face repository id"
+        ) from exc
+    cached = try_to_load_from_cache(repo_id, "tokenizer_config.json", revision=revision)
+    return isinstance(cached, str)
+
+
+def fetch_tokenizer(repo_id: str, revision: str) -> bool:
+    """Download a pinned tokenizer's files into the Hugging Face cache.
+
+    The only tokenizer download path: ``nexus models fetch`` and the commit
+    probe both call it. Returns False when the pin is already cached.
+
+    Raises:
+        OSError: When the Hub download fails.
+        ArtifactLockError: When the download finished without the pin landing
+            in the cache.
+    """
+
+    if tokenizer_cached(repo_id, revision):
+        return False
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(
+        repo_id=repo_id, revision=revision, allow_patterns=list(TOKENIZER_FILES)
+    )
+    if not tokenizer_cached(repo_id, revision):
+        raise ArtifactLockError(
+            f"tokenizer {repo_id} @ {revision}: download finished but "
+            "tokenizer_config.json is not in the Hugging Face cache"
+        )
+    return True
 
 
 def lock_file_path(settings: Settings) -> Path:
@@ -462,17 +591,23 @@ def lock_artifact(
 
 
 def build_manifest(
-    specs: Sequence[ArtifactSpec], lock_path: Optional[Path] = None
+    specs: Sequence[ArtifactSpec],
+    lock_path: Optional[Path] = None,
+    tokenizers: Sequence[TokenizerSpec] = (),
 ) -> Dict[str, Any]:
     """Compute the full lock for the production artifacts.
 
     ``lock_path`` is the lock being replaced; it only pins the restore
-    command for a missing artifact directory.
+    command for a missing artifact directory. ``tokenizers`` are recorded by
+    repository and revision only; they need not be cached to be locked.
     """
 
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "artifacts": [lock_artifact(spec, lock_path) for spec in specs],
+        "tokenizers": [
+            {"repo_id": spec.repo_id, "revision": spec.revision} for spec in tokenizers
+        ],
     }
 
 
@@ -527,7 +662,23 @@ def read_manifest(path: Path) -> Dict[str, Any]:
             f"{path} is malformed: every entry in `artifacts` needs a role and a "
             "`files` list of path, size and sha256. Re-run `nexus models lock`."
         )
+    if "tokenizers" in manifest and not _well_formed_tokenizers(manifest["tokenizers"]):
+        raise ArtifactLockError(
+            f"{path} is malformed: `tokenizers` must list objects with a string "
+            "repo_id and revision. Re-run `nexus models lock`."
+        )
     return manifest
+
+
+def _well_formed_tokenizers(tokenizers: Any) -> bool:
+    """True when the lock's tokenizer entries have the fields verify reads."""
+
+    return isinstance(tokenizers, list) and all(
+        isinstance(entry, dict)
+        and isinstance(entry.get("repo_id"), str)
+        and isinstance(entry.get("revision"), str)
+        for entry in tokenizers
+    )
 
 
 def _well_formed_artifacts(artifacts: Any) -> bool:
@@ -700,13 +851,75 @@ def verify_manifest(
             "`nexus models lock` on the host that holds it and commit the lock."
         )
     if config_drift:
-        remediation.append(
-            "If the nexus.toml change is intentional, re-run `nexus models lock` "
-            "on the host that holds the artifacts and commit the lock; otherwise "
-            "revert nexus.toml."
-        )
+        remediation.append(_CONFIG_DRIFT_REMEDY)
     return VerifyReport(
         problems=problems, remediation=remediation, config_problems=config_problems
+    )
+
+
+_CONFIG_DRIFT_REMEDY = (
+    "If the nexus.toml change is intentional, re-run `nexus models lock` "
+    "on the host that holds the artifacts and commit the lock; otherwise "
+    "revert nexus.toml."
+)
+_RELOCK_REMEDY = (
+    "Re-run `nexus models lock` on the host that holds the artifacts and commit "
+    "the lock."
+)
+_TOKENIZER_FETCH_REMEDY = (
+    "Run `nexus models fetch` to download the missing tokenizers into the "
+    "Hugging Face cache."
+)
+
+
+def verify_tokenizers(settings: Settings, manifest: Dict[str, Any]) -> TokenizerCheck:
+    """Compare the registry's tokenizer pins with the lock and the cache.
+
+    Read-only and offline: nothing is downloaded or written.
+    """
+
+    specs = registry_tokenizer_specs(settings)
+    problems: List[str] = []
+    remediation: List[str] = []
+    config_problems: List[str] = []
+    locked_entries = manifest.get("tokenizers")
+    if locked_entries is None:
+        config_problems.append(
+            "the lock records no tokenizers; re-run nexus models lock and commit "
+            "the lock"
+        )
+        remediation.append(_RELOCK_REMEDY)
+    else:
+        locked = [(entry["repo_id"], entry["revision"]) for entry in locked_entries]
+        configured = {(spec.repo_id, spec.revision) for spec in specs}
+        config_problems.extend(
+            f"{spec.label} is configured but absent from the lock"
+            for spec in specs
+            if (spec.repo_id, spec.revision) not in locked
+        )
+        config_problems.extend(
+            f"the lock records tokenizer {repo_id} @ {revision}, which nexus.toml "
+            "no longer configures"
+            for repo_id, revision in locked
+            if (repo_id, revision) not in configured
+        )
+        if config_problems:
+            remediation.append(_CONFIG_DRIFT_REMEDY)
+    problems.extend(config_problems)
+    absent = [
+        spec for spec in specs if not tokenizer_cached(spec.repo_id, spec.revision)
+    ]
+    problems.extend(f"{spec.label} is not in the Hugging Face cache" for spec in absent)
+    if absent:
+        remediation.append(_TOKENIZER_FETCH_REMEDY)
+    return TokenizerCheck(
+        specs=specs,
+        absent=absent,
+        report=VerifyReport(
+            problems=problems,
+            remediation=remediation,
+            config_problems=config_problems,
+        ),
     )
 
 
@@ -910,6 +1123,102 @@ def _fetch_artifacts(check: ArtifactCheck) -> Dict[str, Any]:
     }
 
 
+def fetch_tokenizers(tokenizer_check: TokenizerCheck) -> Tuple[bool, List[str]]:
+    """Download every absent pinned tokenizer into the Hugging Face cache.
+
+    Runs whatever the embedder section's state (Decision 1126-D8). With a
+    tokenizer configuration problem nothing is downloaded. Returns the
+    section's success and its text lines.
+    """
+
+    report = tokenizer_check.report
+    if report.config_problems:
+        refused = VerifyReport(
+            report.config_problems,
+            [step for step in report.remediation if step != _TOKENIZER_FETCH_REMEDY],
+            report.config_problems,
+        )
+        return False, ["Tokenizer fetch refused:", *_mismatch_lines(refused)]
+    lines: List[str] = []
+    problems: List[str] = []
+    for spec in tokenizer_check.specs:
+        if spec not in tokenizer_check.absent:
+            lines.append(f"{spec.label}: already cached")
+            continue
+        try:
+            downloaded = fetch_tokenizer(spec.repo_id, spec.revision)
+        except (
+            OSError,
+            ArtifactLockError,
+        ) as exc:  # nexus-exception-disposition: fail; reason=hub; safety=failed result
+            problems.append(f"{spec.label}: download failed: {exc}")
+            continue
+        lines.append(
+            f"{spec.label}: downloaded into the Hugging Face cache"
+            if downloaded
+            else f"{spec.label}: already cached"
+        )
+    if problems:
+        failed = VerifyReport(problems, ["Run `nexus models fetch` again."], [])
+        return False, [*lines, "Tokenizer download failed:", *_mismatch_lines(failed)]
+    return True, lines
+
+
+def _plan_tokenizers(
+    tokenizer_check: TokenizerCheck,
+) -> Tuple[bool, List[str], List[Dict[str, Any]]]:
+    """Describe each pinned tokenizer as present or absent, without downloading."""
+
+    entries: List[Dict[str, Any]] = []
+    lines: List[str] = []
+    for spec in tokenizer_check.specs:
+        absent = spec in tokenizer_check.absent
+        entries.append(
+            {
+                "repo_id": spec.repo_id,
+                "revision": spec.revision,
+                "models": list(spec.model_ids),
+                "state": "absent" if absent else "present",
+            }
+        )
+        lines.append(
+            f"{spec.label}: absent; fetch downloads its tokenizer files into the "
+            "Hugging Face cache"
+            if absent
+            else f"{spec.label}: present in the Hugging Face cache"
+        )
+    report = tokenizer_check.report
+    if report.config_problems:
+        refused = VerifyReport(
+            report.config_problems,
+            [step for step in report.remediation if step != _TOKENIZER_FETCH_REMEDY],
+            report.config_problems,
+        )
+        lines.extend(["Tokenizer plan refused:", *_mismatch_lines(refused)])
+    return not report.config_problems, lines, entries
+
+
+def _with_tokenizer_section(
+    result: Dict[str, Any],
+    ok: bool,
+    lines: List[str],
+    *,
+    first: bool = False,
+    **extra: Any,
+) -> Dict[str, Any]:
+    """Join the tokenizer section to the embedder result under one outcome."""
+
+    success = bool(result["success"]) and ok
+    text = result.pop("message", None) or result.pop("error", None)
+    sections = [*lines, text] if first else [text, *lines]
+    result.update(extra)
+    result["success"] = success
+    result["message" if success else "error"] = "\n".join(
+        section for section in sections if section
+    )
+    return result
+
+
 def _format_size(size: int) -> str:
     """Render a byte count in MiB, the scale of model artifacts."""
 
@@ -920,6 +1229,8 @@ def _lock_summary(manifest: Dict[str, Any], path: Path) -> str:
     """Describe a freshly written lock for the CLI."""
 
     lines = [f"Locked {len(manifest['artifacts'])} artifact(s) in {path}:"]
+    for entry in manifest.get("tokenizers", []):
+        lines.append(f"  tokenizer {entry['repo_id']} @ {entry['revision']}")
     for entry in manifest["artifacts"]:
         if entry["revision"]:
             revision = f"{entry['revision']} ({entry['revision_source']})"
@@ -961,7 +1272,9 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
     try:
         if command == "lock":
             specs = production_artifact_specs(settings)
-            manifest = build_manifest(specs, lock_path)
+            manifest = build_manifest(
+                specs, lock_path, registry_tokenizer_specs(settings)
+            )
             write_manifest(manifest, lock_path)
             return {
                 "success": True,
@@ -969,25 +1282,48 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
                 "message": _lock_summary(manifest, lock_path),
             }
         check = verify_artifacts(settings, hash_files=command == "verify")
+        # The tokenizer section never depends on the embedder outcome, and the
+        # embedder section never on the tokenizers (Decision 1126-D8).
+        tokenizer_check = verify_tokenizers(settings, check.manifest)
         if command == "plan":
-            return _plan_artifacts(check)
+            ok, lines, entries = _plan_tokenizers(tokenizer_check)
+            return _with_tokenizer_section(
+                _plan_artifacts(check), ok, lines, tokenizers=entries
+            )
         if command == "fetch":
-            return _fetch_artifacts(check)
+            ok, lines = fetch_tokenizers(tokenizer_check)
+            return _with_tokenizer_section(
+                _fetch_artifacts(check), ok, lines, first=True
+            )
         specs, report = check.specs, check.report
     except ArtifactLockError as exc:
         return {"success": False, "error": str(exc)}
-    if report.ok:
+    tokenizer_report = tokenizer_check.report
+    if report.ok and tokenizer_report.ok:
         verified = ", ".join(f"{spec.role} {spec.name}" for spec in specs)
+        labels = ", ".join(spec.label for spec in tokenizer_check.specs)
+        tokenizers = (
+            f" Tokenizers cached at their pinned revisions: {labels}."
+            if labels
+            else " No registry tokenizer declared."
+        )
         return {
             "success": True,
             "lock_file": str(lock_path),
-            "message": f"Model artifacts match {lock_path}: {verified}",
+            "message": f"Model artifacts match {lock_path}: {verified}.{tokenizers}",
         }
-    lines = [f"Model artifacts do not match {lock_path}:"]
-    lines.extend(_mismatch_lines(report))
+    lines = []
+    if not report.ok:
+        lines.append(f"Model artifacts do not match {lock_path}:")
+        lines.extend(_mismatch_lines(report))
+    if not tokenizer_report.ok:
+        lines.append(
+            f"Registry tokenizers do not match {lock_path} or the Hugging Face cache:"
+        )
+        lines.extend(_mismatch_lines(tokenizer_report))
     return {
         "success": False,
         "lock_file": str(lock_path),
-        "problems": report.problems,
+        "problems": [*report.problems, *tokenizer_report.problems],
         "error": "\n".join(lines),
     }
