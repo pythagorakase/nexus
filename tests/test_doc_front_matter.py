@@ -65,9 +65,9 @@ RECORDS_HEADING = "## Records"
 RECORD_LINK_TARGET = re.compile(r"\]\(([^)]*)\)$")
 FIRST_ISSUE = re.compile(r"#(\d+)")
 
-# The #817 backfill (817-S3): number -> (kind, first linked issue, status).
-# Losing, renumbering, re-kinding or re-statusing a record is a deliberate
-# edit here.
+# The #817 ledger (817-S3 backfill 0001-0055; 817-S5 records 0056 and up):
+# number -> (kind, first linked issue, status). Losing, renumbering,
+# re-kinding or re-statusing a record is a deliberate edit here.
 DECISION_LEDGER: dict[str, tuple[str, int, str]] = {
     "0001": ("decision", 850, "canonical"),
     "0002": ("decision", 851, "canonical"),
@@ -124,6 +124,34 @@ DECISION_LEDGER: dict[str, tuple[str, int, str]] = {
     "0053": ("decision", 776, "canonical"),
     "0054": ("decision", 777, "canonical"),
     "0055": ("decision", 838, "canonical"),
+    "0056": ("decision", 784, "canonical"),
+    "0057": ("decision", 788, "canonical"),
+    "0058": ("decision", 840, "canonical"),
+    "0059": ("decision", 823, "canonical"),
+    "0060": ("decision", 820, "canonical"),
+    "0061": ("decision", 824, "canonical"),
+    "0062": ("decision", 816, "canonical"),
+    "0063": ("decision", 815, "canonical"),
+    "0064": ("decision", 842, "canonical"),
+    "0065": ("decision", 813, "canonical"),
+    "0066": ("decision", 1102, "canonical"),
+    "0067": ("decision", 821, "canonical"),
+    "0068": ("decision", 1106, "canonical"),
+    "0069": ("decision", 842, "canonical"),
+    "0070": ("decision", 845, "canonical"),
+    "0071": ("decision", 812, "canonical"),
+    "0072": ("decision", 817, "canonical"),
+    "0073": ("decision", 815, "canonical"),
+    "0074": ("decision", 1126, "canonical"),
+    "0075": ("decision", 1129, "canonical"),
+    "0076": ("decision", 816, "canonical"),
+    "0077": ("decision", 1069, "canonical"),
+    "0078": ("decision", 1091, "canonical"),
+    "0079": ("decision", 824, "canonical"),
+    "0080": ("decision", 848, "canonical"),
+    "0081": ("decision", 802, "canonical"),
+    "0082": ("decision", 810, "canonical"),
+    "0083": ("decision", 811, "canonical"),
 }
 
 

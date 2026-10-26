@@ -108,6 +108,11 @@ The decision, or what is parked and why.
 Records hold rulings, not task lists; the linked issue or pull request keeps
 execution state.
 
+When the coordinator relays a loom ruling verbatim to an issue, the pull
+request that lands work under that ruling, or a follow-up pull request, appends
+a record here. The record quotes the relay comment and names the files the
+ruling governs as its `sources`.
+
 ## Records
 
 - [0001: The Cut](0001-the-cut.md)
@@ -165,3 +170,31 @@ execution state.
 - [0053: Resumable Genesis](0053-resumable-genesis.md)
 - [0054: Responsive Shell](0054-responsive-shell.md)
 - [0055: Weirdness Control](0055-weirdness-control.md)
+- [0056: Background Activities](0056-background-activities.md)
+- [0057: Stranger Encounters Without Place Sizes](0057-stranger-encounters-without-place-sizes.md)
+- [0058: Map Points From Their Authors](0058-map-points-from-their-authors.md)
+- [0059: Backups and Rollback Copies](0059-backups-and-rollback-copies.md)
+- [0060: The Runtime Home Move](0060-the-runtime-home-move.md)
+- [0061: Play and Operator Listeners](0061-play-and-operator-listeners.md)
+- [0062: Merge Blocking and the Live Tier](0062-merge-blocking-and-the-live-tier.md)
+- [0063: One Envelope for Every Command](0063-one-envelope-for-every-command.md)
+- [0064: Story Text in Diagnostic Logs](0064-story-text-in-diagnostic-logs.md)
+- [0065: The Legacy Drop Migration Number](0065-the-legacy-drop-migration-number.md)
+- [0066: The Keyboard-Held Tooltip](0066-the-keyboard-held-tooltip.md)
+- [0067: Seat Lists in a Popover](0067-seat-lists-in-a-popover.md)
+- [0068: Incubator Column Comments](0068-incubator-column-comments.md)
+- [0069: Log Redaction at the Call Site](0069-log-redaction-at-the-call-site.md)
+- [0070: The Fable Structured-Output Probe](0070-the-fable-structured-output-probe.md)
+- [0071: Embedding Weights and Legacy Vectors](0071-embedding-weights-and-legacy-vectors.md)
+- [0072: Landing the Ratchet and Ledger Currency](0072-landing-the-ratchet-and-ledger-currency.md)
+- [0073: The Envelope Migration Plan](0073-the-envelope-migration-plan.md)
+- [0074: Pinned Tokenizer Revisions](0074-pinned-tokenizer-revisions.md)
+- [0075: A Behavior-Preserving Reachability Index](0075-a-behavior-preserving-reachability-index.md)
+- [0076: The Offline Merge Gate](0076-the-offline-merge-gate.md)
+- [0077: Refusing Out-of-Range Chunk Slugs](0077-refusing-out-of-range-chunk-slugs.md)
+- [0078: Retiring the Legacy File Ingest](0078-retiring-the-legacy-file-ingest.md)
+- [0079: Listener Ports, Lanes and Origins](0079-listener-ports-lanes-and-origins.md)
+- [0080: Closing the Embedding Orchestration Work](0080-closing-the-embedding-orchestration-work.md)
+- [0081: Golden-Path Observation Assertions](0081-golden-path-observation-assertions.md)
+- [0082: Extension Versions in the Genesis Artifact](0082-extension-versions-in-the-genesis-artifact.md)
+- [0083: Retiring Old Scripts and Retired-Tag Gates](0083-retiring-old-scripts-and-retired-tag-gates.md)
