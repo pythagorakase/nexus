@@ -1381,7 +1381,7 @@ openai = 10000000
 [runtime]
 # local    — spawn and manage services (pidfiles + captured logs in state_dir)
 # external — attach to already-running services: health-check + status only
-# remote   — hosted runtime; status hits <remote.base_url>/runtime/status
+# remote   — hosted runtime; up/status probe <remote.base_url>/health (player plane)
 profile = "local"
 state_dir = ".nexus/runtime"  # relative paths resolve against the runtime home (NEXUS_HOME, else the checkout)
 default_slot = 1              # NEXUS_SLOT for spawned services (--slot/env override)

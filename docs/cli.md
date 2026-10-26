@@ -148,8 +148,13 @@ The runtime is remote when the active `nexus.toml` sets
 than `localhost` or a loopback address. A remote runtime refuses `database`,
 `local_operator` and `operator_api` commands with exit 3 before any connection
 is opened. Two exceptions follow the remote profile itself: `up` and `status`
-probe the hosted runtime's `/runtime/status` over HTTP. The runtime commands
-that accept `--config` (`up`, `down`, `restart`, `status`, `logs`,
+probe the hosted runtime's player-plane `/health` over HTTP and read no
+operator route. A runtime that refuses, drops or does not answer the probe in
+time is `api_unreachable` (exit 4), with `profile`, `config` and `gateway_url`
+in `partial`; a non-2xx answer is `api_error`, and a 401, 403 or unfollowed
+redirect is `config_error`. Under the local and external profiles, `status`
+still exits 0 and reports an unreachable gateway in `runtime.error`. The
+runtime commands that accept `--config` (`up`, `down`, `restart`, `status`, `logs`,
 `models lock`, `models verify`, `models plan`, `models fetch`) check the
 profile of that file. `doctor` and `init` are exempt from the refusal and from
 the configuration check below: they diagnose this machine's configuration and

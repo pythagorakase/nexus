@@ -4357,12 +4357,64 @@ def _runtime_supervisor(args: argparse.Namespace):
     return Supervisor.from_config(getattr(args, "config", None))
 
 
+def _remote_runtime_report(supervisor: Any) -> Dict[str, Any]:
+    """Probe a remote runtime's player-plane /health and report its answer.
+
+    Decisions 815-Q5 and 815-D1: the probe reads GET /health only, never an
+    operator route; a runtime that refuses, drops or does not answer it in
+    time is ``api_unreachable`` (exit 4) with the report fields in
+    ``partial``. Decision 815-D3: the answer is classified by the S1
+    classifier, so a non-2xx is ``api_error`` and a 401, 403 or unfollowed
+    redirect is ``config_error``. Credential errors propagate to the caller.
+    """
+    gateway_url = supervisor.gateway_url()
+    report = {
+        "profile": "remote",
+        "config": str(supervisor.config_path),
+        "gateway_url": gateway_url,
+    }
+    try:
+        health = _api_object(supervisor.probe_remote_health())
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.ChunkedEncodingError,
+    ) as exc:  # nexus-exception-disposition: fail; reason=remote probe; safety=failure envelope
+        return {
+            "success": False,
+            "code": "api_unreachable",
+            "error": f"Cannot connect to API server at {gateway_url}: {exc}",
+            **report,
+        }
+    except (
+        requests.exceptions.Timeout
+    ) as exc:  # nexus-exception-disposition: fail; reason=remote probe; safety=failure envelope
+        return {
+            "success": False,
+            "code": "api_unreachable",
+            "error": f"Timed out waiting for API server at {gateway_url}: {exc}",
+            **report,
+        }
+    except (
+        ApiAnswerFailure
+    ) as exc:  # nexus-exception-disposition: fail; reason=remote probe; safety=failure envelope
+        return {
+            "success": False,
+            "code": exc.code,
+            "error": exc.message,
+            "status_code": exc.status_code,
+            **report,
+        }
+    return {"success": True, **report, "health": health}
+
+
 def run_up(args: argparse.Namespace) -> Dict[str, Any]:
     """Start the runtime per the configured profile."""
     from nexus.runtime import RuntimeError_
 
     try:
         supervisor = _runtime_supervisor(args)
+        if supervisor.runtime.profile == "remote":
+            return _remote_runtime_report(supervisor)
         return supervisor.up(
             slot=args.slot,
             foreground=args.foreground,
@@ -4425,6 +4477,10 @@ def _format_uptime(seconds: float) -> str:
 def _print_runtime_status(result: Dict[str, Any]) -> None:
     runtime = result.get("runtime") or {}
     print(f"NEXUS runtime - profile {result['profile']} - {result['gateway_url']}")
+    if result["profile"] == "remote":
+        health = result["health"]
+        print(f"health {health.get('status', '?')} - plane {health.get('plane', '?')}")
+        return
     rows = []
     health_by_service = runtime.get("services", {})
     for name, proc in (result.get("processes") or {}).items():
@@ -4445,7 +4501,7 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
             )
         )
     if not rows:
-        # external/remote: render gateway health from the runtime endpoint
+        # external: render gateway health from the runtime endpoint
         for name, health in health_by_service.items():
             rows.append(
                 (
@@ -4500,11 +4556,17 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
 
 
 def run_status(args: argparse.Namespace) -> Dict[str, Any]:
-    """Render supervisor process state plus the gateway's /runtime/status."""
+    """Render supervisor process state plus /runtime/status, or a remote runtime's
+    /health."""
     from nexus.runtime import RuntimeError_
 
     try:
         supervisor = _runtime_supervisor(args)
+        if supervisor.runtime.profile == "remote":
+            result = _remote_runtime_report(supervisor)
+            if result["success"] and not args.json:
+                _print_runtime_status(result)
+            return result
         result = supervisor.status()
         if not args.json:
             _print_runtime_status(result)

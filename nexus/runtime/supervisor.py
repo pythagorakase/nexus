@@ -10,7 +10,9 @@ Profiles (configured in nexus.toml [runtime]):
 - ``local``    — spawn and manage the services in [runtime.services.*]
 - ``external`` — attach to already-running services: health-check and status
                  only; never spawns or stops anything
-- ``remote``   — a hosted runtime; status hits <base_url>/runtime/status
+- ``remote``   — a hosted runtime; nothing runs here: up() and status() raise,
+                 and nexus.cli probes <base_url>/health through
+                 probe_remote_health() (Decision 815-Q5)
 """
 
 from __future__ import annotations
@@ -70,6 +72,12 @@ _TAIL_BLOCK_BYTES = 64 * 1024
 # A log mark checks the marked file's identity with a crc32 of this prefix.
 MARK_PREFIX_BYTES = 256
 EMPTY_MARK = "0:0:0"
+# Under the remote profile up() and status() refuse with this; nexus.cli
+# classifies the probe's answer itself (Decision 815-Q5).
+_REMOTE_RUNS_NOTHING = (
+    "The remote profile runs nothing on this machine; probe it with "
+    "Supervisor.probe_remote_health()"
+)
 
 
 class RuntimeError_(Exception):
@@ -894,7 +902,7 @@ class Supervisor:
         if profile == "external":
             return self._attach_external()
         if profile == "remote":
-            return self._check_remote()
+            raise RuntimeError_(_REMOTE_RUNS_NOTHING)
 
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
@@ -981,18 +989,26 @@ class Supervisor:
             )
         return {"success": True, "profile": "external", "services": results}
 
-    def _check_remote(self) -> Dict[str, Any]:
+    def probe_remote_health(self) -> requests.Response:
+        """GET the remote runtime's player-plane `/health` with the runtime's auth
+        headers and redirect policy, bounded by `[runtime.health].timeout_seconds`.
+        Returns the answer unread; the caller classifies it (Decision 815-Q5).
+        Request errors propagate.
+        """
+        if self.runtime.profile != "remote":
+            raise RuntimeError_(
+                "probe_remote_health() serves the remote profile only; this "
+                f"runtime's profile is {self.runtime.profile!r}"
+            )
         remote = self.runtime.remote
-        url = remote.base_url.rstrip("/") + RUNTIME_STATUS_PATH
+        url = remote.base_url.rstrip("/") + "/health"
         auth = build_runtime_request_auth(url, remote)
-        response = requests.get(
+        return requests.get(
             url,
             timeout=self.runtime.health.timeout_seconds,
             headers=auth.headers,
             allow_redirects=auth.allow_redirects,
         )
-        response.raise_for_status()
-        return {"success": True, "profile": "remote", "runtime": response.json()}
 
     def _probe(self, url: str) -> bool:
         try:
@@ -1115,8 +1131,7 @@ class Supervisor:
     def _fetch_runtime_status(self) -> Dict[str, Any]:
         url = self.gateway_url() + RUNTIME_STATUS_PATH
         try:
-            remote = self.runtime.remote if self.runtime.profile == "remote" else None
-            auth = build_runtime_request_auth(url, remote)
+            auth = build_runtime_request_auth(url)
             response = requests.get(
                 url,
                 timeout=self.runtime.health.timeout_seconds,
@@ -1129,7 +1144,10 @@ class Supervisor:
             return {"error": f"runtime status unreachable at {url}: {exc}"}
 
     def status(self) -> Dict[str, Any]:
-        """Supervisor-side process state merged with /runtime/status."""
+        """Supervisor-side process state merged with /runtime/status (local and
+        external profiles)."""
+        if self.runtime.profile == "remote":
+            raise RuntimeError_(_REMOTE_RUNS_NOTHING)
         result: Dict[str, Any] = {
             "success": True,
             "profile": self.runtime.profile,

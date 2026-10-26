@@ -199,7 +199,7 @@ The runtime is operated in one of three profiles, configured in
 |------------|------------------------|----------------------|--------------------------|
 | `local`    | The supervisor (`nexus/runtime/`): spawns services detached with pidfiles and captured logs under `[runtime].state_dir` | Spawns enabled services, waits for health, fails loud with log excerpts | Merges supervisor process state (pid, port, uptime) with `/runtime/status` |
 | `external` | You (or an IDE, a debugger, another orchestrator) | Health-checks the configured URLs; **spawns nothing**; nonzero exit if anything is down | Reads `/runtime/status` from `external.gateway_url` |
-| `remote`   | A hosted operator | Confirms `<remote.base_url>/runtime/status` answers, using Access service auth when configured | Reads the remote runtime's status with the same authentication |
+| `remote`   | A hosted operator | Probes `<remote.base_url>/health` (player plane), using Access service auth when configured; exits 4 when the runtime does not answer | Reports that probe's answer as `health`, with `profile`, `config` and `gateway_url`; reads no operator route |
 
 `nexus down`, `restart`, and `logs` are local-profile verbs: they manage or
 read state that only exists when this machine's supervisor owns the

@@ -173,8 +173,9 @@ FLAG_TRANSPORTS: Mapping[str, Tuple[Tuple[str, Transport], ...]] = MappingProxyT
     }
 )
 
-# Under the remote profile the supervisor answers these by probing the hosted
-# runtime's /runtime/status over HTTP; it spawns and reads nothing locally.
+# Under the remote profile `nexus.cli` answers these by probing the hosted
+# runtime's player-plane /health over HTTP (Decision 815-Q5); nothing is
+# spawned or read locally.
 REMOTE_PROFILE_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
     {"up": "http", "status": "http"}
 )
