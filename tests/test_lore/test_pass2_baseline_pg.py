@@ -41,6 +41,7 @@ from tests.pg_fixtures import (
     route_slot_to_disposable,
     seed_protagonist,
     seed_story_base,
+    slug_bounded_episode_scene,
 )
 from tests.settings_helpers import settings_with
 
@@ -232,13 +233,14 @@ def _seed_parent(conn: Any, label: str, *, season: int = 1) -> int:
             (label, label),
         )
         chunk_id = int(cur.fetchone()[0])
+        episode, scene = slug_bounded_episode_scene(chunk_id)
         cur.execute(
             """
             INSERT INTO chunk_metadata (
-                chunk_id, season, episode, scene, world_layer, slug
-            ) VALUES (%s, %s, 1, %s, 'primary', %s)
+                chunk_id, season, episode, scene, world_layer
+            ) VALUES (%s, %s, %s, %s, 'primary')
             """,
-            (chunk_id, season, chunk_id, f"pass2-{chunk_id}"),
+            (chunk_id, season, episode, scene),
         )
         cur.execute(
             "INSERT INTO places (name, type, coordinates) VALUES "

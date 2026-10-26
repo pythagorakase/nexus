@@ -85,20 +85,6 @@ ALLOWLIST: Dict[tuple[str, str, str], str] = {
         "Slot cloning installs vector and postgis before the source restores "
         "(Decision 810-Q9)."
     ),
-    (
-        "scripts/update_raw_text.py",
-        "ChunkUpdater.create_backup_table",
-        "CREATE TABLE",
-    ): (
-        "A data backup of narrative_chunks before rows are rewritten, kept by "
-        "Decision 810-Q4; not schema ownership."
-    ),
-    ("scripts/simple_update.py", "resequence_all_chunks", "CREATE TABLE"): (
-        "A session temporary table for resequencing; not schema ownership."
-    ),
-    ("scripts/simple_update.py", "resequence_all_chunks", "DROP TABLE"): (
-        "Drops the session temporary tables it created; not schema ownership."
-    ),
     ("scripts/benchmark_experience_enqueue_fence.py", "main", "DROP INDEX"): (
         "Runs on a disposable clone, then re-applies the owning migration."
     ),
@@ -354,14 +340,6 @@ _ASSETS_MESSAGE = (
 )
 
 
-def _baseline_message(table: str) -> str:
-    return (
-        f"Missing public.{table}; it is baseline schema "
-        "(migrations/001_baseline.sql), copied from NEXUS_template by "
-        "scripts/new_story_setup.py."
-    )
-
-
 def _ann_message(table: str, dimensions: int) -> str:
     return (
         f"No ANN index exists on {table}, and this script no longer creates one: "
@@ -400,8 +378,6 @@ try:
     elif call == "migrate_provider_names":
         module.DB_URL = url
         result = module.migrate()
-    elif call == "narrative_importer":
-        module.NarrativeImporter(url)
     elif call == "create_vector_index":
         result = module.create_vector_indexes("bge-large", url)
     elif call == "regenerator_indexes":
@@ -455,8 +431,6 @@ try:
                 dry_run=call.endswith("_dry")
             )
             regenerator.engine.dispose()
-    elif call == "season_episode_extractor":
-        module.SeasonEpisodeExtractor(url)
     else:
         raise SystemExit(f"unknown probe call {call!r}")
     outcome = {"type": None, "message": "", "result": result}
@@ -608,25 +582,6 @@ def test_provider_names_script_refuses_a_missing_enum(tmp_path: Path) -> None:
             "scripts/migrate.py is the only migration runner.",
         )
         assert _scalar(dbname, "SELECT to_regnamespace('apex_audition')::text") is None
-
-
-@pytest.mark.requires_postgres
-def test_importer_requires_its_schema(tmp_path: Path) -> None:
-    """The importer installs no extension and creates or drops no table."""
-
-    script = "scripts/import_narratives.py"
-    with disposable_database("qa640_810s3_importer") as dbname:
-        _refused(
-            _probe(script, "narrative_importer", dbname, tmp_path), _VECTOR_MESSAGE
-        )
-        assert not _vector_installed(dbname)
-
-        _execute(dbname, "CREATE EXTENSION vector")
-        _refused(
-            _probe(script, "narrative_importer", dbname, tmp_path),
-            _baseline_message("narrative_chunks"),
-        )
-        assert _regclass(dbname, "public.narrative_chunks") is None
 
 
 def _ann_count(dbname: str, table: str) -> int:
@@ -790,20 +745,3 @@ def test_regenerator_requires_the_vector_extension(tmp_path: Path) -> None:
         )
         assert not _vector_installed(dbname)
         assert _regclass(dbname, "public.chunk_embeddings_1024d") is None
-
-
-@pytest.mark.requires_postgres
-def test_season_episode_extractor_requires_chunk_metadata(tmp_path: Path) -> None:
-    """The extractor refuses a missing baseline table instead of creating it."""
-
-    with disposable_database("qa640_810s3_season") as dbname:
-        _refused(
-            _probe(
-                "scripts/extract_season_episode.py",
-                "season_episode_extractor",
-                dbname,
-                tmp_path,
-            ),
-            _baseline_message("chunk_metadata"),
-        )
-        assert _regclass(dbname, "public.chunk_metadata") is None

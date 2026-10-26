@@ -955,7 +955,7 @@ def test_activate_captures_through_the_writer_under_the_policy(
             env=env,
         )
         assert completed.returncode == 0, completed.stderr
-        assert json.loads(completed.stdout)["lines"] == TWO_HUNDRED_LINES
+        assert json.loads(completed.stdout)["data"]["lines"] == TWO_HUNDRED_LINES
 
         stopped = local_inference.deactivate()["stopped"]
         assert stopped is True

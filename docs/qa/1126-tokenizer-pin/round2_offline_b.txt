@@ -1,0 +1,68 @@
+# on d875e7d5283fcfad3407e859955cf4a5ab0a7b11; 17:25  up  6:03, 5 users, load averages: 23.38 20.06 19.32
+$ nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/fixtures --ignore=tests/proofs --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util
+........s......................................sssssss...sssssssssssssss [  2%]
+s....................................................................... [  5%]
+........................................................................ [  7%]
+........................................................................ [ 10%]
+........................................................................ [ 13%]
+...................................................ss.............ss.... [ 15%]
+..........................................................ssssssssss.... [ 18%]
+...............s....s........................s......................ss.. [ 20%]
+..............s..ss....................s................................ [ 23%]
+........................................................................ [ 26%]
+...........ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss. [ 28%]
+.......ssssssssssssssss.....s....s..........ss..ssssssssssssssssssssssss [ 31%]
+ssssssss..........ssssssssssssssssssssssssss.......ss................... [ 34%]
+..........s........ss.............ssssssssssssssss...................... [ 36%]
+......................................sssssssssss................sss.... [ 39%]
+................................................ssssss.................s [ 41%]
+s....................................................................... [ 44%]
+............................................................ss..ss...... [ 47%]
+..........................ssssssssssssssssss............................ [ 49%]
+.............................sssssssssssssssssssssssssssssssssssssssssss [ 52%]
+sssssss................................................................. [ 55%]
+................sssssssssssssssss....................................... [ 57%]
+........................s.sssssssssss................................... [ 60%]
+........................................................................ [ 62%]
+.s.....ssssssssssssssssss........s...ss.....................s........... [ 65%]
+...............sssssssssssssssssssssss......................sss......... [ 68%]
+..........s................................................sssssssss...s [ 70%]
+sssss..............s.................................................... [ 73%]
+....ssssssssssssssss.ss.....................sssssssssss.s....sssss...... [ 76%]
+.............................................................s..ssssssss [ 78%]
+sssssssssssssssssssssssss............sssssssssssssssssssssss............ [ 81%]
+........................................................................ [ 83%]
+.................................ss..................................... [ 86%]
+......................................................s..s.............. [ 89%]
+........ssssssssssssssssssss...............................ssss...ssssss [ 91%]
+sssssssssssss..............sssss..ss...................................s [ 94%]
+ssssss....................sss........................................... [ 97%]
+ssss..............................................ssssssssssssssssssssss [ 99%]
+ssssssssss                                                               [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_memnon_cross_encoder_artifact.py::test_qwen3_loads_its_local_folder_and_scores
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/tokenization_utils_base.py:2718: UserWarning: `max_length` is ignored when `padding`=`True` and there is no truncation strategy. To pad to max length, use `padding='max_length'`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+2159 passed, 589 skipped, 8 warnings in 483.75s (0:08:03)

@@ -15,7 +15,7 @@ import tomlkit
 from nexus import cli
 from nexus.config import load_settings
 from nexus.config.settings_models import RuntimeRemoteSettings
-from nexus.runtime import remote_auth
+from nexus.runtime import RuntimeError_, remote_auth
 from nexus.runtime.contract import (
     CF_ACCESS_CLIENT_ID_HEADER,
     CF_ACCESS_CLIENT_SECRET_HEADER,
@@ -261,12 +261,8 @@ def test_cli_credential_request_does_not_follow_live_redirect(
     assert [record["path"] for record in records] == ["/redirect"]
 
 
-def test_supervisor_remote_probe_reaches_live_runtime(
-    runtime_http_server: tuple[str, list[dict[str, Optional[str]]]],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The supervisor probe sends shared auth through a real HTTP socket."""
-    base_url, records = runtime_http_server
+def _remote_supervisor(base_url: str) -> Supervisor:
+    """A supervisor whose runtime profile is remote at ``base_url``."""
     settings = load_settings("nexus.toml")
     runtime = settings.runtime.model_copy(
         update={
@@ -275,20 +271,44 @@ def test_supervisor_remote_probe_reaches_live_runtime(
         }
     )
     settings = settings.model_copy(update={"runtime": runtime})
-    supervisor = Supervisor(settings, Path("nexus.toml"))
+    return Supervisor(settings, Path("nexus.toml"))
+
+
+def test_supervisor_remote_probe_reaches_live_runtime(
+    runtime_http_server: tuple[str, list[dict[str, Optional[str]]]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The player-plane /health probe sends shared auth through a real socket."""
+    base_url, records = runtime_http_server
+    supervisor = _remote_supervisor(base_url)
     monkeypatch.setenv("NEXUS_AUTH", "runtime-token")
 
-    result = supervisor._check_remote()
+    response = supervisor.probe_remote_health()
 
-    assert result["runtime"] == {"ok": True}
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
     assert records == [
         {
-            "path": "/runtime/status",
+            "path": "/health",
             "nexus_auth": "runtime-token",
             "access_id": None,
             "access_secret": None,
         }
     ]
+
+
+def test_supervisor_remote_profile_runs_nothing(
+    runtime_http_server: tuple[str, list[dict[str, Optional[str]]]],
+) -> None:
+    """Under the remote profile up() and status() raise; nexus.cli probes."""
+    base_url, records = runtime_http_server
+    supervisor = _remote_supervisor(base_url)
+
+    with pytest.raises(RuntimeError_, match="probe_remote_health"):
+        supervisor.up()
+    with pytest.raises(RuntimeError_, match="probe_remote_health"):
+        supervisor.status()
+    assert records == []
 
 
 def test_cli_uses_remote_profile_from_explicit_config(

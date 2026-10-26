@@ -1,0 +1,41 @@
+# on d875e7d5283fcfad3407e859955cf4a5ab0a7b11; 17:22  up 6 hrs, 5 users, load averages: 21.67 18.59 18.76
+$ nice -n 15 $PY -m pytest -q tests/config tests/fixtures tests/proofs tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util
+........................................................................ [  6%]
+........................................................................ [ 12%]
+........................................................................ [ 18%]
+......................................ssssss............................ [ 25%]
+..s...........sssssss.............................................ss.... [ 31%]
+........ssssssss...............s........................................ [ 37%]
+....................................................................ssss [ 44%]
+sssss....................sssss...s......sssss......sss.................. [ 50%]
+s..................................................................s..ss [ 56%]
+........................................................................ [ 63%]
+..sssssssss............................sss..........................ss.. [ 69%]
+..s..s.s................ss.............................................. [ 75%]
+.....................................................sssss.............. [ 81%]
+........................................................................ [ 88%]
+....................sssssssssssss....................................... [ 94%]
+..............................................................           [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1053 passed, 89 skipped, 7 warnings in 152.77s (0:02:32)

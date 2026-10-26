@@ -75,7 +75,6 @@ def clock_db() -> Iterator[tuple[str, int]]:
                         world_layer=layer,
                         time_delta=timedelta(minutes=minutes),
                         generation_date=datetime.now(timezone.utc),
-                        slug=f"S01E01_{scene:03d}",
                         generation_model=None,
                         scene_weather=None,
                     )
@@ -166,7 +165,6 @@ def _insert_chunk(cur: Any, *, scene: int, layer: str, delta: timedelta | None) 
         world_layer=layer,
         time_delta=delta,
         generation_date=datetime.now(timezone.utc),
-        slug=f"S01E01_{scene:03d}",
         generation_model=None,
         scene_weather=None,
     )

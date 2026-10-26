@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import copy
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+import logging
 from typing import Any, Literal, Mapping, Sequence
 
 from nexus.api.native_structured_output import WireContractViolation
@@ -15,6 +16,8 @@ from nexus.presence.normalization import (
     normalize_identity_text as _normalize,
 )
 from nexus.presence.roster import IdentityIndex, RosterEntry, _rows
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -141,7 +144,15 @@ def resolve_character_declaration(
             if supported:
                 candidates = supported
         if evidence:
-            reason += "; declared evidence: " + "; ".join(evidence)
+            # The declared summary, role and location are model text: the
+            # reason (and so the exception message that wire rejections log at
+            # WARNING) carries only their count; the text goes to DEBUG (#842).
+            reason += f"; {len(evidence)} declared evidence values"
+            logger.debug(
+                "Ambiguous character declaration %r declared evidence: %s",
+                name,
+                "; ".join(evidence),
+            )
         return IdentityResolution(
             "ambiguous",
             candidates=tuple(index.by_id[key] for key in sorted(candidates)),

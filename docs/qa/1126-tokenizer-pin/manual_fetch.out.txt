@@ -1,0 +1,26 @@
+HF_HOME = <scratch>/1126-S1/hf
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files:  20%|██        | 1/5 [00:00<00:01,  3.28it/s]Fetching 5 files:  80%|████████  | 4/5 [00:00<00:00,  9.83it/s]Fetching 5 files: 100%|██████████| 5/5 [00:00<00:00, 10.68it/s]
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|██▌       | 1/4 [00:00<00:00,  4.29it/s]Fetching 4 files:  75%|███████▌  | 3/4 [00:01<00:00,  2.10it/s]Fetching 4 files: 100%|██████████| 4/4 [00:01<00:00,  2.96it/s]
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|██▌       | 1/4 [00:00<00:00,  4.14it/s]Fetching 4 files:  75%|███████▌  | 3/4 [00:00<00:00,  5.60it/s]Fetching 4 files: 100%|██████████| 4/4 [00:00<00:00,  7.21it/s]
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|██▌       | 1/4 [00:00<00:00,  5.16it/s]Fetching 4 files:  75%|███████▌  | 3/4 [00:01<00:00,  2.85it/s]Fetching 4 files: 100%|██████████| 4/4 [00:01<00:00,  3.98it/s]
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files:  50%|█████     | 1/2 [00:00<00:00,  2.96it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00,  5.92it/s]
+[
+  true,
+  [
+    "tokenizer MiniMaxAI/Minimax-M3 @ f0e1c1e04d40177e4673a22097036854f536e9c0: downloaded into the Hugging Face cache",
+    "tokenizer NousResearch/Hermes-4-405B @ 88e3dce03c4a5535e2f4a2bcc08e939a2b302f82: downloaded into the Hugging Face cache",
+    "tokenizer NousResearch/Hermes-4-70B @ d5dec2bd6b3930a09ddefd0b7fc6523fe0720d09: downloaded into the Hugging Face cache",
+    "tokenizer NousResearch/Hermes-4.3-36B @ 3899db2b6c4b35f16bde3b570bb7dd2775d56161: downloaded into the Hugging Face cache",
+    "tokenizer deepseek-ai/DeepSeek-V4-Pro @ b5968e9190ef611bbf34a7229255be88a0e937c1: downloaded into the Hugging Face cache"
+  ]
+]
+
+# Appended in the review-fix round, 2026-10-26 17:05 CDT; the same HF_HOME, untouched since the fetch above:
+$ du -sh <scratch>/1126-S1/hf
+ 60M	<scratch>/1126-S1/hf
+$ find <scratch>/1126-S1/hf/hub -maxdepth 3 -path "*/snapshots/*"
+<scratch>/1126-S1/hf/hub/models--deepseek-ai--DeepSeek-V4-Pro/snapshots/b5968e9190ef611bbf34a7229255be88a0e937c1
+<scratch>/1126-S1/hf/hub/models--MiniMaxAI--Minimax-M3/snapshots/f0e1c1e04d40177e4673a22097036854f536e9c0
+<scratch>/1126-S1/hf/hub/models--NousResearch--Hermes-4-405B/snapshots/88e3dce03c4a5535e2f4a2bcc08e939a2b302f82
+<scratch>/1126-S1/hf/hub/models--NousResearch--Hermes-4-70B/snapshots/d5dec2bd6b3930a09ddefd0b7fc6523fe0720d09
+<scratch>/1126-S1/hf/hub/models--NousResearch--Hermes-4.3-36B/snapshots/3899db2b6c4b35f16bde3b570bb7dd2775d56161

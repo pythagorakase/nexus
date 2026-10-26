@@ -30,49 +30,47 @@ def test_setup_database_indexes_is_absent() -> None:
     assert found == []
 
 
-def test_content_processor_sql_alias_and_embedding_error_reraise() -> None:
-    """Keep narrative text parameters while constructing SQL and failing loudly."""
+INGEST_NAMES = {
+    "ContentProcessor",
+    "content_processor",
+    "process_all_narrative_files",
+    "process_chunked_file",
+    "store_narrative_chunk",
+    "_generate_chunk_embeddings",
+}
+
+
+def test_memnon_file_ingest_is_absent() -> None:
+    """Reject any return of MEMNON's retired file ingest."""
     root = Path(__file__).resolve().parents[1]
-    tree = ast.parse(
-        (root / "nexus/agents/memnon/utils/content_processor.py").read_text()
-    )
-    assert any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "sqlalchemy"
-        and any(
-            alias.name == "text" and alias.asname == "sql_text" for alias in node.names
-        )
-        for node in ast.walk(tree)
-    )
-    methods = {
-        node.name: node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef)
-        and node.name in {"store_narrative_chunk", "_generate_chunk_embeddings"}
-    }
-    for method in methods.values():
-        assert "text" in [arg.arg for arg in method.args.args]
-        assert not any(
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "text"
-            for node in ast.walk(method)
-        )
-    assert (
-        sum(
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "sql_text"
-            for method in methods.values()
-            for node in ast.walk(method)
-        )
-        == 6
-    )
-    handlers = [
-        node
-        for node in ast.walk(methods["_generate_chunk_embeddings"])
-        if isinstance(node, ast.ExceptHandler)
-    ]
-    assert len(handlers) == 1
-    assert isinstance(handlers[0].body[-1], ast.Raise)
-    assert handlers[0].body[-1].exc is None
+    found = []
+    if (root / "nexus/agents/memnon/utils/content_processor.py").exists():
+        found.append("nexus/agents/memnon/utils/content_processor.py exists")
+    for directory in ["nexus", "scripts", "ir_eval"]:
+        for path in sorted((root / directory).rglob("*.py")):
+            for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
+                names = []
+                if isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ):
+                    names.append(node.name)
+                elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                    names.extend(alias.name for alias in node.names)
+                    if isinstance(node, ast.ImportFrom) and node.module:
+                        names.extend(node.module.split("."))
+                elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    names.append(node.func.id)
+                elif isinstance(node, ast.Attribute):
+                    names.append(node.attr)
+                if any(name in INGEST_NAMES for name in names):
+                    line = getattr(node, "lineno")
+                    found.append(f"{path.relative_to(root)}:{line}")
+    memnon = root / "nexus/agents/memnon/memnon.py"
+    for node in ast.walk(ast.parse(memnon.read_text(), filename=str(memnon))):
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and node.value.startswith("process files")
+        ):
+            found.append(f"memnon.py:{node.lineno}")
+    assert found == []

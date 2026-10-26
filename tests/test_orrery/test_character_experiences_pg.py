@@ -65,6 +65,7 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     seed_experience_render_job,
+    slug_bounded_episode_scene,
     sqlalchemy_url,
 )
 
@@ -164,11 +165,12 @@ def _insert_chunk(cur: Any, label: str) -> int:
         (label, label),
     )
     chunk_id = int(cur.fetchone()[0])
+    episode, scene = slug_bounded_episode_scene(chunk_id)
     cur.execute(
         "INSERT INTO chunk_metadata "
-        "(chunk_id, season, episode, scene, world_layer, slug) "
-        "VALUES (%s, 1, 1, %s, 'primary', %s)",
-        (chunk_id, chunk_id, f"qa677_{chunk_id}"),
+        "(chunk_id, season, episode, scene, world_layer) "
+        "VALUES (%s, 1, %s, %s, 'primary')",
+        (chunk_id, episode, scene),
     )
     cur.execute(
         "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",

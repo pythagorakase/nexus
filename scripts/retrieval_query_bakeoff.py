@@ -56,7 +56,6 @@ QUIET_LOGGERS = [
     "nexus.memnon.db_schema",
     "nexus.memnon.embedding_manager",
     "nexus.memnon.cross_encoder",
-    "nexus.memnon.content_processor",
     "nexus.memnon.query_analysis",
     "nexus.memnon.continuous_temporal_search",
     "nexus.lore.local_llm",

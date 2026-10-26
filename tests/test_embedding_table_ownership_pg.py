@@ -11,7 +11,6 @@ from psycopg2.extras import RealDictCursor
 import pytest
 from sqlalchemy import create_engine
 
-from nexus.agents.memnon.utils.content_processor import ContentProcessor
 from nexus.agents.memnon.utils.db_schema import DatabaseManager
 from nexus.agents.memnon.utils.embedding_manager import EmbeddingManager
 from nexus.agents.memnon.utils.embedding_tables import (
@@ -518,32 +517,3 @@ def test_embedding_job_source_path_propagates_ensure_failure(ownership_db: str) 
             assert cur.fetchone() == (None,)
             cur.execute(f"SELECT * FROM {name}")
             assert cur.fetchall() == [("preserved",)]
-
-
-@pytest.mark.requires_local_models
-def test_content_processor_embedding_method_propagates_ensure_failure(
-    ownership_db: str,
-) -> None:
-    """Exercise the legacy embedding method without the #1091 metadata INSERT."""
-    settings = load_memnon_settings()
-    embedder = EmbeddingManager(settings=settings)
-    dimensions = next(iter(active_memnon_embedding_model_dimensions().values()))
-    name = CHUNK_SOURCE.table_name_for_dimensions(dimensions)
-    row_id = seed_source(ownership_db, CHUNK_SOURCE)
-    with closing(connect(ownership_db)) as conn, conn, conn.cursor() as cur:
-        cur.execute(f"CREATE TABLE {name} (marker text)")
-        before = catalog_snapshot(cur)
-    manager = DatabaseManager(database_url(ownership_db))
-    try:
-        processor = ContentProcessor(manager, embedder, settings)
-        with pytest.raises(RuntimeError, match=name + r".*expected.*observed"):
-            with manager.Session.begin() as session:
-                processor._generate_chunk_embeddings(
-                    session, row_id, "The ledger survived."
-                )
-    finally:
-        manager.close()
-    with closing(connect(ownership_db)) as conn, conn.cursor() as cur:
-        assert catalog_snapshot(cur) == before
-        cur.execute(f"SELECT count(*) FROM {name}")
-        assert cur.fetchone() == (0,)

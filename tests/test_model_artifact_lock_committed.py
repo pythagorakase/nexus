@@ -67,3 +67,25 @@ def test_committed_lock_names_the_production_models() -> None:
                 REVISION_SOURCE_GIT,
                 REVISION_SOURCE_HUGGINGFACE,
             }
+
+
+def test_committed_lock_pins_every_registry_tokenizer() -> None:
+    """Issue #1126: the lock's ``tokenizers`` equals nexus.toml's pins, sorted."""
+
+    config = _committed()
+    pins = sorted(
+        {
+            (entry["tokenizer_repository"], entry.get("tokenizer_revision"))
+            for provider in config["global"]["model"]["api_models"].values()
+            for entry in provider["models"]
+            if "tokenizer_repository" in entry
+        }
+    )
+    assert pins
+    lock_file = Path(config["memnon"]["artifacts"]["lock_file"])
+    manifest = read_manifest(
+        lock_file if lock_file.is_absolute() else REPO_ROOT / lock_file
+    )
+    assert manifest.get("tokenizers") == [
+        {"repo_id": repo_id, "revision": revision} for repo_id, revision in pins
+    ]

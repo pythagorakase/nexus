@@ -1,5 +1,6 @@
 """Unit tests for synchronous narrative commit helpers."""
 
+import inspect
 import json
 import logging
 from datetime import datetime, timezone
@@ -986,7 +987,6 @@ def test_sync_chunk_metadata_insert_carries_generation_model():
         world_layer="primary",
         time_delta=60,
         generation_date=datetime(2026, 9, 29, tzinfo=timezone.utc),
-        slug="S01E02_003",
         generation_model="resolved-sync-model",
         scene_weather=None,
     )
@@ -994,6 +994,8 @@ def test_sync_chunk_metadata_insert_carries_generation_model():
     sql, params = cur.statements[-1], cur.params[-1]
     assert "generation_model" in sql
     assert params[-1] == "resolved-sync-model"
+    assert "slug" not in sql
+    assert "slug" not in inspect.signature(insert_chunk_metadata_sync).parameters
 
 
 def test_sync_location_state_updates_map_conditions_to_status_column():
