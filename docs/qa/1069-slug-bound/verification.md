@@ -673,3 +673,94 @@ dbname audit: owner targets: none
 
 `psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE
 'qa640_1069%'"` printed nothing afterwards.
+
+## Astra Round: NULL-Part Cases
+
+Astra's review (P3 at `tests/test_api/test_chunk_slug_bound_pg.py:91` on
+`002dc880`) found that every case supplied integer parts, so a trigger
+regression that turned a NULL part into digits would pass. Decision 1069-D4
+keeps NULL handling unchanged: a NULL part gives a NULL slug. Commit `42923d2f`
+adds real-trigger cases on the module's existing `qa640_1069_slug` clone; no
+product code or migration changed:
+
+- `test_null_part_insert_yields_a_null_slug` (`:235-248`), parametrized
+  `season-null` `(None, 4, 1)`, `episode-null` `(1, None, 1)` and `scene-null`
+  `(1, 4, None)`: an INSERT through `_seed_chunk_with_parts` (`:91-115`; SQL,
+  because `seed_committed_chunk` types the parts as int, with a zero
+  `time_delta` as in the nullable case of `test_reader_feed_pg.py`) stores the
+  parts as given, and the slug fetched by `_parts_and_slug` (`:118-128`)
+  `is None`.
+- `test_update_to_a_null_part_clears_the_slug` (`:251-269`): a chunk seeded at
+  `(1, 5, 1)` reads back `S01E05_001`; `UPDATE chunk_metadata SET scene = NULL`
+  touches exactly one row; the parts read back `(1, 5, None)` and the fetched
+  slug `is None`.
+
+Black `--check`, flake8 and `$PY -m mypy --explicit-package-bases` on the file
+report nothing at `002dc880` and nothing at `42923d2f` (`1 file would be left
+unchanged.`, no flake8 output, `Success: no issues found in 1 source file`).
+
+Recorded run at `42923d2f` with a clean tree (one-minute load 10.72, no wait):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_chunk_slug_bound_pg.py > <scratch>/1069-S1/astra-null/real.log 2>&1
+```
+
+Tail, verbatim from the guard line to the end:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 3 targets: postgres, qa640_1069_commit_*, qa640_1069_slug_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+15 passed, 5 warnings in 13.47s
+```
+
+The 15 cases (`--collect-only -q`, same environment) are the 11 earlier ones
+plus `test_null_part_insert_yields_a_null_slug[season-null]`, `[episode-null]`
+and `[scene-null]`, and `test_update_to_a_null_part_clears_the_slug`.
+
+Bite, at `42923d2f`. The trigger and the migration stay as they are. The
+scratch plant replaces the expected value on both new `assert slug is None`
+lines (`:248`, `:269`) with the non-NULL string `"S00E00_000"`, runs the file,
+and restores it (one-minute load 9.49):
+
+```
+$ sed -i '' 's/assert slug is None/assert slug == "S00E00_000"/' tests/test_api/test_chunk_slug_bound_pg.py
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_chunk_slug_bound_pg.py > <scratch>/1069-S1/astra-null/bite.log 2>&1
+$ git checkout -- tests/test_api/test_chunk_slug_bound_pg.py
+```
+
+Each new case fails on the plant with the fetched slug `None` (`grep -n` on
+the log):
+
+```
+21:E       AssertionError: assert None == 'S00E00_000'
+42:E       AssertionError: assert None == 'S00E00_000'
+63:E       AssertionError: assert None == 'S00E00_000'
+89:E       AssertionError: assert None == 'S00E00_000'
+```
+
+Tail, verbatim from the guard line to the end:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 3 targets: postgres, qa640_1069_commit_*, qa640_1069_slug_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_api/test_chunk_slug_bound_pg.py::test_null_part_insert_yields_a_null_slug[season-null]
+FAILED tests/test_api/test_chunk_slug_bound_pg.py::test_null_part_insert_yields_a_null_slug[episode-null]
+FAILED tests/test_api/test_chunk_slug_bound_pg.py::test_null_part_insert_yields_a_null_slug[scene-null]
+FAILED tests/test_api/test_chunk_slug_bound_pg.py::test_update_to_a_null_part_clears_the_slug
+4 failed, 11 passed, 5 warnings in 10.79s
+```
+
+After the restore, `git status --short` was empty and `git diff --exit-code`
+passed. `psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname
+LIKE 'qa640_1069%'"` printed nothing after each run.
+`PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py`
+at `42923d2f`: `66 passed, 5 warnings in 7.27s`.
