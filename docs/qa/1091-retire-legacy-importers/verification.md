@@ -332,6 +332,15 @@ from it in any case.
 
 ## Offline Suites
 
+Revision (recorded by the coordinator after the Astra review): both runs were
+taken on the working tree of 1119-S2 after its deletions and edits were made
+and before they were committed as `56c2727f`; between the runs and that commit
+only this evidence file changed (the builder's transcript shows no other edit).
+The two commits after `56c2727f` (`d56b0957`, `2b51df8c`) changed only these
+files: `docs/qa/1091-retire-legacy-importers/verification.md`, `docs/vector_embeddings.md`, `nexus/agents/memnon/README_MEMNON.md`.
+The coordinator's whole-tree PostgreSQL gate at the final head is recorded on
+the PR.
+
 ```
 $ nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
