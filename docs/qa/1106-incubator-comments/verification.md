@@ -9,6 +9,13 @@ comment (decision 1106-D1 and its amendment at order freeze, which adds
 `NEXUS_template` or `ref_codex_bakeoff_2026_07` was written. Test and listing
 runs used disposable `qa640_` clones.
 
+The reads and tails below were re-run on commit `4931cf24` (the migration and
+guard test as reviewed) after review asked for every command and every tail;
+the commit that records them changes only this file. Each PostgreSQL run is
+preceded by the `uptime` read taken just before it. `$PY` is
+`/Users/pythagor/nexus/.venv/bin/python`, and every PostgreSQL run had
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset.
+
 ## Migration Number Check (Decision 1106-D3)
 
 ```
@@ -23,9 +30,13 @@ The newest migration on `origin/main` is `151_relationship_entity_ids.sql`.
 
 ## Before Texts (Read Only, 2026-10-26)
 
-md5 over every incubator column comment, in attnum order:
+md5 over every incubator column comment, in attnum order (the loop as run):
 
 ```
+$ for db in NEXUS_template save_01 save_02 save_03 save_04 save_05; do
+    echo "== $db"
+    PGOPTIONS='-c default_transaction_read_only=on' psql -d "$db" -Atc "SELECT md5(string_agg(coalesce(col_description('public.incubator'::regclass, attnum),''), '|' ORDER BY attnum)) FROM pg_attribute WHERE attrelid = 'public.incubator'::regclass AND attnum > 0 AND NOT attisdropped"
+  done
 == NEXUS_template
 6c46fa96543ffe20d5a9f2dbae7cb923
 == save_01
@@ -69,14 +80,35 @@ correspondence_gaia_letter|Player-invisible provisional Gaia reply; copied to th
 lore_pass_baseline|Unbound versioned Pass-2 baseline staged atomically with provisional storyteller prose and discarded on rejection.
 ```
 
-The same query on `save_01` to `save_05` returned output byte-identical to the
-template (each saved to a file and compared with `diff -q`; all five
-identical), which the equal md5 values above also show.
+The same query on `save_01` to `save_05`, each saved to a file and compared with
+the template output (the loop as run, in the `1106-S1` scratch directory):
+
+```
+$ for db in NEXUS_template save_01 save_02 save_03 save_04 save_05; do
+    PGOPTIONS='-c default_transaction_read_only=on' psql -d "$db" -Atc "SELECT attname, col_description('public.incubator'::regclass, attnum) FROM pg_attribute WHERE attrelid = 'public.incubator'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum" > "before_$db.txt"
+  done
+$ wc -l before_*.txt
+      23 before_NEXUS_template.txt
+      23 before_save_01.txt
+      23 before_save_02.txt
+      23 before_save_03.txt
+      23 before_save_04.txt
+      23 before_save_05.txt
+     138 total
+$ for db in save_01 save_02 save_03 save_04 save_05; do
+    diff -q before_NEXUS_template.txt "before_$db.txt" && echo "before_$db.txt: identical to before_NEXUS_template.txt"
+  done
+before_save_01.txt: identical to before_NEXUS_template.txt
+before_save_02.txt: identical to before_NEXUS_template.txt
+before_save_03.txt: identical to before_NEXUS_template.txt
+before_save_04.txt: identical to before_NEXUS_template.txt
+before_save_05.txt: identical to before_NEXUS_template.txt
+```
 
 Function comment before (`NEXUS_template`):
 
 ```
-$ psql -d NEXUS_template -Atc "select obj_description('public.clear_incubator()'::regprocedure,'pg_proc'), pg_get_functiondef('public.clear_incubator()'::regprocedure)"
+$ PGOPTIONS='-c default_transaction_read_only=on' psql -d NEXUS_template -Atc "select obj_description('public.clear_incubator()'::regprocedure,'pg_proc'), pg_get_functiondef('public.clear_incubator()'::regprocedure)"
 Clear the incubator after content is approved and committed|CREATE OR REPLACE FUNCTION public.clear_incubator()
  RETURNS void
  LANGUAGE plpgsql
@@ -85,6 +117,7 @@ BEGIN
     DELETE FROM incubator WHERE id = TRUE;
 END;
 $function$
+
 ```
 
 ## Code Searches
@@ -119,12 +152,22 @@ tests/test_schema_documentation_pg.py:289:            "function:public.clear_inc
 clears the comment to probe the schema-documentation ratchet. No SQL caller of
 `clear_incubator()` exists in `nexus/` or `scripts/`.
 
+These searches were recorded on the base commit `c7ae2988`. Re-run on
+`4931cf24`, the first two return the same lines, and `git grep -n
+clear_incubator` adds only this branch's own files (migration 152, the guard
+test, `listing.py` and this file).
+
 ## Fleet Facts Behind the Comments (Read Only)
 
 `parent_chunk_id = 0` names no chunk, and the pending drafts on `save_03` and
 `save_04` hold the values the new comments state:
 
 ```
+$ for db in save_01 save_02 save_03 save_04 save_05; do
+    echo "== $db"
+    PGOPTIONS='-c default_transaction_read_only=on' psql -d "$db" -Atc "SELECT 'min_id=' || coalesce(min(id)::text, 'none') || ' has_id0=' || coalesce(bool_or(id = 0), false)::text FROM narrative_chunks"
+    PGOPTIONS='-c default_transaction_read_only=on' psql -d "$db" -Atc "SELECT 'incubator: status=' || status || ' parent=' || parent_chunk_id || ' authorial_directives=' || authorial_directives::text || ' llm_response_id=' || coalesce(llm_response_id, 'NULL') || ' generation_model_null=' || (generation_model IS NULL)::text FROM incubator"
+  done
 == save_01
 min_id=1 has_id0=false
 == save_02
@@ -141,7 +184,16 @@ min_id=none has_id0=false
 
 ## Red Run (Test File Present, Migration 152 Absent)
 
+First recorded at `a6595dbe` (test file committed, migration not yet written):
+15 failed, 6 passed. Re-run on `4931cf24` by moving the migration file out of
+the worktree for the run and back afterwards (`git status --short` shows the
+deletion during the run and a clean tree after):
+
 ```
+$ mv migrations/152_incubator_column_comments.sql <scratch>/1106-S1/152_aside.sql && git status --short
+ D migrations/152_incubator_column_comments.sql
+$ uptime
+14:01  up  2:39, 5 users, load averages: 5.57 6.91 6.01
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_incubator_column_comments_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
@@ -165,7 +217,10 @@ FAILED tests/test_incubator_column_comments_pg.py::test_every_corrected_comment_
 FAILED tests/test_incubator_column_comments_pg.py::test_every_corrected_comment_replaced_its_pre_152_text[parent_chunk_id]
 FAILED tests/test_incubator_column_comments_pg.py::test_every_corrected_comment_replaced_its_pre_152_text[reference_updates]
 FAILED tests/test_incubator_column_comments_pg.py::test_every_corrected_comment_replaced_its_pre_152_text[status]
-15 failed, 6 passed in 2.44s
+15 failed, 6 passed in 2.03s
+(exit 1)
+$ mv <scratch>/1106-S1/152_aside.sql migrations/152_incubator_column_comments.sql && git status --short
+(no output: clean tree)
 ```
 
 The first test (three cases), the fourth test and the fifth test (eleven
@@ -174,6 +229,8 @@ cases) fail; the two rejection tests (six cases) pass.
 ## After Texts (Migrated qa640_ Clone)
 
 ```
+$ uptime
+14:03  up  2:40, 5 users, load averages: 8.05 7.31 6.24
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY docs/qa/1106-incubator-comments/listing.py
 clone qa640_1106_listing_* at schema version 152
 
@@ -209,12 +266,16 @@ Registry model id that produced the pending storyteller text. write_to_incubator
 
 clear_incubator() (byte-identical to migration text: True, 210 bytes)
 Deletes the singleton incubator row, discarding any pending draft. No code in nexus/ or scripts/ calls it: DELETE /api/narrative/incubator, slot undo and acceptance each delete the row with their own statement.
-(exit 0; psql restore chatter from the clone fixture omitted)
+(exit 0; the psql restore chatter of the clone fixture on stdout before the
+first line above, and the pg_dump circular-foreign-key warnings on stderr, are
+omitted)
 ```
 
 ## Green Runs
 
 ```
+$ uptime
+14:01  up  2:39, 5 users, load averages: 5.44 6.86 5.99
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_incubator_column_comments_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
@@ -222,27 +283,39 @@ dbname audit: 2 targets: postgres, qa640_1106_comments_*
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-21 passed in 2.41s
+21 passed in 2.24s
 ```
 
 ```
-$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_incubator_column_comments_pg.py tests/test_enum_column_comment_labels_pg.py tests/test_schema_documentation_pg.py tests/test_migration_comment_lint.py tests/test_orrery/test_migrate.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
+$ uptime
+14:01  up  2:39, 5 users, load averages: 5.37 6.80 5.98
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_incubator_column_comments_pg.py tests/test_enum_column_comment_labels_pg.py tests/test_schema_documentation_pg.py tests/test_migration_comment_lint.py tests/test_orrery/test_migrate.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 dbname audit: 19 targets: postgres, qa640_1106_comments_*, qa640_816_lifecycle_test_provider, qa640_819_labels_*, qa640_885_ren_replay_* x4, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6
 dbname audit: owner server: local:5432
-dbname audit: registered disposable clusters: two_clusters[0] at local:61971 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:61977 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
-dbname audit: owner names admitted on registered clusters: save_04@local:61971 (psycopg2), save_04@local:61977 (psycopg2)
+dbname audit: registered disposable clusters: two_clusters[0] at local:59433 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:59436 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:59433 (psycopg2), save_04@local:59436 (psycopg2)
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-197 passed, 2 skipped, 2 warnings in 66.42s (0:01:06)
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+197 passed, 2 skipped, 2 warnings in 66.62s (0:01:06)
 sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
+
+The two skips are the `@requires_corpus` owner-corpus probes at
+`tests/test_orrery/test_card_identity.py:122`, which run only under
+`NEXUS_RUN_CORPUS=1`. `test_migration_sequence_has_only_known_gaps` passes.
+
+## Other Gates
 
 ```
 $ PYTHONPATH=$PWD $PY scripts/check_migration_comments.py
 OK: every object created after migration 129 has a comment.
 
+$ uptime
+14:03  up  2:41, 5 users, load averages: 7.93 7.33 6.27
 $ PGOPTIONS='-c default_transaction_read_only=on' PYTHONPATH=$PWD $PY scripts/migrate.py --status | grep -E '^\S|\[ \]'
 Found 149 managed migrations in /Users/pythagor/nexus/.claude/worktrees/1106-S1/migrations
 NEXUS_template:
@@ -261,15 +334,50 @@ $ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
 OK: exception disposition coverage and shrink-only baseline verified.
 ```
 
-Offline suites:
+## Static Checks
 
 ```
-$ nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
-3196 passed, 699 skipped, 8 warnings in 624.54s (0:10:24)
+$ $PY -m black --check tests/test_incubator_column_comments_pg.py docs/qa/1106-incubator-comments/listing.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+(exit 0)
+$ $PY -m flake8 tests/test_incubator_column_comments_pg.py docs/qa/1106-incubator-comments/listing.py
+(exit 0)
+$ $PY -m mypy --explicit-package-bases tests/test_incubator_column_comments_pg.py docs/qa/1106-incubator-comments/listing.py
+Success: no issues found in 2 source files
+(exit 0)
+```
+
+Both files are new, so there is no `origin/main` version to compare.
+
+## Offline Suites
+
+The first offline command of the order (`tests --ignore=tests/test_api
+--ignore=tests/test_orrery`) ran 624.54s before review, longer than the
+ten-minute command limit, so it was re-run as two pieces that together cover
+the same files (2151 + 1045 = 3196 passed, 610 + 89 = 699 skipped, as before).
+
+```
+$ nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/fixtures --ignore=tests/proofs --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+2151 passed, 610 skipped, 8 warnings in 531.16s (0:08:51)
+(exit 0)
+$ nice -n 15 $PY -m pytest -q tests/config tests/fixtures tests/proofs tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1045 passed, 89 skipped, 7 warnings in 167.12s (0:02:47)
+(exit 0)
 $ nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery
-1910 passed, 1532 skipped, 7 warnings in 46.15s
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1910 passed, 1532 skipped, 7 warnings in 49.73s
+(exit 0)
 $ $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py
-120 passed, 5 warnings in 17.87s
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+120 passed, 5 warnings in 19.79s
+(exit 0)
 ```
 
 No file this branch changes is a declared `sources:` entry of `AGENTS.md`,
