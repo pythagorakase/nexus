@@ -11,6 +11,12 @@ from typing import Any, Callable, cast, Literal
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from anthropic.types.beta import (
+    BetaMessage,
+    BetaTextBlock,
+    BetaThinkingBlock,
+    BetaUsage,
+)
 from pydantic import BaseModel, ValidationError
 from pydantic_ai import ModelRetry
 
@@ -1496,6 +1502,186 @@ async def test_anthropic_rejection_logs_cover_branches_without_input_leaks(
         record.getMessage().startswith("structured-output retries exhausted")
         for record in caplog.records
     )
+
+
+_STOP_REASON_SENTINEL = "SENTINEL-845"
+_DID_NOT_INCLUDE = {
+    "native": "Anthropic structured response did not include JSON output",
+    "prompted": "Anthropic prompted structured response did not include text output",
+    "tool_envelope": (
+        "Anthropic tool-envelope response did not include the "
+        "submit_structured_response tool_use block"
+    ),
+}
+
+
+def _beta_message(
+    content: list[Any],
+    stop_reason: Literal["end_turn", "max_tokens", "refusal"],
+    output_tokens: int,
+) -> BetaMessage:
+    """Build a real Anthropic beta Messages response for the extractor tests."""
+
+    return BetaMessage(
+        id="msg_845",
+        type="message",
+        role="assistant",
+        model=registry_model("anthropic"),
+        content=content,
+        stop_reason=stop_reason,
+        stop_sequence=None,
+        usage=BetaUsage(input_tokens=33, output_tokens=output_tokens),
+    )
+
+
+def _stop_reason_case(
+    case: Literal["thinking_only", "empty", "truncated", "refusal"],
+) -> tuple[BetaMessage, str]:
+    """Return one #845 response shape and its expected diagnostics."""
+
+    thinking = BetaThinkingBlock(
+        type="thinking",
+        thinking=f"{_STOP_REASON_SENTINEL} thinking",
+        signature="sig-845",
+    )
+    if case == "thinking_only":
+        return (
+            _beta_message([thinking], "end_turn", 812),
+            "stop_reason=end_turn block_types=thinking output_tokens=812",
+        )
+    if case == "empty":
+        return (
+            _beta_message([], "end_turn", 0),
+            "stop_reason=end_turn block_types=none output_tokens=0",
+        )
+    if case == "truncated":
+        truncated = BetaTextBlock(
+            type="text", text='{"narrative": "' + _STOP_REASON_SENTINEL
+        )
+        return (
+            _beta_message([thinking, truncated], "max_tokens", 25000),
+            "stop_reason=max_tokens block_types=thinking,text output_tokens=25000",
+        )
+    refusal = BetaTextBlock(type="text", text=f"{_STOP_REASON_SENTINEL} refusal prose")
+    return (
+        _beta_message([refusal], "refusal", 37),
+        "stop_reason=refusal block_types=text output_tokens=37",
+    )
+
+
+@pytest.mark.parametrize("transport", ["native", "prompted", "tool_envelope"])
+@pytest.mark.parametrize("case", ["thinking_only", "empty", "truncated", "refusal"])
+def test_anthropic_extractors_name_stop_reason_and_blocks(
+    caplog: pytest.LogCaptureFixture,
+    transport: Literal["native", "prompted", "tool_envelope"],
+    case: Literal["thinking_only", "empty", "truncated", "refusal"],
+) -> None:
+    """Every Anthropic extractor names stop_reason, block types and token count.
+
+    Issue #845 (S1): an empty, thinking-only, truncated or refused response
+    raises a ValueError whose text and rejection log line carry the response's
+    stop_reason, its content block types in order and usage.output_tokens,
+    never its text or thinking. ``max_tokens`` and ``refusal`` get their own
+    messages; the repair loop keeps its shape.
+    """
+
+    response, diagnostics = _stop_reason_case(case)
+    if case == "truncated":
+        expected_message = (
+            "Anthropic structured response stopped at the output-token limit "
+            f"before complete structured output; {diagnostics}"
+        )
+    elif case == "refusal":
+        expected_message = f"Anthropic structured response was a refusal; {diagnostics}"
+    else:
+        expected_message = f"{_DID_NOT_INCLUDE[transport]}; {diagnostics}"
+    calls: list[dict[str, Any]] = []
+
+    class FakeMessages:
+        def create(self, **kwargs: Any) -> Any:
+            calls.append(kwargs)
+            return response
+
+    provider = AnthropicProvider(
+        model=registry_model("anthropic"),
+        api_key="test-key",
+        structured_transport=transport,
+        structured_output_retries=1,
+        usage_seat="writer",
+    )
+    provider.client = cast(
+        Any, SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+    )
+
+    with caplog.at_level(logging.WARNING, logger="nexus.metadata"):
+        with pytest.raises(ValueError) as exc_info:
+            provider.get_structured_completion("Prompt", SkaldWriterWire)
+
+    exc = exc_info.value
+    assert not isinstance(exc, ValidationError)
+    assert str(exc) == expected_message
+    if case in ("truncated", "refusal"):
+        assert exc.__cause__ is not None
+    assert len(calls) == 2
+    assert calls[0]["messages"][0]["content"] == "Prompt"
+    assert "=== STRUCTURED OUTPUT RETRY ===" in calls[1]["messages"][0]["content"]
+    rejection_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("structured-output rejected")
+    ]
+    assert len(rejection_logs) == 2
+    for attempt, line in enumerate(rejection_logs, start=1):
+        assert line == (
+            f"structured-output rejected transport={transport} "
+            f"model={registry_model('anthropic')} seat=writer attempt={attempt} "
+            f"exception=ValueError {diagnostics} error={expected_message}"
+        )
+    assert _STOP_REASON_SENTINEL not in str(exc)
+    assert all(_STOP_REASON_SENTINEL not in line for line in rejection_logs)
+    assert _STOP_REASON_SENTINEL not in caplog.text
+
+
+def test_anthropic_accepts_valid_output_whatever_the_stop_reason() -> None:
+    """A valid native output is accepted even when stop_reason is max_tokens.
+
+    Issue #845 (S1) adds diagnostics only: stop_reason never rejects a
+    response whose structured output validates.
+    """
+
+    expected = SkaldWriterWire(
+        narrative="[TEST MODE] Complete at the limit.",
+        choices=["Continue", "Wait"],
+        letter="Keep the next beat private.",
+    )
+    response = _beta_message(
+        [BetaTextBlock(type="text", text=expected.model_dump_json())],
+        "max_tokens",
+        4096,
+    )
+    calls: list[dict[str, Any]] = []
+
+    class FakeMessages:
+        def create(self, **kwargs: Any) -> Any:
+            calls.append(kwargs)
+            return response
+
+    provider = AnthropicProvider(
+        model=registry_model("anthropic"),
+        api_key="test-key",
+        structured_transport="native",
+        structured_output_retries=1,
+        usage_seat="writer",
+    )
+    provider.client = cast(
+        Any, SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+    )
+
+    parsed, llm_response = provider.get_structured_completion("Prompt", SkaldWriterWire)
+
+    assert parsed == expected
+    assert len(calls) == 1
+    assert llm_response.output_tokens == 4096
 
 
 @pytest.mark.parametrize("transport", ["native", "prompted", "tool_envelope"])
