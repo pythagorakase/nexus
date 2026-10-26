@@ -176,7 +176,51 @@ FAILED tests/test_embedding_artifacts.py::test_lock_tokenizer_section_shape_is_e
 (`[missing]`: the plan stderr lacks "the lock records no tokenizers";
 `[malformed]`: `verify_tokenizers` raised `KeyError: 'revision'`.)
 
+### Review Round 2 (d875e7d5)
+
+- `run_models_command` now reads the lock, runs `verify_tokenizers`, and for
+  `fetch` runs `fetch_tokenizers`, before it reads the embedder folders. The
+  new `_verify_embedder` turns an `ArtifactLockError` from `verify_artifacts`
+  (for example a folder whose Hugging Face metadata mixes revisions,
+  `artifact_manifest.py` `_snapshot_revision`, or a `.git` whose HEAD cannot be
+  read, `_git_revision`) into a failed result, and plan, fetch and verify join
+  the tokenizer section to it. This is option (a) of the finding, so fetch
+  handles tokenizers whatever the embedder's state, as `docs/cli.md` and the
+  docstrings already said. Its handler carries
+  `# nexus-exception-disposition: fail; reason=folder; safety=failed result`.
+- New test `test_tokenizers_survive_an_embedder_folder_that_cannot_be_read`:
+  after the lock, one embedder metadata file names a second revision; plan,
+  fetch and verify each exit 1 naming both the mixed-revision error and the
+  tokenizer line, and fetch writes no `models--*` under `HF_HOME`.
+- `test_tokenizer_section_reports_absent_then_present` now reads plan's
+  structured `tokenizers` key (a `python -c` subprocess with the same offline
+  `HF_HOME`) and asserts `[{"repo_id", "revision", "models":
+  ["nousresearch/hermes-4-70b"], "state": "absent"}]`, then `present` after
+  the plant.
+- The two edited tomlkit tests annotate the parsed document (`settings: Any`,
+  `config: Any`), which clears the mypy diagnostics on their edited lines.
+- `docs/vector_embeddings.md` adds one sentence after the verify remediation
+  sentence naming the two tokenizer failures and their remedies.
+
+Red first: with f827f8d3's `artifact_manifest.py` and d875e7d5's tests, the
+new folder test fails (the plan stderr holds only the embedder error) and the
+plan-key test passes, as expected for a test that adds coverage of an existing
+key. Raw output: `round2_red.txt`. Verbatim tail:
+
+```
+>           assert tokenizer_line in result.stderr, result.stderr
+E           AssertionError: Error: /private/var/folders/.../test_tokenizers_survive_an_emb0/models/embedder mixes files downloaded at several revisions ['0123456789abcdef0123456789abcdef01234567', '6666666666666666666666666666666666666666']; re-download it at one revision before locking
+...
+FAILED tests/test_embedding_artifacts.py::test_tokenizers_survive_an_embedder_folder_that_cannot_be_read
+1 failed, 1 passed, 47 deselected in 7.91s
+```
+
 ## Green Runs
+
+The runs in this section through "Offline suites" predate the review-fix
+commits and name no commit; the round-2 runs at the end of this section
+supersede them and ran on d875e7d5, the last commit that changes product or
+test code (the commit after it adds only evidence files).
 
 PostgreSQL proof set (one session; `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
 `NEXUS_SLOT` unset; load 17.37 at start):
@@ -243,6 +287,52 @@ $ $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tes
 130 passed, 5 warnings in 16.81s
 ```
 
+Review round 2, on d875e7d5 and unchanged since (raw output with the commit id
+and an `uptime` reading on the first line of each file). The first offline
+suite ran in two pieces so that no command passed the ten-minute limit; the
+pieces cover the same files as `tests --ignore=tests/test_api
+--ignore=tests/test_orrery`.
+
+```
+$ NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_lore/test_token_estimator.py tests/test_lore/test_token_budget.py tests/test_lore/test_turn_cycle.py tests/test_embedding_artifacts.py tests/test_model_artifact_lock_committed.py tests/test_runtime/test_readiness.py tests/config tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 9 targets: postgres, qa640_816_lifecycle_test_provider, qa640_818_estimate_*, qa640_818_pin_* x2, qa640_885_ren_replay_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+323 passed, 2 skipped, 7 warnings in 124.10s (0:02:04)
+```
+(`round2_pg_proof.txt`; load 12.90 at start. Three more than before: the
+folder test and the two lock-shape cases.)
+
+```
+$ nice -n 15 $PY -m pytest -q tests/config tests/fixtures tests/proofs tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_scripts tests/test_util
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1053 passed, 89 skipped, 7 warnings in 152.77s (0:02:32)
+
+$ nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/fixtures --ignore=tests/proofs --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+2159 passed, 589 skipped, 8 warnings in 483.75s (0:08:03)
+
+$ nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1910 passed, 1532 skipped, 7 warnings in 43.48s
+
+$ $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tests/test_cli_reference_doc.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+130 passed, 5 warnings in 17.22s
+```
+(`round2_offline_a.txt`, `round2_offline_b.txt`,
+`round2_offline_api_orrery.txt`, `round2_reachability_docs.txt`. The two
+pieces total 3212 passed and 678 skipped: the earlier 3209 plus the three new
+tests.)
+
 ## Manual Real Fetch (One Attempt, No Retry)
 
 `manual_fetch.py.txt` ran `fetch_tokenizers(verify_tokenizers(s,
@@ -291,27 +381,33 @@ with the same files as the default-cache listing above.
 
 ## Static Checks
 
-Re-run in the review-fix round on the nine changed Python files, branch
-(working tree equal to 5d0a9cc5 plus nothing else in Python) against a
-`git archive origin/main` export.
+Re-run in review round 2 on the nine changed Python files at d875e7d5,
+against a `git archive origin/main` export (the `origin/main` half of each
+file is unchanged from the earlier round; `origin/main` is still c7ae2988).
 
 `black --check` passes on all nine changed Python files.
 
 flake8 (`flake8.txt`, both commands and both outputs) gives the same 23
 diagnostics on the branch and on the `origin/main` versions after normalizing
-line numbers. They are pre-existing E501/F401 on untouched lines of
-`logon_utility.py`, `settings_models.py` and `test_token_estimator.py`. There
-are no new diagnostics.
+line numbers; the round-2 branch run is byte-identical to the recorded one.
+They are pre-existing E501/F401 on untouched lines of `logon_utility.py`,
+`settings_models.py` and `test_token_estimator.py`. There are no new
+diagnostics, and none on a changed or added line.
 
 mypy, `$PY -m mypy --explicit-package-bases <changed files>` (`mypy.txt`, both
-commands and both outputs), compared over the changed files with line numbers
-normalized: no new diagnostics. Gone on the branch: the `sorted` type-var
-error in `scripts/validate_config_commit.py` and eight tomlkit `Item |
-Container` errors in `test_token_estimator.py` (the edited tests annotate
-`entry: Any`). The branch run reports 34 errors in 4 files; the remaining ones
-are pre-existing on untouched lines. The `origin/main` run was made in the
-export, which follows imports into the whole tree (294 errors in 53 files);
-only the changed files were compared.
+commands and both outputs; the branch half re-run on d875e7d5): no diagnostic
+on a changed or added line, and no new diagnostics. The branch run reports 28
+errors in 4 files (34 before round 2). The two edited tomlkit tests now
+annotate the parsed document (`settings: Any` at `test_token_estimator.py:113`,
+`config: Any` at `:614`), so their edited lines carry no diagnostic. Gone on the
+branch: the `sorted` type-var error in `scripts/validate_config_commit.py` and
+fourteen tomlkit `Item | Container` errors in `test_token_estimator.py`. The
+remaining tomlkit errors (`:81-87`, `:136-137`) sit on lines identical to
+`origin/main` `:77-83` and `:128-129`; the other remaining ones are
+pre-existing on untouched lines of `settings_models.py`, `prompt_window.py`
+and `logon_utility.py`. The `origin/main` run was made in the export, which
+follows imports into the whole tree (294 errors in 53 files); only the changed
+files were compared.
 
 Exception dispositions:
 
@@ -320,9 +416,12 @@ $ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
 OK: exception disposition coverage and shrink-only baseline verified.
 ```
 
-One new marked handler: `fetch_tokenizers` catches `(OSError,
+Two new marked handlers: `fetch_tokenizers` catches `(OSError,
 ArtifactLockError)` and carries `# nexus-exception-disposition: fail;
-reason=hub; safety=failed result`. The baseline is unchanged. The new handlers
+reason=hub; safety=failed result`; `_verify_embedder` (review round 2) catches
+`ArtifactLockError` and carries `# nexus-exception-disposition: fail;
+reason=folder; safety=failed result`. The baseline is unchanged (the three
+baselined `run_models_command` handlers are textually unchanged). The new handlers
 in `tokenizer_cached` and `_entry_tokenizer` always raise.
 
 ## Document Freshness
