@@ -381,37 +381,295 @@ receipt isolation: checkout and user receipts untouched
 
 ## Static Checks
 
-- `scripts/check_migration_comments.py`: `OK: every object created after
-  migration 129 has a comment.`
-- `$PY -S scripts/check_exception_dispositions.py --baseline-base-ref
-  origin/main`: `OK: exception disposition coverage and shrink-only baseline
-  verified.` (no new handler; baseline unchanged).
-- Black `--check` on the twelve changed or added Python files: `12 files
-  would be left unchanged.`
-- flake8 on the same files: 20 diagnostics on the branch, 20 on the
-  `origin/main` versions of the eleven pre-existing files; the per-file
-  message multiset is identical (no new diagnostic). The two order-quoted
-  texts that would exceed 88 columns (the `insert_chunk_metadata_sync`
-  docstring and the `test_reader_feed_pg.py` comment) are wrapped across two
-  lines with the words unchanged.
-- `$PY -m mypy --explicit-package-bases` on the same files: `Found 48 errors
-  in 6 files (checked 12 source files)` on the branch; the eleven
-  `origin/main` versions checked in-tree give `Found 48 errors in 6 files
-  (checked 11 source files)`, with an identical per-file message multiset
-  (no new diagnostic; the new test file adds none). Pre-existing
-  diagnostics: `tests/test_orrery/test_replay.py` (20 `index`),
-  `tests/test_idf_dictionary_pg.py` (`operator`, `arg-type`, `index`),
-  `tests/test_orrery/test_character_experiences_pg.py` (`attr-defined` on
-  `LogRecord`), `tests/test_qa_shift.py:192` and `:1088` (`attr-defined`,
-  `call-overload`), `tests/test_world_clock_contract_pg.py:125` (`index`),
-  `tests/test_commit_handler_sync.py:38` (`var-annotated`); none on a changed
-  line.
-- Fixer commit `1d04c8ce` (`tests/test_lore/test_pass2_baseline_pg.py` and
-  `tests/test_api/test_chunk_slug_bound_pg.py`): Black `--check` gives `2
-  files would be left unchanged.`; flake8 gives one diagnostic,
-  `tests/test_lore/test_pass2_baseline_pg.py:253:89: E501 line too long (113 >
-  88 characters)`, the same `places` INSERT line that is `:251` on
-  `origin/main` (pre-existing, untouched); mypy gives `Found 17 errors in 1
-  file` on both the branch and the `origin/main` version of the pass-two file
-  (all pre-existing, none on a changed line) and `Success: no issues found` on
-  the slug test file.
+Recorded by the review fixer at commit `33a23ea6` (the builder's and first
+fixer's runs gave counts only; these replace them). `origin/main` is
+`c7ae2988`. The changed Python files are the thirteen pre-existing files
+`$MOD` and the added `$ADD`:
+
+```
+MOD="nexus/api/commit_handler_sync.py tests/pg_fixtures.py tests/test_api/test_reader_feed_pg.py tests/test_commit_handler_sync.py tests/test_idf_dictionary_pg.py tests/test_lore/test_pass2_baseline_pg.py tests/test_orrery/claim_accounts_test_support.py tests/test_orrery/test_acquisition_scan_pg.py tests/test_orrery/test_character_experiences_pg.py tests/test_orrery/test_replay.py tests/test_orrery/test_weather_live.py tests/test_qa_shift.py tests/test_world_clock_contract_pg.py"
+ADD="tests/test_api/test_chunk_slug_bound_pg.py"
+```
+
+The `origin/main` side is a full export of `nexus/`, `tests/`, `scripts/`,
+`pyproject.toml` and `.flake8` at `origin/main`, so imports resolve as they do
+in-tree and no worktree file is swapped:
+
+```
+$ git archive origin/main nexus tests scripts pyproject.toml .flake8 | tar -x -C <scratch>/1069-S1/static/main_tree
+```
+
+### Migration Comments and Exception Dispositions
+
+```
+$ PYTHONPATH=$PWD $PY scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+No new handler; the baseline is unchanged.
+
+### Black
+
+```
+$ nice -n 15 $PY -m black --check $MOD $ADD
+All done! ✨ 🍰 ✨
+14 files would be left unchanged.
+```
+
+### flake8
+
+Branch, 21 lines:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m flake8 $MOD $ADD
+nexus/api/commit_handler_sync.py:859:89: E501 line too long (91 > 88 characters)
+tests/test_commit_handler_sync.py:194:89: E501 line too long (163 > 88 characters)
+tests/test_commit_handler_sync.py:202:89: E501 line too long (176 > 88 characters)
+tests/test_commit_handler_sync.py:824:5: F811 redefinition of unused 'mock_openai_server' from line 1029
+tests/test_commit_handler_sync.py:863:89: E501 line too long (99 > 88 characters)
+tests/test_commit_handler_sync.py:865:89: E501 line too long (114 > 88 characters)
+tests/test_commit_handler_sync.py:879:89: E501 line too long (94 > 88 characters)
+tests/test_commit_handler_sync.py:885:89: E501 line too long (100 > 88 characters)
+tests/test_idf_dictionary_pg.py:113:89: E501 line too long (93 > 88 characters)
+tests/test_idf_dictionary_pg.py:146:89: E501 line too long (105 > 88 characters)
+tests/test_idf_dictionary_pg.py:228:89: E501 line too long (98 > 88 characters)
+tests/test_idf_dictionary_pg.py:336:89: E501 line too long (91 > 88 characters)
+tests/test_idf_dictionary_pg.py:624:89: E501 line too long (89 > 88 characters)
+tests/test_idf_dictionary_pg.py:654:89: E501 line too long (112 > 88 characters)
+tests/test_idf_dictionary_pg.py:693:89: E501 line too long (90 > 88 characters)
+tests/test_lore/test_pass2_baseline_pg.py:253:89: E501 line too long (113 > 88 characters)
+tests/test_orrery/test_character_experiences_pg.py:3574:89: E501 line too long (91 > 88 characters)
+tests/test_orrery/test_character_experiences_pg.py:3580:89: E501 line too long (107 > 88 characters)
+tests/test_orrery/test_replay.py:1056:89: E501 line too long (110 > 88 characters)
+tests/test_world_clock_contract_pg.py:63:89: E501 line too long (91 > 88 characters)
+tests/test_world_clock_contract_pg.py:97:89: E501 line too long (95 > 88 characters)
+```
+
+`origin/main`, 21 lines (the added file does not exist there):
+
+```
+$ cd <scratch>/1069-S1/static/main_tree && PYTHONPATH=$PWD nice -n 15 $PY -m flake8 $MOD
+nexus/api/commit_handler_sync.py:867:89: E501 line too long (91 > 88 characters)
+tests/test_commit_handler_sync.py:193:89: E501 line too long (163 > 88 characters)
+tests/test_commit_handler_sync.py:201:89: E501 line too long (176 > 88 characters)
+tests/test_commit_handler_sync.py:823:5: F811 redefinition of unused 'mock_openai_server' from line 1027
+tests/test_commit_handler_sync.py:862:89: E501 line too long (99 > 88 characters)
+tests/test_commit_handler_sync.py:864:89: E501 line too long (114 > 88 characters)
+tests/test_commit_handler_sync.py:878:89: E501 line too long (94 > 88 characters)
+tests/test_commit_handler_sync.py:884:89: E501 line too long (100 > 88 characters)
+tests/test_idf_dictionary_pg.py:107:89: E501 line too long (93 > 88 characters)
+tests/test_idf_dictionary_pg.py:140:89: E501 line too long (105 > 88 characters)
+tests/test_idf_dictionary_pg.py:222:89: E501 line too long (98 > 88 characters)
+tests/test_idf_dictionary_pg.py:330:89: E501 line too long (91 > 88 characters)
+tests/test_idf_dictionary_pg.py:618:89: E501 line too long (89 > 88 characters)
+tests/test_idf_dictionary_pg.py:648:89: E501 line too long (112 > 88 characters)
+tests/test_idf_dictionary_pg.py:687:89: E501 line too long (90 > 88 characters)
+tests/test_lore/test_pass2_baseline_pg.py:251:89: E501 line too long (113 > 88 characters)
+tests/test_orrery/test_character_experiences_pg.py:3572:89: E501 line too long (91 > 88 characters)
+tests/test_orrery/test_character_experiences_pg.py:3578:89: E501 line too long (107 > 88 characters)
+tests/test_orrery/test_replay.py:1056:89: E501 line too long (110 > 88 characters)
+tests/test_world_clock_contract_pg.py:63:89: E501 line too long (91 > 88 characters)
+tests/test_world_clock_contract_pg.py:98:89: E501 line too long (95 > 88 characters)
+```
+
+With line and column numbers stripped, the two sorted lists differ only in
+the line number inside the F811 message text (`from line 1029` on the branch,
+`from line 1027` on `origin/main`, the same `mock_openai_server` fixture moved
+by two added lines). No diagnostic is new, none is on a changed line, and the
+added test file and `tests/test_orrery/claim_accounts_test_support.py` have
+none. (The earlier count of 20 was for twelve files and omitted the pass-two
+file, recorded separately; with it, both sides have 21.)
+
+### mypy
+
+Branch:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m mypy --explicit-package-bases --cache-dir <scratch>/1069-S1/static/mypy_cache_branch $MOD $ADD
+tests/test_world_clock_contract_pg.py:125: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+tests/test_qa_shift.py:192: error: "Collection[Collection[str]]" has no attribute "get"  [attr-defined]
+tests/test_qa_shift.py:1088: error: No overload variant of "int" matches argument type "object"  [call-overload]
+tests/test_qa_shift.py:1088: note: Possible overload variants:
+tests/test_qa_shift.py:1088: note:     def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/test_qa_shift.py:1088: note:     def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/test_orrery/test_character_experiences_pg.py:1598: error: "LogRecord" has no attribute "world_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1599: error: "LogRecord" has no attribute "world_event_type"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1600: error: "LogRecord" has no attribute "world_event_tick_chunk_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1601: error: "LogRecord" has no attribute "world_event_actor_entity_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1602: error: "LogRecord" has no attribute "world_event_target_entity_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1603: error: "LogRecord" has no attribute "world_event_resolution_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1604: error: "LogRecord" has no attribute "world_event_source"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1605: error: "LogRecord" has no attribute "world_event_world_layer"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1606: error: "LogRecord" has no attribute "quarantine_reason_code"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2731: error: "LogRecord" has no attribute "world_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2732: error: "LogRecord" has no attribute "replacement_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2831: error: "LogRecord" has no attribute "supersession_rejection_reason"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2838: error: "LogRecord" has no attribute "world_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2839: error: "LogRecord" has no attribute "replacement_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2840: error: "LogRecord" has no attribute "supersession_rejection_detail"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:183: error: "_RouteProvider" has no attribute "prompt_window_guard"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:389: error: Incompatible types in assignment (expression has type "_DatabaseMemnon", variable has type "None")  [assignment]
+tests/test_lore/test_pass2_baseline_pg.py:402: error: Incompatible types in assignment (expression has type "_RouteProvider", variable has type "OpenAIProvider | AnthropicProvider | None")  [assignment]
+tests/test_lore/test_pass2_baseline_pg.py:452: error: Argument 1 to "run" has incompatible type "Awaitable[None]"; expected "Coroutine[Any, Any, Never]"  [arg-type]
+tests/test_lore/test_pass2_baseline_pg.py:465: error: "None" has no attribute "turn_id"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:467: error: "None" has no attribute "context_payload"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:472: error: "None" has no attribute "memory_state"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:475: error: "None" has no attribute "memory_state"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:488: error: Argument 1 to "run" has incompatible type "Awaitable[None]"; expected "Coroutine[Any, Any, Never]"  [arg-type]
+tests/test_lore/test_pass2_baseline_pg.py:503: error: "None" has no attribute "turn_id"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:505: error: "None" has no attribute "context_payload"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:509: error: "None" has no attribute "memory_state"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1059: error: "None" has no attribute "token_counts"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1060: error: "None" has no attribute "export_pass2_baseline"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1083: error: "None" has no attribute "token_counts"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1084: error: "None" has no attribute "memory_state"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1086: error: "None" has no attribute "export_pass2_baseline"  [attr-defined]
+tests/test_idf_dictionary_pg.py:161: error: Unsupported operand types for + ("None" and "int")  [operator]
+tests/test_idf_dictionary_pg.py:161: note: Left operand is of type "int | None"
+tests/test_idf_dictionary_pg.py:201: error: Unsupported operand types for + ("None" and "int")  [operator]
+tests/test_idf_dictionary_pg.py:201: note: Left operand is of type "int | None"
+tests/test_idf_dictionary_pg.py:284: error: Unsupported operand types for > ("int" and "None")  [operator]
+tests/test_idf_dictionary_pg.py:284: error: Unsupported operand types for < ("int" and "None")  [operator]
+tests/test_idf_dictionary_pg.py:284: error: Unsupported left operand type for > ("None")  [operator]
+tests/test_idf_dictionary_pg.py:284: note: Both left and right operands are unions
+tests/test_idf_dictionary_pg.py:340: error: Unsupported operand types for + ("None" and "int")  [operator]
+tests/test_idf_dictionary_pg.py:340: note: Left operand is of type "int | None"
+tests/test_idf_dictionary_pg.py:375: error: Unsupported operand types for + ("None" and "int")  [operator]
+tests/test_idf_dictionary_pg.py:375: note: Left operand is of type "int | None"
+tests/test_idf_dictionary_pg.py:410: error: Argument 1 to "append" of "list" has incompatible type "tuple[bytes | None, Any]"; expected "tuple[bytes, dict[str, int]]"  [arg-type]
+tests/test_idf_dictionary_pg.py:410: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:311: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:312: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:320: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:321: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:323: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:583: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:591: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:685: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:686: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:687: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1483: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1485: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1487: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1488: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1489: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1497: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1505: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1506: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1507: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:2171: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_commit_handler_sync.py:38: error: Need type annotation for "description" (hint: "description: list[<type>] = ...")  [var-annotated]
+Found 65 errors in 7 files (checked 14 source files)
+```
+
+`origin/main`:
+
+```
+$ cd <scratch>/1069-S1/static/main_tree && PYTHONPATH=$PWD nice -n 15 $PY -m mypy --explicit-package-bases --cache-dir <scratch>/1069-S1/static/mypy_cache_main $MOD
+tests/test_world_clock_contract_pg.py:126: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+tests/test_qa_shift.py:192: error: "Collection[Collection[str]]" has no attribute "get"  [attr-defined]
+tests/test_qa_shift.py:1088: error: No overload variant of "int" matches argument type "object"  [call-overload]
+tests/test_qa_shift.py:1088: note: Possible overload variants:
+tests/test_qa_shift.py:1088: note:     def __new__(cls, str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc = ..., /) -> int
+tests/test_qa_shift.py:1088: note:     def __new__(cls, str | bytes | bytearray, /, base: SupportsIndex) -> int
+tests/test_orrery/test_character_experiences_pg.py:1596: error: "LogRecord" has no attribute "world_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1597: error: "LogRecord" has no attribute "world_event_type"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1598: error: "LogRecord" has no attribute "world_event_tick_chunk_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1599: error: "LogRecord" has no attribute "world_event_actor_entity_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1600: error: "LogRecord" has no attribute "world_event_target_entity_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1601: error: "LogRecord" has no attribute "world_event_resolution_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1602: error: "LogRecord" has no attribute "world_event_source"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1603: error: "LogRecord" has no attribute "world_event_world_layer"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:1604: error: "LogRecord" has no attribute "quarantine_reason_code"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2729: error: "LogRecord" has no attribute "world_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2730: error: "LogRecord" has no attribute "replacement_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2829: error: "LogRecord" has no attribute "supersession_rejection_reason"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2836: error: "LogRecord" has no attribute "world_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2837: error: "LogRecord" has no attribute "replacement_event_id"  [attr-defined]
+tests/test_orrery/test_character_experiences_pg.py:2838: error: "LogRecord" has no attribute "supersession_rejection_detail"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:182: error: "_RouteProvider" has no attribute "prompt_window_guard"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:387: error: Incompatible types in assignment (expression has type "_DatabaseMemnon", variable has type "None")  [assignment]
+tests/test_lore/test_pass2_baseline_pg.py:400: error: Incompatible types in assignment (expression has type "_RouteProvider", variable has type "OpenAIProvider | AnthropicProvider | None")  [assignment]
+tests/test_lore/test_pass2_baseline_pg.py:450: error: Argument 1 to "run" has incompatible type "Awaitable[None]"; expected "Coroutine[Any, Any, Never]"  [arg-type]
+tests/test_lore/test_pass2_baseline_pg.py:463: error: "None" has no attribute "turn_id"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:465: error: "None" has no attribute "context_payload"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:470: error: "None" has no attribute "memory_state"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:473: error: "None" has no attribute "memory_state"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:486: error: Argument 1 to "run" has incompatible type "Awaitable[None]"; expected "Coroutine[Any, Any, Never]"  [arg-type]
+tests/test_lore/test_pass2_baseline_pg.py:501: error: "None" has no attribute "turn_id"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:503: error: "None" has no attribute "context_payload"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:507: error: "None" has no attribute "memory_state"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1057: error: "None" has no attribute "token_counts"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1058: error: "None" has no attribute "export_pass2_baseline"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1081: error: "None" has no attribute "token_counts"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1082: error: "None" has no attribute "memory_state"  [attr-defined]
+tests/test_lore/test_pass2_baseline_pg.py:1084: error: "None" has no attribute "export_pass2_baseline"  [attr-defined]
+tests/test_idf_dictionary_pg.py:155: error: Unsupported operand types for + ("None" and "int")  [operator]
+tests/test_idf_dictionary_pg.py:155: note: Left operand is of type "int | None"
+tests/test_idf_dictionary_pg.py:195: error: Unsupported operand types for + ("None" and "int")  [operator]
+tests/test_idf_dictionary_pg.py:195: note: Left operand is of type "int | None"
+tests/test_idf_dictionary_pg.py:278: error: Unsupported operand types for > ("int" and "None")  [operator]
+tests/test_idf_dictionary_pg.py:278: error: Unsupported operand types for < ("int" and "None")  [operator]
+tests/test_idf_dictionary_pg.py:278: error: Unsupported left operand type for > ("None")  [operator]
+tests/test_idf_dictionary_pg.py:278: note: Both left and right operands are unions
+tests/test_idf_dictionary_pg.py:334: error: Unsupported operand types for + ("None" and "int")  [operator]
+tests/test_idf_dictionary_pg.py:334: note: Left operand is of type "int | None"
+tests/test_idf_dictionary_pg.py:369: error: Unsupported operand types for + ("None" and "int")  [operator]
+tests/test_idf_dictionary_pg.py:369: note: Left operand is of type "int | None"
+tests/test_idf_dictionary_pg.py:404: error: Argument 1 to "append" of "list" has incompatible type "tuple[bytes | None, Any]"; expected "tuple[bytes, dict[str, int]]"  [arg-type]
+tests/test_idf_dictionary_pg.py:404: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:311: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:312: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:320: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:321: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:323: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:583: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:591: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:685: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:686: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:687: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1483: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1485: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1487: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1488: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1489: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1497: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1505: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1506: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:1507: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_orrery/test_replay.py:2171: error: Value of type "dict[Any, Any] | None" is not indexable  [index]
+tests/test_commit_handler_sync.py:37: error: Need type annotation for "description" (hint: "description: list[<type>] = ...")  [var-annotated]
+Found 65 errors in 7 files (checked 13 source files)
+```
+
+With line numbers stripped, the sorted `error`/`note` lines of the two runs are
+identical (`diff` prints nothing). All 65 errors are pre-existing; none is on a
+changed line. The added test file and
+`tests/test_orrery/claim_accounts_test_support.py` have none.
+
+## Review Fixer Rerun at `33a23ea6`
+
+Commit `33a23ea6` rewrites the comment above `_SCENE_NUMBERS` in
+`tests/test_orrery/claim_accounts_test_support.py` (it described the pre-153
+trigger writing `###` and colliding on `unique_slug`; it now says
+`set_chunk_slug()` refuses scene > 999 with `numeric_value_out_of_range`) and
+corrects the `insert_chunk_metadata_sync` cite above to `:95-142`. The change
+to the support module is a comment only. The PostgreSQL file in the proof set
+that imports it, one more importer, and the front-matter check were rerun
+(one-minute load 20.21 before the run, no wait):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_pg_disposable_target.py tests/test_orrery/test_epistemics.py tests/test_doc_front_matter.py > <scratch>/1069-S1/static/pg_fix.log 2>&1
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 3 targets: postgres, qa885_epistemics_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+150 passed in 12.59s
+```
+
+`psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE
+'qa640_1069%'"` printed nothing afterwards.
