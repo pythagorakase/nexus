@@ -6,7 +6,6 @@ The MEMNON agent serves as the Unified Memory Access System within the NEXUS nar
 
 MEMNON focuses on:
 
-*   **Storing Narrative Data:** Ingesting narrative text (e.g., from scripts), chunking it based on scene breaks, generating embeddings using multiple configured models, and storing chunks, metadata (season, episode, scene, etc.), and embeddings in a PostgreSQL database.
 *   **Storing Structured Data:** Managing database tables for structured entities like Characters and Places.
 *   **Multi-Strategy Retrieval:** Accepting natural language queries and executing a combination of search strategies to find relevant information:
     *   **Vector Search:** Comparing query embeddings against chunk embeddings using pgvector.
