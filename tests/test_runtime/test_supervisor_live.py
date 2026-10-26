@@ -215,6 +215,11 @@ def _cli(
             f"nexus {' '.join(args)} exited {completed.returncode} without JSON:\n"
             f"{completed.stderr[-2000:]}"
         ) from None
+    if completed.returncode == 0:
+        # The runtime family prints the success envelope (ruling 43 on #815).
+        assert set(payload) == {"ok", "data"} and payload["ok"] is True, payload
+        return {**payload["data"], "_returncode": completed.returncode}
+    # A failure is the stderr failure envelope.
     payload["_returncode"] = completed.returncode
     return payload
 
@@ -637,19 +642,18 @@ def test_external_profile_fails_loud_when_target_is_down(tmp_path):
     assert "unhealthy" in up["error"]
 
 
-def test_remote_profile_status_hits_runtime_endpoint(tmp_path, external_gateway):
-    """profile=remote reports the hosted runtime's /runtime/status."""
+def test_remote_profile_status_reads_player_health(tmp_path, external_gateway):
+    """profile=remote reports the hosted runtime's player-plane /health."""
     config = _write_config(tmp_path, profile="remote", remote_base_url=external_gateway)
-    up = _cli("up", config=config)
-    assert up["_returncode"] == 0
-    assert up["profile"] == "remote"
-    assert up["runtime"]["services"]["gateway"]["ok"] is True
-    assert up["runtime"]["database"]["dbname"] == ROUTED_DATABASE
-
-    status = _cli("status", config=config)
-    assert status["gateway_url"] == external_gateway
-    assert status["runtime"]["profile"] == "local"  # the remote host's profile
-    assert status["runtime"]["version"]
+    for verb in ("up", "status"):
+        result = _cli(verb, config=config)
+        assert result["_returncode"] == 0, result
+        assert result["profile"] == "remote"
+        assert result["gateway_url"] == external_gateway
+        health = result["health"]
+        assert health["status"] == "healthy"
+        # 824-S2a changes which projection the app serves, so plane is unpinned.
+        assert set(health) == {"status", "service", "plane"}
 
 
 def test_mock_port_must_match_test_base_url(tmp_path):

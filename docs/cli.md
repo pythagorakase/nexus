@@ -148,8 +148,13 @@ The runtime is remote when the active `nexus.toml` sets
 than `localhost` or a loopback address. A remote runtime refuses `database`,
 `local_operator` and `operator_api` commands with exit 3 before any connection
 is opened. Two exceptions follow the remote profile itself: `up` and `status`
-probe the hosted runtime's `/runtime/status` over HTTP. The runtime commands
-that accept `--config` (`up`, `down`, `restart`, `status`, `logs`,
+probe the hosted runtime's player-plane `/health` over HTTP and read no
+operator route. A runtime that refuses, drops or does not answer the probe in
+time is `api_unreachable` (exit 4), with `profile`, `config` and `gateway_url`
+in `partial`; a non-2xx answer is `api_error`, and a 401, 403 or unfollowed
+redirect is `config_error`. Under the local and external profiles, `status`
+still exits 0 and reports an unreachable gateway in `runtime.error`. The
+runtime commands that accept `--config` (`up`, `down`, `restart`, `status`, `logs`,
 `models lock`, `models verify`, `models plan`, `models fetch`) check the
 profile of that file. `doctor` and `init` are exempt from the refusal and from
 the configuration check below: they diagnose this machine's configuration and
@@ -185,15 +190,22 @@ on stderr, argparse's rejection of the arguments included:
 `error` is the same message string earlier releases printed as
 `{"error": ...}`. `partial` holds every non-empty field of the failed result
 (a saved seed, a session ID, a recovery command); `false` and `0` are kept,
-`null` and empty values are not. Without `--json`, a failure prints one
-`Error: <message>` line on stderr, and argparse prints its usage and error
+`null` and empty values are not. A failing `doctor`, `init` or `receipts`
+report is passed whole, empty fields included. Without `--json`, a failure
+prints one `Error: <message>` line on stderr, and argparse prints its usage and error
 lines.
 
 One failure keeps its report instead: `trait-audit --fail-on-remainders`
 prints the full audit on stdout with `"failed_policy": true` and exits 1.
 
-Success output is unchanged for existing commands. JSON-first commands
-(every `inspect` verb and `tags audit`) print `{"ok": true, "data": ...}` on stdout.
+JSON-first commands print `{"ok": true, "data": ...}` on stdout: every
+`inspect` verb and `tags audit` (`data` is the record), and, under ruling 43,
+`up`, `down`, `restart`, `status`, `logs`, `home`, `usage`, `window-replay`,
+the four `models` verbs, `doctor`, `init` and `receipts` (`data` is the result
+without `success`; for `doctor` and `init` it is the report, for `receipts`
+its document). A failing `doctor` or `init` report prints the failure envelope
+(`domain_failure`, exit 1) with the full report as `partial`. The other
+commands keep their earlier success output until #815 moves them.
 
 ### Waiting on a Generation
 
@@ -324,7 +336,7 @@ poetry run nexus usage --json --run ab12cd34ef56
 Human output lists totals by provider and logical seat, unknown-usage response
 counts, the OpenAI-only UTC-day total, and configured readout-only allowances.
 The JSON payload places `day`, `events`, `providers`, `seats`,
-`openai_day_total`, and `allowance` under the `usage` key.
+`openai_day_total`, and `allowance` under `data.usage`.
 
 Prompt-window rows also carry `removed_block_tokens`: cached assembly removal
 estimates by recent narrative, historical context, and recalled scenes, including
@@ -353,8 +365,8 @@ candidate whose configured window differs from the runtime config's is refused.
 Human output lists, per seat and attempt, the recorded input and ceiling, the
 candidate ceiling, whether the model cap bounded the recorded spend, the
 ceiling delta, overflow, trimmable memory tokens, feasibility, and freed
-tokens. The JSON payload places `run`, `day`, `config`, and `rows` under the
-`window_replay` key. `REMOVED` follows `FREED`, with the recorded per-block map
+tokens. The JSON payload places `run`, `day`, `config`, and `rows` under
+`data.window_replay`. `REMOVED` follows `FREED`, with the recorded per-block map
 beneath each attempt. JSON adds `removed_block_tokens` and `removed_tokens_total`
 (`null` for absent/empty legacy maps; text says `unknown`). Cached assembly
 removals include headings and remain fixed under candidate changes. They are

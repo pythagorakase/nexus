@@ -54,7 +54,7 @@ sources:
   - nexus/agents/memnon/utils/source_embeddings.py
   - nexus/agents/orrery/job_queues.py
   - ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx
-verified_commit: "a01c162f1e4daaf5009a9bba7397ae4065a8614b"
+verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
 ---
 
 # The Turn Cycle

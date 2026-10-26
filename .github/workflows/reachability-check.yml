@@ -35,7 +35,11 @@ jobs:
         run: poetry install --only main
       - name: Run the ci-runner readiness checks
         shell: bash
-        run: poetry run nexus doctor --target ci-runner --json | tee readiness-report.json
+        run: |
+          status=0
+          poetry run nexus doctor --target ci-runner --json > readiness-report.json 2> readiness-error.json || status=$?
+          cat readiness-report.json readiness-error.json
+          exit "$status"
       # The doctor reports only a count per finding list; on failure, rerun the
       # checker directly so the log names the offending paths and the full
       # import graph is saved.
@@ -49,4 +53,5 @@ jobs:
           name: ci-runner-readiness
           path: |
             readiness-report.json
+            readiness-error.json
             reachability-report.json
