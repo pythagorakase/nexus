@@ -104,12 +104,22 @@ FAILED tests/test_qa_shift.py::test_seed_alignment_repairs_retrograde_vectors_be
 1 failed, 5 warnings in 0.54s
 ```
 
-Green, after Required Changes 1-4:
+Green, at 60cb49a0 (after Required Changes 1-4):
 
 ```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_qa_shift.py::test_seed_alignment_repairs_retrograde_vectors_before_the_gateway_starts
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 1 passed, 5 warnings in 0.34s
+```
+
+The same command again at 35d1ab71 (after the re-stamp):
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_qa_shift.py::test_seed_alignment_repairs_retrograde_vectors_before_the_gateway_starts
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1 passed, 5 warnings in 0.28s
 ```
 
 ## Re-Verification of Canonical Records
@@ -126,6 +136,18 @@ receipt isolation: checkout and user receipts untouched
 - `verified_commit` in 0021 is moved to the merge base with `origin/main`
   after the final merge: `git merge-base origin/main HEAD` =
   `c7ae2988d07b443f627a04d3a4eed1816b1cd438`, which descends from the old
-  stamp f073b371 (`git merge-base --is-ancestor` exits 0). The re-stamp is the
-  branch's last commit; `tests/test_doc_front_matter.py` passes after it (tail
-  in the PR).
+  stamp f073b371 (`git merge-base --is-ancestor` exits 0). The re-stamp is
+  35d1ab71. The re-stamp check, run at 35d1ab71 (`git merge-base origin/main
+  HEAD` still `c7ae2988d07b443f627a04d3a4eed1816b1cd438`):
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+120 passed, 5 warnings in 18.55s
+```
+
+  This evidence commit merges nothing from `origin/main` (which had not moved
+  past c7ae2988 when it was written), so the merge base and the 0021 stamp are
+  unchanged and the re-stamp still stands.
