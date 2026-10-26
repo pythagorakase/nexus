@@ -442,11 +442,10 @@ merge base `c7ae2988d07b443f627a04d3a4eed1816b1cd438`: `AGENTS.md`,
   red runs and the PostgreSQL pieces above all ran on this commit.
 - The red-run and PostgreSQL blocks above are now the commands and the verbatim
   pytest output; the static checks record their script and output.
-- Not changed here: `CharacterIdentityAmbiguity`'s "declared evidence" suffix
-  (`nexus/presence/identity.py:143-144`) still reaches WARNING through
-  `nexus/telemetry/usage.py:54`. The order puts `usage.py` and the presence logs
-  out of scope and fixes the allowlist reason and the `docs/runtime.md` bullet
-  verbatim, so the follow-up is the coordinator's decision.
+- Not changed in this round: `CharacterIdentityAmbiguity`'s "declared
+  evidence" suffix (`nexus/presence/identity.py:143-144`) still reached WARNING
+  through `nexus/telemetry/usage.py:54`. Coordinator ruling 1 later settled it;
+  see Fix Round 3.
 
 ## Review Round 2 (`1bb472fb`)
 
@@ -478,7 +477,183 @@ $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py
 66 passed, 5 warnings in 7.52s
 ```
 
-- Still not changed: the `CharacterIdentityAmbiguity` "declared evidence" text
-  reaching WARNING through `nexus/telemetry/usage.py:54` (above). The review
-  confirmed it and left the follow-up to the coordinator; both proposed fixes
-  edit files the order puts out of scope.
+- Still not changed in this round: the `CharacterIdentityAmbiguity` "declared
+  evidence" text reaching WARNING through `nexus/telemetry/usage.py:54`
+  (above). Fix Round 3 changes it under coordinator ruling 1.
+
+## Fix Round 3: Coordinator Rulings 1 and 2 (`db73e43d`, `65e4031a`)
+
+Both rulings are posted on PR #1155 and amend the order. `origin/main` was
+still `c7ae2988` when this round started and when it was pushed, so no merge
+was needed.
+
+### Ruling 2: the SIGKILL Branch Reaps (`db73e43d`)
+
+- `nexus/runtime/supervisor.py` `_stop_pid`: after `_signal_pid(pid, kill_sig)`
+  the `time.sleep(0.2)` is replaced by a bounded poll. While
+  `process_running(pid)` is true and `time.monotonic()` is under a second
+  deadline of `stop_grace_seconds` (no new setting), it sleeps 0.1 s.
+  `process_running` reaps the killed child, so the method returns with the pid
+  free; the docstring says so.
+- New `test_stop_pid_reaps_a_child_it_had_to_kill`: the child sets
+  `signal.signal(signal.SIGTERM, signal.SIG_IGN)`, touches a ready file and
+  sleeps. The test waits for the ready file (so SIGTERM cannot land before the
+  handler), then `_stop_pid(pid)` with `stop_grace_seconds = 0.5`. It asserts
+  the call took at least 0.5 s (the SIGKILL branch ran) and that
+  `os.waitpid(pid, os.WNOHANG)` raises `ChildProcessError`. The pid and writer
+  guards match `test_stop_pid_reaps_its_own_child_inside_the_grace`.
+- Red run: `nexus/runtime/supervisor.py` from `dac4cd8b` copied over the
+  working file, the new test run, and the fixed file restored
+  (`git diff --stat` showed only the round's intended edits after the restore):
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_runtime/test_supervisor.py -k "stop_pid_reaps_a_child_it_had_to_kill"
+            started = time.monotonic()
+            supervisor._stop_pid(pid)
+            elapsed = time.monotonic() - started
+            assert elapsed >= 0.5, elapsed
+>           with pytest.raises(ChildProcessError):
+E           Failed: DID NOT RAISE <class 'ChildProcessError'>
+
+tests/test_runtime/test_supervisor.py:1087: Failed
+...
+FAILED tests/test_runtime/test_supervisor.py::test_stop_pid_reaps_a_child_it_had_to_kill
+1 failed, 72 deselected, 5 warnings in 1.29s
+```
+
+- Green, on `db73e43d`:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_runtime/test_supervisor.py -k "stop_pid" -rA
+PASSED tests/test_runtime/test_supervisor.py::test_stop_pid_reaps_its_own_child_inside_the_grace
+PASSED tests/test_runtime/test_supervisor.py::test_stop_pid_reaps_a_child_it_had_to_kill
+2 passed, 71 deselected, 5 warnings in 1.78s
+```
+
+### Ruling 1: Declared Evidence Only at DEBUG (`65e4031a`)
+
+- `nexus/presence/identity.py` (`resolve_character_declaration`, the old
+  `:142-144`): the reason no longer appends `"; declared evidence: "` and the
+  text. It appends `f"; {len(evidence)} declared evidence values"`, and a new
+  module logger writes `logger.debug("Ambiguous character declaration %r
+  declared evidence: %s", name, "; ".join(evidence))`. Every
+  `CharacterIdentityAmbiguity` reason comes from this function, so its message
+  now holds names, ids, the ambiguity kind and counts.
+  `nexus/telemetry/usage.py` is unchanged.
+- Raise count, from `git grep -nE "raise (WireContractViolation|CharacterIdentityAmbiguity|CharacterNameRevealConflict)\(" nexus scripts`:
+  21 raises. Four are `CharacterIdentityAmbiguity` (`identity.py:184` and
+  `:265`, `presence_reconciliation.py:374`, `retrograde_persistence.py:2953`),
+  14 are `CharacterNameRevealConflict` and 3 are `WireContractViolation`
+  (`place_reference_validation.py:59`, `:62`, `roster.py:497`): 17 others. Of
+  the four, `retrograde_persistence.py:2953` resolves `{"name": ...}` only, so
+  three could carry evidence.
+- New `test_ambiguous_declaration_evidence_reaches_only_debug`
+  (`tests/test_runtime/test_log_redaction.py`): an in-memory identity index
+  with Silas Wren and Ada Wren, a declaration "Wren" with a summary, role and
+  location, run through the real `validate_character_batch` inside the real
+  `validation_attempt(None)`. The only WARNING record is `nexus.usage`'s wire
+  rejection; none of the three texts appears in it or in the exception
+  message; each appears at DEBUG; the message says `3 declared evidence
+  values`.
+- Red run: `nexus/presence/identity.py` from `dac4cd8b` copied over the
+  working file, the new test run, and the fixed file restored:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_runtime/test_log_redaction.py -k ambiguous
+>           assert all(text not in r.getMessage() for r in warnings), caplog.text
+E           AssertionError: WARNING  nexus.usage:usage.py:54 Wire rejection session=None note={'rejection': 'wire-contract-violation', 'error': "Ambiguous character declaration 'Wren': partial or fuzzy name match; declared evidence: qa842-summary A courier who hums old union songs; qa842-role keeper of the dockside ledgers; qa842-location Pier Nine; candidates: Silas Wren (character id=1), Ada Wren (character id=2). Review requires same_as, create_new, or distinct_from."}
+E             
+E           assert False
+E            +  where False = all(<generator object test_ambiguous_declaration_evidence_reaches_only_debug.<locals>.<genexpr> at 0x10e9e7bc0>)
+
+tests/test_runtime/test_log_redaction.py:273: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_runtime/test_log_redaction.py::test_ambiguous_declaration_evidence_reaches_only_debug
+1 failed, 4 deselected, 5 warnings in 0.33s
+```
+
+- Stale assertion made stale by the ruling: `tests/test_presence_roster_pg.py`
+  `test_identity_frontier_location_narrows_without_resolving` asserted
+  `"Hall" in caught.value.reason`. Hall is the frontier location, now evidence
+  text at DEBUG. The assertion is now
+  `caught.value.reason == "partial or fuzzy name match; 2 declared evidence values"`
+  (the summary and Hall), which still proves the frontier location reached
+  the evidence; the candidate-narrowing assertion is unchanged.
+- `docs/runtime.md`: the #842 bullet gains one sentence: wire rejections and
+  repairs log at WARNING with names, ids, tags, paths, counts and fixed text,
+  and an ambiguous declaration's summary, role and location appear only on a
+  DEBUG line (`nexus/presence/identity.py`). The `_WIRE_NOTES` allowlist reason
+  now reads "wire notes hold names, ids, tags, paths, counts and fixed text (an
+  ambiguous declaration's evidence goes to DEBUG), and feed the prompt-window
+  ledger (842-D4)".
+- No privacy-contract sentinel test failed on the new DEBUG line
+  (`tests/test_native_structured_output.py`, `tests/test_orrery_tag_validation.py`
+  below), so it stays.
+
+### PostgreSQL Proof for This Round
+
+Both runs used the tree committed as `65e4031a` (on top of `db73e43d`; the
+commit followed the runs with no further edit), with `NEXUS_GATEWAY_PORT`,
+`NEXUS_API_URL` and `NEXUS_SLOT` unset. The one-minute load was 21.00 before
+the first run and 28.25 before the second; the second run started without the
+wait loop the machine-load rule asks for above 24 (it took 14 s). Tails from
+the guard line to the end, verbatim:
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_runtime/test_log_redaction.py tests/test_runtime/test_supervisor.py tests/test_presence_roster_pg.py tests/test_orrery/test_character_identity_pg.py tests/test_orrery/test_identity_consumers_pg.py tests/test_orrery/test_retrograde_maturation.py tests/test_trait_compiler.py tests/test_doc_front_matter.py -rs
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 47 targets: postgres, qa640_840s2_drain_*, qa640_842s5_redaction_*, qa640_maturation799_*, qa640_roster798_* x43
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+261 passed in 154.53s (0:02:34)
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_native_structured_output.py tests/test_orrery_tag_validation.py tests/test_orrery/test_card_identity.py -rs
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 5 targets: postgres, qa640_885_ren_replay_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+183 passed, 2 skipped, 2 warnings in 14.00s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+$ psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_842s5%'"
+(no output; exit 0)
+```
+
+On `65e4031a`:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py
+66 passed, 5 warnings in 6.86s
+
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+### Static Checks for This Round
+
+Files: `nexus/presence/identity.py`, `nexus/runtime/supervisor.py`,
+`tests/test_runtime/test_log_redaction.py`, `tests/test_presence_roster_pg.py`,
+`tests/test_runtime/test_supervisor.py`; compared against the same files at
+`dac4cd8b` (flake8 on `git show` copies; mypy on a `git archive dac4cd8b`
+export of `nexus`, `tests`, `scripts` and `pyproject.toml`), line numbers
+stripped:
+
+```
+== black (branch)
+5 files would be left unchanged.
+== flake8: branch 18 lines, dac4cd8b 18 lines
+flake8 diff exit 0
+== mypy --explicit-package-bases, restricted to the five files
+restricted diff exit 0
+changed-file lines: base 25 branch 25
+```
+
+The 18 flake8 lines are pre-existing E501s on untouched lines of
+`nexus/presence/identity.py` (SQL constants) and
+`tests/test_presence_roster_pg.py`.
