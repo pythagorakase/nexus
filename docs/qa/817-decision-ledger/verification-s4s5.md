@@ -233,12 +233,13 @@ A planted one-byte change (`Reversal cost: Trivial.` to `trivial.` in
 ## Red Runs
 
 Runs (a), (c), (d) and (e) were rerun on a working tree equal to the commit
-`1f0723c3` plus one plant at a time; each plant was reverted at once with
-`rm` or `git checkout --`, `git status --short` was empty afterwards, and no
-plant was committed. Each block gives the command, the unedited `E` lines of
-the assertion, and the unedited last 15 lines of output; the closing `exit`
-line is the shell's exit status. Run (b) is the first run's tail, on the
-working tree described at the top of this file.
+`1f0723c3`, and run (b) on a working tree equal to the commit `8136cac5`
+(it changes only this file, so the tested tree is the same), plus one plant
+at a time; each plant was reverted at once with `rm` or `git checkout --`,
+`git status --short` was empty afterwards, and no plant was committed. Each
+block gives the command, the unedited `E` lines of the assertion, and the
+unedited last 15 lines of output; the closing `exit` line is the shell's exit
+status.
 
 (a) An untracked `docs/ratchet_plant.md` without front matter
 (`printf '# Ratchet Plant\n\nNo front matter.\n' > docs/ratchet_plant.md`):
@@ -268,16 +269,42 @@ FAILED tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
 exit 1
 ```
 
-(b) The front matter removed from `docs/hybrid_search.md`; the ratchet and the
-`CLASSIFIED` pin both fail:
+(b) The front matter removed from `docs/hybrid_search.md` (its first four
+lines, the whole front matter block, deleted with
+`sed -i '' '1,4d' docs/hybrid_search.md`; restored with
+`git checkout -- docs/hybrid_search.md`); the ratchet and the `CLASSIFIED`
+pin both fail:
 
 ```text
-(b)
+$ nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined tests/test_doc_front_matter.py::test_issue_817_classifications_hold
+# E lines of both assertions, unedited:
+E       AssertionError: assert ['docs/hybrid...s/README.md)'] == []
+E         
 E         Left contains one more item: 'docs/hybrid_search.md: unclassified and not in config/doc_classification_baseline.json; add front matter (docs/decisions/README.md)'
+E         Use -v to get more diff
+E       AssertionError: assert {'AGENTS.md':...torical', ...} == {'AGENTS.md':...torical', ...}
+E         
+E         Omitting 8 identical items, use -vv to show
+E         Differing items:
 E         {'docs/hybrid_search.md': None} != {'docs/hybrid_search.md': 'historical'}
+E         Use -v to get more diff
+# last 15 lines of output, unedited:
+tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
+tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
 FAILED tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
 FAILED tests/test_doc_front_matter.py::test_issue_817_classifications_hold - ...
 2 failed, 5 warnings in 0.50s
+exit 1
 ```
 
 (c) `ORRERY_CATALOG.path` set to `docs/orrery_packages_plant.md` in
