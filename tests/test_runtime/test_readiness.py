@@ -343,7 +343,8 @@ def test_doctor_json_reports_a_broken_install(tmp_path: Path) -> None:
     assert "Traceback" not in completed.stderr, completed.stderr
     # A failing report is the stderr failure envelope with it as partial.
     assert completed.stdout == ""
-    # The settings loader's own validation message precedes the envelope.
+    # The settings loader's own validation message precedes the envelope; #1157
+    # restores json.loads(completed.stderr) once the loader stops printing it.
     envelope = json.loads(completed.stderr[completed.stderr.index("\n{\n") + 1 :])
     assert envelope["code"] == "domain_failure"
     report = ReadinessReport.model_validate(envelope["partial"])

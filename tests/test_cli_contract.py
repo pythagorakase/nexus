@@ -1492,9 +1492,10 @@ def test_remote_status_text_error_answer_prints_one_error_line(
 
     assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stderr
     assert completed.stdout == ""
+    assert [request[:2] for request in gateway.requests] == [("GET", "/health")]
     lines = completed.stderr.splitlines()
     assert len(lines) == 1, completed.stderr
-    assert lines[0].startswith("Error: ")
+    assert lines[0] == f"Error: API error: {_BAD_GATEWAY_PAGE}"
 
 
 # ---------------------------------------------------------------------------
