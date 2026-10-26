@@ -237,7 +237,7 @@ $ PYTHONPATH=$PWD $PY -m scripts.render_cli_reference --check
 
 ## Observation for the Coordinator
 
-When `config.valid` fails on an import error, `nexus/config/loader.py:328` prints `❌ Error validating <path>:` and the error on stderr before the CLI prints its envelope there. A failing `doctor --json` therefore leaves that text ahead of the JSON envelope on stderr (seen in `tests/test_runtime/test_readiness.py::test_doctor_json_reports_a_broken_install`, which now parses from the envelope's first line). CI's `readiness-error.json` will carry the same prefix in that case. A TOML syntax error prints nothing extra (the stand-in envelope above parses whole). The loader is outside this order's scope.
+When `config.valid` fails on an import error, `nexus/config/loader.py:328` prints `❌ Error validating <path>:` and the error on stderr before the CLI prints its envelope there. A failing `doctor --json` therefore leaves that text ahead of the JSON envelope on stderr (seen in `tests/test_runtime/test_readiness.py::test_doctor_json_reports_a_broken_install`, which now parses from the envelope's first line). CI's `readiness-error.json` will carry the same prefix in that case. A TOML syntax error prints nothing extra (the stand-in envelope above parses whole). The loader is outside this order's scope; the follow-up is #1157 (see the second review fixes below).
 
 ## Review Fixes (080bf3ca)
 
@@ -265,3 +265,46 @@ dbname audit: owner targets: none
 ```
 
 Black (`$PY -m black --check` on the four changed files): "4 files would be left unchanged." flake8 on `nexus/runtime/supervisor.py`, `nexus/cli_contract.py` and `tests/test_cli_contract.py`: no output; on `nexus/cli.py` the same E501 set as before (the three marker lines plus the pre-existing long lines). `$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`: "OK: exception disposition coverage and shrink-only baseline verified."
+
+## Review Fixes, Second Round (dad95ff8)
+
+dad95ff8 applies three review findings. The tails below ran on the working tree that dad95ff8 committed.
+
+- `test_remote_status_text_error_answer_prints_one_error_line` (`tests/test_cli_contract.py:1484`) passed even with the remote branch of `run_status` removed: `supervisor.status()` then raises `RuntimeError_(_REMOTE_RUNS_NOTHING)` (`supervisor.py:1151-1152`), which `run_status`'s own `except RuntimeError_` turns into one `Error:` line and exit 1. The test now also requires `[request[:2] for request in gateway.requests] == [("GET", "/health")]` and `lines[0] == f"Error: API error: {_BAD_GATEWAY_PAGE}"` (the `api_error` message `_check_answer` builds, `nexus/cli.py:1282-1284`).
+- The `nexus/cli_contract.py` module docstring lines 56-69 are reflowed to 79 columns so `handlers (``load``,` no longer stands alone; the wording is unchanged (the joined text is byte-identical before and after the reflow).
+- The loader's validation print (`nexus/config/loader.py:328-329`) is outside this order, so the finding's second option was taken: follow-up issue #1157 names `tests/test_runtime/test_readiness.py:347` and CI's `readiness-error.json`, and the test's comment at the loosened slice now names #1157. The loader is unchanged.
+
+Red run for the strengthened test: the five-line remote branch of `run_status` (`if supervisor.runtime.profile == "remote": ... return result`) was removed from a working copy of `nexus/cli.py`, the test was run, and `nexus/cli.py` was restored with `git checkout -- nexus/cli.py` (`git status --short` afterwards lists only the three committed files).
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_cli_contract.py -k test_remote_status_text_error_answer_prints_one_error_line
+E       AssertionError: assert [] == [('GET', '/health')]
+E         
+E         Right contains one more item: ('GET', '/health')
+E         Use -v to get more diff
+
+tests/test_cli_contract.py:1495: AssertionError
+...
+FAILED tests/test_cli_contract.py::test_remote_status_text_error_answer_prints_one_error_line
+1 failed, 209 deselected, 5 warnings in 1.38s
+```
+
+Green, the same test with `nexus/cli.py` as committed:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_cli_contract.py -k test_remote_status_text_error_answer_prints_one_error_line
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1 passed, 209 deselected, 5 warnings in 1.41s
+```
+
+The covering files (load average 3.04 before the run; no wait):
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_cli_contract.py tests/test_runtime/test_readiness.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+320 passed, 5 warnings in 198.11s (0:03:18)
+```
+
+Black (`$PY -m black --check nexus/cli_contract.py tests/test_cli_contract.py tests/test_runtime/test_readiness.py`): "3 files would be left unchanged." flake8 on the same three files: no output (the `origin/main` version of `test_readiness.py` also prints nothing). No exception handler changed, so the disposition baseline is untouched; no declared source changed, so no freshness stamp moves.
