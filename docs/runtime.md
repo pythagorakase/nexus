@@ -296,7 +296,10 @@ in `docs/cli.md`).
   titles or wizard choice texts; each site that needs the text logs it on a
   paired DEBUG line. Structured-output and validator payloads stay out of
   every level (`structured_output_error_text` in
-  `nexus/api/native_structured_output.py`).
+  `nexus/api/native_structured_output.py`). Wire rejections and repairs log
+  at WARNING (`nexus/telemetry/usage.py`) with names, ids, tags, paths, counts
+  and fixed text; an ambiguous character declaration's declared summary, role
+  and location appear only on a DEBUG line (`nexus/presence/identity.py`).
   `tests/test_runtime/test_log_redaction.py` enforces the rule over `nexus/`
   and the provider modules `scripts/api_openai.py`, `scripts/api_anthropic.py`
   and `scripts/api_openrouter.py`. There is no generic scrubber: an exception

@@ -19,6 +19,12 @@ import pytest
 from sqlalchemy import create_engine
 
 from nexus.agents.memnon.utils.alias_search import hybrid_alias_search
+from nexus.presence.identity import (
+    CharacterIdentityAmbiguity,
+    identity_index,
+    validate_character_batch,
+)
+from nexus.telemetry.usage import validation_attempt
 from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -62,8 +68,9 @@ SCANNED = tuple(
 )
 
 _WIRE_NOTES = (
-    "wire notes hold names, ids, tags, paths and wire messages, and feed the "
-    "prompt-window ledger (842-D4)"
+    "wire notes hold names, ids, tags, paths, counts and fixed text (an ambiguous "
+    "declaration's evidence goes to DEBUG), and feed the prompt-window ledger "
+    "(842-D4)"
 )
 
 METADATA_ONLY_USES: dict[tuple[str, str, str], str] = {
@@ -224,6 +231,49 @@ def test_scanner_flags_each_level_and_exempts_metadata_forms() -> None:
         'logger.info("x%s", " [n]" if note else "")\n',
     ):
         assert story_text_violations(exempt, "probe.py") == [], exempt
+
+
+def test_ambiguous_declaration_evidence_reaches_only_debug(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Declared evidence of an ambiguous character stays below WARNING (#842).
+
+    The wire rejection that ``validation_attempt`` logs at WARNING carries the
+    exception message; the declared summary, role and location reach DEBUG.
+    """
+
+    summary = "qa842-summary A courier who hums old union songs"
+    role = "qa842-role keeper of the dockside ledgers"
+    location = "qa842-location Pier Nine"
+    index = identity_index(
+        [
+            {"id": 1, "name": "Silas Wren", "summary": "A dockhand."},
+            {"id": 2, "name": "Ada Wren", "summary": "A clerk."},
+        ],
+        [],
+    )
+    declaration = {
+        "kind": "character",
+        "name": "Wren",
+        "summary": summary,
+        "role": role,
+        "scene_location": location,
+    }
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(CharacterIdentityAmbiguity) as caught:
+            with validation_attempt(None):
+                validate_character_batch([declaration], index)
+    message = str(caught.value)
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert [r.name for r in warnings] == ["nexus.usage"], caplog.text
+    debug = "\n".join(
+        r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG
+    )
+    for text in (summary, role, location):
+        assert all(text not in r.getMessage() for r in warnings), caplog.text
+        assert text not in message
+        assert text in debug, caplog.text
+    assert "3 declared evidence values" in message, message
 
 
 SENTINEL = "qa842-sentinel Ask Kessa Brin what she remembers"
