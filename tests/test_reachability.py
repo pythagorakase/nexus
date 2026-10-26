@@ -1085,3 +1085,160 @@ def test_namespace_import_initializes_package_ancestor_and_explains_chain(
         ]
         is False
     )
+
+
+def test_external_imports_are_top_level_names_without_edges(static_repo) -> None:
+    """External imports are recorded by top-level name and never become edges."""
+    root, config = static_repo
+    _write(
+        root,
+        "pkg/cli.py",
+        "import yaml\nfrom typing import Any\ndef main():\n    pass\n",
+    )
+    report = analyze_repository(root, config)
+    assert {"yaml", "typing"} <= set(report["external_or_unresolved_top_level_names"])
+    assert not [
+        edge
+        for edge in report["edges"]
+        if edge["source"] == "pkg/cli.py" and edge["line"] in {1, 2}
+    ]
+    assert report["unresolved_internal_imports"] == []
+
+
+def test_missing_internal_import_is_reported_with_source_and_line(
+    static_repo,
+) -> None:
+    """A missing module under a local prefix is an unresolved internal import."""
+    root, config = static_repo
+    _write(root, "pkg/cli.py", "import pkg.absent\ndef main():\n    pass\n")
+    report = analyze_repository(root, config)
+    assert report["unresolved_internal_imports"] == [
+        {"source": "pkg/cli.py", "line": 1, "name": "pkg.absent"}
+    ]
+    assert "pkg" not in report["external_or_unresolved_top_level_names"]
+
+
+def test_dotted_prefix_collision_is_not_a_namespace_package(static_repo) -> None:
+    """A string prefix of a namespace package is not a namespace package."""
+    root, config = static_repo
+    _write(root, "pkg/namespace/leaf.py", "value = 2\n")
+    _write(
+        root,
+        "pkg/cli.py",
+        "import pkg.name\nimport pkg.namespac\nimport pkg.namespace\n"
+        "def main():\n    pass\n",
+    )
+    report = analyze_repository(root, config)
+    assert report["unresolved_internal_imports"] == [
+        {"source": "pkg/cli.py", "line": 1, "name": "pkg.name"},
+        {"source": "pkg/cli.py", "line": 2, "name": "pkg.namespac"},
+    ]
+    assert {
+        "source": "pkg/cli.py",
+        "target": "pkg/__init__.py",
+        "line": 3,
+        "kind": "namespace_package_initialization",
+        "scope": "<module>",
+    } in report["edges"]
+    assert not [
+        edge
+        for edge in report["edges"]
+        if edge["source"] == "pkg/cli.py"
+        and edge["kind"].endswith("namespace_package_initialization")
+        and edge["line"] in {1, 2}
+    ]
+
+
+def test_deferred_namespace_import_carries_function_scope(static_repo) -> None:
+    """A namespace import inside a function or method keeps its deferred scope."""
+    root, config = static_repo
+    _write(root, "pkg/namespace/leaf.py", "value = 2\n")
+    _write(
+        root,
+        "pkg/cli.py",
+        "def main():\n    import pkg.namespace\n\n\n"
+        "class Runner:\n    def run(self):\n        import pkg.namespace\n",
+    )
+    report = analyze_repository(root, config)
+    deferred = sorted(
+        (edge["line"], edge["scope"])
+        for edge in report["edges"]
+        if edge["source"] == "pkg/cli.py"
+        and edge["target"] == "pkg/__init__.py"
+        and edge["kind"] == "deferred_namespace_package_initialization"
+    )
+    assert deferred == [(2, "main"), (7, "Runner.run")]
+    assert not [
+        edge
+        for edge in report["edges"]
+        if edge["source"] == "pkg/cli.py"
+        and edge["kind"] == "namespace_package_initialization"
+    ]
+
+
+def test_nested_namespace_initializes_each_regular_ancestor_only(
+    static_repo,
+) -> None:
+    """A nested namespace import initializes regular ancestors, not namespaces."""
+    root, config = static_repo
+    _write(root, "pkg/outer/__init__.py", "value = 0\n")
+    _write(root, "pkg/outer/ns/inner/leaf.py", "value = 1\n")
+    _write(root, "pkg/cli.py", "import pkg.outer.ns.inner\ndef main():\n    pass\n")
+    report = analyze_repository(root, config)
+    assert {
+        (edge["target"], edge["line"])
+        for edge in report["edges"]
+        if edge["source"] == "pkg/cli.py"
+        and edge["kind"] == "namespace_package_initialization"
+    } == {("pkg/outer/__init__.py", 1), ("pkg/__init__.py", 1)}
+    assert "pkg/outer/__init__.py" in report["reachable_by_kind"]["production"]
+
+
+def test_alias_rewrite_keeps_the_unaliased_namespace_check(static_repo) -> None:
+    """Record current behavior: the namespace check tests the un-aliased name.
+
+    An aliased import that resolves gets an ordinary edge. An aliased import
+    that does not resolve is checked as a namespace and as a required name
+    under its original, un-aliased name, so it is recorded as an external
+    top-level name and not as an unresolved internal import. Decision 1129-D2
+    keeps this behavior in the 1129-S1 performance slice. The latent
+    misclassification is filed as follow-up issue #1159, so a later fix that
+    changes these assertions is not a regression.
+    """
+    root, config = static_repo
+    config["import_aliases"] = [
+        {
+            "source": "pkg/cli.py",
+            "prefix": "utils",
+            "target": "pkg.utils",
+            "reason": "Fixture alias",
+        }
+    ]
+    _write(root, "pkg/utils/helper.py", "value = 1\n")
+    _write(root, "pkg/utils/ns/leaf.py", "value = 2\n")
+    _write(
+        root,
+        "pkg/cli.py",
+        "import utils.helper\nimport utils.ns\ndef main():\n    pass\n",
+    )
+    report = analyze_repository(root, config)
+    assert {
+        "source": "pkg/cli.py",
+        "target": "pkg/utils/helper.py",
+        "line": 1,
+        "kind": "import",
+        "scope": "<module>",
+    } in report["edges"]
+    assert not [
+        edge
+        for edge in report["edges"]
+        if edge["source"] == "pkg/cli.py"
+        and edge["kind"].endswith("namespace_package_initialization")
+    ]
+    assert "utils" in report["external_or_unresolved_top_level_names"]
+    assert report["unresolved_internal_imports"] == []
+
+    _write(root, "pkg/cli.py", "import utils.missing_module\ndef main():\n    pass\n")
+    report = analyze_repository(root, config)
+    assert "utils" in report["external_or_unresolved_top_level_names"]
+    assert report["unresolved_internal_imports"] == []
