@@ -447,3 +447,38 @@ merge base `c7ae2988d07b443f627a04d3a4eed1816b1cd438`: `AGENTS.md`,
   `nexus/telemetry/usage.py:54`. The order puts `usage.py` and the presence logs
   out of scope and fixes the allowlist reason and the `docs/runtime.md` bullet
   verbatim, so the follow-up is the coordinator's decision.
+
+## Review Round 2 (`1bb472fb`)
+
+- A second test was made stale by S6:
+  `test_check_children_still_fails_a_live_child_without_its_writer` stops its
+  child through `_check_children` -> `_stop_pid`, which now reaps it, and its
+  `finally` still sent SIGKILL to that freed pid. It now asserts
+  `os.waitpid(pid, os.WNOHANG)` raises `ChildProcessError` (comment
+  `# _stop_pid reaped its own child (#842).`), sets `reaped = True`, and its
+  `finally` signals and reaps the pid only when `reaped` is still `False`, the
+  same guard as `test_check_children_stops_a_service_whose_writer_died`.
+- Run on `1bb472fb` (one-minute load 5.30), with `NEXUS_GATEWAY_PORT`,
+  `NEXUS_API_URL` and `NEXUS_SLOT` unset; Black and flake8 are clean on the
+  changed file:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_runtime/test_supervisor.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+72 passed, 5 warnings in 31.36s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest tests/test_runtime/test_supervisor.py -k "writer_died or without_its_writer or stop_pid" -rA -q
+PASSED tests/test_runtime/test_supervisor.py::test_check_children_stops_a_service_whose_writer_died
+PASSED tests/test_runtime/test_supervisor.py::test_stop_pid_reaps_its_own_child_inside_the_grace
+PASSED tests/test_runtime/test_supervisor.py::test_doctor_fails_a_live_service_without_its_writer
+PASSED tests/test_runtime/test_supervisor.py::test_check_children_still_fails_a_live_child_without_its_writer
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py
+66 passed, 5 warnings in 7.52s
+```
+
+- Still not changed: the `CharacterIdentityAmbiguity` "declared evidence" text
+  reaching WARNING through `nexus/telemetry/usage.py:54` (above). The review
+  confirmed it and left the follow-up to the coordinator; both proposed fixes
+  edit files the order puts out of scope.
