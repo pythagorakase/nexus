@@ -289,6 +289,26 @@ in `docs/cli.md`).
   appear at any `level`. Successful (below 400) access records for
   `access_success_exclude_paths` are dropped while every 4xx and 5xx is
   kept.
+- Story and player text appears only at DEBUG (#842). At INFO and every
+  higher level, application loggers record ids, entity names, session ids,
+  lengths, counts and exception classes, never player input, author's notes
+  or directives, storyteller or model output, retrieval query text, story
+  titles or wizard choice texts; each site that needs the text logs it on a
+  paired DEBUG line. Structured-output and validator error messages carry no
+  payload text at any level (`structured_output_error_text` in
+  `nexus/api/native_structured_output.py`). Wire rejections and repairs log
+  at WARNING (`nexus/telemetry/usage.py`) with names, ids, tags, paths, counts
+  and fixed text; an ambiguous character declaration's declared summary, role
+  and location appear only on a DEBUG line (`nexus/presence/identity.py`).
+  `tests/test_runtime/test_log_redaction.py` enforces the rule over `nexus/`
+  and the provider modules `scripts/api_openai.py`, `scripts/api_anthropic.py`
+  and `scripts/api_openrouter.py`. There is no generic scrubber: an exception
+  message a library composes (a provider error body, a Pydantic
+  `ValidationError` that echoes its input) still reaches ERROR wherever a site
+  outside that sweep logs `str(exc)`. `level = "DEBUG"` turns on DEBUG for
+  every library as well, and the OpenAI SDK then logs request options,
+  prompts included. A QA probe that needs query text sets `level = "DEBUG"` in
+  its own generated config.
 - `nexus up --foreground` keeps the supervisor attached: it streams
   prefixed service logs to the console, honors `autorestart = "on-failure"`
   (bounded by `autorestart_max_retries`), and tears everything down on

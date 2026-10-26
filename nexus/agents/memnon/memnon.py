@@ -1385,15 +1385,19 @@ class MEMNON:
             Dictionary containing query results and metadata
         """
         # Log the query
-        logger.info(f"Querying memory: {query}")
+        logger.info("Querying memory (%d chars)", len(query))
+        logger.debug(f"Querying memory: {query}")
 
         # Check if this is a direct chunk ID query
         if query.startswith("chunk_id:"):
             try:
                 chunk_id = int(query.replace("chunk_id:", "").strip())
                 return self._get_chunk_by_id(chunk_id)
-            except ValueError:
-                logger.error(f"Invalid chunk_id format in query: {query}")
+            except (
+                ValueError
+            ):  # nexus-exception-disposition: safe-continuation; reason=id; safety=text
+                logger.error("Invalid chunk_id format in query (%d chars)", len(query))
+                logger.debug(f"Invalid chunk_id format in query: {query}")
                 # Fall through to regular query processing
 
         # Use default limit if not specified

@@ -751,10 +751,11 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         ui_choices = prepare_choices_for_ui(wizard_response.choices)
         logger.info(
-            "Wizard response: message_len=%d choices=%s",
+            "Wizard response: message_len=%d choices=%d",
             len(wizard_response.message or ""),
-            ui_choices,
+            len(ui_choices),
         )
+        logger.debug("Wizard response choices: %s", ui_choices)
         record_wizard_reply(
             slot_dbname(request.slot),
             expected_thread_id=request.thread_id,
@@ -903,7 +904,13 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             transition_data = build_transition_data_from_cache(cache)
         except ValidationError as e:
             # Fail loudly per user directive
-            logger.error(f"Validation error building TransitionData: {e}")
+            logger.error(
+                "Validation error building TransitionData: %s (%d chars, %d errors)",
+                type(e).__name__,
+                len(str(e)),
+                e.error_count(),
+            )
+            logger.debug(f"Validation error building TransitionData: {e}")
             raise HTTPException(
                 status_code=422, detail=f"Setup data validation failed: {e.errors()}"
             )
