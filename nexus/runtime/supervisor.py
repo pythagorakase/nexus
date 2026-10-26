@@ -1013,13 +1013,17 @@ class Supervisor:
         no zombie (#842). Any other pid is probed with ``pid_alive``.
         """
         grace = self.runtime.health.stop_grace_seconds
-        if not process_running(pid):
+        running = process_running(pid)
+        if not running:
             return
         _signal_pid(pid, signal.SIGTERM)
         deadline = time.monotonic() + grace
-        while process_running(pid) and time.monotonic() < deadline:
+        # Probe again only while the pid is still held: once ``process_running``
+        # has reaped the child, the pid is free and may be reused (#842).
+        while running and time.monotonic() < deadline:
             time.sleep(0.1)
-        if process_running(pid):
+            running = process_running(pid)
+        if running and process_running(pid):
             kill_sig = signal.SIGKILL if os.name == "posix" else signal.SIGTERM
             _signal_pid(pid, kill_sig)
             time.sleep(0.2)
