@@ -174,10 +174,10 @@ this branch causes both.
 - `test_shipped_model_paths_are_unchanged_by_anchoring` pins the number of
   configured model paths; deleting `bge-small-custom` makes it 13. Updated
   14 to 13; `tests/test_runtime_home.py` then passes (`53 passed`).
-- `test_golden_query_overrides_merge_without_field_errors` is not fixed here.
-  The ir_eval V1 `ir_eval/golden_queries.json` `settings.models` block carries
-  a `weight` on its four ensemble-era embedders, and the merged V1 settings
-  now fail with `extra_forbidden` at `memnon.models.<name>.weight`:
+- `test_golden_query_overrides_merge_without_field_errors` failed because the
+  ir_eval V1 `ir_eval/golden_queries.json` `settings.models` block carried a
+  `weight` on its four ensemble-era embedders, and the merged V1 settings
+  then failed with `extra_forbidden` at `memnon.models.<name>.weight`:
 
   ```
   E           AssertionError: assert [(('memnon', ...a_forbidden')] == []
@@ -185,12 +185,54 @@ this branch causes both.
   tests/test_config/test_ir_eval_golden_overrides.py:105: AssertionError
   ```
 
-  The golden file is out of scope by name (Decision 812-Q12, #811 deletes V1),
-  and the test's rule is that the golden overrides carry no retired key, so it
-  is left for the coordinator.
+  Fixed in `d16b1f21` (review round 2): the four `weight` keys are deleted
+  from that block (data only; the V1 readers take `weight` through `.get()`
+  defaults at `ir_eval/ir_eval.py:1890` and `:1940`). The test is unchanged.
+  This is a recorded exception to the 812-Q12 out-of-scope line for
+  `ir_eval/golden_queries*.json`; `ir_eval/golden_queries_backup.json` is
+  not read by the test and is not edited.
 
 `nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery`:
 
 ```
 1910 passed, 1532 skipped, 7 warnings in 48.93s
 ```
+
+## Review Round 2 (Head `92a932d8`, After Merging `origin/main` at `9a0714d7`)
+
+- `d16b1f21`: the golden-overrides fix above, and
+  `test_committed_runtime_holds_one_embedder` now pins the production
+  entry's keys on the committed `[memnon.models."Octen-Embedding-4B"]` table
+  (`_raw()`), keeping the `model_dump()` schema assertion beside it.
+- `92a932d8`: merge of `origin/main` at `9a0714d7`; the six `verified_commit`
+  conflicts (`AGENTS.md`, `docs/turn_flow_sequence.md`, decisions 0009,
+  0010, 0024, 0034) resolve to the new merge base `9a0714d7`. None of those
+  documents describes the ensemble weight. #1162 had not landed, so no
+  0056-0083 record needed a re-stamp.
+
+Tails (the commit each ran on is named after the block):
+
+```
+$ nice -n 15 $PY -m pytest -q tests/test_config/test_ir_eval_golden_overrides.py tests/test_ir_eval_v2/test_candidate_registry.py
+12 passed, 5 warnings in 5.28s
+
+$ nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_config/test_ir_eval_golden_overrides.py tests/test_ir_eval_v2/test_candidate_registry.py tests/test_memnon_embedding_contract.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+87 passed, 5 warnings in 19.35s
+
+$ nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3244 passed, 701 skipped, 8 warnings in 670.89s (0:11:10)
+
+$ nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1910 passed, 1547 skipped, 7 warnings in 49.67s
+
+$ $PY scripts/validate_config_commit.py    # exit 0, no output
+```
+
+The first command ran on `d16b1f21` before the merge; the rest on
+`92a932d8`. Black and flake8 on `tests/test_ir_eval_v2/test_candidate_registry.py`:
+`1 file left unchanged`, no flake8 output.
