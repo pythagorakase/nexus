@@ -153,9 +153,60 @@ clears the comment to probe the schema-documentation ratchet. No SQL caller of
 `clear_incubator()` exists in `nexus/` or `scripts/`.
 
 These searches were recorded on the base commit `c7ae2988`. Re-run on
-`4931cf24`, the first two return the same lines, and `git grep -n
-clear_incubator` adds only this branch's own files (migration 152, the guard
-test, `listing.py` and this file).
+`4931cf24` (the same searches pinned to that tree), the first two return the
+same lines, and `git grep -n clear_incubator` adds only this branch's own files
+(migration 152, the guard test, `listing.py` and this file):
+
+```
+$ git grep -nw response_id 4931cf24 -- nexus
+4931cf24:nexus/api/lore_adapter.py:201:        "llm_response_id": getattr(response, "response_id", None),
+
+$ git grep -n authorial_directives 4931cf24 -- nexus
+4931cf24:nexus/agents/memnon/memnon.py:81:    authorial_directives = Column(
+4931cf24:nexus/agents/memnon/utils/db_schema.py:30:    authorial_directives = Column(
+4931cf24:nexus/agents/orrery/job_queues.py:111:              AND NOT (coalesce(n.authorial_directives, '[]'::jsonb) @> %s::jsonb)
+4931cf24:nexus/agents/orrery/reconstruction.py:46:        f"COALESCE({table_alias}.authorial_directives, '[]'::jsonb) "
+4931cf24:nexus/agents/orrery/retrograde_orchestrator.py:666:          AND nc.authorial_directives @> %s::jsonb
+4931cf24:nexus/agents/orrery/retrograde_persistence.py:2548:            authorial_directives
+4931cf24:nexus/agents/orrery/retrograde_persistence.py:2595:        WHERE authorial_directives @> %s::jsonb
+
+$ git grep -n clear_incubator 4931cf24
+4931cf24:docs/qa/1106-incubator-comments/listing.py:4:public.clear_incubator()) with the literal in migration 152, prints the live
+4931cf24:docs/qa/1106-incubator-comments/listing.py:28:FUNCTION = "clear_incubator()"
+4931cf24:docs/qa/1106-incubator-comments/listing.py:31:    r"|FUNCTION public\.(clear_incubator\(\))) IS\n    '((?:[^']|'')*)';"
+4931cf24:docs/qa/1106-incubator-comments/listing.py:63:                    "'public.clear_incubator()'::regprocedure, 'pg_proc')"
+4931cf24:docs/qa/1106-incubator-comments/verification.md:5:`public.incubator` column comments and the `public.clear_incubator()` function
+4931cf24:docs/qa/1106-incubator-comments/verification.md:79:$ psql -d NEXUS_template -Atc "select obj_description('public.clear_incubator()'::regprocedure,'pg_proc'), pg_get_functiondef('public.clear_incubator()'::regprocedure)"
+4931cf24:docs/qa/1106-incubator-comments/verification.md:80:Clear the incubator after content is approved and committed|CREATE OR REPLACE FUNCTION public.clear_incubator()
+4931cf24:docs/qa/1106-incubator-comments/verification.md:105:$ git grep -n clear_incubator
+4931cf24:docs/qa/1106-incubator-comments/verification.md:106:docs/qa/807-one-commit-path/verification.md:28:helper (`fetch_incubator_data`, `insert_narrative_chunk`, `clear_incubator`)
+4931cf24:docs/qa/1106-incubator-comments/verification.md:107:docs/qa/819-ratchet-extension/verification.md:112:  (`public.clear_incubator()`), `removed-view-comment` (`public.narrative_view`).
+4931cf24:docs/qa/1106-incubator-comments/verification.md:108:nexus/api/narrative.py:1660:async def clear_incubator(
+4931cf24:docs/qa/1106-incubator-comments/verification.md:109:scripts/create_incubator_table.sql:73:CREATE OR REPLACE FUNCTION clear_incubator() RETURNS VOID AS $$
+4931cf24:docs/qa/1106-incubator-comments/verification.md:110:scripts/create_incubator_table.sql:79:COMMENT ON FUNCTION clear_incubator IS 'Clear the incubator after content is approved and committed';
+4931cf24:docs/qa/1106-incubator-comments/verification.md:111:scripts/test_narrative_api.py:109:def test_clear_incubator(slot: int):
+4931cf24:docs/qa/1106-incubator-comments/verification.md:112:scripts/test_narrative_api.py:176:            test_clear_incubator(args.slot)
+4931cf24:docs/qa/1106-incubator-comments/verification.md:113:tests/test_schema_documentation_pg.py:288:            "COMMENT ON FUNCTION public.clear_incubator() IS NULL",
+4931cf24:docs/qa/1106-incubator-comments/verification.md:114:tests/test_schema_documentation_pg.py:289:            "function:public.clear_incubator()",
+4931cf24:docs/qa/1106-incubator-comments/verification.md:120:`clear_incubator()` exists in `nexus/` or `scripts/`.
+4931cf24:docs/qa/1106-incubator-comments/verification.md:159:FAILED tests/test_incubator_column_comments_pg.py::test_every_corrected_comment_replaced_its_pre_152_text[clear_incubator()]
+4931cf24:docs/qa/1106-incubator-comments/verification.md:210:clear_incubator() (byte-identical to migration text: True, 210 bytes)
+4931cf24:docs/qa/807-one-commit-path/verification.md:28:helper (`fetch_incubator_data`, `insert_narrative_chunk`, `clear_incubator`)
+4931cf24:docs/qa/819-ratchet-extension/verification.md:112:  (`public.clear_incubator()`), `removed-view-comment` (`public.narrative_view`).
+4931cf24:migrations/152_incubator_column_comments.sql:4:-- public.incubator and the COMMENT ON FUNCTION text of public.clear_incubator()
+4931cf24:migrations/152_incubator_column_comments.sql:39:-- clear_incubator() (function): catalog body DELETE FROM incubator WHERE id = TRUE; no SQL caller in nexus/ or scripts/; nexus/api/narrative.py:1668-1672; nexus/api/slot_endpoints.py:262-265; nexus/api/commit_handler_sync.py:880-889
+4931cf24:migrations/152_incubator_column_comments.sql:77:COMMENT ON FUNCTION public.clear_incubator() IS
+4931cf24:nexus/api/narrative.py:1660:async def clear_incubator(
+4931cf24:scripts/create_incubator_table.sql:73:CREATE OR REPLACE FUNCTION clear_incubator() RETURNS VOID AS $$
+4931cf24:scripts/create_incubator_table.sql:79:COMMENT ON FUNCTION clear_incubator IS 'Clear the incubator after content is approved and committed';
+4931cf24:scripts/test_narrative_api.py:109:def test_clear_incubator(slot: int):
+4931cf24:scripts/test_narrative_api.py:176:            test_clear_incubator(args.slot)
+4931cf24:tests/test_incubator_column_comments_pg.py:4:and the comment on ``public.clear_incubator()``. These tests read
+4931cf24:tests/test_incubator_column_comments_pg.py:39:FUNCTION = "clear_incubator()"
+4931cf24:tests/test_incubator_column_comments_pg.py:131:SELECT obj_description('public.clear_incubator()'::regprocedure, 'pg_proc')
+4931cf24:tests/test_schema_documentation_pg.py:288:            "COMMENT ON FUNCTION public.clear_incubator() IS NULL",
+4931cf24:tests/test_schema_documentation_pg.py:289:            "function:public.clear_incubator()",
+```
 
 ## Fleet Facts Behind the Comments (Read Only)
 
@@ -356,6 +407,12 @@ The first offline command of the order (`tests --ignore=tests/test_api
 --ignore=tests/test_orrery`) ran 624.54s before review, longer than the
 ten-minute command limit, so it was re-run as two pieces that together cover
 the same files (2151 + 1045 = 3196 passed, 610 + 89 = 699 skipped, as before).
+The earlier single run, as recorded in this file at `4931cf24`:
+
+```
+$ nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+3196 passed, 699 skipped, 8 warnings in 624.54s (0:10:24)
+```
 
 ```
 $ nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery --ignore=tests/config --ignore=tests/fixtures --ignore=tests/proofs --ignore=tests/test_config --ignore=tests/test_ir_eval_v2 --ignore=tests/test_lore --ignore=tests/test_memnon --ignore=tests/test_runtime --ignore=tests/test_scripts --ignore=tests/test_util
@@ -382,3 +439,47 @@ receipt isolation: checkout and user receipts untouched
 
 No file this branch changes is a declared `sources:` entry of `AGENTS.md`,
 `docs/turn_flow_sequence.md` or any other `status: canonical` document.
+
+## Review Fix: The Bite Test Goes Through the Guard (Commit `0ae1cb65`)
+
+Review found that `test_pre_152_keys_in_convention_are_rejected` did its own
+set arithmetic and never called `_model_mismatches`, the comparison the live
+guard `test_json_column_comment_lists_its_model_keys` uses. Commit `0ae1cb65`
+keeps the `_key_sets` prefix assertion and adds
+`assert _model_mismatches(text, model, {}) == [f"top level ({model.__name__}): extra {sorted(extra)}, missing {sorted(missing)}"]`
+(the empty nested map because the old key lists carry only a top-level set).
+Only the test file changed, so the migration, listing and offline results above
+still hold. Run on `0ae1cb65`:
+
+```
+$ uptime
+14:24  up  3:02, 5 users, load averages: 18.74 13.25 11.00
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_incubator_column_comments_pg.py
+.....................                                                    [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 2 targets: postgres, qa640_1106_comments_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+21 passed in 2.48s
+$ $PY -m pytest -q tests/test_doc_front_matter.py
+66 passed, 5 warnings in 8.64s
+$ $PY -m black --check tests/test_incubator_column_comments_pg.py
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+$ $PY -m flake8 tests/test_incubator_column_comments_pg.py
+(exit 0)
+$ $PY -m mypy --explicit-package-bases tests/test_incubator_column_comments_pg.py
+Success: no issues found in 1 source file
+```
+
+The new assertion bites. A scratch script (session scratchpad,
+`1106-S1/bite_check.py`) replaces `_model_mismatches` in memory with one that
+reports nothing and calls the test for each column; all three fail:
+
+```
+$ PYTHONPATH=$PWD $PY <scratchpad>/1106-S1/bite_check.py
+bite test failed for: ['entity_updates', 'metadata_updates', 'reference_updates']
+(exit 0)
+```
