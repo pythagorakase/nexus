@@ -38,11 +38,44 @@ canonical document for `check_reachability`, `test_reachability` and
   `resolve()` (`:377-395`) returns no file. `record()` runs per `import` name
   (`:457`), per `from` statement (`:469`) and per imported item with
   `required=False` (`:474`).
+- The issue measured 16,346,085 iterations of that generator (2.469s cumulative of
+  8.971s under cProfile) and 4.92s unprofiled wall time at f073b371. On c7ae2988
+  one read-only run of `python -S scripts/check_reachability.py` in the main
+  checkout took 6.14s wall and exited 0 (coordinator check, 2026-10-26).
 - `modules` is built once (`:209-211`) and only read afterwards (`:229`,
   `:365-368`, `:383-391`, `:423`, `:428`, `:583`).
-- The namespace check and the `required` branch (`:444-450`) test the caller's
-  `name`; `resolve()` rewrites aliases into its own local (`:378-382`). The
-  ancestor walk is `:426-443`.
+- `resolve()` rewrites an aliased name into its own local variable (`:377-395`,
+  the alias loop at `:378-382`). The namespace check (`:423`) and the `required`
+  branch (`:444-450`) both test the caller's original `name`. The ancestor walk is
+  `:426-443`. The three branches are an `if`/`elif`/`elif` chain, so a name that
+  takes the namespace branch never reaches the `required` branch.
+- The live config has one alias (`config/reachability.toml:148-152`, `utils` to
+  `nexus.agents.lore.utils` for `nexus/agents/lore/lore.py`) and two search-path
+  declarations (`:198-205`). `nexus/agents/lore/utils/` has no `__init__.py`. The
+  three live aliased imports (`nexus/agents/lore/lore.py:56-58`) resolve directly.
+- Test gaps in `tests/test_reachability.py` at c7ae2988, and the new test that
+  closes each:
+  - `unresolved_internal_imports` only asserted empty (`:110`, `:235`, `:893`):
+    `test_missing_internal_import_is_reported_with_source_and_line` and
+    `test_dotted_prefix_collision_is_not_a_namespace_package`.
+  - External names only checked for a blank name (`:236`, `:255`):
+    `test_external_imports_are_top_level_names_without_edges`.
+  - Namespace coverage module-level only (`:1060-1087`):
+    `test_nested_namespace_initializes_each_regular_ancestor_only`.
+  - The deferred namespace edge from `:97` never asserted:
+    `test_deferred_namespace_import_carries_function_scope`.
+  - No test used `import_aliases` (`git grep import_aliases tests` was empty):
+    `test_alias_rewrite_keeps_the_unaliased_namespace_check`.
+    `import_search_paths` already had a test (`:329-360`).
+- The readiness doctor runs the gate as a subprocess, `[sys.executable, "-S",
+  script]`, under `[runtime.readiness].reachability_timeout_seconds`
+  (`nexus/runtime/readiness.py:1338-1380`; `nexus.toml:1467`, 120.0;
+  `nexus/config/settings_models.py:773-780`). The script path is
+  `ctx.checkout / "scripts" / "check_reachability.py"` (`readiness.py:1340`), and
+  `checkout` defaults to `repo_root()` (`:148`).
+  `tests/test_runtime/test_readiness.py:1093-1108` runs it on the checkout. CI runs
+  it through `nexus doctor --target ci-runner`
+  (`.github/workflows/reachability-check.yml:35-44`).
 
 ## The Change
 
