@@ -20,6 +20,7 @@ import pytest
 from anthropic.types.beta import BetaMessage, BetaThinkingBlock, BetaUsage
 
 from nexus.agents.logon.skald_wire import SkaldWriterWire
+from nexus.cli_contract import error_envelope
 from nexus.config import load_settings
 from nexus.telemetry.usage import make_usage_event
 from scripts.api_anthropic import AnthropicProvider
@@ -33,6 +34,7 @@ from tests.test_fable_structured_output_live import (
     parse_rejection_lines,
     probe_lane,
     read_ledger,
+    turn_outcome,
     verdict,
     write_evidence,
 )
@@ -399,6 +401,83 @@ def test_write_evidence_writes_every_file(tmp_path: Path) -> None:
     assert "- Verdict: `null`" in summary
     assert f"- Fable calls: {len(events)} against `CALL_CAP` 30" in summary
     assert "- Worst case per turn (`worst`): 8" in summary
+    assert "- Excess over `CALL_CAP`: 0" in summary
+    assert "### Fable Calls Beyond CALL_CAP by Seat\n\nNone." in summary
+
+    # Follow-story calls push the run past CALL_CAP: the summary names the
+    # seats of the calls beyond the cap, in ledger time order.
+    late = _BASE + timedelta(hours=2, minutes=40)
+    over = events + [
+        _event("experience_renderer", "accepted", late + timedelta(minutes=i))
+        for i in range(5)
+    ]
+    over += [
+        _event("summaries", "accepted", late + timedelta(minutes=10 + i))
+        for i in range(2)
+    ]
+    over.append(
+        _event("correspondence_compaction", "accepted", late + timedelta(minutes=15))
+    )
+    assert len(over) == 33
+    usage_over = tmp_path / "usage_over"
+    usage_over.mkdir()
+    (usage_over / f"usage-{_BASE.date().isoformat()}.jsonl").write_text(
+        "".join(json.dumps(event) + "\n" for event in over)
+    )
+    evidence_over = tmp_path / "evidence_over"
+    evidence_over.mkdir()
+    write_evidence(
+        evidence_over,
+        events_all=read_ledger(usage_over, _BASE, _BASE + timedelta(hours=3)),
+        rejections=parse_rejection_lines(line),
+        turns=turns,
+        turn_windows=_windows(TURN_COUNT),
+        stop_reason="completed",
+        worst=8,
+    )
+    summary_over = (evidence_over / "summary.md").read_text()
+    assert "- Fable calls: 33 against `CALL_CAP` 30" in summary_over
+    assert "- Excess over `CALL_CAP`: 3" in summary_over
+    beyond = summary_over.split("### Fable Calls Beyond CALL_CAP by Seat\n\n")[1]
+    beyond_rows = beyond.split("\n\n")[0].splitlines()
+    assert beyond_rows[2:] == [
+        "| correspondence_compaction | 1 |",
+        "| summaries | 2 |",
+    ]
+
+
+def test_turn_outcome_reads_the_failure_envelope_on_stderr() -> None:
+    """A failed turn's CLI code and session id come from the stderr envelope.
+
+    ``continue --json`` prints a failure envelope on stderr, so the turn that
+    ends the run still records its ``code`` and ``partial.session_id``; the
+    envelope's ``error`` text is never kept.
+    """
+
+    envelope = json.dumps(
+        error_envelope("domain_failure", "x", {"session_id": "s"}),
+        indent=2,
+        sort_keys=True,
+    )
+    failed = turn_outcome(4, "", envelope)
+    assert failed["code"] == "domain_failure"
+    assert failed["session_id"] == "s"
+    assert "x" not in failed.values()
+    assert set(failed) == {"success", "code", "session_id"}
+    # Log lines the child wrote to stderr before the envelope are skipped.
+    noisy = turn_outcome(4, "", "WARNING something\n" + envelope + "\n")
+    assert (noisy["code"], noisy["session_id"]) == ("domain_failure", "s")
+    # Success is read from stdout; stderr is ignored.
+    ok = turn_outcome(
+        0, json.dumps({"success": True, "session_id": "t"}), "WARNING noise\n"
+    )
+    assert ok == {"success": True, "code": None, "session_id": "t"}
+    # A timed-out turn records nothing.
+    assert turn_outcome(None, "", "") == {
+        "success": None,
+        "code": None,
+        "session_id": None,
+    }
 
 
 def test_probe_lane_refuses_unset_and_play_port(

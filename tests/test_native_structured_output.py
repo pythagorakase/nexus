@@ -1613,7 +1613,12 @@ def test_anthropic_extractors_name_stop_reason_and_blocks(
         Any, SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
     )
 
-    with caplog.at_level(logging.WARNING, logger="nexus.metadata"):
+    # INFO and above on every logger: the #1155 redaction boundary, so the
+    # sentinel check sees every record that contract governs.
+    with (
+        caplog.at_level(logging.INFO),
+        caplog.at_level(logging.INFO, logger="nexus.metadata"),
+    ):
         with pytest.raises(ValueError) as exc_info:
             provider.get_structured_completion("Prompt", SkaldWriterWire)
 

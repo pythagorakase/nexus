@@ -495,8 +495,8 @@ def write_evidence(
 
     done = completed_turns(turns)
     result = verdict(attempts, done)
-    fable = fable_events(events_all)
-    fable_count = len(fable)
+    fable_by_ts = sorted(fable_events(events_all), key=lambda event: event.ts)
+    fable_count = len(fable_by_ts)
     rejected = [a for a in attempts if a["outcome"] == "rejected_validation"]
 
     lines = [
@@ -573,6 +573,10 @@ def write_evidence(
         Counter(a["seat"] for a in attempts if a["turn"] is None),
     )
     lines += _count_section(
+        "Fable Calls Beyond CALL_CAP by Seat",
+        Counter(event.seat for event in fable_by_ts[CALL_CAP:]),
+    )
+    lines += _count_section(
         "Rejections by Error Class", Counter(a["error_class"] for a in rejected)
     )
     lines += _count_section(
@@ -603,6 +607,51 @@ def write_evidence(
     lines.append("")
     (evidence / "summary.md").write_text("\n".join(lines))
     return result
+
+
+def _json_object(text: str) -> dict[str, Any]:
+    """The JSON object ``text`` holds, or the last indented one it ends with.
+
+    The CLI prints its envelope with ``indent=2``, so it starts on a line that
+    is exactly ``{``; log lines a failing child wrote to stderr come before it.
+    """
+
+    candidates = [text]
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line == "{"]
+    if starts:
+        candidates.append("\n".join(lines[starts[-1] :]))
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def turn_outcome(exit_code: Optional[int], stdout: str, stderr: str) -> dict[str, Any]:
+    """The ``success``, CLI ``code`` and ``session_id`` of one ``continue --json``.
+
+    A successful run prints its result on stdout; a failed run prints the
+    failure envelope on stderr (``nexus.cli.emit_error``). Only ``success``,
+    ``code`` and ``session_id`` (or ``partial.session_id``) are kept, never
+    ``error``, prose or choices. A timed-out run (exit code ``None``) has none.
+    """
+
+    if exit_code is None:
+        return {"success": None, "code": None, "session_id": None}
+    payload = _json_object(stdout if exit_code == 0 else stderr)
+    session_id = payload.get("session_id")
+    partial = payload.get("partial")
+    if session_id is None and isinstance(partial, dict):
+        session_id = partial.get("session_id")
+    return {
+        "success": payload.get("success"),
+        "code": payload.get("code"),
+        "session_id": session_id,
+    }
 
 
 def _clone_story_pins(dbname: str) -> tuple[Any, Any]:
@@ -639,7 +688,7 @@ def _run_turn(
     start = datetime.now(timezone.utc)
     started = time.monotonic()
     exit_code: Optional[int]
-    payload: dict[str, Any] = {}
+    stdout = stderr = ""
     try:
         completed = subprocess.run(
             argv,
@@ -653,25 +702,14 @@ def _run_turn(
         exit_code = None
     else:
         exit_code = completed.returncode
-        try:
-            parsed = json.loads(completed.stdout)
-        except json.JSONDecodeError:
-            parsed = None
-        if isinstance(parsed, dict):
-            payload = parsed
+        stdout, stderr = completed.stdout, completed.stderr
     seconds = round(time.monotonic() - started, 3)
     end = datetime.now(timezone.utc)
-    partial = payload.get("partial")
-    session_id = payload.get("session_id")
-    if session_id is None and isinstance(partial, dict):
-        session_id = partial.get("session_id")
     record = {
         "index": index,
         "input_kind": input_kind,
         "exit_code": exit_code,
-        "success": payload.get("success"),
-        "code": payload.get("code"),
-        "session_id": session_id,
+        **turn_outcome(exit_code, stdout, stderr),
         "seconds": seconds,
     }
     return record, TurnWindow(index=index, start=start, end=end)
