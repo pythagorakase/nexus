@@ -6,7 +6,7 @@ sources:
   - prompts/storyteller_writer_pass.md
   - prompts/storyteller_gaia.md
   - prompts/correspondence_compaction.md
-verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"
+verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
 ---
 
 # 0034: Conspiracy Channel
