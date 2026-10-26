@@ -3,7 +3,7 @@ status: canonical
 sources:
   - nexus/api/new_story_db_mapper.py
   - ui/client/src/lib/world-outline.ts
-verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
+verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
 ---
 
 # 0048: Region Genesis

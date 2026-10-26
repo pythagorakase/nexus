@@ -4,7 +4,7 @@ sources:
   - config/schema_docs_baseline.json
   - docs/dead_retrieval_subtraction.md
   - nexus/agents/memnon/utils/db_access.py
-verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
+verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
 ---
 
 # 0029: Legacy Vector-Helper Functions

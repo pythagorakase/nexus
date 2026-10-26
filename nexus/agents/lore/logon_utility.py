@@ -332,8 +332,13 @@ def _coerce_mapping(value: Any) -> Dict[str, Any]:
     if isinstance(value, str):
         try:
             value = json.loads(value)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse mapping JSON for prompt context: %r", value)
+        except (
+            json.JSONDecodeError
+        ):  # nexus-exception-disposition: degrade-read-only; reason=JSON; safety={}
+            logger.warning(
+                "Failed to parse mapping JSON for prompt context (%d chars)", len(value)
+            )
+            logger.debug("Failed to parse mapping JSON for prompt context: %r", value)
             return {}
     if hasattr(value, "model_dump"):
         value = value.model_dump(mode="json", exclude_none=True)
