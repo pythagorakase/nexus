@@ -54,7 +54,7 @@ sources:
   - nexus/agents/memnon/utils/source_embeddings.py
   - nexus/agents/orrery/job_queues.py
   - ui/client/src/components/NewStoryWizard/InteractiveWizard.tsx
-verified_commit: "a01c162f1e4daaf5009a9bba7397ae4065a8614b"
+verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
 ---
 
 # The Turn Cycle
@@ -293,6 +293,10 @@ Before starting its scheduler, the gateway checks the production model artifact
 lock by file list, size and revision, and refuses startup on drift. A process
 marked `NEXUS_TEST_PROVIDER_ONLY=1` skips this boot check; full sha256 checks run
 through `nexus models verify` and the doctor's `models.artifacts` check.
+
+Registry tokenizers are outside the boot check: the doctor's models.artifacts
+check fails while one is not cached at its pinned revision, and the first
+counted turn on that model fails naming nexus models fetch.
 
 A gateway started with `NEXUS_SLOT` runs one `SlotScheduler`
 (`nexus/jobs/scheduler.py`) for that slot. It holds the durable

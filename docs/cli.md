@@ -530,9 +530,11 @@ Available models:
 
 ### `models` — Lock, Verify, Plan, or Fetch Model Artifacts
 
-Manages the configured production embedder and reranker files (not the LLM
-that `model` selects). All four verbs use the `local_operator` transport and
-accept `--config`; they operate on this runtime host.
+Manages the configured production embedder and reranker files and the
+registry tokenizers, the prompt-window tokenizer of every model registry entry
+that declares `tokenizer_repository` (not the LLM that `model` selects). All
+four verbs use the `local_operator` transport and accept `--config`; they
+operate on this runtime host.
 
 ```bash
 # Hash the local artifacts and write [memnon.artifacts].lock_file
@@ -557,6 +559,11 @@ then run `nexus models fetch` again. A failed download may leave a partial
 folder; nothing is removed, and that folder must also be moved aside before
 retrying. Fetch never rewrites the lock. Only `lock` records an intentional
 artifact upgrade.
+
+The lock also records each registry tokenizer's repository and pinned
+`tokenizer_revision`. `plan` reports each tokenizer as present or absent in the
+Hugging Face cache, and `fetch` downloads absent tokenizers into the Hugging
+Face cache whatever the embedder's state.
 
 See `docs/vector_embeddings.md` for what the lock records.
 

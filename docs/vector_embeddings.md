@@ -112,9 +112,11 @@ embedding job, and the operator scripts `import_narratives.py`,
 `query_narratives_vector.py`, and `regenerate_embeddings.py`) and both
 rerankers. An artifact with missing files therefore fails to load rather than
 being repaired from the Hub; a modified or extra file still loads, and only
-`nexus models verify` catches it. The prompt-window tokenizer in
-`nexus/telemetry/prompt_window.py` is not a retrieval artifact and is outside
-this rule.
+`nexus models verify` catches it. The prompt-window tokenizers of the model
+registry follow the same rule: each pins `tokenizer_revision` in `nexus.toml`,
+loads with `local_files_only=True` from the Hugging Face cache, and is
+downloaded only by `nexus models fetch`. A `nexus home` move does not carry that
+cache; `nexus models fetch` rebuilds it on any host.
 
 ## Database Storage Strategy
 
