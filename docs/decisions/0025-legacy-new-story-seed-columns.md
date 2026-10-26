@@ -1,11 +1,11 @@
 ---
-status: canonical
+status: historical
 sources:
   - config/schema_docs_baseline.json
   - migrations/007_normalize_new_story_creator.sql
   - nexus/api/new_story_cache.py
   - docs/dead_retrieval_subtraction.md
-verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"
+verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
 ---
 
 # 0025: Legacy New-Story Seed and Zone Columns
@@ -14,6 +14,8 @@ verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"
 **Links:** #819, #813
 
 ## Ruling
+
+Closed: migration 154 (#813) drops these objects, which meets this record's reopening criterion; their baseline entries leave config/schema_docs_baseline.json with the drop.
 
 Parked. These objects stay uncommented and listed in config/schema_docs_baseline.json.
 
