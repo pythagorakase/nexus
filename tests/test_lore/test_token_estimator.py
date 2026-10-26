@@ -1,15 +1,17 @@
 """Registry estimator and real loopback TEST exchange proof."""
 
+import ast
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import re
 import logging
 import os
 import subprocess
 import sys
 from pathlib import Path
 from threading import Thread
-from typing import Iterator
+from typing import Any, Iterator
 
 import pytest
 import tiktoken
@@ -23,6 +25,8 @@ from nexus.telemetry.usage import summarize_usage
 from scripts.api_openai import OpenAIProvider
 
 SENTENCE = "The quick brown fox jumps over the lazy dog."
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TINY_REPOSITORY = "nexus-test/tiny-tokenizer"
 
 
 @pytest.mark.parametrize(
@@ -86,8 +90,11 @@ def test_settings_reject_missing_tokenizer_on_unused_entry(tmp_path: Path) -> No
 
 
 def test_commit_probe_and_first_use_reject_remote_code_tokenizer(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The probe fetches the four real pins too: keep it offline and private.
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
     repository = tmp_path / "custom-tokenizer"
     repository.mkdir()
     (repository / "tokenizer_config.json").write_text(
@@ -104,9 +111,10 @@ def test_commit_probe_and_first_use_reject_remote_code_tokenizer(
         "raise AssertionError('Remote tokenizer code executed')\n"
     )
     settings = tomlkit.parse(Path("nexus.toml").read_text())
-    entry = settings["global"]["model"]["api_models"]["openrouter"]["models"][0]
+    entry: Any = settings["global"]["model"]["api_models"]["openrouter"]["models"][0]
     entry.pop("tokenizer_encoding", None)
     entry["tokenizer_repository"] = str(repository)
+    entry["tokenizer_revision"] = "0" * 40
     path = tmp_path / "settings.toml"
     path.write_text(tomlkit.dumps(settings))
     from scripts.validate_config_commit import validate_tokenizer_registry
@@ -133,8 +141,13 @@ def test_settings_reject_unknown_encoding(tmp_path: Path) -> None:
         load_settings(path)
 
 
-def test_commit_tokenizer_probe_timeout_names_entries() -> None:
+def test_commit_tokenizer_probe_timeout_names_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from scripts.validate_config_commit import validate_tokenizer_registry
+
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
 
     settings = load_settings()
     settings.global_.model.tokenizer_probe_timeout_seconds = 0.000001
@@ -145,6 +158,218 @@ def test_commit_tokenizer_probe_timeout_names_entries() -> None:
             if entry.tokenizer_repository:
                 assert entry.id in str(error.value)
     assert "timed out" in str(error.value)
+
+
+def _registry_document() -> Any:
+    """Parse the repository nexus.toml for an edited copy."""
+    return tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+
+
+def _repository_entries(config: Any) -> list[Any]:
+    """The registry entries that declare tokenizer_repository, in file order."""
+    return [
+        entry
+        for provider in config["global"]["model"]["api_models"].values()
+        for entry in provider["models"]
+        if "tokenizer_repository" in entry
+    ]
+
+
+def _offline_env(hf_home: Path) -> dict[str, str]:
+    """A child environment with a private, offline Hugging Face cache."""
+    return {
+        **os.environ,
+        "PYTHONPATH": str(REPO_ROOT),
+        "HF_HUB_OFFLINE": "1",
+        "HF_HOME": str(hf_home),
+    }
+
+
+@pytest.mark.parametrize("case", ["unpinned", "branch", "encoding"])
+def test_settings_require_a_pinned_tokenizer_revision(
+    tmp_path: Path, case: str
+) -> None:
+    """Issue #1126 (D1, D2): a repository tokenizer pins a 40-hex commit."""
+    config = _registry_document()
+    if case == "encoding":
+        entry = config["global"]["model"]["api_models"]["test"]["models"][0]
+        entry["tokenizer_revision"] = "a" * 40
+        expected = (
+            "tokenizer_revision pins tokenizer_repository and is not allowed without it"
+        )
+    else:
+        entry = _repository_entries(config)[0]
+        if case == "unpinned":
+            entry.pop("tokenizer_revision", None)
+            expected = (
+                "tokenizer_repository requires tokenizer_revision, a 40-character "
+                "Hugging Face commit id"
+            )
+        else:
+            entry["tokenizer_revision"] = "main"
+            expected = (
+                "tokenizer_revision must be a 40-character lowercase hexadecimal "
+                "commit id"
+            )
+    path = tmp_path / "settings.toml"
+    path.write_text(tomlkit.dumps(config))
+    with pytest.raises(
+        ValueError, match=re.escape(f"Model {entry['id']!r}: {expected}")
+    ):
+        load_settings(path)
+
+
+def test_first_use_on_an_empty_hf_cache_names_the_fetch_command(
+    tmp_path: Path,
+) -> None:
+    """Runtime never downloads: an uncached pin names `nexus models fetch`."""
+    entry = next(
+        entry
+        for provider in load_settings().global_.model.api_models.values()
+        for entry in provider.models
+        if entry.tokenizer_repository
+    )
+    hf_home = tmp_path / "empty-hf"
+    code = """import sys
+from nexus.telemetry.prompt_window import estimator_for
+try:
+    estimator_for(sys.argv[1])
+except ValueError as exc:
+    print(exc)
+else:
+    raise SystemExit("estimator_for loaded a tokenizer from an empty cache")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, entry.id],
+        env=_offline_env(hf_home),
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    revision = getattr(entry, "tokenizer_revision", None)
+    assert result.stdout.strip() == (
+        f"Model {entry.id!r}: tokenizer_repository {entry.tokenizer_repository!r} "
+        f"at tokenizer_revision {revision!r} is not in the local Hugging Face "
+        "cache. Run `nexus models fetch` to download it."
+    )
+    assert not list(hf_home.rglob("models--*"))
+
+
+def test_commit_probe_names_an_unfetchable_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 1126-D5: the probe fetches through fetch_tokenizer, then loads."""
+    from scripts.validate_config_commit import validate_tokenizer_registry
+
+    hf_home = tmp_path / "hf"
+    monkeypatch.setenv("HF_HOME", str(hf_home))
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    config = _registry_document()
+    entry = _repository_entries(config)[0]
+    entry["tokenizer_repository"] = "nexus-test/absent-tokenizer"
+    entry["tokenizer_revision"] = "1" * 40
+    path = tmp_path / "settings.toml"
+    path.write_text(tomlkit.dumps(config))
+    settings = load_settings(path)
+    with pytest.raises(ValueError) as error:
+        validate_tokenizer_registry(settings)
+    assert entry["id"] in str(error.value)
+    assert f"fetch at {'1' * 40} failed" in str(error.value)
+    assert not list(hf_home.rglob("models--*"))
+
+
+def test_commit_probe_accepts_a_cached_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pin already in the cache passes the probe without any download."""
+    from scripts.validate_config_commit import validate_tokenizer_registry
+    from tests.test_embedding_artifacts import _plant_hub_tokenizer
+
+    hf_home = tmp_path / "hf"
+    monkeypatch.setenv("HF_HOME", str(hf_home))
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    _plant_hub_tokenizer(hf_home, TINY_REPOSITORY, "2" * 40)
+    config = _registry_document()
+    for entry in _repository_entries(config):
+        entry["tokenizer_repository"] = TINY_REPOSITORY
+        entry["tokenizer_revision"] = "2" * 40
+    path = tmp_path / "settings.toml"
+    path.write_text(tomlkit.dumps(config))
+    settings = load_settings(path)
+    validate_tokenizer_registry(settings)
+
+
+def test_every_tracked_from_pretrained_call_is_local_only() -> None:
+    """Issue #1126 closes #812's last from_pretrained call that may download."""
+    listed = subprocess.run(
+        ["git", "ls-files", "--", "nexus/*.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert listed
+    offenders = []
+    for relative in listed:
+        tree = ast.parse((REPO_ROOT / relative).read_text(), filename=relative)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "from_pretrained"
+                and not any(
+                    keyword.arg == "local_files_only"
+                    and isinstance(keyword.value, ast.Constant)
+                    and keyword.value.value is True
+                    for keyword in node.keywords
+                )
+            ):
+                offenders.append(f"{relative}:{node.lineno}")
+    assert offenders == []
+
+
+def test_window_counter_cache_keys_on_the_revision(tmp_path: Path) -> None:
+    """Decision 1126-D9: two pins of one repository never share a counter."""
+    from tests.test_embedding_artifacts import _plant_hub_tokenizer
+
+    hf_home = tmp_path / "hf"
+    _plant_hub_tokenizer(hf_home, TINY_REPOSITORY, "4" * 40)
+    _plant_hub_tokenizer(hf_home, TINY_REPOSITORY, "5" * 40, split=False)
+    config = _registry_document()
+    first, second = _repository_entries(config)[:2]
+    for entry, revision in ((first, "4" * 40), (second, "5" * 40)):
+        entry["tokenizer_repository"] = TINY_REPOSITORY
+        entry["tokenizer_revision"] = revision
+    path = tmp_path / "settings.toml"
+    path.write_text(tomlkit.dumps(config))
+    code = """import json, sys
+from pathlib import Path
+from nexus.config import load_settings
+from scripts.api_openai import OpenAIProvider
+from tests.test_lore.window_helpers import window_logon
+utility = window_logon(load_settings(Path(sys.argv[1])))
+counts = [
+    utility._local_window_counter(
+        OpenAIProvider(model=model, api_key="unused", usage_provider_name="test")
+    )[0].text_count("hello world")
+    for model in sys.argv[2:]
+]
+print(json.dumps(counts))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(path), first["id"], second["id"]],
+        env=_offline_env(hf_home),
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    counts = json.loads(result.stdout.strip().splitlines()[-1])
+    assert counts[0] != counts[1], counts
+    assert counts == [2, 1]
 
 
 def test_empty_hf_cache_offline_test_provider(tmp_path: Path) -> None:
@@ -387,9 +612,10 @@ def test_drift_failure_does_not_break_real_exchange(
     from nexus.config.loader import settings_path_scope
 
     config = tomlkit.parse(Path("nexus.toml").read_text())
-    entry = config["global"]["model"]["api_models"]["test"]["models"][0]
+    entry: Any = config["global"]["model"]["api_models"]["test"]["models"][0]
     entry.pop("tokenizer_encoding")
     entry["tokenizer_repository"] = str(tmp_path / "absent-tokenizer")
+    entry["tokenizer_revision"] = "0" * 40
     path = tmp_path / "settings.toml"
     path.write_text(tomlkit.dumps(config))
     with token_test_server() as base_url, settings_path_scope(path):
