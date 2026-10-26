@@ -91,13 +91,10 @@ a migration owns. `scripts/update_scene_numbers.py` and
 `scripts/extract_scene_numbers.py` require `chunk_metadata.scene` (migration
 138), `scripts/new_story_setup.py --create-assets` requires
 `assets.new_story_creator` (migration 007), `scripts/regenerate_embeddings.py`
-requires the `vector` extension (migration 022),
-`scripts/extract_season_episode.py` requires the baseline `chunk_metadata`
-table, and `scripts/create_vector_index.py` and
+requires the `vector` extension (migration 022), and
+`scripts/create_vector_index.py` and
 `scripts/regenerate_embeddings.py --only-indexes` build no ANN index; each
 raises, naming the owner, when an object it needs is missing.
-`scripts/update_raw_text.py` still copies `narrative_chunks` into
-`narrative_chunks_backup` before it rewrites rows.
 `tests/test_schema_ownership.py` scans the Python under `nexus/` and `scripts/`
 for CREATE, ALTER and DROP of a table, index, type, function or extension and
 fails on any site outside its reasoned allowlist.
