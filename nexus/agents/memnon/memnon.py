@@ -27,7 +27,7 @@ from datetime import datetime, date
 from pathlib import Path
 
 import sqlalchemy as sa
-from sqlalchemy import Column, Table, MetaData, text, inspect, func, or_
+from sqlalchemy import Column, Table, MetaData, text, func, or_
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY, JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
