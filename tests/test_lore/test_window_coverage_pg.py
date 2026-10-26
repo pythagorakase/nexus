@@ -38,6 +38,7 @@ from tests.test_lore.window_helpers import window_logon
 pytestmark = pytest.mark.requires_postgres
 
 
+@pytest.mark.requires_local_models
 def test_window_coverage_is_written_only_from_post_render_kept_chunks():
     with disposable_slot_database("qa640_window_coverage") as dbname:
         character_id, _ = seed_protagonist(
@@ -137,6 +138,7 @@ def test_window_coverage_is_written_only_from_post_render_kept_chunks():
             memnon.close()
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.parametrize("limit, repeats", [(5, 1), (15, 1), (15, 2500)])
 def test_historical_coverage_matches_rendered_prefix(limit: int, repeats: int) -> None:
     """The real trim callback logs all and only printed historical passages."""
@@ -239,6 +241,7 @@ def _seed_removal_session(dbname: str, session: str) -> None:
         )
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.parametrize("pipeline", ["two_pass", "single_pass"])
 def test_removed_tokens_reach_real_attempt_manifest_and_observation(
     monkeypatch: pytest.MonkeyPatch,

@@ -78,6 +78,7 @@ def _write_alternate_config(tmp_path: Path) -> AlternateConfig:
     )
 
 
+@pytest.mark.requires_local_models
 def test_lore_honors_runtime_config_for_both_storyteller_seats(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -113,6 +114,7 @@ def test_lore_honors_runtime_config_for_both_storyteller_seats(
         lore.close()
 
 
+@pytest.mark.requires_local_models
 def test_explicit_lore_settings_path_beats_runtime_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -142,6 +144,7 @@ def test_explicit_lore_settings_path_beats_runtime_environment(
         lore.close()
 
 
+@pytest.mark.requires_local_models
 def test_lore_without_runtime_environment_falls_back_to_repo_root(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -185,6 +188,7 @@ def test_lore_startup_names_the_missing_embedder_remedy(
     assert remedy in str(raised.value.__cause__)
 
 
+@pytest.mark.requires_local_models
 def test_lore_instances_keep_independent_memnon_configuration(
     tmp_path: Path, runtime_database: str
 ) -> None:

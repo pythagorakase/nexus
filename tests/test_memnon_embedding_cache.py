@@ -227,6 +227,7 @@ def test_cached_model_survives_manager_teardown() -> None:
     assert embedding is not None and len(embedding) > 0
 
 
+@pytest.mark.requires_local_models
 @requires_bge_large
 @pytest.mark.requires_postgres
 def test_memnon_close_disposes_engine(model_config: Path, model_database: str) -> None:
@@ -258,6 +259,7 @@ def test_memnon_close_disposes_engine(model_config: Path, model_database: str) -
         instance.db_manager.create_session()
 
 
+@pytest.mark.requires_local_models
 @requires_bge_large
 @pytest.mark.requires_postgres
 def test_per_turn_lore_stacks_share_embedder_and_close(

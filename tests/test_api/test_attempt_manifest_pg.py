@@ -201,6 +201,7 @@ def test_manifest_reference_privacy_retention_and_readonly(monkeypatch):
         assert late[1]["provider_outcome"] == "accepted"
 
 
+@pytest.mark.requires_local_models
 def test_manifest_real_test_turn_and_child_job_correlation(
     monkeypatch, tmp_path, request
 ):

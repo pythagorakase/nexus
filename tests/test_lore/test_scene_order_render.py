@@ -380,6 +380,7 @@ def test_assembly_hydrates_only_selected_recalled_entries_with_null_clocks() -> 
             engine.dispose()
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.requires_postgres
 def test_recent_warm_window_ends_at_historical_parent(
     monkeypatch: pytest.MonkeyPatch,

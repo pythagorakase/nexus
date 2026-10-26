@@ -1017,6 +1017,7 @@ def test_missing_tail_error_and_admin_stamp_boundary(
         engine.dispose()
 
 
+@pytest.mark.requires_local_models
 def test_story_settings_pinned_window_survives_accepted_turn(
     pass2_database: str,
 ) -> None:

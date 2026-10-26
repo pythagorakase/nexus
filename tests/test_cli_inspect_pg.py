@@ -98,6 +98,7 @@ def _nexus_text(*argv: str) -> str:
     return completed.stdout
 
 
+@pytest.mark.requires_local_models
 def test_continue_waits_then_inspect_reads_the_played_clone(
     monkeypatch, tmp_path, mock_openai_server  # noqa: F811
 ) -> None:

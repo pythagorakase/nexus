@@ -622,6 +622,7 @@ def test_renderer_validator_isolates_content_errors_within_batch() -> None:
     assert "Selene" in validation.rejected[42]
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.requires_postgres
 def test_embedding_upsert_binds_each_correct_experience_id(
     monkeypatch: pytest.MonkeyPatch,

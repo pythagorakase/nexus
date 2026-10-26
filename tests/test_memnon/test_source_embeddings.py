@@ -284,6 +284,7 @@ def test_summaries_generate_every_vector_before_one_write_transaction(
         assert all(row[0] == stamps[ids[0]] for row in cur.fetchall())
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.requires_postgres
 def test_experiences_load_and_stamp_only_valid_rendered_rows(source_db: str) -> None:
     """Real loaded rows, configured local vectors and validity-filtered stamps."""
@@ -445,6 +446,7 @@ def test_invalid_or_empty_ids_never_connect(
     assert database.trace == []
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.requires_postgres
 def test_wrappers_are_the_shared_orchestrator(source_db: str) -> None:
     """Public wrapper and shared orchestrator use the real configured embedder."""
