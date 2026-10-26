@@ -1,8 +1,10 @@
 # 812-S4b Verification: Move the Ensemble Weighting Into ir_eval
 
 Branch `claude/812-ensemble-to-ir-eval`, cut from `origin/main` at
-`c7ae2988d07b443f627a04d3a4eed1816b1cd438` (still the newest `origin/main`
-when this file was written; the merge base of every re-stamp). No migration,
+`c7ae2988d07b443f627a04d3a4eed1816b1cd438`, where the re-stamps were first
+made. Merge `92a932d8` brought in `origin/main` at
+`9a0714d7671457d47f91bfbd76749fee4444c686`, which is now the merge base and
+the `verified_commit` of every re-stamp. No migration,
 no paid call, no gateway lane, no write to any `save_NN`, `NEXUS_template`
 or `ref_codex_bakeoff_2026_07`. Every PostgreSQL run used
 `-p tests.dbname_audit` with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
@@ -124,7 +126,32 @@ c2, c1, c3, c4 the order predicts.
 
 ## After
 
-Whole proof set at the final head:
+Whole proof set on `9b1c2db8` (the pushed head after the round-2 merge;
+the round-3 commit changes only this file). One-minute load 6.65 before
+the run:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 71 targets: postgres, qa640_810s2_source_* x5, qa640_812s4a_* x6, qa640_812s4b_* x4, ...
+dbname audit: owner server: local:5432
+...
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+239 passed, 2 skipped, 23 warnings in 246.92s (0:04:06)
+```
+
+The count is 239, not 240, because #1154 (merged in at `9a0714d7`)
+deleted `tests/test_memnon_script_model_loaders.py::test_import_narratives_loader_raises_for_a_missing_folder`
+together with `scripts/import_narratives.py`. Afterward
+`psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_812s4b%'"`
+returned no rows.
+
+Earlier run, round 1 (before `d16b1f21` and the round-2 merge `92a932d8`;
+product code and proof-set files are the same at `fd57f36e`, `ff5fb87f`
+and `6b1f79cb`):
 
 ```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
@@ -135,20 +162,22 @@ SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 
 240 passed, 2 skipped, 23 warnings in 308.40s (0:05:08)
 ```
 
-The two added tests account for 238 to 240. Afterward
-`psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_812s4b%'"`
-returned no rows.
+The two added tests account for 238 to 240. Afterward the same `psql`
+check returned no rows.
 
 ## Static Checks
 
-Run on every changed Python file and on its `origin/main` version (exported
-with `git archive origin/main` into a scratch tree), compared without line
-numbers.
+Run on `9b1c2db8` against `origin/main` at `9a0714d7`: every changed
+Python file and its `origin/main` version (exported with
+`git archive origin/main` into a scratch tree), compared without line
+numbers. (Round 1, against `c7ae2988`, counted flake8 118 to 111 and mypy
+52 to 48, with the same removals.)
 
-- Black: `13 files would be left unchanged`.
-- flake8: 118 diagnostics on `origin/main`, 111 after; the seven removed are
+- Black: `13 files would be left unchanged.`
+- flake8: 117 diagnostics on `origin/main`, 110 after; the seven removed are
   `E501` lines inside the deleted MEMNON methods. None added.
-- mypy (`--explicit-package-bases`): 52 errors on `origin/main`, 48 after.
+- mypy (`--explicit-package-bases`): 51 errors on `origin/main` (12 files),
+  47 after (13 files).
   Removed: `run_executor.py` `Missing positional argument "db_url" in call to
   "QueryAnalyzer"` (the repaired TypeError) and its `query_vector_search`
   `filters=None` arg-type error; `memnon.py`'s two implicit-Optional defaults
@@ -236,3 +265,10 @@ $ $PY scripts/validate_config_commit.py    # exit 0, no output
 The first command ran on `d16b1f21` before the merge; the rest on
 `92a932d8`. Black and flake8 on `tests/test_ir_eval_v2/test_candidate_registry.py`:
 `1 file left unchanged`, no flake8 output.
+
+## Review Round 3 (Evidence Only)
+
+No code changes. The focused PostgreSQL proof set and the static-check
+comparison above were rerun on `9b1c2db8` against `origin/main` at
+`9a0714d7` (still the newest `origin/main` at the rerun). The round-1
+PostgreSQL tail is now labeled with the commits it ran on.
