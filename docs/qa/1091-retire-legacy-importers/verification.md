@@ -178,11 +178,34 @@ FAILED tests/test_schema_ownership.py::test_every_allowlist_entry_matches_a_site
 3 failed, 20 passed, 5 warnings in 12.49s
 ```
 
-`check_exception_dispositions.py` then reported 109 stale entries: 21
-`scripts/estimate_time_delta.py`, 1 `scripts/extract_season_episode.py`, 40
-`scripts/map_builder_legacy.py`, 31 `scripts/process_characters.py`, 7
-`scripts/simple_update.py`, 9 `scripts/update_raw_text.py`. All 119 baseline
-entries (10 + 109) were deleted by exact key; none was added.
+The `check_exception_dispositions.py` red run at the same point (taken again
+after review at the S1 commit `000a3223`: a `git archive 000a3223` export under
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/s2red/`, committed once as `HEAD` in a scratch
+repository, with the six scripts of item 8a `git rm`'d; full output at
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/s2red_dispositions.log`):
+
+```
+$ $PY -S scripts/check_exception_dispositions.py
+scripts/estimate_time_delta.py:1: stale exception disposition baseline entry: scripts/estimate_time_delta.py|<module>|342ba95f67bf2c7b0a17697da083ca2df807fb09403a67d5182115fad7a5e332|1
+scripts/estimate_time_delta.py:1: stale exception disposition baseline entry: scripts/estimate_time_delta.py|<module>|672550b9ed7bb507a26b7a9273bb304fb56c16525b5f8b80a3f5b9ba080470b9|1
+scripts/estimate_time_delta.py:1: stale exception disposition baseline entry: scripts/estimate_time_delta.py|<module>|e08747dc2d4050cc9f744f179e40c9e35347508413791cb3b276a3f88d620c0f|1
+... (103 lines omitted; full log at the path above)
+scripts/update_raw_text.py:1: stale exception disposition baseline entry: scripts/update_raw_text.py|ChunkUpdater.reorganize_chunk_ids|b5644add8a0c2a5657d185aa0ae084e4c19853e6d48363d8f4819d77b23d7dde|1
+scripts/update_raw_text.py:1: stale exception disposition baseline entry: scripts/update_raw_text.py|ChunkUpdater.reorganize_chunk_ids|f39a1d859094ce8c2ccbf4f58a014e23ac4c39168a82b47041a91cfe811e5e01|1
+scripts/update_raw_text.py:1: stale exception disposition baseline entry: scripts/update_raw_text.py|ChunkUpdater.update_chunk_raw_text|d0c5977572196cafd6981eddebb16c6f4ce6ee3034e63d32163a9235b6c3e970|1
+exit 1
+$ grep -c 'stale exception disposition baseline entry' s2red_dispositions.log
+109
+$ grep stale s2red_dispositions.log | cut -d: -f1 | sort | uniq -c
+  21 scripts/estimate_time_delta.py
+   1 scripts/extract_season_episode.py
+  40 scripts/map_builder_legacy.py
+  31 scripts/process_characters.py
+   7 scripts/simple_update.py
+   9 scripts/update_raw_text.py
+```
+
+All 119 baseline entries (10 + 109) were deleted by exact key; none was added.
 
 ## 1119-S2 Reachability Baseline Diff
 
@@ -238,9 +261,47 @@ index 14bae7a8..fc17a5ad 100644
 
 ## Green Gates
 
+Taken after review at `d56b0957` (the evidence-only commit that follows
+changes no code).
+
 ```
 $ PYTHONPATH=$PWD $PY scripts/check_reachability.py; echo $?
-(JSON summary with every list empty)
+{
+  "maintained": 398,
+  "reachable_by_kind": {
+    "production": 224,
+    "operator": 263,
+    "migration": 200,
+    "test": 301
+  },
+  "test_only": 44,
+  "existing_unreachable": 54,
+  "newly_unreachable": [],
+  "lost_production_reachability": [],
+  "baseline_add_production_paths": [],
+  "baseline_remove_orphan_exemptions": [],
+  "baseline_remove_deleted_production_paths": [],
+  "forbidden_dependencies": [],
+  "tombstone_violations": [],
+  "unresolved_internal_imports": [],
+  "unregistered_dynamic_import_sites": [],
+  "unclassified_paths": [],
+  "classified_paths_not_in_repository": [],
+  "class_graph_mismatches": [],
+  "classification_counts": {
+    "dead": 27,
+    "documented": 7,
+    "openrouter-shim": 1,
+    "operator": 46,
+    "pending-ruling:811-Q1": 3,
+    "pending-ruling:811-Q3": 78,
+    "pending-ruling:811-Q4": 2,
+    "pending-ruling:811-Q5": 38,
+    "runtime": 3,
+    "test-only": 25
+  },
+  "route_reachability": "not_proven"
+}
 0
 $ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
 OK: exception disposition coverage and shrink-only baseline verified.
@@ -300,21 +361,97 @@ dbname audit: owner targets: none
 137 passed, 4 skipped, 19 warnings in 305.52s (0:05:05)
 ```
 
-The four skips are the `requires_corpus` tests
-(`test_configured_k_bounds_the_deep_query_pool[3]`, `[15]` and
-`test_card_exposure_rank_joint_and_backstage_parity[False]`, `[True]`), which
-run only under `NEXUS_RUN_CORPUS=1`.
+Rerun after review at `d56b0957` with `-rs` (load average 6.65, no wait; the
+same three variables unset; full log at `/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/pg_proof_rs.log`; the
+`dbname audit: 110 targets: ...` line, a list of disposable `qa640_`/`qa_`
+names, is left out here):
+
+```
+$ NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_embedding_table_ownership_pg.py tests/test_schema_ownership.py tests/test_player_identity_consumers_pg.py tests/test_lore/test_query_patterns_pg.py tests/test_memnon_model_failures_pg.py tests/test_lore/test_window_coverage_pg.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:51198 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:51206 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:51198 (psycopg2), save_04@local:51206 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_lore/test_window_coverage_pg.py:488: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+137 passed, 4 skipped, 19 warnings in 340.60s (0:05:40)
+```
+
+The four skips are the `requires_corpus` tests, which run only under
+`NEXUS_RUN_CORPUS=1`:
+
+```
+$ $PY -m pytest -q --co -m requires_corpus tests/test_lore/test_window_coverage_pg.py tests/test_orrery/test_card_identity.py
+tests/test_lore/test_window_coverage_pg.py::test_configured_k_bounds_the_deep_query_pool[3]
+tests/test_lore/test_window_coverage_pg.py::test_configured_k_bounds_the_deep_query_pool[15]
+tests/test_orrery/test_card_identity.py::test_card_exposure_rank_joint_and_backstage_parity[False]
+tests/test_orrery/test_card_identity.py::test_card_exposure_rank_joint_and_backstage_parity[True]
+4/20 tests collected (16 deselected) in 0.37s
+```
 
 ## Static Checks
 
-Black: `10 files would be left unchanged.` flake8 and
-`mypy --explicit-package-bases` ran on the ten changed Python files on the
-branch and on their `origin/main` versions (a `git archive origin/main`
-export). Compared by file and message: flake8 149 on the branch against 152 on
-main, 0 new (3 removed: E501 lines inside deleted code); mypy 64 errors
-against 65, 0 new (1 removed: the implicit-Optional default of the deleted
-`process_all_narrative_files`). The remaining diagnostics are pre-existing on
-untouched lines.
+Taken after review at `d56b0957`, on the ten changed Python files listed in
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/changed_py.txt` (the deleted files have no branch version). The
+`origin/main` versions come from a `git archive origin/main` export at
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/main_tree/`, checked with the same commands from that directory.
+The script is `/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/static.sh`. Full outputs:
+`black_branch.txt`, `flake8_branch.txt`, `flake8_main.txt`, `mypy_branch.txt`
+and `mypy_main.txt` in `/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/`.
+
+```
++ cd /Users/pythagor/nexus/.claude/worktrees/1091-1119 && $PY -m black --check nexus/agents/lore/lore.py nexus/agents/memnon/memnon.py nexus/prompts/registry.py scripts/retrieval_query_bakeoff.py tests/test_api/test_import_side_effects.py tests/test_embedding_table_ownership_pg.py tests/test_memnon_db_access.py tests/test_memnon_script_model_loaders.py tests/test_prompt_lint.py tests/test_schema_ownership.py
+All done! ✨ 🍰 ✨
+10 files would be left unchanged.
+exit 0
+```
+
+flake8 and mypy are compared by file and message with line and column numbers
+stripped, kept only for the ten changed files (`*.norm` in the same folder).
+The `origin/main` mypy run from the export also reports errors in 51 other
+modules it follows by import (`Found 280 errors in 55 files`); this branch
+does not change those modules, so they are filtered out.
+
+```
+$ cd /private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/main_tree && $PY -m flake8 <the ten files>   # exit 1
+$ cd <worktree> && $PY -m flake8 <the ten files>      # exit 1
+$ wc -l < flake8_branch.norm; wc -l < flake8_main.norm
+149
+152
+$ comm -23 flake8_branch.norm flake8_main.norm   # new on the branch
+$ comm -13 flake8_branch.norm flake8_main.norm   # removed by the branch
+nexus/agents/memnon/memnon.py: E501 line too long (100 > 88 characters)
+tests/test_prompt_lint.py: E501 line too long (197 > 88 characters)
+tests/test_prompt_lint.py: E501 line too long (96 > 88 characters)
+```
+
+```
+$ cd /private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/1091-1119/main_tree && $PY -m mypy --explicit-package-bases <the ten files>
+Found 280 errors in 55 files (checked 10 source files)
+exit 1
+$ cd <worktree> && $PY -m mypy --explicit-package-bases <the ten files>
+Found 64 errors in 4 files (checked 10 source files)
+exit 1
+$ grep -c ': error:' mypy_branch.norm mypy_main.norm
+mypy_branch.norm:64
+mypy_main.norm:65
+$ comm -23 mypy_branch.norm mypy_main.norm   # new on the branch
+$ comm -13 mypy_branch.norm mypy_main.norm   # removed by the branch
+nexus/agents/memnon/memnon.py: error: Incompatible default for argument "glob_pattern" (default has type "None", argument has type "str")  [assignment]
+nexus/agents/memnon/memnon.py: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
+nexus/agents/memnon/memnon.py: note: Use https://github.com/hauntsaninja/no_implicit_optional to automatically upgrade your codebase
+```
+
+No diagnostic is new. The three flake8 removals are E501 lines inside deleted
+code (`memnon.py:954` in the deleted `process_files` branch of `step()`, and
+`tests/test_prompt_lint.py:75-76` in a deleted `PROSE_ALLOWLIST` row);
+the mypy removal is the implicit-Optional default of the deleted
+`process_all_narrative_files` with its two notes. The remaining diagnostics
+are pre-existing on untouched lines.
 
 ## Document Freshness
 
@@ -326,3 +463,24 @@ passages (retrieval through `query_memory`, a fresh LORE closed per turn)
 stay accurate. Both `verified_commit` values move from `a01c162f` to
 `c7ae2988d07b443f627a04d3a4eed1816b1cd438`. No other canonical document
 declares a changed file.
+
+## Post-Review Fixes (`d56b0957`)
+
+- `docs/vector_embeddings.md`: the paragraph keeps its `origin/main` line
+  count; only the two lines naming the operator scripts change, so
+  `config/reachability.toml:448` (`named by docs/vector_embeddings.md:208`)
+  still points at `python scripts/validate_embeddings.py` (`sed -n 208p` on
+  the branch prints that line; the file has 241 lines on both sides).
+- `nexus/agents/memnon/README_MEMNON.md`: the `Storing Narrative Data` bullet,
+  which described the deleted file ingest, is deleted; nothing else in the
+  README changes.
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_doc_front_matter.py tests/test_reachability.py tests/test_memnon_db_access.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+122 passed, 5 warnings in 22.93s
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main; echo $?
+OK: exception disposition coverage and shrink-only baseline verified.
+0
+```
