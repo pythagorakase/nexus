@@ -541,8 +541,8 @@ PASSED tests/test_runtime/test_supervisor.py::test_stop_pid_reaps_a_child_it_had
   now holds names, ids, the ambiguity kind and counts.
   `nexus/telemetry/usage.py` is unchanged.
 - Raise count, from `git grep -nE "raise (WireContractViolation|CharacterIdentityAmbiguity|CharacterNameRevealConflict)\(" nexus scripts`:
-  21 raises. Four are `CharacterIdentityAmbiguity` (`identity.py:184` and
-  `:265`, `presence_reconciliation.py:374`, `retrograde_persistence.py:2953`),
+  21 raises. Four are `CharacterIdentityAmbiguity` (`identity.py:195` and
+  `:276`, `presence_reconciliation.py:374`, `retrograde_persistence.py:2953`),
   14 are `CharacterNameRevealConflict` and 3 are `WireContractViolation`
   (`place_reference_validation.py:59`, `:62`, `roster.py:497`): 17 others. Of
   the four, `retrograde_persistence.py:2953` resolves `{"name": ...}` only, so
@@ -657,3 +657,34 @@ changed-file lines: base 25 branch 25
 The 18 flake8 lines are pre-existing E501s on untouched lines of
 `nexus/presence/identity.py` (SQL constants) and
 `tests/test_presence_roster_pg.py`.
+
+## Fix Round 4: Second-Pass Findings on Rulings 1 and 2
+
+Two P3 findings, documentation only; no code or test changed.
+
+- Raise-site line numbers. The raise list under "Ruling 1" cited
+  `identity.py:184` and `:265`, and the PR body also cited `identity.py:188`.
+  Those are the `c7ae2988` numbers; `65e4031a` added 11 lines above them. At
+  this head `git grep -nE "raise (CharacterIdentityAmbiguity|CharacterNameRevealConflict)\(" nexus/presence/identity.py`
+  prints `:195` and `:276` (`CharacterIdentityAmbiguity`) and `:199`
+  (`CharacterNameRevealConflict`). The list above and the PR body now cite
+  those. Every other line in the list is unchanged at this head.
+- `docs/runtime.md` (#842 bullet). "Structured-output and validator payloads
+  stay out of every level" contradicted the ruling-1 sentence that puts an
+  ambiguous declaration's summary, role and location on a DEBUG line. It now
+  states the contract it cites: "Structured-output and validator error
+  messages carry no payload text at any level
+  (`structured_output_error_text` in `nexus/api/native_structured_output.py`)."
+  The ruling-1 sentence is unchanged.
+
+Covering tests (load average 19.67 before the run):
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_runtime/test_log_redaction.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_842s5_redaction_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+71 passed in 11.49s
+```

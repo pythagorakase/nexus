@@ -294,8 +294,8 @@ in `docs/cli.md`).
   lengths, counts and exception classes, never player input, author's notes
   or directives, storyteller or model output, retrieval query text, story
   titles or wizard choice texts; each site that needs the text logs it on a
-  paired DEBUG line. Structured-output and validator payloads stay out of
-  every level (`structured_output_error_text` in
+  paired DEBUG line. Structured-output and validator error messages carry no
+  payload text at any level (`structured_output_error_text` in
   `nexus/api/native_structured_output.py`). Wire rejections and repairs log
   at WARNING (`nexus/telemetry/usage.py`) with names, ids, tags, paths, counts
   and fixed text; an ambiguous character declaration's declared summary, role
