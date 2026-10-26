@@ -33,11 +33,36 @@ freshness check counts uncommitted changes).
 
 ## Baseline Computation
 
-`classified_scope(repository_paths(ROOT))` holds 342 files; 64 have front
-matter; of the 278 without it, 234 are under `docs/qa/`. Removing
-`docs/qa/`, `README.md`, `CLAUDE.md` and the two registered generated
-documents leaves 40, exactly the order's list. The merge of `origin/main` was
-a no-op, so the set has no delta.
+The counts come from git's tree at `c7ae2988` (`git ls-tree` and `git show`,
+so no checkout of that commit is needed) and the branch's own
+`classified_scope`, `ratchet_scope` and `read_front_matter`. Run from the
+worktree root:
+
+```text
+$ PYTHONPATH=$PWD $PY - <<'EOF'
+import json, subprocess
+from tests.test_doc_front_matter import classified_scope, ratchet_scope, read_front_matter
+rev = "c7ae2988"
+git = lambda *a: subprocess.run(["git", *a], capture_output=True, text=True, check=True).stdout
+paths = frozenset(git("ls-tree", "-r", "--name-only", rev).splitlines())
+scope = classified_scope(paths)
+bare = [p for p in scope if read_front_matter(git("show", f"{rev}:{p}")) is None]
+qa = [p for p in bare if p.startswith("docs/qa/")]
+left = [p for p in ratchet_scope(paths) if p in bare]
+baseline = json.loads(open("config/doc_classification_baseline.json").read())["unclassified"]
+print(f"scope={len(scope)} front_matter={len(scope) - len(bare)} without={len(bare)} qa={len(qa)} non_qa={len(bare) - len(qa)} ratchet={len(left)} equals_baseline={left == baseline}")
+print("non-qa, non-ratchet:", sorted(set(bare) - set(qa) - set(left)))
+EOF
+scope=342 front_matter=64 without=278 qa=234 non_qa=44 ratchet=40 equals_baseline=True
+non-qa, non-ratchet: ['CLAUDE.md', 'README.md', 'docs/cli_reference.md', 'docs/orrery_packages.md']
+```
+
+`classified_scope` holds 342 files at `c7ae2988`; 64 have front matter; of
+the 278 without it, 234 are under `docs/qa/` and 44 are not. Removing
+`README.md`, `CLAUDE.md` and the two registered generated documents from the
+44 leaves 40, and that list equals the committed baseline
+(`equals_baseline=True`), which is exactly the order's list. The merge of
+`origin/main` was a no-op, so the set has no delta.
 
 ```json
 {
@@ -207,66 +232,170 @@ A planted one-byte change (`Reversal cost: Trivial.` to `trivial.` in
 
 ## Red Runs
 
-Each plant was reverted before commit.
+Runs (a), (c), (d) and (e) were rerun on a working tree equal to the commit
+`1f0723c3` plus one plant at a time; each plant was reverted at once with
+`rm` or `git checkout --`, `git status --short` was empty afterwards, and no
+plant was committed. Each block gives the command, the unedited `E` lines of
+the assertion, and the unedited last 15 lines of output; the closing `exit`
+line is the shell's exit status. Run (b) is the first run's tail, on the
+working tree described at the top of this file.
+
+(a) An untracked `docs/ratchet_plant.md` without front matter
+(`printf '# Ratchet Plant\n\nNo front matter.\n' > docs/ratchet_plant.md`):
 
 ```text
-(a)
+$ nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
+# E lines of the assertion, unedited:
+E       AssertionError: assert ['docs/ratche...s/README.md)'] == []
+E         
 E         Left contains one more item: 'docs/ratchet_plant.md: unclassified and not in config/doc_classification_baseline.json; add front matter (docs/decisions/README.md)'
-1 failed, 5 warnings in 0.45s
+E         Use -v to get more diff
+# last 15 lines of output, unedited:
+tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
+tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
 
+tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
+1 failed, 5 warnings in 0.48s
+exit 1
+```
+
+(b) The front matter removed from `docs/hybrid_search.md`; the ratchet and the
+`CLASSIFIED` pin both fail:
+
+```text
 (b)
 E         Left contains one more item: 'docs/hybrid_search.md: unclassified and not in config/doc_classification_baseline.json; add front matter (docs/decisions/README.md)'
 E         {'docs/hybrid_search.md': None} != {'docs/hybrid_search.md': 'historical'}
 FAILED tests/test_doc_front_matter.py::test_unclassified_documents_are_baselined
 FAILED tests/test_doc_front_matter.py::test_issue_817_classifications_hold - ...
 2 failed, 5 warnings in 0.50s
-
-(c)
-        ), f"{doc_path} does not exist. Run: {ORRERY_CATALOG.regenerate}"
-E       AssertionError: /Users/pythagor/nexus/.claude/worktrees/817-S4S5/docs/orrery_packages_plant.md does not exist. Run: python -m nexus.agents.orrery.catalog --write
-1 failed, 5 warnings in 0.29s
-
-(d)
-E         Left contains one more item: "docs/decisions/README.md: the Records list lacks '- [0083: Retiring Old Scripts and Retired-Tag Gates](0083-retiring-old-scripts-and-retired-tag-gates.md)'"
-1 failed, 5 warnings in 0.42s
-
-(e)
-E         {'0064': ('parked', 842, 'canonical')} != {'0064': ('decision', 842, 'canonical')}
-1 failed, 5 warnings in 0.45s
 ```
 
-(a) planted an untracked `docs/ratchet_plant.md` without front matter;
-(b) removed the front matter of `docs/hybrid_search.md` (ratchet and the
-`CLASSIFIED` pin both fail); (c) set `ORRERY_CATALOG.path` to
-`docs/orrery_packages_plant.md` (`test_orrery_packages_md_is_up_to_date`);
-(d) removed the 0083 Records line (`test_decision_ledger_follows_the_record_format`);
-(e) set 0064's Kind to `parked` (`test_decision_ledger_backfill_holds`).
+(c) `ORRERY_CATALOG.path` set to `docs/orrery_packages_plant.md` in
+`tests/generated_docs.py`:
+
+```text
+$ nice -n 15 $PY -m pytest -q tests/test_orrery/test_catalog.py::test_orrery_packages_md_is_up_to_date
+# E lines of the assertion, unedited:
+E       AssertionError: /Users/pythagor/nexus/.claude/worktrees/817-S4S5/docs/orrery_packages_plant.md does not exist. Run: python -m nexus.agents.orrery.catalog --write
+E       assert False
+E        +  where False = exists()
+E        +    where exists = PosixPath('/Users/pythagor/nexus/.claude/worktrees/817-S4S5/docs/orrery_packages_plant.md').exists
+# last 15 lines of output, unedited:
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_catalog.py::test_orrery_packages_md_is_up_to_date
+1 failed, 5 warnings in 0.30s
+exit 1
+```
+
+(d) The 0083 line removed from the README's Records list:
+
+```text
+$ nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py::test_decision_ledger_follows_the_record_format
+# E lines of the assertion, unedited:
+E       assert ["docs/decisi...g-gates.md)'"] == []
+E         
+E         Left contains one more item: "docs/decisions/README.md: the Records list lacks '- [0083: Retiring Old Scripts and Retired-Tag Gates](0083-retiring-old-scripts-and-retired-tag-gates.md)'"
+E         Use -v to get more diff
+# last 15 lines of output, unedited:
+tests/test_doc_front_matter.py::test_decision_ledger_follows_the_record_format
+tests/test_doc_front_matter.py::test_decision_ledger_follows_the_record_format
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_doc_front_matter.py::test_decision_ledger_follows_the_record_format
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_doc_front_matter.py::test_decision_ledger_follows_the_record_format
+1 failed, 5 warnings in 0.45s
+exit 1
+```
+
+(e) 0064's Kind set to `parked`:
+
+```text
+$ nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py::test_decision_ledger_backfill_holds
+# E lines of the assertion, unedited:
+E       AssertionError: assert {'0001': ('de...onical'), ...} == {'0001': ('de...onical'), ...}
+E         
+E         Omitting 82 identical items, use -vv to show
+E         Differing items:
+E         {'0064': ('parked', 842, 'canonical')} != {'0064': ('decision', 842, 'canonical')}
+E         Use -v to get more diff
+# last 15 lines of output, unedited:
+tests/test_doc_front_matter.py::test_decision_ledger_backfill_holds
+tests/test_doc_front_matter.py::test_decision_ledger_backfill_holds
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_doc_front_matter.py::test_decision_ledger_backfill_holds
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_doc_front_matter.py::test_decision_ledger_backfill_holds - ...
+1 failed, 5 warnings in 0.46s
+exit 1
+```
+
 No red run plants baseline growth on the checkout: `origin/main` lacks the
 baseline until this branch lands, so `prior` is `None` here;
 `test_baseline_growth_is_checked_against_the_merge_base` proves growth.
 
 ## Static Checks
 
-Head versions of the five changed or added Python files:
+Rerun on the commit `1f0723c3`. The base run checks the `origin/main`
+(`c7ae2988`) versions of the three pre-existing files, checked out into the
+worktree with `git checkout origin/main -- <files>` and restored with
+`git checkout HEAD -- <files>` (`git status --short` was empty afterwards).
 
 ```text
-## head black
+## head (1f0723c3)
+$ $PY -m black --check tests/test_doc_front_matter.py tests/generated_docs.py tests/test_cli_reference_doc.py tests/test_orrery/test_catalog.py docs/qa/817-decision-ledger/quote_audit_s5.py
 All done! ✨ 🍰 ✨
 5 files would be left unchanged.
-## head flake8
-flake8 exit 0
-## head mypy
+exit 0
+$ $PY -m flake8 tests/test_doc_front_matter.py tests/generated_docs.py tests/test_cli_reference_doc.py tests/test_orrery/test_catalog.py docs/qa/817-decision-ledger/quote_audit_s5.py
+exit 0
+$ PYTHONPATH=$PWD $PY -m mypy --explicit-package-bases tests/test_doc_front_matter.py tests/generated_docs.py tests/test_cli_reference_doc.py tests/test_orrery/test_catalog.py docs/qa/817-decision-ledger/quote_audit_s5.py
 Success: no issues found in 5 source files
-```
-
-`origin/main` versions of the three pre-existing files, placed in the
-worktree for the run and restored afterwards:
-
-```text
-## base (origin/main versions placed in the worktree) mypy --explicit-package-bases
+exit 0
+## base (origin/main versions: git checkout origin/main -- <files>, restored afterwards with git checkout HEAD -- <files>)
+$ $PY -m black --check tests/test_doc_front_matter.py tests/test_cli_reference_doc.py tests/test_orrery/test_catalog.py
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+exit 0
+$ $PY -m flake8 tests/test_doc_front_matter.py tests/test_cli_reference_doc.py tests/test_orrery/test_catalog.py
+exit 0
+$ PYTHONPATH=$PWD $PY -m mypy --explicit-package-bases tests/test_doc_front_matter.py tests/test_cli_reference_doc.py tests/test_orrery/test_catalog.py
 Success: no issues found in 3 source files
-## base flake8 (in worktree)
-flake8 exit 0
+exit 0
 ```
 
 No new diagnostics; no pre-existing ones.
