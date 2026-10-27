@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Toaster } from "@/components/ui/toaster";
 import { KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { HEALTH_QUERY_KEY, type HealthPayload } from "@/hooks/usePlane";
+import { queryClient as appQueryClient } from "@/lib/queryClient";
 import { GENESIS_STAGES, InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
 
 const STATUS_URL = "/api/story/new/retrograde/status?slot=5";
@@ -83,7 +85,7 @@ function stubGateway() {
             gateway.weirdSaves.push(body);
             return gateway.weirdAnswer(body);
         }
-        if (url === "/api/story/new/transition") {
+        if (url === "/api/story/new/transition" || url === "/api/story/new/transition/overwrite") {
             gateway.transitionBodies.push(JSON.parse(String(init?.body)));
             return pending("transition", init?.signal);
         }
@@ -171,6 +173,7 @@ afterEach(() => {
     localStorage.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    appQueryClient.clear();
 });
 
 describe("genesis stage waiter", () => {
@@ -229,6 +232,26 @@ describe("genesis stage waiter", () => {
         await confirmIntroduction();
         gateway.status = stage("seed_candidates", { weird: "medium" });
         await waitFor(() => expect(pipStates()).toEqual(track(2)));
+
+        gateway.status = stage("done");
+        await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
+        await waitFor(() => expect(pipStates()).toEqual(track(6)));
+        await expectNoFurtherStatusReads(gateway);
+    });
+
+    it("posts the operator transition when the operator plane serves the client", async () => {
+        appQueryClient.setQueryData<HealthPayload>([...HEALTH_QUERY_KEY], {
+            status: "healthy",
+            service: "nexus",
+            plane: "operator",
+        });
+        const gateway = stubGateway();
+        renderReadyWizard();
+        await confirmIntroduction();
+
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        expect(gateway.requests).toContain("POST /api/story/new/transition/overwrite");
+        expect(gateway.requests).not.toContain("POST /api/story/new/transition");
 
         gateway.status = stage("done");
         await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));

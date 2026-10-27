@@ -2629,15 +2629,18 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         }
 
     if state.get("is_empty"):
-        # Initialize via setup/start endpoint. Forward only an explicit
-        # --model override; otherwise the backend preserves an
-        # operator-set slot model or resolves the configured wizard
-        # default for a fresh slot.
-        setup_url = f"{get_api_url()}/api/story/new/setup/start"
+        # Initialize via setup. Forward only an explicit --model override.
+        # On this machine an override goes to the operator route, which may
+        # replace the slot's model pin; a remote runtime's player route
+        # refuses that (Decision 824-Q4).
+        setup_route = "/api/story/new/setup/start"
         setup_payload = {"slot": args.slot}
         model_to_use = getattr(args, "model", None)
         if model_to_use:
             setup_payload["model"] = model_to_use
+            if _active_remote_runtime(args, "continue") is None:
+                setup_route = "/api/story/new/setup/overwrite"
+        setup_url = f"{get_api_url()}{setup_route}"
         setup_response = _api_post(
             setup_url, json=setup_payload, timeout=_request_timeout_seconds()
         )

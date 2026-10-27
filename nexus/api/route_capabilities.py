@@ -11,11 +11,11 @@ Two planes project from the one shared app:
 
 - **player** — what the remote tunnel may reach: reading and play
   (narrative turns, undo, the new-story wizard, preferences, static images,
-  and the app shell). The wizard can overwrite an unlocked occupied slot,
-  so its start and transition routes are marked destructive.
+  and the app shell). The player wizard starts only empty slots, so every
+  destructive route is operator-only.
 - **operator** — the whole runtime, player routes included, for loopback:
   secrets, settings, local models, diagnostics, slot administration, resets,
-  and asset management.
+  wizard overwrites, and asset management.
 
 :func:`build_player_app` and :func:`build_operator_app` construct those
 projections; they share the gateway's route objects, lifespan, middleware,
@@ -127,8 +127,8 @@ _NARRATIVE_TURN = _player("narrative.play", "write", provider_effect=True)
 _NARRATIVE_EDIT = _player("narrative.play", "write")
 _WIZARD_TURN = _player("wizard.play", "write", provider_effect=True)
 _WIZARD_EDIT = _player("wizard.play", "write")
-_WIZARD_OVERWRITE = _player(
-    "wizard.play", "write", provider_effect=True, destructive=True
+_WIZARD_OVERWRITE = _operator(
+    "wizard.overwrite", "write", provider_effect=True, destructive=True
 )
 _ASSETS_READ = _player("assets.read", "read")
 _ASSETS_FILES = _player("assets.read")
@@ -175,12 +175,11 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         ("PATCH", "/api/slot/{slot}/settings"): _operator("slot.pins", "write"),
         ("POST", "/api/slot/{slot}/lock"): _operator("slot.lock", "write"),
         ("POST", "/api/slot/{slot}/unlock"): _operator("slot.lock", "write"),
-        # setup_endpoints. The wizard admits any unlocked slot, occupied or
-        # not; the slot lock is the only guard. Starting it discards the
-        # slot's in-progress wizard and trait selections and persists the
-        # resolved wizard model as the slot's Skald pin, so a request's model
-        # override replaces an operator-set pin.
-        ("POST", "/api/story/new/setup/start"): _WIZARD_OVERWRITE,
+        # setup_endpoints. The player route starts only an empty slot and
+        # keeps its model pin; the operator route may restart an occupied
+        # slot's wizard and replace the pin (Decision 824-Q4).
+        ("POST", "/api/story/new/setup/start"): _WIZARD_TURN,
+        ("POST", "/api/story/new/setup/overwrite"): _WIZARD_OVERWRITE,
         ("GET", "/api/story/new/setup/resume"): _player(
             "wizard.read", "read", provider_effect=True
         ),
@@ -195,8 +194,10 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         ("POST", "/api/story/new/chat"): _WIZARD_TURN,
         # Records the genesis strangeness selection on the wizard cache.
         ("PUT", "/api/story/new/weird"): _WIZARD_EDIT,
-        # Deletes the slot's existing world and restarts its id sequences.
-        ("POST", "/api/story/new/transition"): _WIZARD_OVERWRITE,
+        # The operator route may delete the slot's existing world; the player
+        # route refuses a slot that holds one.
+        ("POST", "/api/story/new/transition"): _WIZARD_TURN,
+        ("POST", "/api/story/new/transition/overwrite"): _WIZARD_OVERWRITE,
         ("GET", "/api/story/new/retrograde/status"): _player("wizard.read"),
         # reader_endpoints
         ("GET", "/status"): _HEALTH,

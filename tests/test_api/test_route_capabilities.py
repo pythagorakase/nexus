@@ -51,6 +51,8 @@ OPERATOR_REQUESTS = [
     ("POST", "/api/slot/1/unlock"),
     ("PATCH", "/api/slot/1/settings"),
     ("POST", "/api/story/new/setup/reset"),
+    ("POST", "/api/story/new/setup/overwrite"),
+    ("POST", "/api/story/new/transition/overwrite"),
     ("POST", "/api/characters/1/images"),
     ("DELETE", "/api/characters/1/images/1"),
     ("PUT", "/api/places/1/images/1/main"),
@@ -523,12 +525,8 @@ def test_play_is_on_the_player_plane(key: RouteKey) -> None:
 
 
 def test_destructive_routes_are_pinned() -> None:
-    """Exactly these routes can irreversibly wipe data, whatever their plane.
-
-    The wizard admits any unlocked slot: ``setup/start`` discards an occupied
-    slot's in-progress wizard and ``transition`` deletes its world, so both
-    are destructive on the player plane. Everything else destructive is
-    operator-only.
+    """Exactly these routes can irreversibly wipe data, and every one is
+    operator-only: the player wizard starts only empty slots (Decision 824-Q4).
     """
     destructive = {
         key: capability.plane
@@ -541,9 +539,33 @@ def test_destructive_routes_are_pinned() -> None:
         ("DELETE", "/api/characters/{character_id}/images/{image_id}"): "operator",
         ("DELETE", "/api/places/{place_id}/images/{image_id}"): "operator",
         ("POST", "/api/local-models/delete"): "operator",
-        ("POST", "/api/story/new/setup/start"): "player",
-        ("POST", "/api/story/new/transition"): "player",
+        ("POST", "/api/story/new/setup/overwrite"): "operator",
+        ("POST", "/api/story/new/transition/overwrite"): "operator",
     }
+
+
+def test_wizard_routes_split_by_plane() -> None:
+    """Overwrite and repin are operator routes; the player wizard only plays."""
+    for key in [
+        ("POST", "/api/story/new/setup/overwrite"),
+        ("POST", "/api/story/new/transition/overwrite"),
+    ]:
+        capability = ROUTE_CAPABILITIES[key]
+        assert capability.plane == "operator"
+        assert capability.capability == "wizard.overwrite"
+        assert capability.slot_mode == "write"
+        assert capability.provider_effect is True
+        assert capability.destructive is True
+    for key in [
+        ("POST", "/api/story/new/setup/start"),
+        ("POST", "/api/story/new/transition"),
+    ]:
+        capability = ROUTE_CAPABILITIES[key]
+        assert capability.plane == "player"
+        assert capability.capability == "wizard.play"
+        assert capability.slot_mode == "write"
+        assert capability.provider_effect is True
+        assert capability.destructive is False
 
 
 def test_unclassified_route_fails_the_gateway_import() -> None:

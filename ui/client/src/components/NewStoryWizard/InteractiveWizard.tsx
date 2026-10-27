@@ -3,6 +3,8 @@ import { Circle, Diamond, Sparkle, Sparkles, type LucideIcon } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { rememberActiveSlot } from "@/lib/active-slot";
+import { queryClient } from "@/lib/queryClient";
+import { HEALTH_QUERY_KEY, type HealthPayload } from "@/hooks/usePlane";
 import {
     RETROGRADE_STAGES,
     getRetrogradeStatus,
@@ -29,6 +31,11 @@ import {
     Loader,
     Response,
 } from "@/components/ai";
+
+// Read at call time, so a plane that resolves later never restarts the wizard. An unknown plane uses the player routes, which refuse an overwrite (#824, Decision 824-Q4).
+function onOperatorPlane(): boolean {
+    return queryClient.getQueryData<HealthPayload>([...HEALTH_QUERY_KEY])?.plane === "operator";
+}
 
 interface Message {
     id: string;
@@ -383,7 +390,9 @@ export function InteractiveWizard({
                 // No model in the payload: the backend preserves an
                 // operator-set slot model, or chooses the wizard default for
                 // a fresh slot, and stamps that resolution on the setup.
-                const startRes = await fetch("/api/story/new/setup/start", {
+                // The operator plane uses the overwrite route; SlotSelector
+                // offers an occupied slot only there.
+                const startRes = await fetch(onOperatorPlane() ? "/api/story/new/setup/overwrite" : "/api/story/new/setup/start", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ slot }),
@@ -627,7 +636,7 @@ export function InteractiveWizard({
             // saved strangeness rides along; with none chosen the server's
             // stored selection, or its configured default, applies.
             const weird = weirdLevelRef.current;
-            const transitionRes = await fetch("/api/story/new/transition", {
+            const transitionRes = await fetch(onOperatorPlane() ? "/api/story/new/transition/overwrite" : "/api/story/new/transition", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(weird === null ? { slot } : { slot, weird_level: weird }),

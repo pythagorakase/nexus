@@ -30,6 +30,8 @@ BODY_MUTATIONS = [
     ("/api/story/new/setup/reset", {}),
     ("/api/story/new/chat", {"message": "Begin"}),
     ("/api/story/new/transition", {}),
+    ("/api/story/new/setup/overwrite", {}),
+    ("/api/story/new/transition/overwrite", {}),
 ]
 
 

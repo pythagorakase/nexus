@@ -6,7 +6,7 @@ sources:
   - scripts/api_openai.py
   - scripts/api_anthropic.py
   - scripts/api_openrouter.py
-verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
+verified_commit: "5ba97c05ad104e295fc89e126e27d40f86426390"
 ---
 
 # 0069: Log Redaction at the Call Site

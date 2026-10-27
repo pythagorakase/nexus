@@ -5,7 +5,7 @@ sources:
   - docs/cli_reference.md
   - nexus/cli.py
   - nexus/cli_contract.py
-verified_commit: "571f982b2fa375acd4b52c51c76c29f4663f7242"
+verified_commit: "5ba97c05ad104e295fc89e126e27d40f86426390"
 ---
 
 # 0073: The Envelope Migration Plan

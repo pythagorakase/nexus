@@ -100,6 +100,20 @@ def store(monkeypatch: pytest.MonkeyPatch) -> WizardStore:
     monkeypatch.setattr(wizard_chat, "read_cache", wizard.read)
     monkeypatch.setattr(wizard_chat, "guarded_wizard_write", wizard.guard)
     monkeypatch.setattr(wizard_chat, "write_weird_level", wizard.write)
+    # The slot holds the wizard, so the player transition's story-slot
+    # refusal (#824) passes without opening a slot database.
+    monkeypatch.setattr(
+        wizard_chat,
+        "get_slot_state",
+        lambda slot: SlotState(
+            slot=slot,
+            is_empty=False,
+            is_wizard_mode=True,
+            wizard_state=None,
+            narrative_state=None,
+            model=None,
+        ),
+    )
     return wizard
 
 
