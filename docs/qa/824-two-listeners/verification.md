@@ -695,5 +695,9 @@ Static checks on the 17 Python files `5d2734d6` changes, against their
 `fbe20636` versions: Black leaves all 17 unchanged; flake8 reports only the
 two pre-existing `tests/test_connection_lifecycle.py` diagnostics (`:111`
 E501, `:161` F811), the same on both sides; mypy `--explicit-package-bases`
-reports 40 errors in 4 files on both sides, identical apart from line
-numbers (all pre-existing tomlkit indexing in tests).
+reports 40 errors on both sides, identical apart from line numbers:
+`nexus/runtime/supervisor.py` (11: Windows-only `subprocess` constants,
+Optional `external`/`remote`), `tests/test_connection_lifecycle.py` (24,
+tomlkit indexing), `tests/test_runtime/test_remote_auth.py` (7),
+`tests/test_runtime/test_supervisor_live.py` (2) and `tests/test_cli.py`
+(1, an untyped import).
