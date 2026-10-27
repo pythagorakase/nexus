@@ -1456,8 +1456,10 @@ that run.
 Ruling 2 (posted on the PR, 2026-10-27) amends the order; ruling 1 stands.
 Scratch logs for this round are in
 `/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/816-fix2/`
-(called `<fix2>`). `origin/main` is still `925f2591`, the merge base; no
-merge this round.
+(called `<fix2>`). When `ab71c203` was made (01:00 CDT), `origin/main` was
+still `925f2591`, the merge base; no merge this round. Main moved to
+`36abe1b0` (#1179, 01:35 CDT) after the last push of this round; see the
+fifth fix round below.
 
 Commit `ab71c203`:
 
@@ -1610,7 +1612,8 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 ```
 
 `ui-tests`: the same stale receipt, which stays red until the wave's
-state-surface union regeneration lands on `main`:
+state-surface union regeneration lands on `main` (it landed in #1179
+after this round; see the fifth fix round):
 
 ```
 Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
@@ -1618,5 +1621,81 @@ Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-st
  Test Files  1 failed | 43 passed (44)
 ```
 
-The commit that records this run starts one more run; the PR body records
-that run.
+Two evidence commits followed run 12, and each started a run:
+
+- Run 13, https://github.com/pythagorakase/nexus/actions/runs/40461081803
+  (`1ac128da`): `offline-tests` **success** (`3299 passed, 687 skipped, 32
+  deselected`, then `1941 passed, 1571 skipped, 8 deselected`, both with the
+  guard line); `ui-tests` failure on the stale receipt
+  (`state-shades.test.ts:183`).
+- Run 14, https://github.com/pythagorakase/nexus/actions/runs/40461126777
+  (`30dd5cec`): `offline-tests` **success** (the same counts, both with the
+  guard line); `ui-tests` failure on the stale receipt; run conclusion
+  `failure`, from `ui-tests` alone.
+
+The commit that carries this note starts a further run, which the PR body
+records.
+
+## Fifth Fix Round: Review Findings on the Record
+
+Three P3 findings against the record, no code change: this file and the PR
+body only. Scratch logs are under `<fix2>`.
+
+- `origin/main` moved from `925f2591` to `36abe1b0` (#1179, "Regenerate the
+  Browser-Resolved State Surfaces for the 2026-10-26 UI Union") after the
+  fourth round's last push. #1179 changes
+  `ui/client/src/state-surfaces.resolved.json`, two decision records
+  (`docs/decisions/0066-*.md`, `0067-*.md`) and two files under `docs/qa/`
+  (`git diff --name-only 925f2591 36abe1b0`); none is an `AGENTS.md` source,
+  and `git merge-tree --write-tree HEAD origin/main` reports no conflict.
+  The branch still holds main at `925f2591` (no merge this round), so
+  `ui-tests` stays
+  red on this branch only until the branch carries `36abe1b0`. Whether to
+  `git merge origin/main` is the coordinator's call; a merge moves the merge
+  base, so the `AGENTS.md` `verified_commit` (`925f2591`) must then be
+  re-checked against the new merge base.
+- The fourth round's line above now dates its "`origin/main` is still
+  `925f2591`" claim, and the run 12 section names runs 13 and 14.
+- The PR body: the fourth-round bullet, the `ui-tests` sentence, the
+  `ui-tests` section and Open Question 1 say main moved to `36abe1b0`; the
+  "Runs 1-4" bullet credits the `requires_local_models` marks (`26067762`,
+  narrowed to the five parameters in `ab71c203`) and says ruling 2 removed
+  the `7d70fdcc` cache; the `bc340089` line marks its header tokenizer-fill
+  line as removed by ruling 2 (`ab71c203`).
+
+Reruns on `30dd5cec` (the code and tests at this round's commit are the same;
+load average 11.29 before the runs; `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and
+`NEXUS_SLOT` unset):
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_offline_ci_workflow.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+93 passed, 5 warnings in 5.96s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_lore/test_token_budget.py tests/test_lore/test_token_estimator.py tests/test_lore/test_turn_cycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+79 passed, 3 skipped, 5 warnings in 17.75s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' <the same three files>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+72 passed, 3 skipped, 7 deselected, 5 warnings in 17.31s
+
+$ HF_HOME=<fix2>/hf-empty-p3 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_lore/test_token_estimator.py
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4.3-36b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[deepseek/deepseek-v4-pro]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3]
+5 failed, 34 passed, 3 skipped, 5 warnings in 16.41s
+
+$ HF_HOME=<fix2>/hf-empty-p3 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' tests/test_lore/test_token_estimator.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+34 passed, 3 skipped, 5 deselected, 5 warnings in 16.29s
+```
+
+`<fix2>/hf-empty-p3` held no file afterwards. No PostgreSQL file changed, so
+no PostgreSQL run is owed.
