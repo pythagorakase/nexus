@@ -401,9 +401,15 @@ ran in full (one hour) after the first merge of `origin/main` (head `5ac3adb7`,
 migrations 152 and 153 present). The later merges brought no migration, fixture
 or test-helper change; the only file they changed that this test reaches is
 `nexus/api/new_story_db_mapper.py`, so its transition and deferred cases ran
-again at the final head.
+again at `bd15f8aa`.
 
-`tests/test_orrery/test_migration_154_dead_strata_pg.py` (final head):
+Unless a tail names another commit, it ran at `bd15f8aa`. The later merge of
+#1166 (`3f6e4a74`) changed only `scripts/api_anthropic.py`, its tests, the
+exception baseline and documents, none of which these PostgreSQL files reach.
+The card, lifecycle and fleet files ran again at `4cbc5a2f` in the fixer round
+(below); `4cbc5a2f` differs from the fixer-round head only in this file.
+
+`tests/test_orrery/test_migration_154_dead_strata_pg.py` (at `bd15f8aa`):
 
 ```text
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
@@ -427,7 +433,7 @@ dbname audit: owner targets: none
 542 passed, 6 skipped in 3695.84s (1:01:35)
 ```
 
-Same file, `-k "transition or deferred"` (final head):
+Same file, `-k "transition or deferred"` (at `bd15f8aa`):
 
 ```text
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
@@ -470,31 +476,54 @@ FAILED tests/test_orrery/test_migrate.py::test_canonical_grieving_migration_exec
 is `test_canonical_grieving_migration_executes_against_slot_db`; see Open Item
 below.
 
+Fixer round, at `4cbc5a2f`. Before each PostgreSQL run of the fixer round,
+this bounded loop waited while the one-minute load was 24 or more:
+
+```sh
+i=0; until [ "$(sysctl -n vm.loadavg | awk '{print int($2)}')" -lt 24 ] || [ $i -ge 40 ]; do sleep 30; i=$((i+1)); done
+```
+
+No run had to wait (0 x 30s); the loads at start were 19.05 (card), 19.54
+(lifecycle) and 11.07 (fleet). The first round's card, lifecycle and fleet runs started at
+24.84, above the cap, without that wait; these runs replace them.
+
 `tests/test_orrery/test_card_identity.py` (the two skips are its
 `requires_corpus` cases):
 
 ```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 5 targets: postgres, qa640_885_ren_replay_* x4
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-9 passed, 2 skipped, 2 warnings in 10.96s
+9 passed, 2 skipped, 2 warnings in 10.60s
 ```
 
 `tests/test_connection_lifecycle.py`:
 
 ```text
-dbname audit: owner names admitted on registered clusters: save_04@local:53563 (psycopg2), save_04@local:53567 (psycopg2)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 2 targets: postgres, qa640_816_lifecycle_test_provider
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:52642 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:52645 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:52642 (psycopg2), save_04@local:52645 (psycopg2)
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-1 passed in 32.58s
+1 passed in 30.25s
 ```
 
-Corpus fleet run, `NEXUS_RUN_CORPUS=1 ... -k fleet` (counts are
-`new_story_creator`, `entity_tags`, `world_events`, then the number of
-`orrery_narration_jobs` rows; every `(id, provider, model_ref)` is equal before
-and after):
+Corpus fleet run,
+`NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 nice -n 15 $PY -m pytest -q -s -p tests.dbname_audit tests/test_orrery/test_migration_154_dead_strata_pg.py -k fleet`
+(`-s` shows the six count lines; counts are `new_story_creator`,
+`entity_tags`, `world_events`, then the number of `orrery_narration_jobs` rows;
+every `(id, provider, model_ref)` is equal before and after):
 
 ```text
+813-154 fleet NEXUS_template (0, 0, 0) 0
+.813-154 fleet save_01 (0, 0, 0) 0
+.813-154 fleet save_02 (0, 0, 0) 0
 .813-154 fleet save_03 (0, 35, 96) 9
 .813-154 fleet save_04 (0, 42, 133) 0
 .813-154 fleet save_05 (0, 0, 0) 0
@@ -504,11 +533,8 @@ dbname audit: 7 targets: postgres, qa640_813_154_* x6
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-6 passed, 17 deselected in 53.63s
+6 passed, 17 deselected in 53.07s
 ```
-
-The run of the card, lifecycle and fleet files started at a one-minute load of
-24.84, just above the cap of 24; every other PostgreSQL run started below it.
 
 ## Open Item: Migration 046 Re-Run Test
 
@@ -526,11 +552,194 @@ migrations/046_canonical_grieving_state.py:54: UndefinedColumn
 ```
 
 The runner applies 046 before 154 on a fresh database, and every fleet
-database is stamped 046 (read-only check at push time: `NEXUS_template` and
-`save_01` to `save_05` each hold stamps 046, 152 and 153), so no runtime path
-re-runs it. Under the common rules a
-failure in a file this branch did not change is reported, not fixed: the test
-is unchanged and the remedy is the coordinator's call.
+database is stamped 046, so no runtime path re-runs it. Read-only stamp check
+(fixer round):
+
+```text
+$ for db in NEXUS_template save_01 save_02 save_03 save_04 save_05; do echo "$db: $(PGOPTIONS='-c default_transaction_read_only=on' psql -d $db -Atc "SELECT string_agg(version, ',' ORDER BY version) || ' max=' || (SELECT max(version) FROM schema_migrations) FROM schema_migrations WHERE version IN ('046','152','153','154')")"; done
+NEXUS_template: 046,152,153 max=153
+save_01: 046,152,153 max=153
+save_02: 046,152,153 max=153
+save_03: 046,152,153 max=153
+save_04: 046,152,153 max=153
+save_05: 046,152,153 max=153
+```
+
+Under the common rules a failure in a file this branch did not change is
+reported, not fixed: the test is unchanged and the remedy is the coordinator's
+call.
+
+Review confirmed this failure. Its remedy, restoring the column on the
+disposable clone before the 046 re-run, needs a coordinator amendment, because
+`tests/test_orrery/test_migrate.py` is outside the order's file list. The fixer
+verified that remedy as a scratch plant, reverted it, and left the test
+unchanged. The patch
+(`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/813-S4S5/fix_test_migrate.patch`):
+
+```diff
+         with closing(connect(dbname)) as conn:
++            # Migration 154 drops entity_tags.clear_on_override, which 046 copies.
++            with conn, conn.cursor() as cur:
++                cur.execute(
++                    "ALTER TABLE public.entity_tags "
++                    "ADD COLUMN IF NOT EXISTS clear_on_override jsonb"
++                )
+             _exercise_canonical_grieving_migration(conn, migration)
+```
+
+`tests/test_orrery/test_migrate.py` with that plant (at `4cbc5a2f`, load 15.70,
+no wait):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 8 targets: postgres, qa640_grieving_migration_*, qa640_vocab_migration_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+77 passed in 15.31s
+```
+
+## Open Item: The TEST-Provider Seeder (Migration 008)
+
+Review found a second consumer of the dropped columns, which the order's code
+grep (Proof 5 excludes `migrations/`) did not reach.
+`migrations/008_populate_mock_database.py` is a script-only seed script
+(`nexus/maintenance/migrate.py:44-46`, `SCRIPT_ONLY_MIGRATIONS = {"008"}`):
+the runner never applies it, and operators run it against head-schema
+databases. Its `populate_wizard_cache` INSERT (`:161-167`, values `:220-234`)
+still names the five dropped `new_story_creator` columns, so
+`seed_test_provider_database` (`:480-501`) raises `UndefinedColumn` on any
+database at 154. That breaks the operator seeding command
+(`nexus/api/mock_openai.py:12`, `:97`) and the `routed_test_provider_database`
+and `disposable_test_provider_database` fixtures (`tests/conftest.py:231-244`,
+`tests/pg_fixtures.py:447-473`).
+
+The order puts every existing migration out of scope, so this branch leaves
+008 unchanged; the fix needs a coordinator amendment. The Python migrations
+that name any of the eleven targets: 008 (the live seeder), 023 (creates the
+columns), 042 (`entity_pair_tags.clear_on_override`, a different column) and
+046 (historical, re-run only by the test above).
+
+```text
+$ git grep -n -E "seed_starting_location|seed_initial_mystery|seed_potential_obstacles|zone_boundary_description|zone_approximate_area|clear_on_override|narration_chunk_id|hybrid_search|pad_vector|migrate_embeddings" -- 'migrations/*.py'
+migrations/008_populate_mock_database.py:161:                seed_starting_location, seed_weather, seed_key_npcs,
+migrations/008_populate_mock_database.py:162:                seed_initial_mystery, seed_potential_allies,
+migrations/008_populate_mock_database.py:163:                seed_potential_obstacles, seed_secrets,
+migrations/008_populate_mock_database.py:166:                zone_name, zone_summary, zone_boundary_description,
+migrations/008_populate_mock_database.py:167:                zone_approximate_area,
+migrations/023_orrery_schema.py:508:            clear_on_override     jsonb,
+migrations/023_orrery_schema.py:570:            narration_chunk_id       bigint,
+migrations/023_orrery_schema.py:582:            narration_chunk_id     bigint,
+migrations/023_orrery_schema.py:668:        constraint_name="orrery_resolutions_narration_chunk_id_fkey",
+migrations/023_orrery_schema.py:669:        column_name="narration_chunk_id",
+migrations/023_orrery_schema.py:676:        constraint_name="world_events_narration_chunk_id_fkey",
+migrations/023_orrery_schema.py:677:        column_name="narration_chunk_id",
+migrations/042_orrery_entity_pair_tags.py:142:                clear_on_override     jsonb,
+migrations/042_orrery_entity_pair_tags.py:190:            "COMMENT ON COLUMN entity_pair_tags.clear_on_override IS "
+migrations/046_canonical_grieving_state.py:58:                    clear_on_override, template_id, source_kind
+migrations/046_canonical_grieving_state.py:64:                       et.clear_on_override,
+```
+
+`tests/test_mock_openai.py tests/test_test_provider_seeder.py tests/test_config/test_test_provider_database.py`
+at `4cbc5a2f` (load 10.47, no wait), branch as committed:
+
+```text
+E           psycopg2.errors.UndefinedColumn: column "seed_starting_location" of relation "new_story_creator" does not exist
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 13 targets: postgres, qa640_816_empty_* x4, qa640_816_legacy_trait_*, qa640_816_singleton_* x2, qa640_816_test_provider_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_test_provider_seeder.py::test_optimized_seeder_refuses_a_suppressed_singleton_update[post_transition]
+FAILED tests/test_test_provider_seeder.py::test_optimized_seeder_refuses_a_suppressed_singleton_update[save_slot]
+ERROR tests/test_mock_openai.py::test_mock_responses_routes_bootstrap_schema_as_final_result_tool
+ERROR tests/test_mock_openai.py::test_mock_responses_routes_bootstrap_schema_as_native_text_format
+ERROR tests/test_mock_openai.py::test_seeded_test_provider_database_holds_the_rows_the_provider_reads
+ERROR tests/test_mock_openai.py::test_reseeding_test_provider_preserves_reference_parity
+ERROR tests/test_mock_openai.py::test_child_mock_server_reads_the_routed_database
+2 failed, 31 passed, 5 errors in 29.77s
+```
+
+The fixer verified the remedy as a scratch plant and reverted it. It deletes
+the five columns from the INSERT list, five placeholders (the seed group goes
+from 14 to 11, because three seed columns go; the layer/zone group from 7 to 5)
+and the five matching `seed.get`/`zone.get` values, and keeps
+`seed_potential_allies`. The patch is
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/813-S4S5/fix_008.patch`
+(Black leaves it unchanged):
+
+```diff
+diff --git a/migrations/008_populate_mock_database.py b/migrations/008_populate_mock_database.py
+index 7536860b..504532a4 100644
+--- a/migrations/008_populate_mock_database.py
++++ b/migrations/008_populate_mock_database.py
+@@ -158,13 +158,11 @@ def populate_wizard_cache(conn, cache: dict):
+                 -- Seed phase
+                 seed_type, seed_title, seed_situation, seed_hook,
+                 seed_immediate_goal, seed_stakes, seed_tension_source,
+-                seed_starting_location, seed_weather, seed_key_npcs,
+-                seed_initial_mystery, seed_potential_allies,
+-                seed_potential_obstacles, seed_secrets,
++                seed_weather, seed_key_npcs,
++                seed_potential_allies, seed_secrets,
+                 -- Layer/Zone
+                 layer_name, layer_type, layer_description,
+-                zone_name, zone_summary, zone_boundary_description,
+-                zone_approximate_area,
++                zone_name, zone_summary,
+                 -- Location
+                 initial_location,
+                 -- Temporal
+@@ -176,9 +174,9 @@ def populate_wizard_cache(conn, cache: dict):
+                 -- Character
+                 %s, %s, %s, %s, TRUE,
+                 -- Seed (with cast for seed_type enum)
+-                %s::seed_type, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
++                %s::seed_type, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                 -- Layer/Zone (with cast for layer_type)
+-                %s, %s::layer_type, %s, %s, %s, %s, %s,
++                %s, %s::layer_type, %s, %s, %s,
+                 -- Location
+                 %s,
+                 -- Temporal
+@@ -217,12 +215,9 @@ def populate_wizard_cache(conn, cache: dict):
+                 seed.get("immediate_goal"),
+                 seed.get("stakes"),
+                 seed.get("tension_source"),
+-                seed.get("starting_location"),
+                 seed.get("weather"),
+                 seed.get("key_npcs"),
+-                seed.get("initial_mystery"),
+                 seed.get("potential_allies"),
+-                seed.get("potential_obstacles"),
+                 seed.get("secrets"),
+                 # Layer/Zone (cache uses "type" not "layer_type")
+                 layer.get("name"),
+@@ -230,8 +225,6 @@ def populate_wizard_cache(conn, cache: dict):
+                 layer.get("description"),
+                 zone.get("name"),
+                 zone.get("summary"),
+-                zone.get("boundary_description"),
+-                zone.get("approximate_area"),
+                 # Location
+                 Json(location) if location else None,
+                 # Temporal
+```
+
+The same three files with the plant (load 13.92, no wait):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 13 targets: postgres, qa640_816_empty_* x4, qa640_816_legacy_trait_*, qa640_816_singleton_* x2, qa640_816_test_provider_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+38 passed in 34.58s
+```
 
 ## Static Checks
 
@@ -569,6 +778,15 @@ FAILED tests/test_scripts/test_check_exception_dispositions.py::test_repository_
 The one failure is `test_repository_tree_matches_committed_baseline`. It
 compares the baseline with `origin/main`, and #1166 landed on `origin/main`
 during the run. After merging #1166 the test passes at `af3b500e` (below).
+
+The same command again in the fixer round, at `4cbc5a2f` (the whole suite,
+run in the background):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3285 passed, 702 skipped, 8 warnings in 642.09s (0:10:42)
+```
 
 `tests/test_api tests/test_orrery` (at `af3b500e`):
 
