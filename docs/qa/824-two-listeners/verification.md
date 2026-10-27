@@ -11,14 +11,17 @@ that merge base; the doc, reachability and CLI-reference checks and the
 launcher, CORS and supervisor unit files were rerun after it (last section).
 The review fixes are `4c4031e4`; a third merge `688e90e9` brought in
 `d295eef0` (1102-S1, #1170, UI only, no conflicts, no file this order
-touches). The canonical stamps stay at `e058005f`, an ancestor of the new
-merge base, which `test_declared_sources_carry_a_fresh_verified_commit`
-accepts; the one source the fixes touch again, `docs/runtime.md` (0061,
+touches). The one source the fixes touch again, `docs/runtime.md` (0061,
 0079), only moved its `/health` paragraph back above the new subsection, so
 no record's claim changed. The supervisor sites the fixes edit were located
 on the branch head `5dee9e73` (which contains `9a0714d7`), not by the
-order's `c7ae2988` line numbers: the refusal at `supervisor.py:955-973`, the
-plane check at `:865`, `_health_answer` at `:889`.
+order's `c7ae2988` line numbers: before the fix, at `5dee9e73`, the
+unmanaged-port refusal is `supervisor.py:943-949`, the plane check `:852`
+and `_health_answer` `:876`; after the fix, at `4c4031e4`, they sit at
+`:963-969`, `:865` and `:889`. The second review round is `5d2734d6` (code
+and tests) and `f6af9784` (the 25 canonical documents re-stamped from
+`e058005f` to the merge base `d295eef0`); its evidence is the last section,
+"After the Round-2 Review Fixes", whose tails all ran on `f6af9784`.
 
 ## What Main Does Today (Cited Lines at `b0e9cb77`)
 
@@ -293,7 +296,9 @@ dbname audit: owner targets: none
 59 passed, 2 warnings in 97.92s (0:01:37)
 ```
 
-PostgreSQL run 2 (`29a691e8`, the final product head; load average 14.04):
+PostgreSQL run 2 (`29a691e8`; not the product head: `4c4031e4` and `5d2734d6`
+changed product code afterwards, and this set was rerun at `f6af9784` in the
+last section; load average 14.04):
 
 ```
 NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit \
@@ -343,6 +348,11 @@ $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tests
 (`$PY -m scripts.render_cli_reference --write`, no further change).
 
 ## UI and Rust
+
+These UI tails ran at 19:42 CDT on the branch before merge `688e90e9`
+brought in `d295eef0` (which changes `LocalModelRows.tsx` and its test);
+their commit was not recorded. The rerun on `f6af9784`, the merged branch,
+is in the last section and supersedes them.
 
 ```
 nice -n 15 npm --prefix ui ci         # exit 0
@@ -492,3 +502,198 @@ What the fixes change:
   covers both.
 - `docs/runtime.md`: the `/health` paragraph stays in the planes section and
   "Listeners and the Tunnel" follows it, before "Profiles".
+
+## After the Round-2 Review Fixes (`5d2734d6`, `f6af9784`, Merge `52465f4b`)
+
+Commits: `5d2734d6` (code and tests), `f6af9784` (the 25 branch-stamped
+canonical documents moved from `e058005f` to the then merge base
+`d295eef0`), and `52465f4b`, a merge of `origin/main` at `571f982b`
+(845-S3 #1172, 813-S4S5 #1168, 821-S2 #1171). The merge's only conflicts
+were `verified_commit` lines: main had re-stamped the shared documents to
+`b75f6241`; every one of the 25 now carries the new merge base `571f982b`.
+`docs/cli_reference.md` was regenerated after the merge (no change). Every
+tail in this section ran on `52465f4b` unless it names another commit; each
+run had `NEXUS_GATEWAY_PORT`, `NEXUS_PLAYER_PORT`, `NEXUS_API_URL`,
+`NARRATIVE_API_PORT` and `NEXUS_SLOT` unset, and
+`lsof -nP -iTCP:8002 -iTCP:8003 -sTCP:LISTEN` was empty (exit 1) before and
+after.
+
+What the fixes change:
+
+- `gateway_listener_ports` (`nexus/runtime/contract.py`) refuses a lane port
+  (`NEXUS_GATEWAY_PORT` or `NEXUS_PLAYER_PORT`) equal to
+  `[runtime.services.gateway].port` (the tunnel's address) or
+  `[runtime.gateway].operator_port` (the default instance's operator
+  listener), naming the variable and the key. The finding's optional player
+  case is taken, for both configured ports. `test_connection_lifecycle.py`
+  set its operator-only lane equal to the configured player port; it now
+  gives the configured player port its own OS-assigned port, never bound.
+- `nexus.api.serve.main` applies `--log-config` (`_configure_logging`,
+  mirroring uvicorn 0.34's `.json`/`.yaml`/`fileConfig` dispatch) before it
+  imports the gateway, so import-time records carry the `[runtime.logs]`
+  format.
+- `test_launcher_serves_both_planes_and_stops_on_sigterm` runs under
+  `SIGTERM` and `SIGINT`, asserts exit 0 for `SIGINT`, and asserts a
+  formatted `nexus.api.static_ui` record.
+- The unmanaged-port refusal spells the configured key
+  `[runtime.services.<name>].port`, as `__init__`'s collision check does.
+- New `test_lane_refusal_names_the_lane_variable_of_the_held_port`
+  (`player`, `operator`): a dual-plane lane with one lane port held refuses
+  with "Adjust NEXUS_PLAYER_PORT or stop" or "Adjust NEXUS_GATEWAY_PORT or
+  stop", writes no pidfile and leaves the other lane port closed. It covers
+  `_listener_port_key`'s lane branches, which `4c4031e4` added; it is not a
+  red test.
+- `NEXUS_PLAYER_PORT` joins every remaining test env strip that dropped
+  only `NEXUS_GATEWAY_PORT`: `tests/test_cli.py`,
+  `tests/test_fable_probe_parsing.py`, `tests/test_logon_mock_integration.py`,
+  `tests/test_scheduler_helpers_basetemp.py`,
+  `tests/test_api/test_local_inference.py`,
+  `tests/test_runtime/test_desktop_config.py`,
+  `tests/test_runtime/test_init_plan.py`,
+  `tests/test_runtime/test_init_plan_pg.py`,
+  `tests/test_runtime/test_logging_config.py` (three) and
+  `tests/test_runtime/test_remote_auth.py`.
+
+Red runs (the new tests against the PR head `fbe20636`'s product file,
+restored afterwards):
+
+```
+$ git show HEAD:nexus/api/serve.py > nexus/api/serve.py   # HEAD = fbe20636
+$ nice -n 15 $PY -m pytest -q tests/test_api/test_serve.py::test_launcher_serves_both_planes_and_stops_on_sigterm
+E       AssertionError: 2026-10-26 20:54:14,650 - uvicorn.error - INFO - Started server process [55764]
+tests/test_api/test_serve.py:184: AssertionError
+FAILED tests/test_api/test_serve.py::test_launcher_serves_both_planes_and_stops_on_sigterm[SIGTERM]
+FAILED tests/test_api/test_serve.py::test_launcher_serves_both_planes_and_stops_on_sigterm[SIGINT]
+2 failed, 5 warnings in 3.95s
+```
+
+Both fail only at the `nexus.api.static_ui` assertion: the launcher log has
+no `static_ui` record at all, because it was logged before logging was
+configured. The `SIGINT` case had already passed its exit-0 assertion.
+
+```
+$ git show HEAD:nexus/runtime/contract.py > nexus/runtime/contract.py   # HEAD = fbe20636
+$ nice -n 15 $PY -m pytest -q tests/test_runtime/test_supervisor.py::test_gateway_listener_ports_follow_the_lane_contract
+>           with pytest.raises(ValueError, match=f"{variable}={value} is {key}"):
+E           Failed: DID NOT RAISE <class 'ValueError'>
+tests/test_runtime/test_supervisor.py:249: Failed
+1 failed, 5 warnings in 0.43s
+```
+
+Green, the launcher and supervisor unit files at `5d2734d6`'s tree:
+
+```
+nice -n 15 $PY -m pytest -q tests/test_api/test_serve.py tests/test_runtime/test_supervisor.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+85 passed, 7 warnings in 42.88s
+```
+
+PostgreSQL run 1 (load average 6.63 before the run):
+
+```
+NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit \
+  tests/test_runtime/test_supervisor_live.py tests/test_slot_routed_entrypoints.py \
+  tests/test_live_gate_clones_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 9 targets: postgres, qa640_test_golden_path_staging_*, qa640_test_issue_600_staging_c_*, qa640_test_issue_601_staging_p_*, qa640_test_live_cycle_seed_rou_*, qa640_test_maturation_enqueue__*, qa640_test_retrograde_wizard_s_*, qa885_entrypoints_*, qa885_supervisor_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+62 passed, 2 warnings in 112.72s (0:01:52)
+```
+
+PostgreSQL run 2, the full twelve-file set (load average 9.07):
+
+```
+NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit \
+  tests/test_api/test_serve.py tests/test_api/test_cors.py \
+  tests/test_api/test_route_capabilities.py tests/test_cli_contract.py \
+  tests/test_runtime/test_supervisor.py tests/test_runtime/test_readiness.py \
+  tests/test_runtime/test_readiness_pg.py tests/test_runtime/test_remote_auth.py \
+  tests/test_runtime/test_desktop_config.py tests/config/test_settings_models.py \
+  tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 17 targets: postgres, qa640_1013_readiness_* x2, qa640_816_lifecycle_test_provider, qa640_885_ren_replay_* x4, qa640_offline_gate_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:53783 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:53795 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:53783 (psycopg2), save_04@local:53795 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+533 passed, 2 skipped, 7 warnings in 333.57s (0:05:33)
+```
+
+Both PostgreSQL sets also passed at `f6af9784`, before the merge (62 passed;
+533 passed, 2 skipped, the same corpus skips).
+
+Offline suites:
+
+```
+nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3300 passed, 708 skipped, 8 warnings in 725.59s (0:12:05)
+
+nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1926 passed, 1570 skipped, 7 warnings in 59.01s
+```
+
+The first half also ran at `f6af9784`, before the merge, and failed one
+test only because `origin/main` moved during the run:
+`tests/test_scripts/test_check_exception_dispositions.py::test_repository_tree_matches_committed_baseline`
+compares the tree with `origin/main`, whose baseline 813-S4S5 (#1168) had
+just shrunk (`nexus/agents/memnon/memnon.py:347: baseline growth forbidden:
+... MEMNON.get_schema_summary ...`; `1 failed, 3299 passed, 708 skipped`).
+After the merge it passes (the run above, and the next block).
+
+```
+nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_cli_reference_doc.py \
+  tests/test_reachability.py tests/test_scripts/test_check_exception_dispositions.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+254 passed, 5 warnings in 38.10s
+$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+$ PYTHONPATH=$PWD $PY -c 'import tests.test_golden_path_live as g; print(g.API)'
+http://localhost:8003
+```
+
+UI, on the merged branch (which includes `d295eef0`'s `LocalModelRows` and
+`571f982b`'s `SettingsPane` changes):
+
+```
+nice -n 15 npm --prefix ui ci         # exit 0
+nice -n 15 npm --prefix ui run check  # exit 0
+nice -n 15 npm --prefix ui test       # exit 1, only the expected stale receipt:
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ Test Files  1 failed | 43 passed (44)
+      Tests  673 passed (673)
+nice -n 15 npm --prefix ui run build  # exit 0
+```
+
+Cargo, rechecked at 21:27 CDT on `52465f4b`, still blocked:
+
+```
+CARGO_TARGET_DIR=<scratch>/824-S2ab/cargo nice -n 15 cargo test --manifest-path ui/src-tauri/Cargo.toml --lib
+error: linking with `cc` failed: exit status: 69
+  = note: You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' from within a Terminal window to review and agree to the Xcode and Apple SDKs license.
+cargo exit 101
+```
+
+The cargo gate stays open: the owner accepts the license and the test runs
+on the PR head, or the coordinator records a waiver on #824 naming the four
+unrun Rust literals (`lib.rs:17`, `:720`, `:731`, `:737`).
+
+Static checks on the 17 Python files `5d2734d6` changes, against their
+`fbe20636` versions: Black leaves all 17 unchanged; flake8 reports only the
+two pre-existing `tests/test_connection_lifecycle.py` diagnostics (`:111`
+E501, `:161` F811), the same on both sides; mypy `--explicit-package-bases`
+reports 40 errors in 4 files on both sides, identical apart from line
+numbers (all pre-existing tomlkit indexing in tests).
