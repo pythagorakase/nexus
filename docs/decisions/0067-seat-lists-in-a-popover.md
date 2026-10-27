@@ -3,7 +3,7 @@ status: canonical
 sources:
   - ui/client/src/state-surfaces.resolved.json
   - ui/client/src/components/nexus/SettingsPane.tsx
-verified_commit: "d295eef0928706cda3a9f7c5a8b4dc103929e1ed"
+verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
 ---
 
 # 0067: Seat Lists in a Popover
