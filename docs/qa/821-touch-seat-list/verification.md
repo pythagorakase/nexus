@@ -9,10 +9,11 @@ Commits, in order:
 - `90ccacfc` merge of `origin/main` at `d295eef0`.
 - `e719f79d` re-stamps `0054-responsive-shell.md` and `0067-seat-lists-in-a-popover.md` to the merge base `d295eef0928706cda3a9f7c5a8b4dc103929e1ed`.
 - `240bbe72` the phone-width fixture and proof script. The final UI tails, the browser proof and the Python suites below ran on `e719f79d`/`240bbe72` (`240bbe72` adds only the two files under this directory).
+- `3ffa0f32` review fix: the popover test also asserts that a hover opens nothing. Its tail is under Green; it changes only `SettingsPane.test.tsx`, so the other tails stand.
 
 ## The shadcn Check
 
-The harness running this order has no subagent-spawn tool, so the implementer made the check directly (WebFetch, 2026-10-26):
+The order says to dispatch a subagent for this check. The harness running this order has no subagent-spawn tool, so the implementer made the check directly (WebFetch, 2026-10-26). This is a deviation from the order step as written; the review fixer's harness has no subagent-spawn tool either, so the coordinator either acknowledges it at landing or reruns the check through a subagent and appends the result here.
 
 - ui.shadcn.com/docs/components/popover: "Displays rich content in a portal, triggered by a button." Parts `Popover`, `PopoverTrigger`, `PopoverContent`; installed with `shadcn@latest add popover`. The page offers Radix UI, Base UI and React Aria variants; the vendored copy is the Radix one.
 - radix-ui.com Popover: the trigger "toggles the popover"; Space and Enter open and close it; Esc "Closes the popover and moves focus to `Popover.Trigger`."
@@ -28,7 +29,7 @@ Finding: Popover is the ready-made component that opens on a tap, a click, Enter
 - `nexus/api/secrets_endpoints.py:228`: `required=bool(requirements)`.
 - `SettingsPane.test.tsx:245`, `:252`, `:257`, `:682-683`: the title assertions replaced here.
 - `nexus-layout.css:2147-2158` `.lm-tip.lm-tip` (portaled tooltip tokens), `:2182-2189` `.key-provider-name`, `:929-932` the `--ring` focus precedent.
-- `ui/client/src/state-shades.test.ts:695` pins ``className={`key-status ${status}`}``; that line is untouched (now `SettingsPane.tsx:596`).
+- `ui/client/src/state-shades.test.ts:695` pins ``className={`key-status ${status}`}``; that line is untouched (now `SettingsPane.tsx:596`). The pin did not run on this branch: see the note on the stale receipt under Green.
 - `ui/scripts/state-surfaces/fixture.tsx:62-64` seeds every key row with `required_by: []`, so the state-surface fixture's rows keep the plain `<span>`.
 
 ## What Changed
@@ -64,6 +65,18 @@ Same command on `90727f93`: `Test Files  2 passed (2)`, `Tests  33 passed (33)`.
       Tests  33 passed (33)
 ```
 
+Again on `3ffa0f32`, with the hover assertion (before the touch press the test hovers the `anthropic` trigger, expects no `dialog` and `aria-expanded="false"`, then unhovers):
+
+```
+ ✓ src/shell-accessibility.test.ts (11 tests) 52ms
+ ✓ src/components/nexus/SettingsPane.test.tsx (22 tests) 793ms
+
+ Test Files  2 passed (2)
+      Tests  33 passed (33)
+```
+
+Mutation check for that assertion: with `onPointerEnter={(e) => e.currentTarget.click()}` added to the trigger in a scratch edit (reverted with `git checkout`, never committed), `npm --prefix ui test -- SettingsPane` fails the popover test with `AssertionError: expected <div data-side="bottom" …(9)></div> to be null` (`Tests  2 failed | 20 passed (22)`; the Skald-pin test also fails because its click toggles the hover-opened popover closed).
+
 Full `nice -n 15 npm --prefix ui test` on `240bbe72`:
 
 ```
@@ -75,6 +88,8 @@ Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-st
 ```
 
 Expected by Decision 821-D3: the receipt is not regenerated on this branch. The same failure also occurs on `origin/main` at `d295eef0` without this change: with `SettingsPane.tsx` and `nexus-layout.css` checked out from `origin/main`, `npm --prefix ui test -- state-shades` reports the same "Stale browser-resolved state surfaces" error (`d295eef0` changed `LocalModelRows.tsx`, which is in the input closure). The files were then restored from `HEAD`.
+
+This is not a receipt-only failure. The stale-receipt check throws at module load (`state-shades.test.ts:183`), so the whole file aborts before any `it` runs (`Tests  673 passed` counts no state-shades test). On this branch none of its tests ran, including the `key-status` pin (`:695`) and the source checks over the changed `nexus-layout.css`: `state_surfaces_read_only_state_tokens` (`:620`) and `global_tokens_are_unchanged_from_baseline_including_compound_and_alpha_values` (`:592`). No executed check proves that the new `.key-seats` and `.key-seats-trigger` color and outline declarations stay out of the state-surface closure. By reading the code they should pass: the new rules declare no custom properties and none of their selectors names a surface class. Landing note: after `resolve-state-surfaces` runs on the UI union, the coordinator confirms that these three tests pass.
 
 `nice -n 15 npm --prefix ui run check`: exit 0 (`tsc && npm run check:design-sync`, no output). `nice -n 15 npm --prefix ui run build`: exit 0, `✓ built in 2.62s` (the pre-existing chunk-size warning only).
 
