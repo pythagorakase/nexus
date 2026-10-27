@@ -740,6 +740,115 @@ dbname audit: owner targets: none
 38 passed in 34.58s
 ```
 
+## Coordinator Amendment 2: Migration 008 Seeder
+
+Coordinator Amendment 2 to the order (2026-10-26) brings
+`migrations/008_populate_mock_database.py` into scope, because 008 is a seeder
+that must track the live schema. Commit `670939cd` applies the patch in the
+section above with `git apply`, unchanged, and so closes that open item. Only
+`populate_wizard_cache` changes. The `boundary_description` and
+`approximate_area` keys left at `:320-321` are keys of the `places.extra_data`
+JSON in `populate_post_transition_data`, not columns. The five columns are
+nullable and have no default on every fleet database (Read-Only Preflight
+above), so the narrower INSERT is also valid on a database below 154. The
+Static Checks section below covers the six Python files changed before this
+amendment; this section covers the seventh.
+
+The column list, the VALUES list and the value tuple agree. The script
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/813-S4S5/a2_count_008.py`
+counts them from the file's syntax tree and splits them at the SQL `--` group
+comments:
+
+```text
+$ $PY -I a2_count_008.py migrations/008_populate_mock_database.py
+column groups:
+  (lead): 3
+  Setting phase: 15
+  Character phase: 5
+  Seed phase: 11
+  Layer/Zone: 5
+  Location: 1
+  Temporal: 1
+VALUES groups (expressions / %s placeholders):
+  (lead): 3 / 2
+  Setting (with casts for enum arrays): 15 / 15
+  Character: 5 / 4
+  Seed (with cast for seed_type enum): 11 / 11
+  Layer/Zone (with cast for layer_type): 5 / 5
+  Location: 1 / 1
+  Temporal: 1 / 1
+columns=41 value_expressions=41 placeholders=39 tuple_elements=39
+dropped names left in file: none
+leftover .get key: boundary_description
+leftover .get key: approximate_area
+AGREE
+```
+
+The two `TRUE` literals (for `id` and `traits_confirmed`) account for 41
+expressions over 39 placeholders. At `df10de98` the same script prints seed 14
+and layer/zone 7, and `columns=46 value_expressions=46 placeholders=44
+tuple_elements=44`. The grep of the Python migrations above no longer lists
+008:
+
+```text
+$ git grep -n -E "seed_starting_location|seed_initial_mystery|seed_potential_obstacles|zone_boundary_description|zone_approximate_area|clear_on_override|narration_chunk_id|hybrid_search|pad_vector|migrate_embeddings" -- 'migrations/*.py'
+migrations/023_orrery_schema.py:508:            clear_on_override     jsonb,
+migrations/023_orrery_schema.py:570:            narration_chunk_id       bigint,
+migrations/023_orrery_schema.py:582:            narration_chunk_id     bigint,
+migrations/023_orrery_schema.py:668:        constraint_name="orrery_resolutions_narration_chunk_id_fkey",
+migrations/023_orrery_schema.py:669:        column_name="narration_chunk_id",
+migrations/023_orrery_schema.py:676:        constraint_name="world_events_narration_chunk_id_fkey",
+migrations/023_orrery_schema.py:677:        column_name="narration_chunk_id",
+migrations/042_orrery_entity_pair_tags.py:142:                clear_on_override     jsonb,
+migrations/042_orrery_entity_pair_tags.py:190:            "COMMENT ON COLUMN entity_pair_tags.clear_on_override IS "
+migrations/046_canonical_grieving_state.py:58:                    clear_on_override, template_id, source_kind
+migrations/046_canonical_grieving_state.py:64:                       et.clear_on_override,
+```
+
+`NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_test_provider_seeder.py tests/test_mock_openai.py tests/test_config/test_test_provider_database.py tests/test_orrery/test_migrate.py`
+at `670939cd` (load 4.80, no wait), with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`
+and `NEXUS_SLOT` unset. The three seeder files gave `2 failed, 31 passed, 5
+errors` at `4cbc5a2f` (section above); `tests/test_orrery/test_migrate.py`
+adds its 77.
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 20 targets: postgres, qa640_816_empty_* x4, qa640_816_legacy_trait_*, qa640_816_singleton_* x2, qa640_816_test_provider_* x5, qa640_grieving_migration_*, qa640_vocab_migration_* x6
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+115 passed in 46.75s
+```
+
+`PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py`
+at `670939cd`. No document declares 008 as a source, so no stamp moves:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+89 passed, 5 warnings in 6.88s
+```
+
+Static checks on `migrations/008_populate_mock_database.py` at `670939cd`,
+against `origin/main` at `d295eef0`, with the method of the Static Checks
+section below:
+
+- `black --check`: `1 file would be left unchanged.`
+- `flake8`, with main's copy checked under main's own `.flake8`: 13
+  diagnostics on each side, all E501. The branch-only list (file, code and
+  message) is empty, and no diagnostic falls on a changed line.
+- `mypy --explicit-package-bases`: no diagnostic in 008 on either side. The
+  branch prints `Success: no issues found in 1 source file`; main's extracted
+  tree prints `Found 171 errors in 33 files (checked 1 source file)`, all in
+  modules it follows. The branch-only list is empty.
+- `$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
+  `OK: exception disposition coverage and shrink-only baseline verified.` The
+  lint covers `nexus/` and `scripts/`, so 008 is outside it.
+- `PYTHONPATH=$PWD $PY scripts/check_migration_comments.py`: `OK: every object
+  created after migration 129 has a comment.` 008 is below the watermark.
+- The four pre-commit hooks passed on `670939cd`.
+
 ## Static Checks
 
 Rerun at `b7a7ed6d` against `origin/main` at `d295eef0`. The script is
