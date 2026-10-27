@@ -16,8 +16,14 @@ import pytest
 import tomlkit
 
 from nexus import cli
-from nexus.config.settings_models import RuntimeServiceSettings
+from nexus.config import load_settings
+from nexus.config.settings_models import RuntimeServiceSettings, RuntimeSettings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
+from nexus.runtime.contract import (
+    GatewayPorts,
+    gateway_listener_ports,
+    operator_url,
+)
 from nexus.runtime import supervisor as supervisor_module
 from nexus.runtime.log_capture import (
     WriterProbeError,
@@ -172,6 +178,7 @@ def test_json_status_reports_resolved_runtime_environment_config(
     runtime_config = _write_config(tmp_path)
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(runtime_config))
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
     monkeypatch.setattr(
         Supervisor,
         "_fetch_runtime_status",
@@ -184,6 +191,120 @@ def test_json_status_reports_resolved_runtime_environment_config(
     result = json.loads(capsys.readouterr().out)
     assert result["ok"] is True
     assert result["data"]["config"] == str(runtime_config.resolve())
+
+
+# ---------------------------------------------------------------------------
+# The gateway's two listeners and the lane contract (issue #824)
+# ---------------------------------------------------------------------------
+
+
+def _ported_runtime(tmp_path: Path, *, player: int, operator: int) -> RuntimeSettings:
+    """A validated runtime whose gateway listeners take the given ports."""
+    document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
+    runtime = cast(Any, document["runtime"])
+    runtime["state_dir"] = str(tmp_path / "state")
+    runtime["services"]["gateway"]["port"] = player
+    runtime["gateway"]["operator_port"] = operator
+    path = tmp_path / "ported.toml"
+    path.write_text(tomlkit.dumps(document), encoding="utf-8")
+    settings_runtime = load_settings(path).runtime
+    assert settings_runtime is not None
+    return settings_runtime
+
+
+def test_gateway_listener_ports_follow_the_lane_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """NEXUS_GATEWAY_PORT names the operator listener; NEXUS_PLAYER_PORT the player."""
+    player, operator, lane, lane_player = (_free_port() for _ in range(4))
+    runtime = _ported_runtime(tmp_path, player=player, operator=operator)
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
+
+    # No lane: the configured service port and operator port.
+    assert gateway_listener_ports(runtime) == GatewayPorts(player, operator)
+    assert operator_url(runtime) == f"http://127.0.0.1:{operator}"
+
+    # An operator-only lane never binds the configured player port.
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(lane))
+    assert gateway_listener_ports(runtime) == GatewayPorts(None, lane)
+    assert operator_url(runtime) == f"http://127.0.0.1:{lane}"
+    assert operator_url(None) == f"http://127.0.0.1:{lane}"
+
+    # A dual-plane lane names both listeners.
+    monkeypatch.setenv("NEXUS_PLAYER_PORT", str(lane_player))
+    assert gateway_listener_ports(runtime) == GatewayPorts(lane_player, lane)
+
+    # Equal lane ports are refused.
+    monkeypatch.setenv("NEXUS_PLAYER_PORT", str(lane))
+    with pytest.raises(ValueError, match=f"cannot share port {lane}"):
+        gateway_listener_ports(runtime)
+
+    # A malformed override is loud, never the configured port.
+    monkeypatch.setenv("NEXUS_PLAYER_PORT", "styrofoam")
+    with pytest.raises(ValueError, match="NEXUS_PLAYER_PORT must be an integer"):
+        gateway_listener_ports(runtime)
+    monkeypatch.setenv("NEXUS_PLAYER_PORT", "70000")
+    with pytest.raises(ValueError, match="NEXUS_PLAYER_PORT must be 1-65535"):
+        gateway_listener_ports(runtime)
+
+    # A player override without a lane is refused, naming both variables.
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT")
+    monkeypatch.setenv("NEXUS_PLAYER_PORT", str(lane_player))
+    with pytest.raises(ValueError) as refused:
+        gateway_listener_ports(runtime)
+    assert "NEXUS_PLAYER_PORT" in str(refused.value)
+    assert "NEXUS_GATEWAY_PORT" in str(refused.value)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT")
+
+    # Equal configured ports are refused too.
+    same = runtime.model_copy(deep=True)
+    same.gateway.operator_port = player
+    with pytest.raises(ValueError, match=f"cannot share port {player}"):
+        gateway_listener_ports(same)
+
+    # A runtime without [runtime.services.gateway] has no listeners.
+    external = RuntimeSettings.model_validate(
+        {
+            "profile": "external",
+            "external": {"gateway_url": "http://127.0.0.1:1"},
+            "gateway": runtime.gateway.model_dump(),
+        }
+    )
+    with pytest.raises(ValueError, match=r"no \[runtime.services.gateway\]"):
+        gateway_listener_ports(external)
+
+    # A bare install (no runtime) reads the model default.
+    assert operator_url(None) == "http://127.0.0.1:8003"
+
+
+def test_gateway_url_names_the_operator_listener(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The local profile's gateway URL is the operator listener, lane applied."""
+    player, operator, lane = _free_port(), _free_port(), _free_port()
+    runtime = _ported_runtime(tmp_path, player=player, operator=operator)
+    assert runtime.services["gateway"].port == player
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
+    config = tmp_path / "ported.toml"
+
+    supervisor = Supervisor.from_config(config)
+    assert supervisor.gateway_url() == f"http://127.0.0.1:{operator}"
+    assert supervisor.gateway_ports == GatewayPorts(player, operator)
+
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(lane))
+    lane_supervisor = Supervisor.from_config(config)
+    assert lane_supervisor.gateway_url() == f"http://127.0.0.1:{lane}"
+    # The lane keeps the configured service port and isolates its state.
+    assert lane_supervisor.runtime.services["gateway"].port == player
+    assert lane_supervisor.state_dir == supervisor.state_dir / f"gateway-{lane}"
+
+    # A player override without a lane refuses to build a supervisor.
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT")
+    monkeypatch.setenv("NEXUS_PLAYER_PORT", str(lane))
+    with pytest.raises(RuntimeError_, match="NEXUS_PLAYER_PORT is set without"):
+        Supervisor.from_config(config)
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +337,7 @@ def _logging_supervisor(
         runtime["health"]["poll_interval_seconds"] = poll_interval_seconds
     if gateway_port is not None:
         runtime["services"]["gateway"]["port"] = gateway_port
+        runtime["gateway"]["operator_port"] = _free_port()
     echo = tomlkit.table()
     echo["command"] = command or ECHO_COMMAND
     echo["port"] = 1
@@ -1104,6 +1226,7 @@ def _json_status(
 ) -> dict[str, Any]:
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(supervisor.config_path))
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
     monkeypatch.setattr(sys, "argv", ["nexus", "--json", "status"])
     assert cli.main() == 0
     envelope = json.loads(capsys.readouterr().out)

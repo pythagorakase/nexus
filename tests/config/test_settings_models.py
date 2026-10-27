@@ -991,6 +991,20 @@ def test_gateway_cors_origins_reject_wildcard() -> None:
         Settings(**raw)
 
 
+@pytest.mark.parametrize("service", ["gateway", "mock_openai"])
+def test_gateway_operator_port_rejects_a_service_port(service: str) -> None:
+    """The operator listener cannot share a port with any configured service."""
+    raw = _nexus_toml_dict()
+    port = raw["runtime"]["services"][service]["port"]
+    raw["runtime"]["gateway"]["operator_port"] = port
+
+    with pytest.raises(ValidationError) as refused:
+        Settings(**raw)
+    message = str(refused.value)
+    assert f"[runtime.gateway].operator_port {port}" in message
+    assert f"[runtime.services.{service}].port" in message
+
+
 def test_deep_query_k_ships_at_todays_value() -> None:
     """The shipped key and both validated defaults preserve fifteen results."""
     assert _nexus_toml_dict()["lore"]["retrieval"]["deep_query_k"] == 15

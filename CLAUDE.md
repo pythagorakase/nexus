@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Install dependencies: `poetry install`
 - Register pre-commit hooks (once per checkout): `poetry run pre-commit install`
 - Run tests: `poetry run pytest`
-- Run the full gate (PostgreSQL-backed tests included): `NEXUS_RUN_POSTGRES=1 poetry run pytest`, with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset. A summary with hundreds of skips is not a passing gate.
+- Run the full gate (PostgreSQL-backed tests included): `NEXUS_RUN_POSTGRES=1 poetry run pytest`, with `NEXUS_GATEWAY_PORT`, `NEXUS_PLAYER_PORT` and `NEXUS_API_URL` unset. A summary with hundreds of skips is not a passing gate.
 - Secret-store guard (mandatory, fail-closed, inside pytest): a gate run whose final terminal summary lacks `secret-store guard: active; nexus-api: denied` is not a gate; `docs/agent_workflow.md` lists what the guard covers, its flags and child-process opt-out, and its gaps.
 - Run specific test: `poetry run pytest tests/path/to/test.py::test_name`
 - Format code: `poetry run black .`

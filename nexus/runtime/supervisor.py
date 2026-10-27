@@ -43,9 +43,14 @@ from nexus.config.settings_models import (
 )
 from nexus.runtime.contract import (
     GATEWAY_PORT_ENV,
+    OPERATOR_HOST,
+    PLAYER_PORT_ENV,
     RUNTIME_CONFIG_ENV,
     RUNTIME_STATUS_PATH,
+    GatewayPorts,
+    gateway_listener_ports,
     gateway_port_override,
+    operator_url,
 )
 from nexus.runtime.home import (
     RuntimeHomeError,
@@ -67,6 +72,9 @@ from nexus.runtime.logging_config import build_logging_config
 from nexus.runtime.remote_auth import build_runtime_request_auth
 
 LOG_CONFIG_PLACEHOLDER = "log_config"
+OPERATOR_PORT_PLACEHOLDER = "operator_port"
+# ``{port}`` of the gateway's argv in an operator-only lane: no player listener.
+NO_PLAYER_LISTENER = "off"
 LOG_CONFIG_FILENAME = "logging.json"
 _TAIL_BLOCK_BYTES = 64 * 1024
 # A log mark checks the marked file's identity with a crc32 of this prefix.
@@ -405,10 +413,11 @@ class Supervisor:
         self.root = repo_root()
         self.state_dir = self.home.state_dir
         self.logs_dir = self.home.logs_dir
-        # NEXUS_GATEWAY_PORT: run this instance's gateway on an alternate
-        # port with fully isolated state (pidfiles, logs, slot bookkeeping),
-        # so agent/test sessions and the desktop app can coexist on one
-        # checkout without ever contending for the configured port.
+        # NEXUS_GATEWAY_PORT: run this instance's gateway operator listener
+        # on an alternate port with fully isolated state (pidfiles, logs, slot
+        # bookkeeping), so agent/test sessions and the desktop app can coexist
+        # on one checkout without ever contending for the configured ports.
+        # NEXUS_PLAYER_PORT adds the lane's player listener (issue #824).
         try:
             self._gateway_port_override = gateway_port_override()
         except ValueError as exc:
@@ -417,24 +426,42 @@ class Supervisor:
         # it is the ownership ledger for fixed-port siblings (see
         # _start_service's borrow path).
         self._base_state_dir = self.state_dir
-        if self._gateway_port_override is not None:
-            gateway = self.runtime.services.get("gateway")
-            if gateway is None:
-                raise RuntimeError_(
-                    f"{GATEWAY_PORT_ENV} is set but nexus.toml has no "
-                    "[runtime.services.gateway] to apply it to."
-                )
-            for name, service in self.runtime.services.items():
-                if name != "gateway" and service.port == self._gateway_port_override:
-                    raise RuntimeError_(
-                        f"{GATEWAY_PORT_ENV}={self._gateway_port_override} "
-                        f"collides with [runtime.services.{name}] port "
-                        f"{service.port}; pick a port no service is "
-                        "configured on."
+        self.gateway_ports: Optional[GatewayPorts] = None
+        if self.runtime.profile == "local":
+            try:
+                self.gateway_ports = gateway_listener_ports(self.runtime)
+            except ValueError as exc:
+                raise RuntimeError_(str(exc)) from exc
+            lane = self._gateway_port_override is not None
+            listeners = [
+                (
+                    (
+                        f"{GATEWAY_PORT_ENV}"
+                        if lane
+                        else "[runtime.gateway].operator_port"
+                    ),
+                    self.gateway_ports.operator,
+                ),
+            ]
+            if self.gateway_ports.player is not None:
+                listeners.append(
+                    (
+                        PLAYER_PORT_ENV if lane else "[runtime.services.gateway].port",
+                        self.gateway_ports.player,
                     )
-            gateway.port = self._gateway_port_override
-            self.state_dir = self.state_dir / f"gateway-{gateway.port}"
-            self.logs_dir = self.logs_dir / f"gateway-{gateway.port}"
+                )
+            for label, port in listeners:
+                for name, service in self.runtime.services.items():
+                    if name != "gateway" and service.port == port:
+                        raise RuntimeError_(
+                            f"{label}={port} collides with "
+                            f"[runtime.services.{name}] port {service.port}; "
+                            "pick a port no service is configured on."
+                        )
+            if lane:
+                operator = self.gateway_ports.operator
+                self.state_dir = self.state_dir / f"gateway-{operator}"
+                self.logs_dir = self.logs_dir / f"gateway-{operator}"
 
         self._start_lock_file: Optional[BinaryIO] = None
         self._start_lock_guard = threading.RLock()
@@ -609,11 +636,52 @@ class Supervisor:
             return int(env_slot)
         return self.runtime.default_slot
 
+    def _gateway_ports(self) -> GatewayPorts:
+        """The local gateway's listener ports (resolved in ``__init__``)."""
+        if self.gateway_ports is None:
+            raise RuntimeError_(
+                "The gateway's listener ports exist only in the local profile; "
+                f"this runtime's profile is {self.runtime.profile!r}."
+            )
+        return self.gateway_ports
+
+    def _listeners(
+        self, name: str, service: RuntimeServiceSettings
+    ) -> List[Tuple[str, str, int]]:
+        """``(plane, host, port)`` of each listener a service opens.
+
+        The gateway opens its operator listener on 127.0.0.1 and, unless the
+        lane is operator-only, its player listener on the service host; any
+        other service opens its one port, with no plane.
+        """
+        if name != "gateway":
+            return [("", service.host, service.port)]
+        ports = self._gateway_ports()
+        listeners = [("operator", OPERATOR_HOST, ports.operator)]
+        if ports.player is not None:
+            listeners.insert(0, ("player", service.host, ports.player))
+        return listeners
+
     def _service_argv(self, service: RuntimeServiceSettings) -> List[str]:
+        """Render a service's argv template.
+
+        ``{operator_port}`` is the gateway's operator listener for every
+        service; for the gateway itself ``{port}`` is its player listener, or
+        ``off`` in an operator-only lane.
+        """
+        port = str(service.port)
+        if service is self.runtime.services.get("gateway"):
+            player = self._gateway_ports().player
+            port = NO_PLAYER_LISTENER if player is None else str(player)
         substitutions = {
             "python": sys.executable,
             "host": service.host,
-            "port": str(service.port),
+            "port": port,
+            OPERATOR_PORT_PLACEHOLDER: str(
+                self.gateway_ports.operator
+                if self.gateway_ports is not None
+                else self.runtime.gateway.operator_port
+            ),
             LOG_CONFIG_PLACEHOLDER: str(self.log_config_path()),
         }
         return [part.format(**substitutions) for part in service.command]
@@ -760,7 +828,11 @@ class Supervisor:
         that wait raises, the record that names the writer stays.
         """
         health = self.runtime.health
-        url = f"http://{service.host}:{service.port}{service.health_path}"
+        # Every listener must answer; a gateway listener must name its plane.
+        pending = {
+            f"http://{host}:{port}{service.health_path}": plane
+            for plane, host, port in self._listeners(name, service)
+        }
         deadline = time.monotonic() + health.startup_deadline_seconds
         while True:
             # An exited child answers kill(pid, 0) until it is reaped.
@@ -773,12 +845,23 @@ class Supervisor:
                     f"Service '{name}' exited during startup. Last log lines:\n"
                     f"{excerpt}"
                 )
-            try:
-                if requests.get(url, timeout=health.timeout_seconds).status_code == 200:
-                    return
-            except requests.RequestException:
-                pass
+            for url, plane in list(pending.items()):
+                answer = self._health_answer(url)
+                if answer is None:
+                    continue
+                if not plane or answer.get("plane") == plane:
+                    del pending[url]
+                    continue
+                self._abandon_service(name, pid, writer_pid)
+                raise RuntimeError_(
+                    f"Service '{name}' answered {url} as plane "
+                    f"{answer.get('plane')!r}, not {plane!r}; its command must "
+                    "serve each projection on its own listener."
+                )
+            if not pending:
+                return
             if time.monotonic() > deadline:
+                url = next(iter(pending))
                 self._stop_pid(pid)
                 self._await_writer(name, writer_pid)
                 self._unlink_own_record(name, pid)
@@ -789,6 +872,24 @@ class Supervisor:
                     f"{excerpt}"
                 )
             time.sleep(health.poll_interval_seconds)
+
+    def _health_answer(self, url: str) -> Optional[Dict[str, Any]]:
+        """A listener's 200 health body, ``{}`` when not a JSON object, else None."""
+        try:
+            response = requests.get(url, timeout=self.runtime.health.timeout_seconds)
+        except (
+            requests.RequestException
+        ):  # nexus-exception-disposition: retry; reason=not up; safety=deadline
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            body = response.json()
+        except (
+            ValueError
+        ):  # nexus-exception-disposition: fail; reason=body; safety=plane
+            return {}
+        return body if isinstance(body, dict) else {}
 
     def _start_service(
         self,
@@ -839,11 +940,13 @@ class Supervisor:
                     }
                 # Port open but not verifiably ours: fall through to the
                 # unmanaged-port refusal below.
-            if _port_open(service.host, service.port):
-                occupant = _describe_port_occupant(service.port)
+            for _plane, host, port in self._listeners(name, service):
+                if not _port_open(host, port):
+                    continue
+                occupant = _describe_port_occupant(port)
                 listener = f" Listener: {occupant}." if occupant else ""
                 raise RuntimeError_(
-                    f"Port {service.port} is already in use by an unmanaged process; "
+                    f"Port {port} is already in use by an unmanaged process; "
                     f"refusing to spawn '{name}'. Adjust [runtime.services.{name}] "
                     f"port or stop the other process.{listener} If the listener is "
                     "a stale NEXUS service from a dead session, kill that pid. "
@@ -858,7 +961,7 @@ class Supervisor:
             # The record exists before the health wait: a startup failure whose
             # writer cannot be waited out leaves the record that names it, so the
             # next start waits for that writer instead of spawning a second one.
-            record = {
+            record: Dict[str, Any] = {
                 "pid": pid,
                 "service": name,
                 "port": service.port,
@@ -869,6 +972,10 @@ class Supervisor:
                 "log": str(self.log_path(name)),
                 "log_writer_pid": writer_pid,
             }
+            if name == "gateway":
+                # null in an operator-only lane, which opens no player listener.
+                record["port"] = self._gateway_ports().player
+                record["operator_port"] = self._gateway_ports().operator
             try:
                 self._write_pidfile(name, record)
             except Exception as exc:
@@ -939,7 +1046,7 @@ class Supervisor:
                 elif echo:
                     print(
                         f"started {name} (pid {record['pid']}) on "
-                        f"http://{service.host}:{service.port}"
+                        f"{self._listener_summary(name, service)}"
                     )
         except Exception as exc:
             # Roll back only pids this invocation spawned. A concurrent start's
@@ -956,7 +1063,7 @@ class Supervisor:
         gateway = self.runtime.services.get("gateway")
         if echo and gateway:
             print(
-                f"NEXUS is up: http://{gateway.host}:{gateway.port} "
+                f"NEXUS is up: {self._listener_summary('gateway', gateway)} "
                 f"(slot {resolved_slot}, profile local)"
             )
 
@@ -969,6 +1076,19 @@ class Supervisor:
             "slot": resolved_slot,
             "services": started,
         }
+
+    def _listener_summary(self, name: str, service: RuntimeServiceSettings) -> str:
+        """``player http://H:P, operator http://127.0.0.1:O`` for the gateway.
+
+        An operator-only lane omits the player part; another service shows
+        its one URL.
+        """
+        if name != "gateway":
+            return f"http://{service.host}:{service.port}"
+        return ", ".join(
+            f"{plane} http://{host}:{port}"
+            for plane, host, port in self._listeners(name, service)
+        )
 
     def _attach_external(self) -> Dict[str, Any]:
         external = self.runtime.external
@@ -1092,13 +1212,22 @@ class Supervisor:
             if pid is None:
                 continue
             stopped[name] = {"pid": pid}
-            if record and not self._wait_port_closed(
-                record.get("host", "127.0.0.1"), record["port"]
-            ):
-                raise RuntimeError_(
-                    f"Service '{name}' was signaled but port {record['port']} is "
-                    f"still open - a process outlived shutdown."
-                )
+            if record is None:
+                continue
+            # The gateway's record carries its operator listener too, and a
+            # null player port in an operator-only lane.
+            ports = [
+                (record.get("host", "127.0.0.1"), record.get("port")),
+                (OPERATOR_HOST, record.get("operator_port")),
+            ]
+            for host, port in ports:
+                if port is None:
+                    continue
+                if not self._wait_port_closed(host, int(port)):
+                    raise RuntimeError_(
+                        f"Service '{name}' was signaled but port {port} is "
+                        f"still open - a process outlived shutdown."
+                    )
         return {"success": True, "stopped": stopped}
 
     def restart(
@@ -1136,13 +1265,16 @@ class Supervisor:
     # ------------------------------------------------------------------
 
     def gateway_url(self) -> str:
-        """Base URL of the gateway this profile names (the port override applied)."""
+        """Base URL of the gateway this profile names.
+
+        The local profile names the operator listener (the lane override
+        applied), which serves ``/runtime/status``.
+        """
         if self.runtime.profile == "external":
             return self.runtime.external.gateway_url.rstrip("/")
         if self.runtime.profile == "remote":
             return self.runtime.remote.base_url.rstrip("/")
-        gateway = self.runtime.services["gateway"]
-        return f"http://{gateway.host}:{gateway.port}"
+        return operator_url(self.runtime)
 
     def _fetch_runtime_status(self) -> Dict[str, Any]:
         url = self.gateway_url() + RUNTIME_STATUS_PATH
@@ -1185,12 +1317,18 @@ class Supervisor:
                         "uptime_seconds": round(uptime, 1),
                         "log_writer": self.writer_state(name),
                     }
+                    if name == "gateway":
+                        processes[name]["operator_port"] = record.get("operator_port")
                 else:
                     processes[name] = {
                         "state": "stopped",
                         "port": service.port,
                         "log_writer": self.writer_state(name),
                     }
+                    if name == "gateway":
+                        ports = self._gateway_ports()
+                        processes[name]["port"] = ports.player
+                        processes[name]["operator_port"] = ports.operator
             result["processes"] = processes
         result["runtime"] = self._fetch_runtime_status()
         return result

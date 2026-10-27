@@ -1389,6 +1389,7 @@ state_dir = ".nexus/runtime"  # relative paths resolve against the runtime home 
 default_slot = 1              # NEXUS_SLOT for spawned services (--slot/env override)
 
 [runtime.gateway]
+operator_port = 8003  # operator listener on 127.0.0.1: the CLI, the desktop shell and NEXUS_GATEWAY_PORT lanes
 # Same-origin app origins plus the Vite dev server. `*` was retired in #458:
 # with credentials it let any site ride the Cloudflare Access cookie.
 cors_allowed_origins = [
@@ -1473,9 +1474,9 @@ slots = [1, 2, 3, 4, 5]               # slot databases the slots.* checks read
 [runtime.services.gateway]
 # argv template — {python} is the current interpreter; no shell in the path
 # {log_config} is the dictConfig JSON the supervisor writes from [runtime.logs].
-command = ["{python}", "-m", "uvicorn", "nexus.api.narrative:app", "--host", "{host}", "--port", "{port}", "--log-config", "{log_config}"]
+command = ["{python}", "-m", "nexus.api.serve", "--host", "{host}", "--port", "{port}", "--operator-port", "{operator_port}", "--log-config", "{log_config}"]
 host = "127.0.0.1"
-port = 8002 # the desktop shell's runtimeOrigin pins this; agent/test shells export NEXUS_GATEWAY_PORT for an isolated-state instance on another port
+port = 8002 # player listener: the Cloudflare tunnel's address; NEXUS_PLAYER_PORT replaces it in a dual-plane lane
 health_path = "/health"
 autorestart = "on-failure"  # honored by the foreground supervisor only
 

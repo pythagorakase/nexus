@@ -1062,7 +1062,7 @@ def _check_log_writers(ctx: ReadinessContext) -> Outcome:
     if runtime.profile != "local":
         return _passed(f"profile {runtime.profile}: no supervised local services")
     try:
-        # A copy: the supervisor applies NEXUS_GATEWAY_PORT to its settings.
+        # A copy: the supervisor resolves the lane overrides against its settings.
         supervisor = Supervisor(
             settings.model_copy(deep=True), ctx.require_home().config_path
         )
@@ -1138,7 +1138,7 @@ def _check_gateway_reachable(ctx: ReadinessContext) -> Outcome:
     settings = ctx.require_settings()
     runtime = ctx.require_runtime()
     try:
-        # A copy: the supervisor applies NEXUS_GATEWAY_PORT to its settings.
+        # A copy: the supervisor resolves the lane overrides against its settings.
         supervisor = Supervisor(
             settings.model_copy(deep=True), ctx.require_home().config_path
         )

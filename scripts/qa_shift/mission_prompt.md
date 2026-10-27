@@ -32,7 +32,7 @@ issue, dry-well, wall-clock, and token settings.
 ## Hard Boundaries
 
 - Use only the configured disposable slot and gateway port. Never stop, query,
-  or mutate another slot or the normal port-8002 runtime.
+  or mutate another slot or the normal runtime on ports 8002 and 8003.
 - Use the generated isolated runtime config and configured `target_model` for
   every remote-model call. Verify effective routing from usage events and
   generation metadata/logs, not configuration alone.

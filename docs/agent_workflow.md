@@ -13,9 +13,9 @@ more specific instructions.
 - Open a ready-for-review PR autonomously when the branch is validated. Use a
   draft PR only when the user explicitly asks for one.
 - Validate against the full gate before opening or merging a PR:
-  `NEXUS_RUN_POSTGRES=1 poetry run pytest` with `NEXUS_GATEWAY_PORT` and
-  `NEXUS_API_URL` unset. The PostgreSQL-gated tests are where fixture debt
-  accumulates; a run that skips them is not the gate.
+  `NEXUS_RUN_POSTGRES=1 poetry run pytest` with `NEXUS_GATEWAY_PORT`,
+  `NEXUS_PLAYER_PORT` and `NEXUS_API_URL` unset. The PostgreSQL-gated tests
+  are where fixture debt accumulates; a run that skips them is not the gate.
 - The gate includes the document freshness check in
   `tests/test_doc_front_matter.py`: a branch that changes a source declared by
   a canonical document must re-stamp that document's `verified_commit` (see

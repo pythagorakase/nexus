@@ -44,7 +44,7 @@ were already served by the gateway.
   "slot": 5,
   "database": {"ok": true, "slot": 5, "dbname": "save_05"},
   "services": {
-    "gateway": {"ok": true, "port": 8002},
+    "gateway": {"ok": true, "port": 8002, "operator_port": 8003},
     "mock_openai": {"ok": true, "port": 5102}
   },
   "auth": {"header": "X-Nexus-Auth", "enforced": false},
@@ -166,9 +166,10 @@ destructive.
 apps from the gateway. Each reuses the gateway's route objects in
 registration order (the app-shell catch-all stays last), its middleware,
 exception handlers, metadata, and root path, and runs the gateway's lifespan
-against the gateway app itself so shared handlers see one scheduler; only one
-projection may run that lifespan at a time. Serving the gateway app itself
-beside a projection in one process is not yet detected.
+against the gateway app itself so shared handlers see one scheduler. The
+projections share the gateway's routes, handlers and lifespan, and the
+lifespan runs once per process: a second projection, or the gateway app
+served beside a projection, fails at lifespan start.
 
 The registry rule: a route enters the gateway only with an entry.
 `nexus.api.narrative` calls `require_classified(app)` at import, so an
@@ -177,10 +178,15 @@ registered after the app-shell catch-all fails the import, and the
 projections refuse the same. `tests/test_api/test_route_capabilities.py`
 also fails on entries no route uses.
 
-The gateway still serves the whole runtime on one listener. Binding the
-operator projection to loopback or a Unix socket, pointing the Cloudflare
-tunnel at the player projection, and routing the Tauri shell to the operator
-projection is the next slice, after the runtime home (#820).
+The `gateway` service is one process with two listeners
+(`nexus.api.serve`): the player projection on the service port
+(`[runtime.services.gateway].port`, 8002, the address the Cloudflare tunnel
+reaches, which ruling 43 on #824 left unchanged) and the operator projection
+on `127.0.0.1:<operator_port>` (`[runtime.gateway].operator_port`, 8003). The
+operator listener starts first and runs the one lifespan; the player listener
+runs none. A local browser on `http://127.0.0.1:8002` therefore shows the
+player plane: no settings, keys or models. Local administration uses the
+desktop shell or `http://127.0.0.1:8003` (Decision D-824-LOCAL-BROWSER).
 `GET /health` reports the plane of the app that served it (`"plane": "player"`
 or `"operator"`); the unprojected gateway reports `operator`, because it serves
 every route. The client's connectivity probe reads `/health` and keeps the
@@ -317,18 +323,23 @@ in `docs/cli.md`).
   double-start; partial startups are rolled back so `up` is all-or-nothing.
   The refusal identifies the listener (pid, age, command) when `lsof` is
   available.
-- `NEXUS_GATEWAY_PORT=<port>` runs the gateway on an alternate port with
-  fully isolated state (`state_dir/gateway-<port>/`), so an agent or test
-  session coexists with the desktop app's instance on one checkout.
-  Fixed-port siblings (the mock provider) always belong to the default
-  instance: an override instance borrows one only when the default state
-  ledger proves the listener is managed (live pidfile on that port, and
-  healthy), skips it loudly when it is not running, and never spawns its
-  own — so the default stack starts cleanly in either order. A foreign
-  listener answering the health path is still refused; overrides equal to
-  a configured sibling port are rejected at startup. `nexus down` under
-  the override stops only the override instance. The desktop shell never
-  sets this — its `runtimeOrigin` is pinned to the configured port.
+- `NEXUS_GATEWAY_PORT=<port>` runs the gateway's operator listener on an
+  alternate port with fully isolated state (`state_dir/gateway-<port>/`), so
+  an agent or test session coexists with the desktop app's instance on one
+  checkout. Such a lane is operator-only: one listener serves the whole
+  runtime and the configured player port (8002) is never bound. A
+  dual-plane lane also sets `NEXUS_PLAYER_PORT=<port>` for its player
+  listener; `NEXUS_PLAYER_PORT` without `NEXUS_GATEWAY_PORT`, or both equal,
+  is refused before anything starts. Fixed-port siblings (the mock provider)
+  always belong to the default instance: an override instance borrows one
+  only when the default state ledger proves the listener is managed (live
+  pidfile on that port, and healthy), skips it loudly when it is not
+  running, and never spawns its own — so the default stack starts cleanly
+  in either order. A foreign listener answering the health path is still
+  refused; a lane port equal to a configured sibling port is rejected at
+  startup. `nexus down` under the override stops only the override
+  instance. The desktop shell never sets either variable — the desktop
+  shell's `runtimeOrigin` is the configured operator port.
 - The gateway keeps the launch lifecycle of the app-managed local model
   and its download worker, and captures both through the same log writer
   under the same `[runtime.logs]` policy: `local-model.log` (llama-server)
