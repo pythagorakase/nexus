@@ -93,7 +93,10 @@ try {
   readings.open = {
     dialogs: await dialog.count(),
     text: await dialog.textContent(),
-    accessibleName: await dialog.evaluate(el => document.getElementById(el.getAttribute('aria-labelledby'))?.textContent ?? null),
+    // The browser's computed accessible name, resolved by Playwright's
+    // accessibility engine rather than read off aria-labelledby by hand.
+    namedDialogs: await page.getByRole('dialog', { name: 'required-missing', exact: true }).count(),
+    ariaSnapshot: await dialog.ariaSnapshot(),
     insideCard: await dialog.evaluate(el => document.getElementById('set-keys').contains(el)),
     dialog: box(await dialog.boundingBox()),
     triggerExpanded: await trigger.getAttribute('aria-expanded'),
@@ -105,7 +108,8 @@ try {
   };
   assert.equal(readings.open.dialogs, 1);
   assert.equal(readings.open.text, 'Skald · Summaries');
-  assert.equal(readings.open.accessibleName, 'required-missing');
+  assert.equal(readings.open.namedDialogs, 1);
+  assert.match(readings.open.ariaSnapshot, /^- dialog "required-missing"/);
   assert.equal(readings.open.insideCard, false);
   assert.equal(readings.open.triggerExpanded, 'true');
   assert.ok(readings.open.dialog.x >= 0 && readings.open.dialog.right <= 390, 'dialog inside 0..390');

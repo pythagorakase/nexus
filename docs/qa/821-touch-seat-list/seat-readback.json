@@ -29,7 +29,8 @@
     "open": {
       "dialogs": 1,
       "text": "Skald · Summaries",
-      "accessibleName": "required-missing",
+      "namedDialogs": 1,
+      "ariaSnapshot": "- dialog \"required-missing\": Skald · Summaries",
       "insideCard": false,
       "dialog": {
         "x": 239,

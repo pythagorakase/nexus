@@ -10,6 +10,8 @@ Commits, in order:
 - `e719f79d` re-stamps `0054-responsive-shell.md` and `0067-seat-lists-in-a-popover.md` to the merge base `d295eef0928706cda3a9f7c5a8b4dc103929e1ed`.
 - `240bbe72` the phone-width fixture and proof script. The final UI tails, the browser proof and the Python suites below ran on `e719f79d`/`240bbe72` (`240bbe72` adds only the two files under this directory).
 - `3ffa0f32` review fix: the popover test also asserts that a hover opens nothing. Its tail is under Green; it changes only `SettingsPane.test.tsx`, so the other tails stand.
+- `de0ac056` records the hover check and the state-shades coverage gap (this file only).
+- The second review fix (the commit that adds this line): `seat-proof.mjs` reads the dialog's accessible name from Playwright's accessibility engine. The phone-width proof was rerun on `de0ac056` plus that one-file change; see Phone-Width Check.
 
 ## The shadcn Check
 
@@ -22,7 +24,9 @@ The order says to dispatch a subagent for this check. The harness running this o
 
 Finding: Popover is the ready-made component that opens on a tap, a click, Enter or Space. It is already vendored at `ui/client/src/components/ui/popover.tsx` (Radix `@radix-ui/react-popover`, `PopoverContent` in a portal) and is used unchanged.
 
-## Cited Lines (Main at c7ae2988, Confirmed on the Branch Before Editing)
+## Cited Lines (Main at c7ae2988; Re-Located Unchanged at d295eef0)
+
+Every cited line in `SettingsPane.tsx`, `SettingsPane.test.tsx` and `nexus-layout.css` (and `secrets_endpoints.py:228`) holds the same text on `origin/main` at `d295eef0`, the main this branch merged: no commit in `c7ae2988..d295eef0` touches those files (`git diff --quiet c7ae2988 d295eef0 -- <file>` exits 0 for each), and the lines were also confirmed on the branch before editing.
 
 - `ui/client/src/components/nexus/SettingsPane.tsx:570`: `<span className="key-provider-name" title={requiredByTitle(row)}>`; the seat list lived only in a native `title`.
 - `SettingsPane.tsx:442-444`: comment "The provider name's hover title lists the needing seats"; `:448-456` `SEAT_LABELS`; `:458-467` `requiredByTitle` (unchanged on the branch).
@@ -95,7 +99,7 @@ This is not a receipt-only failure. The stale-receipt check throws at module loa
 
 ## Phone-Width Check
 
-`SEAT_SCRATCH=<scratch>/821-S2/seat-build nice -n 15 node docs/qa/821-touch-seat-list/seat-proof.mjs` on `240bbe72`, after the build:
+`SEAT_SCRATCH=<scratch>/821-S2/seat-build nice -n 15 node docs/qa/821-touch-seat-list/seat-proof.mjs` first on `240bbe72`, after the build. Rerun after the second review fix on `de0ac056` plus the `seat-proof.mjs` change (a fresh `nice -n 15 npm --prefix ui run build`, same `index-CBz8DeaZ.css`), with the same output; `seat-popover-390.png` came out byte-identical:
 
 ```
 390x844 touch: seat popover opened on a tap (Skald · Summaries), stayed inside the viewport, closed on an outside tap; optional row has no trigger; 0 page errors, 0 HTTP requests
@@ -112,7 +116,7 @@ Readback (`seat-readback.json`, production CSS `index-CBz8DeaZ.css`):
 | `required-missing` trigger before the tap | x 300, width 90, right 390 (inside 0..390); `BUTTON`, `aria-expanded="false"`, no `title` |
 | `#set-keys` text | no seat name |
 | Dialog text after `locator.tap()` | `Skald · Summaries` |
-| Dialog accessible name | `required-missing`; not inside `#set-keys` |
+| Dialog accessible name (computed by Playwright's accessibility engine) | `getByRole('dialog', { name: 'required-missing', exact: true })` count 1; `ariaSnapshot()` `- dialog "required-missing": Skald · Summaries`; not inside `#set-keys` |
 | Dialog box | x 239, right 374.05 (inside 0..390), width 135.05, max-width 358px |
 | `document.documentElement.scrollWidth` | 390 before and after |
 | Trigger after the tap | `aria-expanded="true"` |
