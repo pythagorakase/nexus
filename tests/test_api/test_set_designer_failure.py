@@ -287,7 +287,14 @@ def test_chat_set_design_write_failure_returns_500_without_design_draft(
         for key, value in raw.items()
         if key.startswith(("layer_", "zone_")) or key == "initial_location"
     }
-    assert len(design_fields) == 8, design_fields
+    assert set(design_fields) == {
+        "initial_location",
+        "layer_description",
+        "layer_name",
+        "layer_type",
+        "zone_name",
+        "zone_summary",
+    }, design_fields
     assert all(value is None for value in design_fields.values()), design_fields
     cache = read_cache(design_gateway.dbname)
     assert cache is not None

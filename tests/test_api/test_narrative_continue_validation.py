@@ -851,19 +851,27 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
         fail_completed_broadcast,
     )
 
-    def post_continue() -> Any:
-        with TestClient(narrative.app) as client:
-            return client.post(
+    # One client, so one gateway lifespan: a second concurrent lifespan in
+    # this process is refused (issue #824). Each request runs as its own task
+    # on the client's event loop, and the owner parks in generation off that
+    # loop, so the competitor is answered while the owner holds the slot.
+    with TestClient(narrative.app) as client:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            owner_future = executor.submit(
+                client.post,
                 "/api/narrative/continue",
                 json={"slot": 3},
             )
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        owner_future = executor.submit(post_continue)
-        assert entered_generation.wait(10), "owner never reached storyteller generation"
-        competitor = post_continue()
-        release_generation.set()
-        owner = owner_future.result(timeout=15)
+            assert entered_generation.wait(
+                10
+            ), "owner never reached storyteller generation"
+            competitor = client.post(
+                "/api/narrative/continue",
+                json={"slot": 3},
+            )
+            assert not owner_future.done(), "owner left generation before release"
+            release_generation.set()
+            owner = owner_future.result(timeout=15)
 
     assert owner.status_code == 200
     owner_session_id = owner.json()["session_id"]
