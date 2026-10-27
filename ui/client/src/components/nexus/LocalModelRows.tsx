@@ -21,7 +21,7 @@
  * "swap in flight" state is derived from active.ready staying false —
  * polling fast until it flips (or fails, which surfaces as an alert).
  */
-import { useEffect, useMemo, useState } from "react";
+import { type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -86,6 +86,61 @@ function familyLabel(entry: LocalCatalogEntry): string {
 
 function quantPath(status: LocalModelsStatus, entry: LocalCatalogEntry): string {
   return `${status.models_dir}/${entry.subdir}/${entry.filename}`;
+}
+
+/** Holds the exceeds-RAM tooltip open while keyboard focus is within its row, until Escape (#1102). */
+function ExceedsRamTooltip({
+  content,
+  children,
+}: {
+  content: ReactNode;
+  children: ReactElement;
+}) {
+  const [radixOpen, setRadixOpen] = useState(false);
+  const [keyboardFocusWithin, setKeyboardFocusWithin] = useState(false);
+  const [escapeDismissed, setEscapeDismissed] = useState(false);
+  const pointerDownRef = useRef(false);
+  const open = radixOpen || (keyboardFocusWithin && !escapeDismissed);
+  return (
+    <Tooltip open={open} onOpenChange={setRadixOpen}>
+      <TooltipTrigger
+        asChild
+        onPointerDown={() => {
+          pointerDownRef.current = true;
+          setKeyboardFocusWithin(false);
+        }}
+        onKeyDown={() => {
+          pointerDownRef.current = false;
+        }}
+        onFocus={(event) => {
+          const entering = !event.currentTarget.contains(
+            event.relatedTarget as Node | null,
+          );
+          if (entering) setEscapeDismissed(false);
+          if (!pointerDownRef.current) setKeyboardFocusWithin(true);
+          if (!entering && escapeDismissed) event.preventDefault();
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setKeyboardFocusWithin(false);
+            setEscapeDismissed(false);
+            pointerDownRef.current = false;
+          }
+        }}
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent
+        className="lm-tip"
+        side="top"
+        onEscapeKeyDown={() => {
+          setEscapeDismissed(true);
+        }}
+      >
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function LocalModelRows({
@@ -368,8 +423,8 @@ export function LocalModelRows({
                           .join(" ")}
                         onClick={blocked ? undefined : () => clickQuant(q)}
                         onBlur={(event) => {
-                          // Focus moving inside the row keeps the tooltip open;
-                          // Radix closes it when focus leaves the row.
+                          // Focus moving inside the row skips Radix's blur close;
+                          // ExceedsRamTooltip holds the tooltip for keyboard focus (#1102).
                           if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
                             event.preventDefault();
                           }
@@ -474,13 +529,17 @@ export function LocalModelRows({
                       </div>
                     );
                     return q.exceeds ? (
-                      <Tooltip key={q.entry.quant}>
-                        <TooltipTrigger asChild>{row}</TooltipTrigger>
-                        <TooltipContent className="lm-tip" side="top">
-                          needs {q.entry.min_ram_gb.toFixed(0)} gb ·{" "}
-                          {status.system_ram_gb.toFixed(0)} gb memory
-                        </TooltipContent>
-                      </Tooltip>
+                      <ExceedsRamTooltip
+                        key={q.entry.quant}
+                        content={
+                          <>
+                            needs {q.entry.min_ram_gb.toFixed(0)} gb ·{" "}
+                            {status.system_ram_gb.toFixed(0)} gb memory
+                          </>
+                        }
+                      >
+                        {row}
+                      </ExceedsRamTooltip>
                     ) : (
                       row
                     );
