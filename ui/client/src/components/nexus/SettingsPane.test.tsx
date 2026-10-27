@@ -292,8 +292,14 @@ describe("SettingsPane API keys", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(card.textContent).not.toMatch(seatNames);
 
-    // A tap opens one popover, named by the provider and portaled outside the card.
+    // A hover alone discloses nothing: the list never opens on a mouse pass.
     const anthropic = trigger("anthropic");
+    await user.hover(anthropic);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(anthropic).toHaveAttribute("aria-expanded", "false");
+    await user.unhover(anthropic);
+
+    // A tap opens one popover, named by the provider and portaled outside the card.
     await user.pointer({ keys: "[TouchA]", target: anthropic });
     const dialog = await screen.findByRole("dialog");
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
