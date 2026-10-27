@@ -3,7 +3,7 @@ status: canonical
 sources:
   - tests/test_golden_path_live.py
   - nexus/api/backstage_endpoints.py
-verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
+verified_commit: "b0e9cb77af52a22673113b4910d027cd189cf281"
 ---
 
 # 0081: Golden-Path Observation Assertions

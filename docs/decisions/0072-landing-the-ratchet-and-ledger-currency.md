@@ -3,7 +3,7 @@ status: canonical
 sources:
   - docs/decisions/README.md
   - tests/test_doc_front_matter.py
-verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
+verified_commit: "b0e9cb77af52a22673113b4910d027cd189cf281"
 ---
 
 # 0072: Landing the Ratchet and Ledger Currency
