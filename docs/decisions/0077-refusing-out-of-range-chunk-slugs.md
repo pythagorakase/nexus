@@ -5,7 +5,7 @@ sources:
   - tests/test_commit_handler_sync.py
   - tests/test_api/test_reader_feed_pg.py
   - nexus/api/commit_handler_sync.py
-verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
+verified_commit: "55ab85a4468f0a46b5cbe7b0daacf66d8a890709"
 ---
 
 # 0077: Refusing Out-of-Range Chunk Slugs

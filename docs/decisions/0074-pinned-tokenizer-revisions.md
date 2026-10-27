@@ -4,7 +4,7 @@ sources:
   - nexus.toml
   - config/model_artifacts.lock.json
   - nexus/agents/lore/logon_utility.py
-verified_commit: "c7ae2988d07b443f627a04d3a4eed1816b1cd438"
+verified_commit: "55ab85a4468f0a46b5cbe7b0daacf66d8a890709"
 ---
 
 # 0074: Pinned Tokenizer Revisions
