@@ -29,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TINY_REPOSITORY = "nexus-test/tiny-tokenizer"
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.parametrize(
     "model",
     [
