@@ -27,7 +27,12 @@ from ir_eval.models.schemas import (
 
 
 class RunExecutor:
-    """Execute eval runs with explicit, immutable model selection."""
+    """Execute eval runs with explicit, immutable model selection.
+
+    The ``--model NAME:WEIGHT`` weights are the run's own: runtime
+    configuration carries no ensemble weight, and only an ir_eval run combines
+    several embedders (Decision 812-Q4a).
+    """
 
     def __init__(
         self,
@@ -127,7 +132,6 @@ class RunExecutor:
             )
         for model_name, model_config in model_configs.items():
             model_config["is_active"] = True
-            model_config["weight"] = selected_model_weights[model_name]
 
         retrieval = run_settings.setdefault("retrieval", {})
         hybrid = retrieval.setdefault("hybrid_search", {})
@@ -150,11 +154,6 @@ class RunExecutor:
         query_config = memnon_settings.get("query", {})
         retrieval_config = memnon_settings.get("retrieval", {})
 
-        model_weights: Dict[str, float] = {}
-        for model_name, model_config in memnon_settings.get("models", {}).items():
-            if model_config.get("is_active", False):
-                model_weights[model_name] = float(model_config.get("weight", 0.0))
-
         return {
             "default_top_k": int(query_config.get("default_limit", 10)),
             "max_query_results": int(retrieval_config.get("max_results", 50)),
@@ -168,7 +167,6 @@ class RunExecutor:
                 retrieval_config.get("recency_boost_factor", 1.1)
             ),
             "db_vector_balance": float(retrieval_config.get("db_vector_balance", 0.6)),
-            "model_weights": model_weights,
             "highlight_matches": bool(query_config.get("highlight_matches", True)),
         }
 
@@ -199,9 +197,44 @@ class RunExecutor:
             settings=memnon_settings,
             retrieval_settings=retrieval_settings,
         )
-        query_analyzer = QueryAnalyzer(settings=memnon_settings)
+        query_analyzer = QueryAnalyzer(db_url=self.db_url, settings=memnon_settings)
 
         return search_manager, query_analyzer
+
+    def _ensemble_search(
+        self,
+        search_manager: SearchManager,
+        query_text: str,
+        model_weights: Dict[str, float],
+        run_config: EvalRunConfig,
+    ) -> List[Dict[str, Any]]:
+        """Embed the query with every run model and score by the run's weights.
+
+        Decision 812-Q4a: ensemble orchestration and weighting live in
+        ir_eval; the runtime keeps one embedder path and the shared retrieval
+        primitives. ``model_weights`` are the run's normalized
+        ``--model NAME:WEIGHT`` weights, in the run's model order; a
+        zero-weight model is still embedded and the scorer skips it.
+        """
+        query_embeddings = {
+            name: search_manager.embedding_manager.generate_embedding(query_text, name)
+            for name in model_weights
+        }
+        if run_config.hybrid_search:
+            return search_manager.hybrid_search_from_embeddings(
+                query_text,
+                query_embeddings,
+                dict(model_weights),
+                filters=None,
+                top_k=run_config.top_k,
+            )
+        return search_manager.vector_search_from_embeddings(
+            query_text,
+            query_embeddings,
+            dict(model_weights),
+            filters=None,
+            top_k=run_config.top_k,
+        )
 
     @staticmethod
     def _to_query_execution_result(
@@ -365,19 +398,9 @@ class RunExecutor:
             for query in queries:
                 query_start = time.time()
 
-                if run_config.hybrid_search:
-                    raw_results = search_manager.perform_hybrid_search(
-                        query_text=query.text,
-                        filters=None,
-                        top_k=run_config.top_k,
-                    )
-                else:
-                    raw_results = search_manager.query_vector_search(
-                        query_text=query.text,
-                        collections=["narrative_chunks"],
-                        filters=None,
-                        top_k=run_config.top_k,
-                    )
+                raw_results = self._ensemble_search(
+                    search_manager, query.text, selected_model_weights, run_config
+                )
 
                 if run_config.cross_encoder_enabled and raw_results:
                     query_type = query_analyzer.analyze_query(query.text).get(

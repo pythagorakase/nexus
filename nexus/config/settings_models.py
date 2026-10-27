@@ -3262,7 +3262,11 @@ class DatabaseConfig(BaseModel):
 
 
 class EmbeddingModelConfig(BaseModel):
-    """Configuration for an individual embedding model."""
+    """The one runtime embedder in ``[memnon.models]``.
+
+    It carries no ensemble weight, because only an ir_eval run combines
+    embedders (Decision 812-Q4a).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -3270,7 +3274,6 @@ class EmbeddingModelConfig(BaseModel):
     local_path: str
     remote_path: Optional[str] = None
     dimensions: int = Field(..., ge=1)
-    weight: float = Field(..., ge=0.0, le=1.0, description="Ensemble weight")
 
 
 class EmbeddingCandidate(BaseModel):
@@ -3278,7 +3281,8 @@ class EmbeddingCandidate(BaseModel):
 
     The runtime never loads a candidate: only an ir_eval run selects one, by
     its name (``ir_eval.runner create-run --model NAME:WEIGHT``). A candidate
-    carries no ``is_active`` or ``weight``; the run supplies both.
+    carries no ``is_active`` or ``weight``; the run activates it and its
+    ``--model NAME:WEIGHT`` supplies the weight.
     """
 
     model_config = ConfigDict(extra="forbid")

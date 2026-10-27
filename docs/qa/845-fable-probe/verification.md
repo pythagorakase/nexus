@@ -1,7 +1,8 @@
 # Verification: Fable Structured-Output Diagnostics and the Production Probe (845-S1S2)
 
 Issue #845. Branch `claude/845-fable-probe`, cut from `c7ae2988`, merged with
-`origin/main` at `9a0714d7`. No migration, no paid call, no gateway started by
+`origin/main` at `9a0714d7` and again, after the review fixes, at `b0e9cb77`
+(#1162 and #1165). No migration, no paid call, no gateway started by
 this branch's own work, no `nexus.toml` change, no `ui/` change.
 
 ## What Was Wrong (Cited on `main` at c7ae2988)
@@ -66,8 +67,13 @@ this branch's own work, no `nexus.toml` change, no `ui/` change.
   Seat" (the seats of the Fable calls after the 30th, in ledger time order);
   the stop-reason sentinel check captures INFO and above on every logger.
 - `AGENTS.md`, `docs/turn_flow_sequence.md`: `verified_commit` moved to the
-  merge base `9a0714d7671457d47f91bfbd76749fee4444c686`; the repair paragraph
-  (`docs/turn_flow_sequence.md:212-214`) still holds.
+  merge base `9a0714d7671457d47f91bfbd76749fee4444c686`, then, after the
+  second merge, to `b0e9cb77af52a22673113b4910d027cd189cf281`; the repair
+  paragraph (`docs/turn_flow_sequence.md:212-214`) still holds.
+- `docs/decisions/0070-the-fable-structured-output-probe.md` (added by #1162;
+  sources `nexus.toml` and `scripts/api_anthropic.py`): re-verified against
+  this branch's `scripts/api_anthropic.py` and stamped
+  `b0e9cb77af52a22673113b4910d027cd189cf281`. Its rulings still hold.
 
 ## Red Run (S1 Tests Against Unchanged Product Code)
 

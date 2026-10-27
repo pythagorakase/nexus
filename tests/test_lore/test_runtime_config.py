@@ -196,9 +196,6 @@ def test_lore_instances_keep_independent_memnon_configuration(
             memnon: Any = document["memnon"]
             memnon["debug"] = debug
             memnon["query"]["default_limit"] = 11 + index
-            # The production embedder is the one runtime model (issue #812);
-            # its weight distinguishes the scopes.
-            memnon["models"]["Octen-Embedding-4B"]["weight"] = 0.25 + index * 0.25
             path = tmp_path / f"scope-{index}.toml"
             path.write_text(tomlkit.dumps(document))
             instances.append(
