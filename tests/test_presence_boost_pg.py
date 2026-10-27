@@ -236,10 +236,7 @@ def _search_manager(db_url: str) -> SearchManager:
         embedding_manager=FixedEmbeddingManager(),
         idf_dictionary=None,
         settings={"retrieval": {"hybrid_search": hybrid_config}},
-        retrieval_settings={
-            "default_top_k": 10,
-            "model_weights": {"presence-fixture": 1.0},
-        },
+        retrieval_settings={"default_top_k": 10},
     )
 
 

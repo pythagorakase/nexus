@@ -954,7 +954,6 @@ is_active = true  # Production embedder (winner of issue #175 bakeoff)
 local_path = "/Users/pythagor/nexus/models/Octen-Embedding-4B"
 remote_path = "Octen/Octen-Embedding-4B"
 dimensions = 2560
-weight = 1.0
 
 [memnon.artifacts]
 # `nexus models lock` records the active embedder and the production reranker
@@ -1290,12 +1289,6 @@ dimensions = 1024
 local_path = "/Users/pythagor/nexus/models/e5-large-v2"
 remote_path = "intfloat/e5-large-v2"
 dimensions = 1024
-
-# Fine-tuned model, currently disabled
-[ir_eval.embedding_candidates.bge-small-custom]
-local_path = "/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654"
-remote_path = ""
-dimensions = 384
 
 # Deprecated by Octen-4B (issue #175)
 [ir_eval.embedding_candidates."inf-retriever-v1-1.5b"]
