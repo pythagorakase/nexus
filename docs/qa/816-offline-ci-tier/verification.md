@@ -1238,7 +1238,7 @@ tests skip there without `NEXUS_RUN_CORPUS`, and the marker adds no skip.
 
 Static checks on the three changed Python files: Black `3 files would be left
 unchanged`; flake8 shows the same six E501 lines in
-`tests/test_window_coverage_pg.py` on `bc340089` and on `1b35be05`
+`tests/test_lore/test_window_coverage_pg.py` on `bc340089` and on `1b35be05`
 (`:54,63,72,99,118,214`; the same six at `origin/main` `:53,62,71,98,117,212`),
 none on a changed line and none in the other two files; mypy
 `--explicit-package-bases` gives `Found 15 errors in 2 files (checked 3
@@ -1246,3 +1246,29 @@ source files)` on both `1b35be05` and `bc340089`, identical after
 normalizing line numbers. `check_exception_dispositions.py
 --baseline-base-ref origin/main`: `OK: exception disposition coverage and
 shrink-only baseline verified.`
+
+### Run 8: https://github.com/pythagorakase/nexus/actions/runs/40449528208
+
+Head `0b41b430` (`bc340089` plus the evidence). Conclusion: failure, from
+`ui-tests` alone. `offline-tests`: success, with the two new marks
+deselected (22 to 25 in the first suite) and the tokenizer cache hit:
+
+```
+Cache restored from key: hf-tokenizers-92e7bfa13ec24356b64ae7c30c11d96d9af39d0acc55cde72e7087e28009d1fd
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3304 passed, 687 skipped, 25 deselected, 8 warnings in 963.79s (0:16:03)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1926 passed, 1562 skipped, 8 deselected, 7 warnings in 94.28s (0:01:34)
+```
+
+The landing note's job-level read, pointed at this branch, prints the job
+result while the run's conclusion is `failure`:
+
+```
+$ gh run view $(gh run list --repo pythagorakase/nexus --workflow offline-tests.yml --branch claude/816-offline-ci-tier --limit 1 --json databaseId --jq '.[0].databaseId') --repo pythagorakase/nexus --json jobs --jq '.jobs[]|select(.name=="offline-tests")|.conclusion'
+success
+```
+
+`ui-tests`: the same stale receipt (`state-shades.test.ts:183`,
+`Test Files  1 failed | 43 passed (44)`). The commit that records this run
+starts one more run; the PR body records that run.
