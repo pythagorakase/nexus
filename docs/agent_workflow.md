@@ -23,8 +23,12 @@ more specific instructions.
   `tests/test_api tests/test_orrery`, with `NEXUS_RUN_POSTGRES` unset, and
   fails unless each run ends with
   `secret-store guard: active; nexus-api: denied`. Its `ui-tests` job runs
-  `npm --prefix ui test` and reports without blocking. CI does not replace the
-  gate above: PostgreSQL-backed tests run only locally.
+  `npm --prefix ui test` and reports without blocking. `offline-tests` is a
+  required status check on `main`'s ruleset (816-S3): a pull request whose
+  run is red cannot merge, and because the freshness check below compares
+  the branch against the newest `main`, a branch that touches a canonical
+  source merges `origin/main` and re-stamps right before it lands. CI does
+  not replace the gate above: PostgreSQL-backed tests run only locally.
   `requires_local_models` (`pytest.ini`) marks tests that load a production
   local model artifact (the embedder or reranker from `nexus.toml`'s
   `local_path` or `model_path`, or a registry model's pinned Hugging Face
