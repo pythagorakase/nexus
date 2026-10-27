@@ -457,7 +457,7 @@ dbname audit: owner targets: none
 66 passed, 5 warnings in 68.14s (0:01:08)
 ```
 
-`tests/test_orrery/test_migrate.py`:
+`tests/test_orrery/test_migrate.py` (at `bd15f8aa`, before the fix):
 
 ```text
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
@@ -472,9 +472,10 @@ FAILED tests/test_orrery/test_migrate.py::test_canonical_grieving_migration_exec
 
 `test_migration_sequence_has_only_known_gaps` failed before migrations 152 and
 153 reached main (`{'013', '119', '152', '153'}` against
-`frozenset({'013', '119'})`) and passes at the final head. The remaining failure
-is `test_canonical_grieving_migration_executes_against_slot_db`; see Open Item
-below.
+`frozenset({'013', '119'})`) and passes at the final head. The other failure,
+`test_canonical_grieving_migration_executes_against_slot_db`, is fixed in
+`ef554b2b`; see Migration 046 Re-Run Test below for the passing tail at
+`b7a7ed6d`.
 
 Fixer round, at `4cbc5a2f`. Before each PostgreSQL run of the fixer round,
 this bounded loop waited while the one-minute load was 24 or more:
@@ -536,7 +537,7 @@ dbname audit: owner targets: none
 6 passed, 17 deselected in 53.07s
 ```
 
-## Open Item: Migration 046 Re-Run Test
+## Migration 046 Re-Run Test (Fixed in `ef554b2b`)
 
 `tests/test_orrery/test_migrate.py::test_canonical_grieving_migration_executes_against_slot_db`
 re-runs the historical Python migration `migrations/046_canonical_grieving_state.py`
@@ -565,16 +566,12 @@ save_04: 046,152,153 max=153
 save_05: 046,152,153 max=153
 ```
 
-Under the common rules a failure in a file this branch did not change is
-reported, not fixed: the test is unchanged and the remedy is the coordinator's
-call.
-
-Review confirmed this failure. Its remedy, restoring the column on the
-disposable clone before the 046 re-run, needs a coordinator amendment, because
-`tests/test_orrery/test_migrate.py` is outside the order's file list. The fixer
-verified that remedy as a scratch plant, reverted it, and left the test
-unchanged. The patch
-(`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/813-S4S5/fix_test_migrate.patch`):
+Two review rounds confirmed this failure as a regression of this branch.
+`tests/test_orrery/test_migrate.py` is in the order's proof set, and the order
+does not put it out of scope, so commit `ef554b2b` applies the remedy that the
+first fixer round verified as a scratch plant. The test restores the column on
+the disposable clone before the 046 re-run, with the rule that item 7 applies
+to 143. Migration 046 stays unchanged.
 
 ```diff
          with closing(connect(dbname)) as conn:
@@ -587,8 +584,10 @@ unchanged. The patch
              _exercise_canonical_grieving_migration(conn, migration)
 ```
 
-`tests/test_orrery/test_migrate.py` with that plant (at `4cbc5a2f`, load 15.70,
-no wait):
+`NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery/test_migrate.py`
+at `b7a7ed6d` (`ef554b2b` plus the merge of `origin/main` at `d295eef0`; load
+16.04, no wait), with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT`
+unset:
 
 ```text
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
@@ -597,7 +596,7 @@ dbname audit: 8 targets: postgres, qa640_grieving_migration_*, qa640_vocab_migra
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-77 passed in 15.31s
+77 passed in 15.03s
 ```
 
 ## Open Item: The TEST-Provider Seeder (Migration 008)
@@ -743,21 +742,62 @@ dbname audit: owner targets: none
 
 ## Static Checks
 
-The changed Python files were checked as written on the branch and as they are
-on `origin/main` (`git show`/`git archive` into the scratch directory):
+Rerun at `b7a7ed6d` against `origin/main` at `d295eef0`. The script is
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/813-S4S5/static2.sh`.
+It checks the six changed Python files on the branch, and the five that exist
+on main as main holds them (`git archive origin/main | tar -x -C $M`). With
+`PY=/Users/pythagor/nexus/.venv/bin/python`:
 
-- `black --check`: 5 files unchanged.
-- `flake8`: 65 diagnostics on the branch, 72 on main, none present only on the
-  branch. Deleting `get_schema_summary` left `sqlalchemy.inspect` unused (F401),
-  so the import was removed.
-- `mypy --explicit-package-bases`: 33 errors in `memnon.py` and
-  `new_story_cache.py` on both sides; no diagnostic is present only on the
-  branch.
-- `scripts/check_migration_comments.py`: `OK: every object created after
-  migration 129 has a comment.` A first draft counted rows with `EXECUTE
-  format(...)`, which the lint refuses; the counts are now static queries.
-- `scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
-  `OK`. Removed keys:
+```sh
+FILES=(nexus/api/new_story_cache.py nexus/agents/memnon/memnon.py tests/test_doc_front_matter.py tests/test_orrery/test_migration_dead_strata_pg.py tests/test_orrery/test_migrate.py tests/test_orrery/test_migration_154_dead_strata_pg.py)
+OLD=(nexus/api/new_story_cache.py nexus/agents/memnon/memnon.py tests/test_doc_front_matter.py tests/test_orrery/test_migration_dead_strata_pg.py tests/test_orrery/test_migrate.py)
+nice -n 15 $PY -m black --check "${FILES[@]}"
+nice -n 15 $PY -m flake8 "${FILES[@]}" > f3_branch.txt
+(cd $M && nice -n 15 $PY -m flake8 "${OLD[@]}") > f3_main.txt
+sed -E 's/:[0-9]+:[0-9]+:/:/' f3_branch.txt | sort > f3_branch.norm   # same for main
+comm -23 f3_branch.norm f3_main.norm
+nice -n 15 $PY -m mypy --explicit-package-bases "${FILES[@]}" > m3_branch.txt 2>&1
+(cd $M && nice -n 15 $PY -m mypy --explicit-package-bases "${OLD[@]}") > m3_main.txt 2>&1
+grep -E ': (error|note):' m3_branch.txt | sed -E 's/:[0-9]+:( [0-9]+:)?/:/' | sort > m3_branch.norm   # same for main
+comm -23 m3_branch.norm m3_main.norm
+```
+
+Output:
+
+```text
+== origin/main d295eef0, branch b7a7ed6d
+== black --check (branch)
+6 files would be left unchanged.
+== flake8 (branch)
+      58
+== flake8 (main)
+      65
+== flake8 branch-only (comm -23 of file+code+message):
+== mypy (branch)
+Found 31 errors in 2 files (checked 6 source files)
+== mypy (main)
+Found 259 errors in 51 files (checked 5 source files)
+== mypy branch-only (comm -23 of file+message):
+== end
+```
+
+Both branch-only lists are empty. The comparison ignores line numbers and
+compares file, code and message. Flake8 reports 51 diagnostics in `memnon.py`
+and 7 in `new_story_cache.py` on the branch, and 58 and 7 on main. Deleting
+`get_schema_summary` left `sqlalchemy.inspect` unused (F401), so the import
+was removed. The run on main's extracted tree follows imports into 51
+modules. Restricted to the two product files, it reports the same 31 errors as
+the branch: 30 in `memnon.py` and 1 in `new_story_cache.py`. The test files
+have no diagnostic on either side. All of these are on lines this branch did
+not change.
+
+- `scripts/check_migration_comments.py` (at `b7a7ed6d`): `OK: every object
+  created after migration 129 has a comment.` A first draft counted rows with
+  `EXECUTE format(...)`, which the lint refuses; the counts are now static
+  queries.
+- `scripts/check_exception_dispositions.py --baseline-base-ref origin/main` (at
+  `b7a7ed6d`): `OK: exception disposition coverage and shrink-only baseline
+  verified.` Removed keys:
   `nexus/agents/memnon/memnon.py|MEMNON.get_schema_summary|10fa351c...|1`,
   `|630165ee...|1`, `|8b45aeb9...|1` and `|8b45aeb9...|2`.
 
@@ -808,11 +848,16 @@ receipt isolation: checkout and user receipts untouched
 `tests/test_scripts/test_check_exception_dispositions.py` (at `af3b500e`):
 
 ```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 94 passed, 5 warnings in 23.74s
 ```
 
 ## Code Grep
+
+Rerun at `b7a7ed6d` (long lines cut at 200 characters). Beyond the order's
+list it prints the two lines of the 046 re-run restore in
+`tests/test_orrery/test_migrate.py`.
 
 ```text
 $ git grep -n -e get_schema_summary -e seed_starting_location -e clear_on_override -- . ':!docs/qa' ':!migrations' ':!temp'
@@ -830,6 +875,8 @@ tests/fixtures/813_pre154_columns.sql:11:ALTER TABLE public.entity_tags ADD COLU
 tests/test_orrery/test_build_venture_async.py:59:            applied_at_world_time timestamptz, clear_on_override jsonb,
 tests/test_orrery/test_build_venture_projects.py:220:            applied_at_world_time timestamptz, clear_on_override jsonb,
 tests/test_orrery/test_build_venture_replay.py:59:            applied_at_world_time timestamptz, clear_on_override jsonb,
+tests/test_orrery/test_migrate.py:2038:            # Migration 154 drops entity_tags.clear_on_override, which 046 copies.
+tests/test_orrery/test_migrate.py:2042:                    "ADD COLUMN IF NOT EXISTS clear_on_override jsonb"
 tests/test_orrery/test_migration_154_dead_strata_pg.py:66:    ("assets", "new_story_creator", "seed_starting_location", "text"),
 tests/test_orrery/test_migration_154_dead_strata_pg.py:71:    ("public", "entity_tags", "clear_on_override", "jsonb"),
 tests/test_orrery/test_migration_154_dead_strata_pg.py:361:    if column == "clear_on_override":
