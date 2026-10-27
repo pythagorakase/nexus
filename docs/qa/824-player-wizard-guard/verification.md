@@ -142,7 +142,9 @@ The other direct callers (`tests/test_api/test_genesis_ledger_pg.py`,
 `tests/genesis_owner_child.py`) run on the routed clone and pass unchanged.
 
 The first run's log was not kept. Re-run on c002bbbc's parent (52041b8b, a
-`git archive` in the session scratchpad, `ui/` excluded): 14 tests fail, 11 in
+`git archive` in the session scratchpad, `ui/` excluded; its log is
+`824-S4/c002bbbc-parent-run.log` there, and the `dbname audit: FAILED` line
+below is pasted from it verbatim): 14 tests fail, 11 in
 `test_wizard_weird_level.py`, 2 in `test_wizard_confirmation.py` and 1 in
 `test_wizard_agent.py`. The earlier text said 11 (8 + 2 + 1); it left out
 the three unparametrized `test_wizard_weird_level.py` tests.
@@ -156,7 +158,7 @@ receipt isolation: checkout and user receipts untouched
 dbname audit: 20 targets: postgres, qa640_fake_wizard_slot, qa640_offline_gate_* x17, save_04
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
-dbname audit: FAILED: owner targets: save_04 (psycopg2) from [the 13 tests below other than test_wizard_agent.py's]
+dbname audit: FAILED: owner targets: save_04 (psycopg2) from tests/test_api/test_wizard_confirmation.py::test_final_transition_cannot_bypass_artifact_acceptance[character_confirmed], tests/test_api/test_wizard_confirmation.py::test_final_transition_cannot_bypass_artifact_acceptance[setting_confirmed], tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[None], tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[high], tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[low], tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[medium], tests/test_api/test_wizard_weird_level.py::test_transition_guards_refuse_before_recording_a_level[changes0-409-Confirm the setting and character], tests/test_api/test_wizard_weird_level.py::test_transition_guards_refuse_before_recording_a_level[changes1-409-Confirm the setting and character], tests/test_api/test_wizard_weird_level.py::test_transition_guards_refuse_before_recording_a_level[changes2-409-Finish the character revision], tests/test_api/test_wizard_weird_level.py::test_transition_guards_refuse_before_recording_a_level[changes3-422-Missing: base_timestamp], tests/test_api/test_wizard_weird_level.py::test_transition_persists_a_supplied_level_before_it_runs, tests/test_api/test_wizard_weird_level.py::test_transition_refuses_an_incomplete_seed_before_recording_a_level, tests/test_api/test_wizard_weird_level.py::test_transition_reports_a_concurrent_wizard_change_without_running
 FAILED tests/test_api/test_wizard_weird_level.py::test_transition_persists_a_supplied_level_before_it_runs
 FAILED tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[low]
 FAILED tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[medium]
@@ -195,9 +197,13 @@ serves the unprojected `narrative.app`, which reports the operator plane
 `POST /api/story/new/transition/overwrite`. Its `StrangenessRequestRecorder`
 recorded only `/api/story/new/transition`, so the browser half saw no
 transition. Commit 6eeec8ee adds the overwrite route to `RECORDED_ROUTES` and
-names both transition routes in the module and recorder docstrings;
-`assert_one_transition` already filters by method and is unchanged. The CLI
-half still posts the player route.
+names both transition routes in the module and recorder docstrings. The CLI
+half still posts the player route. Commit 75cd1625 gives
+`assert_one_transition` an expected `path` and asserts
+`transition["path"] == path`: the CLI half passes
+`/api/story/new/transition` and the browser half
+`/api/story/new/transition/overwrite`, so the proof fails if either half posts
+the other route.
 
 The proof does not run on main as committed: `tests/conftest.py:82-83` routes
 every process to the never-created `qa640_816_test_provider_unrouted` (#816),
@@ -239,34 +245,61 @@ dbname audit: owner targets: none
 2 passed, 2 warnings in 36.31s
 ```
 
-The recorded requests of that run: the browser half posted `POST
-/api/story/new/transition/overwrite` (200, after 4 saves) and the CLI half
-posted `POST /api/story/new/transition` (200, after 6 saves). Evidence went
-to the test's temporary directory; the tracked `docs/qa/838-entry-points` is
-unchanged.
-
-## Green Runs (Merged Tree, HEAD cf9762c1)
-
-PostgreSQL proof set (load 1.98 at start; no wait needed):
+That run's assertions did not check the path; its recorded requests went to
+the test's temporary directory and are not kept. With 75cd1625's path check
+(on 75cd1625; client rebuilt first with `nice -n 15 npm --prefix ui run
+build`, exit 0; lane 8012 free by `lsof` before and after):
 
 ```
-$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_api/test_wizard_plane_guard_pg.py tests/test_api/test_slot_mutation_guard.py tests/test_api/test_wizard_model_resolution.py tests/test_api/test_route_capabilities.py tests/test_api/test_genesis_ledger_pg.py tests/test_api/test_wizard_weird_level.py tests/test_api/test_wizard_confirmation.py tests/test_wizard_agent.py tests/test_cli_contract.py tests/test_cli_model_selection.py tests/test_cli_generation_http.py tests/test_owner_target_guard.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
+$ env -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 NEXUS_GATEWAY_PORT=8012 PYTHONPATH=$PWD:<scratch>/824-S4/plugins nice -n 15 $PY -m pytest -q -s -p tests.dbname_audit -p route_838_test_provider tests/proofs/proof_weird_entry_points.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
-dbname audit: 60 targets: postgres, qa640_816_lifecycle_test_provider, qa640_885_ren_replay_* x4, qa640_offline_gate_* x53, test_slot_guard_4a339bea65254f558c75220890a0d368
+dbname audit: 5 targets: postgres, qa640_816_test_provider_* x2, qa640_838_browser_*, qa640_838_cli_*
 dbname audit: owner server: local:5432
-dbname audit: registered disposable clusters: two_clusters[0] at local:52226 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:52227 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
-dbname audit: owner names admitted on registered clusters: save_04@local:52226 (psycopg2), save_04@local:52227 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2 passed, 2 warnings in 34.95s
+```
+
+Both halves pass with the path asserted: the CLI half's one transition is
+`POST /api/story/new/transition` and the browser half's is `POST
+/api/story/new/transition/overwrite`, each after its last save. The tracked
+`docs/qa/838-entry-points` is unchanged.
+
+## Green Runs
+
+### PostgreSQL Proof Set (on 75cd1625)
+
+Re-run on 75cd1625, the branch's last code commit (later commits change only
+this file), so the evidence shows the environment. The `env | grep` runs in
+the same `env -u` environment as pytest and prints nothing: no `NEXUS_`
+variable is set. Load 6.75 at start; no wait needed. This replaces the
+earlier run on cf9762c1, whose command line did not show the unset variables
+(`647 passed, 2 skipped` there too).
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT sh -c 'env | grep "^NEXUS_"; echo "env-check-done"'
+env-check-done
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_api/test_wizard_plane_guard_pg.py tests/test_api/test_slot_mutation_guard.py tests/test_api/test_wizard_model_resolution.py tests/test_api/test_route_capabilities.py tests/test_api/test_genesis_ledger_pg.py tests/test_api/test_wizard_weird_level.py tests/test_api/test_wizard_confirmation.py tests/test_wizard_agent.py tests/test_cli_contract.py tests/test_cli_model_selection.py tests/test_cli_generation_http.py tests/test_owner_target_guard.py tests/test_orrery/test_card_identity.py tests/test_connection_lifecycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 60 targets: postgres, qa640_816_lifecycle_test_provider, qa640_885_ren_replay_* x4, qa640_offline_gate_* x53, test_slot_guard_c6b717ca68514205a1dcffc873d5dc78
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:49974 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:49975 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:49974 (psycopg2), save_04@local:49975 (psycopg2)
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 =========================== short test summary info ============================
 SKIPPED [2] tests/test_orrery/test_card_identity.py:122: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
-647 passed, 2 skipped, 7 warnings in 523.08s (0:08:43)
-$ psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_offline_gate%'"
-(no rows)
+647 passed, 2 skipped, 7 warnings in 487.10s (0:08:07)
+$ psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_offline_gate%'"; echo "psql exit $?"
+psql exit 0
 ```
 
-Offline suites:
+The `psql` check printed nothing (no `qa640_offline_gate%` database is left)
+and exited 0.
+
+### Offline Suites (Merged Tree, HEAD cf9762c1)
 
 ```
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
@@ -302,7 +335,7 @@ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
 OK: exception disposition coverage and shrink-only baseline verified.
 ```
 
-mypy, re-run on 5f67524c with the 13 changed Python files (12 pre-existing,
+mypy, re-run on 75cd1625 with the 13 changed Python files (12 pre-existing,
 `tests/proofs/proof_weird_entry_points.py` included, plus the new
 `tests/test_api/test_wizard_plane_guard_pg.py`). Both runs are from the
 worktree root: main's versions were checked out in place with `git checkout
@@ -320,11 +353,200 @@ $ diff <(strip main) <(strip branch)     # strip = drop "Found", drop file:line[
 (empty; exit 0)
 ```
 
-black --check on the 13 files: "13 files would be left unchanged". flake8 on
-`tests/proofs/proof_weird_entry_points.py`: no output on the branch or on
-main's version.
+black --check on the 13 files (on 75cd1625): "13 files would be left
+unchanged". flake8 on `tests/proofs/proof_weird_entry_points.py`: no output on
+the branch or on main's version. Every diagnostic is listed under
+"Pre-existing Diagnostics".
 
 No swallowing handler was added; the baseline does not change.
+
+## Pre-existing Diagnostics
+
+All on 75cd1625. The branch's 33 mypy and 38 flake8 diagnostics are main's,
+moved by lines the branch added above them. None falls on a line the branch
+adds or changes: `changed_lines.py` (session scratchpad, `824-S4/`) reads the
+`+` ranges of `git diff -U0 origin/main HEAD -- '*.py'` and tests each
+diagnostic's `file:line` against them.
+
+```
+$ $PY <scratch>/824-S4/changed_lines.py $PWD origin/main <flake8 branch output>
+38 diagnostics checked; 0 on lines added or changed since origin/main
+$ $PY <scratch>/824-S4/changed_lines.py $PWD origin/main <mypy branch error lines>
+33 diagnostics checked; 0 on lines added or changed since origin/main
+```
+
+mypy notes (`note:` lines) are omitted below; only the `error:` lines and the
+summary are pasted. With line numbers stripped, the main and branch mypy lists
+are identical; the flake8 lists differ only in the two F811 messages ("from
+line 40" on main, "from line 41" on the branch, one import added above).
+
+### flake8, Branch (13 Files)
+
+```
+$ $PY -m flake8 <the 13 changed files>
+nexus/api/wizard_chat.py:23:1: F401 'nexus.api.config_utils.get_new_story_model' imported but unused
+nexus/api/wizard_chat.py:90:89: E501 line too long (136 > 88 characters)
+nexus/api/wizard_chat.py:308:89: E501 line too long (108 > 88 characters)
+nexus/api/wizard_chat.py:328:89: E501 line too long (101 > 88 characters)
+nexus/api/wizard_chat.py:333:89: E501 line too long (92 > 88 characters)
+nexus/api/wizard_chat.py:348:89: E501 line too long (93 > 88 characters)
+nexus/api/wizard_chat.py:412:89: E501 line too long (100 > 88 characters)
+nexus/api/wizard_chat.py:416:89: E501 line too long (90 > 88 characters)
+nexus/api/wizard_chat.py:448:89: E501 line too long (90 > 88 characters)
+nexus/api/wizard_chat.py:495:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:985:89: E501 line too long (92 > 88 characters)
+nexus/cli.py:4395:89: E501 line too long (96 > 88 characters)
+nexus/cli.py:4404:89: E501 line too long (96 > 88 characters)
+nexus/cli.py:4413:89: E501 line too long (96 > 88 characters)
+nexus/cli.py:4557:89: E501 line too long (93 > 88 characters)
+nexus/cli.py:5094:89: E501 line too long (113 > 88 characters)
+nexus/cli.py:5123:89: E501 line too long (118 > 88 characters)
+nexus/cli.py:5163:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:5248:89: E501 line too long (151 > 88 characters)
+nexus/cli.py:5274:89: E501 line too long (94 > 88 characters)
+nexus/cli.py:5275:89: E501 line too long (103 > 88 characters)
+nexus/cli.py:5294:89: E501 line too long (101 > 88 characters)
+tests/test_api/test_slot_mutation_guard.py:108:89: E501 line too long (96 > 88 characters)
+tests/test_api/test_wizard_model_resolution.py:12:1: F401 'types.SimpleNamespace' imported but unused
+tests/test_wizard_agent.py:22:1: F401 'nexus.api.new_story_schemas.LayerDefinition' imported but unused
+tests/test_wizard_agent.py:22:1: F401 'nexus.api.new_story_schemas.LayerType' imported but unused
+tests/test_wizard_agent.py:22:1: F401 'nexus.api.new_story_schemas.PlaceProfile' imported but unused
+tests/test_wizard_agent.py:22:1: F401 'nexus.api.new_story_schemas.ZoneDefinition' imported but unused
+tests/test_wizard_agent.py:585:1: F811 redefinition of unused 'PromptId' from line 41
+tests/test_wizard_agent.py:585:1: F811 redefinition of unused 'load' from line 41
+tests/test_wizard_agent.py:585:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:586:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:599:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:600:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:601:1: F401 'pydantic_ai.tools.DeferredToolRequests' imported but unused
+tests/test_wizard_agent.py:601:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:733:89: E501 line too long (110 > 88 characters)
+tests/test_wizard_agent.py:734:89: E501 line too long (96 > 88 characters)
+```
+
+### flake8, Main (the 12 Pre-existing Files, `git show origin/main:<path>` With Main's `.flake8`)
+
+```
+$ $PY -m flake8 <main's 12 pre-existing files>
+nexus/api/wizard_chat.py:23:1: F401 'nexus.api.config_utils.get_new_story_model' imported but unused
+nexus/api/wizard_chat.py:89:89: E501 line too long (136 > 88 characters)
+nexus/api/wizard_chat.py:307:89: E501 line too long (108 > 88 characters)
+nexus/api/wizard_chat.py:327:89: E501 line too long (101 > 88 characters)
+nexus/api/wizard_chat.py:332:89: E501 line too long (92 > 88 characters)
+nexus/api/wizard_chat.py:347:89: E501 line too long (93 > 88 characters)
+nexus/api/wizard_chat.py:411:89: E501 line too long (100 > 88 characters)
+nexus/api/wizard_chat.py:415:89: E501 line too long (90 > 88 characters)
+nexus/api/wizard_chat.py:447:89: E501 line too long (90 > 88 characters)
+nexus/api/wizard_chat.py:494:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:985:89: E501 line too long (92 > 88 characters)
+nexus/cli.py:4392:89: E501 line too long (96 > 88 characters)
+nexus/cli.py:4401:89: E501 line too long (96 > 88 characters)
+nexus/cli.py:4410:89: E501 line too long (96 > 88 characters)
+nexus/cli.py:4554:89: E501 line too long (93 > 88 characters)
+nexus/cli.py:5091:89: E501 line too long (113 > 88 characters)
+nexus/cli.py:5120:89: E501 line too long (118 > 88 characters)
+nexus/cli.py:5160:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:5245:89: E501 line too long (151 > 88 characters)
+nexus/cli.py:5271:89: E501 line too long (94 > 88 characters)
+nexus/cli.py:5272:89: E501 line too long (103 > 88 characters)
+nexus/cli.py:5291:89: E501 line too long (101 > 88 characters)
+tests/test_api/test_slot_mutation_guard.py:106:89: E501 line too long (96 > 88 characters)
+tests/test_api/test_wizard_model_resolution.py:12:1: F401 'types.SimpleNamespace' imported but unused
+tests/test_wizard_agent.py:21:1: F401 'nexus.api.new_story_schemas.LayerDefinition' imported but unused
+tests/test_wizard_agent.py:21:1: F401 'nexus.api.new_story_schemas.LayerType' imported but unused
+tests/test_wizard_agent.py:21:1: F401 'nexus.api.new_story_schemas.PlaceProfile' imported but unused
+tests/test_wizard_agent.py:21:1: F401 'nexus.api.new_story_schemas.ZoneDefinition' imported but unused
+tests/test_wizard_agent.py:570:1: F811 redefinition of unused 'PromptId' from line 40
+tests/test_wizard_agent.py:570:1: F811 redefinition of unused 'load' from line 40
+tests/test_wizard_agent.py:570:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:571:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:584:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:585:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:586:1: F401 'pydantic_ai.tools.DeferredToolRequests' imported but unused
+tests/test_wizard_agent.py:586:1: E402 module level import not at top of file
+tests/test_wizard_agent.py:718:89: E501 line too long (110 > 88 characters)
+tests/test_wizard_agent.py:719:89: E501 line too long (96 > 88 characters)
+```
+
+### mypy, Branch (13 Files)
+
+```
+$ nice -n 15 $PY -m mypy --explicit-package-bases --cache-dir <scratch>/mypy-cache-branch <the 13 changed files>
+nexus/api/setup_endpoints.py:13: error: Skipping analyzing "frontmatter": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+nexus/api/setup_endpoints.py:165: error: Argument "current_phase" to "ResumeSetupResponse" has incompatible type "str"; expected "Literal['setting', 'character', 'seed', 'ready']"  [arg-type]
+nexus/api/setup_endpoints.py:166: error: Argument "pending_confirmation" to "ResumeSetupResponse" has incompatible type "str | None"; expected "Literal['setting', 'character'] | None"  [arg-type]
+nexus/api/setup_endpoints.py:177: error: Argument "messages" to "ResumeSetupResponse" has incompatible type "list[dict[str, str]]"; expected "list[WizardHistoryMessage]"  [arg-type]
+nexus/api/wizard_chat.py:17: error: Skipping analyzing "frontmatter": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+nexus/api/wizard_chat.py:242: error: No overload variant of "run" of "AbstractAgent" matches argument types "str", "WizardContext", "list[Any]", "Any", "ModelSettings"  [call-overload]
+nexus/api/wizard_chat.py:282: error: Item "None" of "WizardCache | None" has no attribute "confirmation_metadata"  [union-attr]
+nexus/api/wizard_chat.py:339: error: Incompatible types in assignment (expression has type "str", variable has type "Literal['setting', 'character', 'seed'] | None")  [assignment]
+nexus/api/wizard_chat.py:622: error: No overload variant of "run" of "AbstractAgent" matches argument types "str | None", "WizardContext", "list[ModelRequest | ModelResponse]", "Model", "ModelSettings"  [call-overload]
+nexus/api/wizard_chat.py:653: error: Argument after ** must be a mapping, not "dict[str, Any] | None"  [arg-type]
+nexus/api/wizard_chat.py:753: error: "str" has no attribute "choices"  [attr-defined]
+nexus/api/wizard_chat.py:756: error: "str" has no attribute "message"  [attr-defined]
+nexus/api/wizard_chat.py:763: error: "str" has no attribute "message"  [attr-defined]
+nexus/api/wizard_chat.py:769: error: "str" has no attribute "message"  [attr-defined]
+tests/test_wizard_agent.py:94: error: Missing named argument "language_notes" for "SettingCard"  [call-arg]
+tests/test_wizard_agent.py:147: error: Missing named argument "dependents" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:147: error: Missing named argument "status" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:147: error: Missing named argument "fame" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:147: error: Missing named argument "reputation" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:147: error: Missing named argument "resources" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:147: error: Missing named argument "domain" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:147: error: Missing named argument "enemies" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:147: error: Missing named argument "obligations" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:184: error: Missing named argument "second" for "StoryTimestamp"  [call-arg]
+tests/test_wizard_agent.py:378: error: Missing named argument "second" for "StoryTimestamp"  [call-arg]
+tests/test_api/test_wizard_confirmation.py:83: error: Item "None" of "str | None" has no attribute "replace"  [union-attr]
+tests/test_api/test_wizard_confirmation.py:154: error: Argument "thread_id" to "WizardContext" has incompatible type "str | None"; expected "str"  [arg-type]
+tests/test_api/test_wizard_confirmation.py:168: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+tests/test_api/test_wizard_confirmation.py:175: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+tests/test_api/test_wizard_confirmation.py:176: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+tests/test_api/test_wizard_confirmation.py:179: error: Argument 1 to "_require_revision_submission" has incompatible type "DummyRunContext"; expected "RunContext[WizardContext]"  [arg-type]
+tests/test_api/test_wizard_confirmation.py:372: error: Argument "model_settings" to "_handle_accept_fate_traits" has incompatible type "None"; expected "ModelSettings"  [arg-type]
+tests/test_api/test_slot_mutation_guard.py:149: error: Incompatible types in assignment (expression has type "object", variable has type "dict[str, bool] | dict[str, int]")  [assignment]
+Found 33 errors in 5 files (checked 13 source files)
+```
+
+### mypy, Main (the 12 Pre-existing Files, Checked Out in Place)
+
+```
+$ nice -n 15 $PY -m mypy --explicit-package-bases --cache-dir <scratch>/mypy-cache-wt-main <main's 12 pre-existing files>
+nexus/api/setup_endpoints.py:13: error: Skipping analyzing "frontmatter": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+nexus/api/setup_endpoints.py:123: error: Argument "current_phase" to "ResumeSetupResponse" has incompatible type "str"; expected "Literal['setting', 'character', 'seed', 'ready']"  [arg-type]
+nexus/api/setup_endpoints.py:124: error: Argument "pending_confirmation" to "ResumeSetupResponse" has incompatible type "str | None"; expected "Literal['setting', 'character'] | None"  [arg-type]
+nexus/api/setup_endpoints.py:135: error: Argument "messages" to "ResumeSetupResponse" has incompatible type "list[dict[str, str]]"; expected "list[WizardHistoryMessage]"  [arg-type]
+nexus/api/wizard_chat.py:17: error: Skipping analyzing "frontmatter": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+nexus/api/wizard_chat.py:241: error: No overload variant of "run" of "AbstractAgent" matches argument types "str", "WizardContext", "list[Any]", "Any", "ModelSettings"  [call-overload]
+nexus/api/wizard_chat.py:281: error: Item "None" of "WizardCache | None" has no attribute "confirmation_metadata"  [union-attr]
+nexus/api/wizard_chat.py:338: error: Incompatible types in assignment (expression has type "str", variable has type "Literal['setting', 'character', 'seed'] | None")  [assignment]
+nexus/api/wizard_chat.py:621: error: No overload variant of "run" of "AbstractAgent" matches argument types "str | None", "WizardContext", "list[ModelRequest | ModelResponse]", "Model", "ModelSettings"  [call-overload]
+nexus/api/wizard_chat.py:652: error: Argument after ** must be a mapping, not "dict[str, Any] | None"  [arg-type]
+nexus/api/wizard_chat.py:752: error: "str" has no attribute "choices"  [attr-defined]
+nexus/api/wizard_chat.py:755: error: "str" has no attribute "message"  [attr-defined]
+nexus/api/wizard_chat.py:762: error: "str" has no attribute "message"  [attr-defined]
+nexus/api/wizard_chat.py:768: error: "str" has no attribute "message"  [attr-defined]
+tests/test_wizard_agent.py:93: error: Missing named argument "language_notes" for "SettingCard"  [call-arg]
+tests/test_wizard_agent.py:146: error: Missing named argument "dependents" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:146: error: Missing named argument "status" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:146: error: Missing named argument "fame" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:146: error: Missing named argument "reputation" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:146: error: Missing named argument "resources" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:146: error: Missing named argument "domain" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:146: error: Missing named argument "enemies" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:146: error: Missing named argument "obligations" for "TraitRationales"  [call-arg]
+tests/test_wizard_agent.py:183: error: Missing named argument "second" for "StoryTimestamp"  [call-arg]
+tests/test_wizard_agent.py:377: error: Missing named argument "second" for "StoryTimestamp"  [call-arg]
+tests/test_api/test_wizard_confirmation.py:83: error: Item "None" of "str | None" has no attribute "replace"  [union-attr]
+tests/test_api/test_wizard_confirmation.py:154: error: Argument "thread_id" to "WizardContext" has incompatible type "str | None"; expected "str"  [arg-type]
+tests/test_api/test_wizard_confirmation.py:168: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+tests/test_api/test_wizard_confirmation.py:175: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+tests/test_api/test_wizard_confirmation.py:176: error: Value of type "dict[str, Any] | None" is not indexable  [index]
+tests/test_api/test_wizard_confirmation.py:179: error: Argument 1 to "_require_revision_submission" has incompatible type "DummyRunContext"; expected "RunContext[WizardContext]"  [arg-type]
+tests/test_api/test_wizard_confirmation.py:358: error: Argument "model_settings" to "_handle_accept_fate_traits" has incompatible type "None"; expected "ModelSettings"  [arg-type]
+tests/test_api/test_slot_mutation_guard.py:147: error: Incompatible types in assignment (expression has type "object", variable has type "dict[str, bool] | dict[str, int]")  [assignment]
+Found 33 errors in 5 files (checked 12 source files)
+```
 
 ## UI
 
@@ -335,6 +557,20 @@ $ nice -n 15 npm --prefix ui test -- InteractiveWizard SlotSelector WizardShell
 $ nice -n 15 npm --prefix ui run check     (exit 0)
 $ nice -n 15 npm --prefix ui run build     (exit 0)
 ```
+
+The whole UI suite, on 75cd1625:
+
+```
+$ nice -n 15 npm --prefix ui test
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ Test Files  1 failed | 43 passed (44)
+      Tests  677 passed (677)
+```
+
+The one failing file is the expected stale `state-shades.test.ts` (see
+"State Surfaces"): the coordinator regenerates the state surfaces on the
+wave's UI union branch. The other 43 files pass.
 
 ## State Surfaces
 
