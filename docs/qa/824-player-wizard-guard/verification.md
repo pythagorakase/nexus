@@ -3,8 +3,10 @@
 Issue #824, Decisions 824-Q4 and D-824-TRANSITION. Branch
 `claude/824-player-wizard-guard`, cut from `origin/main` at c7ae2988, brought
 forward to d295eef0 before any edit, and merged with `origin/main` at
-70a1ff95 and again at 5ba97c05. No migration, no paid call, no gateway lane.
-Every PostgreSQL write went to the disposable `qa640_offline_gate_*` clones.
+70a1ff95 and again at 5ba97c05. No migration and no paid call. The build
+used no gateway lane; the review fixes ran the #838 entry-point proof on the
+disposable lane 8012 (see "A Second Consumer the Order Did Not Name"). Every
+PostgreSQL write went to disposable `qa640_*` clones.
 
 ## What Was Wrong (Lines at c7ae2988)
 
@@ -29,6 +31,37 @@ Every PostgreSQL write went to the disposable `qa640_offline_gate_*` clones.
   posted `setup/start` with `{slot}` and `:630` posted `transition` on both
   planes. `nexus/cli.py:2620-2632` posted `setup/start` with `--model` when
   given.
+
+### Re-Located on `origin/main` 5ba97c05
+
+Every citation above and in the order was re-checked on 5ba97c05, the
+merge base of this branch. These moved:
+
+| Citation at c7ae2988 | On 5ba97c05 |
+|---|---|
+| `wizard_chat.py:822-949` (transition handler) | `:823-956` |
+| `wizard_chat.py:822-823` (decorator, `def`) | `:823-824` |
+| `wizard_chat.py:836` (lock) | `:837` |
+| `wizard_chat.py:839-911` (`prepare`) | `:840-918` |
+| `wizard_chat.py:917-921` (`run_genesis_transition`) | `:924-928` |
+| `wizard_chat.py:940-941` (`except HTTPException: raise`) | `:947-948` |
+| `route_capabilities.py:127-129` (`_WIZARD_OVERWRITE`) | `:130-132` |
+| `route_capabilities.py:175-180` (setup comment, `setup/start`) | `:178-183` |
+| `route_capabilities.py:195-196` (transition comment and entry) | `:198-199` |
+| `cli.py:2620-2632` (`setup/start` block) | `:2631-2643` |
+| `cli.py:2627-2629` (`--model` forward) | `:2638-2640` |
+| `cli.py:2739`, `:2936`, `:3017` (transition posts) | `:2750`, `:2947`, `:3028` (`:2753`, `:2950`, `:3031` on this branch) |
+| `cli.py:6306-6324` (`_active_remote_runtime`) | `:6400-6418` |
+| `docs/runtime.md:155` (Operator row) | `:158` |
+| `docs/runtime.md:157-163` (planes paragraph) | `:160-166` |
+| `tests/test_api/test_route_capabilities.py:523-544` | `:525-546` |
+
+These did not move: `setup_endpoints.py:50-92`, `:53`, `:58`, `:90-92` and
+`:235`; `new_story_flow.py:131-143`; `slot_state.py:106-255`, `:132-134` and
+`:199-216`; `route_capabilities.py:12-15`; `wizard_chat.py:508-516` (the
+chat route's `model` repin, Known Limit (c), cited as `:507-515` before);
+`InteractiveWizard.tsx:383-390` and `:630`; `SlotSelector.tsx:67` and
+`:126-133`; `usePlane.ts`.
 
 ## Read-Only Facts About the Owner's Databases
 
@@ -97,22 +130,122 @@ $ nice -n 15 npm --prefix ui test -- InteractiveWizard
 
 ## A Consumer the Order Did Not Name
 
-The first green PostgreSQL proof run failed 11 tests in three named proof
-files: `tests/test_api/test_wizard_weird_level.py` (8),
-`tests/test_api/test_wizard_confirmation.py::test_final_transition_cannot_bypass_artifact_acceptance`
-(2) and `tests/test_wizard_agent.py::test_transition_rejects_missing_diegetic_timestamp`
-(1). Each calls `transition_to_narrative_endpoint` with the handler's storage
-boundary replaced (`read_cache` and `run_genesis_transition`; "no database is
-opened") and opens no slot database. The new story-slot refusal reads
-`get_slot_state`, which reached `save_04` (refused by the dbname audit:
-`OwnerDatabaseConnectionRefused ... owner database 'save_04'`) or the
-nonexistent `qa640_fake_wizard_slot`. Each test now also replaces
+The first green PostgreSQL proof run failed tests in three named proof files.
+Each failing test calls `transition_to_narrative_endpoint` with the handler's
+storage boundary replaced (`read_cache` and `run_genesis_transition`; "no
+database is opened") and opens no slot database. The new story-slot refusal
+reads `get_slot_state`, which reached `save_04` (refused by the dbname audit)
+or the nonexistent `qa640_fake_wizard_slot`. Each test now also replaces
 `wizard_chat.get_slot_state` with a wizard-mode `SlotState`, so the refusal
 runs and passes as it does for a slot that holds a wizard (commit c002bbbc).
 The other direct callers (`tests/test_api/test_genesis_ledger_pg.py`,
 `tests/genesis_owner_child.py`) run on the routed clone and pass unchanged.
 
-## Green Runs (Merged Tree, HEAD cf9762c1 Before the Final Receipt)
+The first run's log was not kept. Re-run on c002bbbc's parent (52041b8b, a
+`git archive` in the session scratchpad, `ui/` excluded): 14 tests fail, 11 in
+`test_wizard_weird_level.py`, 2 in `test_wizard_confirmation.py` and 1 in
+`test_wizard_agent.py`. The earlier text said 11 (8 + 2 + 1); it left out
+the three unparametrized `test_wizard_weird_level.py` tests.
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_wizard_weird_level.py tests/test_api/test_wizard_confirmation.py tests/test_wizard_agent.py
+E               tests.dbname_audit.OwnerDatabaseConnectionRefused: dbname audit: refused a psycopg2 connection to owner database 'save_04' from tests/test_api/test_wizard_weird_level.py::test_transition_persists_a_supplied_level_before_it_runs on the owner's server (local:5432); tests connect only to disposable databases, or to an owner name on a registered disposable cluster
+E        +  where 500 = HTTPException(status_code=500, detail='Transition failed: connection to server on socket "/tmp/.s.PGSQL.5432" failed: FATAL:  database "qa640_fake_wizard_slot" does not exist\n').status_code
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 20 targets: postgres, qa640_fake_wizard_slot, qa640_offline_gate_* x17, save_04
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: FAILED: owner targets: save_04 (psycopg2) from [the 13 tests below other than test_wizard_agent.py's]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_persists_a_supplied_level_before_it_runs
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[low]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[medium]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[high]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_forwards_the_stored_selection[None]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_guards_refuse_before_recording_a_level[changes0-409-Confirm the setting and character]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_guards_refuse_before_recording_a_level[changes1-409-Confirm the setting and character]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_guards_refuse_before_recording_a_level[changes2-409-Finish the character revision]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_guards_refuse_before_recording_a_level[changes3-422-Missing: base_timestamp]
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_refuses_an_incomplete_seed_before_recording_a_level
+FAILED tests/test_api/test_wizard_weird_level.py::test_transition_reports_a_concurrent_wizard_change_without_running
+FAILED tests/test_api/test_wizard_confirmation.py::test_final_transition_cannot_bypass_artifact_acceptance[setting_confirmed]
+FAILED tests/test_api/test_wizard_confirmation.py::test_final_transition_cannot_bypass_artifact_acceptance[character_confirmed]
+FAILED tests/test_wizard_agent.py::test_transition_rejects_missing_diegetic_timestamp
+14 failed, 89 passed, 5 warnings in 40.75s
+```
+
+The same three files with `tests/test_doc_front_matter.py`, on 5f67524c:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_wizard_weird_level.py tests/test_api/test_wizard_confirmation.py tests/test_wizard_agent.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 18 targets: postgres, qa640_offline_gate_* x17
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+192 passed, 5 warnings in 45.97s
+```
+
+## A Second Consumer the Order Did Not Name
+
+`tests/proofs/proof_weird_entry_points.py` (the #838 entry-point proof)
+serves the unprojected `narrative.app`, which reports the operator plane
+(`nexus/api/narrative.py:1770`), so the built client now posts
+`POST /api/story/new/transition/overwrite`. Its `StrangenessRequestRecorder`
+recorded only `/api/story/new/transition`, so the browser half saw no
+transition. Commit 6eeec8ee adds the overwrite route to `RECORDED_ROUTES` and
+names both transition routes in the module and recorder docstrings;
+`assert_one_transition` already filters by method and is unchanged. The CLI
+half still posts the player route.
+
+The proof does not run on main as committed: `tests/conftest.py:82-83` routes
+every process to the never-created `qa640_816_test_provider_unrouted` (#816),
+and the proof does not request `routed_test_provider_database`, so its
+private mock answers 500 at the first wizard chat (`database
+"qa640_816_test_provider_unrouted" does not exist`, in both halves, before
+any transition). That is outside this order and left unfixed. The runs below
+add a scratch plugin, `route_838_test_provider.py` in the session scratchpad's
+`824-S4/plugins/`, whose only content is an autouse fixture that requests
+`routed_test_provider_database`. Lane 8012 was free (`lsof` empty) and load
+was under 6. The client was rebuilt first (`nice -n 15 npm --prefix ui run
+build`, exit 0).
+
+With the recorder as it was (6710a3ab's proof file in the 5f67524c tree):
+
+```
+$ env -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 NEXUS_GATEWAY_PORT=8012 PYTHONPATH=$PWD:<scratch>/824-S4/plugins nice -n 15 $PY -m pytest -q -s -p tests.dbname_audit -p route_838_test_provider tests/proofs/proof_weird_entry_points.py
+E       AssertionError: [{'method': 'PUT', 'path': '/api/story/new/weird', 'request': {'slot': 4, 'weird_level': 'low'}, 'response': {'slot': ...request': {'slot': 4, 'weird_level': 'low'}, 'response': {'slot': 4, 'status': 'recorded', 'weird_level': 'low'}, ...}]
+E       assert 0 == 1
+E        +  where 0 = len([])
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_816_test_provider_* x2, qa640_838_browser_*, qa640_838_cli_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+FAILED tests/proofs/proof_weird_entry_points.py::test_browser_glyphs_hold_confirm_and_ride_the_transition
+1 failed, 1 passed, 2 warnings in 154.69s (0:02:34)
+```
+
+With 6eeec8ee's recorder (on 5f67524c):
+
+```
+$ env -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 NEXUS_GATEWAY_PORT=8012 PYTHONPATH=$PWD:<scratch>/824-S4/plugins nice -n 15 $PY -m pytest -q -s -p tests.dbname_audit -p route_838_test_provider tests/proofs/proof_weird_entry_points.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa640_816_test_provider_* x2, qa640_838_browser_*, qa640_838_cli_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+2 passed, 2 warnings in 36.31s
+```
+
+The recorded requests of that run: the browser half posted `POST
+/api/story/new/transition/overwrite` (200, after 4 saves) and the CLI half
+posted `POST /api/story/new/transition` (200, after 6 saves). Evidence went
+to the test's temporary directory; the tracked `docs/qa/838-entry-points` is
+unchanged.
+
+## Green Runs (Merged Tree, HEAD cf9762c1)
 
 PostgreSQL proof set (load 1.98 at start; no wait needed):
 
@@ -152,24 +285,44 @@ the first piece. The first piece failed once, before the merge, on
 (declaring `docs/runtime.md`), 0069 (`nexus/api/wizard_chat.py`) and 0063 and
 0073 (`nexus/cli.py`) were added on main after the order was written. Each
 records an issue ruling that the route split leaves true (0079 quotes
-D-824-TRANSITION, which this branch implements) and was re-stamped; 0067
-(declaring the state-surface receipt) was re-stamped at the second merge.
+D-824-TRANSITION, which this branch implements) and was re-stamped. 0067
+(declaring the state-surface receipt) is back at main's `verified_commit`,
+since the branch no longer changes its sources (5f67524c).
 AGENTS.md, `docs/turn_flow_sequence.md` and decision 0009 describe neither
 the wizard routes nor `continue --model` and were re-stamped as item 7 asks.
 
-## Static Checks (Against `origin/main` Versions, via `git archive`)
+## Static Checks (Against `origin/main` Versions)
 
 ```
 black --check (12 files): 12 files would be left unchanged.
 flake8: branch 38, main 38. The only lines that differ are the two
   pre-existing F811 diagnostics in tests/test_wizard_agent.py, whose message
   now says "from line 41" instead of "from line 40" (one import was added).
-mypy --explicit-package-bases: branch "Found 33 errors in 5 files (checked
-  12 source files)"; every branch diagnostic is also reported on main's
-  versions (main run: "Found 267 errors in 58 files"); new on branch: none.
 $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
 OK: exception disposition coverage and shrink-only baseline verified.
 ```
+
+mypy, re-run on 5f67524c with the 13 changed Python files (12 pre-existing,
+`tests/proofs/proof_weird_entry_points.py` included, plus the new
+`tests/test_api/test_wizard_plane_guard_pg.py`). Both runs are from the
+worktree root: main's versions were checked out in place with `git checkout
+origin/main -- <the 12 pre-existing files>` and restored with `git checkout
+HEAD -- <same>` (status clean afterwards). An earlier note gave main as
+"Found 267 errors in 58 files"; that came from a `git archive` tree outside
+the checkout, where mypy also reports every imported module, and is withdrawn.
+
+```
+$ nice -n 15 $PY -m mypy --explicit-package-bases --cache-dir <scratch>/mypy-cache-wt-main <the 12 pre-existing files, main's versions>
+Found 33 errors in 5 files (checked 12 source files)
+$ nice -n 15 $PY -m mypy --explicit-package-bases --cache-dir <scratch>/mypy-cache-branch <the 13 changed files>
+Found 33 errors in 5 files (checked 13 source files)
+$ diff <(strip main) <(strip branch)     # strip = drop "Found", drop file:line[:col], sort
+(empty; exit 0)
+```
+
+black --check on the 13 files: "13 files would be left unchanged". flake8 on
+`tests/proofs/proof_weird_entry_points.py`: no output on the branch or on
+main's version.
 
 No swallowing handler was added; the baseline does not change.
 
@@ -185,60 +338,19 @@ $ nice -n 15 npm --prefix ui run build     (exit 0)
 
 ## State Surfaces
 
-`InteractiveWizard.tsx` and both wizard test files are in the state-surface
-input closure. Main's receipt is already stale: it is the receipt of
-a01c162f, and 1102-S1 (`LocalModelRows.tsx`, `tooltip-focus-trace.mjs`) and
-later 821-S2 (`SettingsPane.tsx`, `nexus-layout.css`, `vite.config.ts`, the
-Radix popover) landed without regenerating it (Decision 0067, 821-D3: the
-coordinator regenerates once on the wave's UI union). At d295eef0, before any
-edit of this order, `npm --prefix ui test -- state-shades` already failed with
-"Stale browser-resolved state surfaces".
-
-First regeneration, on this branch before the second merge (tree with
-d295eef0's UI plus this order's three files): nine bounded `nice -n 15`
-capture batches of `npm --prefix ui run resolve-state-surfaces` with
-`STATE_SURFACES_CONDITION` over the 33 media conditions, then
-`--assemble`:
+This branch does not regenerate the browser-resolved state surfaces. The
+stale `state-shades.test.ts` failure ("Stale browser-resolved state
+surfaces") is expected: the coordinator regenerates once on the wave's UI
+union branch, and that regeneration covers this order's three closure files
+(`InteractiveWizard.tsx`, `InteractiveWizard.test.tsx`,
+`InteractiveWizard.transition.test.tsx`). An earlier commit (22ec5882) wrote
+the receipt against that rule; 5f67524c restores main's receipt pointer and
+decision 0067's `verified_commit`. On 5f67524c:
 
 ```
-Resolved painted state surfaces: renders=126078; wall=3500.300s (sum of bounded capture shards); Chromium 153.0.8010.12; Playwright 1.63.0
-Emulation: 1200×900 default; deviceScaleFactor=4; dark; reduced motion; 33 media conditions; file://; network aborted; requests=0; errors=0
-Wrote ui/client/src/state-surfaces.resolved.json; module graph=2099 inputs; SHA-256 72208704ee04a968655e30faa980b6126e4e7a6d4b685b1a8fac253749b17018
-$ nice -n 15 npm --prefix ui test -- state-shades StateGlyphs shell-accessibility
- Test Files  4 passed (4)
-      Tests  123 passed (123)
-$ nice -n 15 npm --prefix ui test
- Test Files  44 passed (44)
-      Tests  687 passed (687)
-```
-
-Against main's receipt, ignoring settle timings: the media inventory is
-equal, every painted color (`meanLinear`, `controlMeanLinear`, `rgb`,
-`coreSize`) is equal, and the recorded tables still match. The only
-differences are on the exceeds-RAM delete row, whose inputs 1102-S1 changed:
-its focus-visible captures record an Escape dismissal (`escapePressed`,
-`action`: 1,978 samples each) and its rest box sits lower (`y`: 204 samples).
-No sample of this order's surfaces moved. That receipt is committed
-(22ec5882).
-
-Second regeneration, after merging 5ba97c05 (same nine batches, module graph
-2108 inputs, SHA-256 eb1ab6e7...): 821-S2's inputs move painted measurements
-on the delete rows (`rgb` 446, `meanLinear` 68, `coreSize` 68, `signature`
-6,744 samples; contexts `delete/ready-exceeds/focus-visible`,
-`delete/ready/rest`, `delete/ready-exceeds/rest`,
-`delete/ready-exceeds/button-hover`) and change the media inventory, so
-`browser_measurements_match_recorded_tables` fails until the recorded tables
-under `docs/qa/777-glyph-first-states/amendment-2/` are refreshed. Certifying
-those moves is the union regeneration that 821-D3 assigns to the coordinator,
-so the branch keeps the first receipt. On the merged tree:
-
-```
-$ nice -n 15 npm --prefix ui test
+$ nice -n 15 npm --prefix ui test -- state-shades
  FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
 Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
- Test Files  1 failed | 43 passed (44)
-      Tests  677 passed (677)
+ Test Files  1 failed | 1 passed (2)
+      Tests  95 passed (95)
 ```
-
-This is the same staleness `origin/main` shows (its receipt is a01c162f's,
-with 1102-S1's and 821-S2's inputs changed since).
