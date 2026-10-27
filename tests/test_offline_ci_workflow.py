@@ -90,6 +90,12 @@ def test_offline_tests_run_both_suites_without_local_models() -> None:
         if "poetry run pytest" in line
     ]
     assert len(invocations) == 2
+    for step in _steps("offline-tests"):
+        if "poetry run pytest" in str(step.get("run", "")):
+            # `shell: bash` runs the step as `bash -eo pipefail`; GitHub's
+            # default `bash -e` takes tee's status, so a pytest failure would
+            # pass the step.
+            assert step.get("shell") == "bash"
     logs = []
     for (run, line), suite in zip(invocations, SUITES, strict=True):
         assert suite in line

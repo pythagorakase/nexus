@@ -488,6 +488,7 @@ def test_distinct_seat_removals_reach_attempt_records_and_manifests(
             )
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.requires_corpus
 @pytest.mark.parametrize("k", [3, 15])
 def test_configured_k_bounds_the_deep_query_pool(

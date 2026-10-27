@@ -7,6 +7,7 @@ name: Offline tests
 # the secret-store guard line. The `ui-tests` job runs the IRIS client tests
 # and reports without blocking. Run the same thing from a checkout with:
 #
+#   nexus models fetch   # or fill only the pinned tokenizers, as the steps below do
 #   poetry run pytest -q -m 'not requires_local_models' tests --ignore=tests/test_api --ignore=tests/test_orrery
 #   poetry run pytest -q -m 'not requires_local_models' tests/test_api tests/test_orrery
 #   npm --prefix ui ci && npm --prefix ui test

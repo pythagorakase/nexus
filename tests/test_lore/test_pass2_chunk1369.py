@@ -25,7 +25,11 @@ AUTHORIAL_DIRECTIVES = [
 
 # The regression replays karaoke chunk 1369 and its deep cuts from the golden
 # master's played corpus (a save_01 data clone); no seed reproduces them.
-pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_corpus]
+pytestmark = [
+    pytest.mark.requires_postgres,
+    pytest.mark.requires_corpus,
+    pytest.mark.requires_local_models,
+]
 
 
 def _strip_user_section(full_text: str) -> str:
