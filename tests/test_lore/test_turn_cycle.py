@@ -75,7 +75,13 @@ def _stub_baseline(
 @pytest.mark.parametrize(
     ("apex_model", "provider_wire_type", "provider_name", "expected_window"),
     [
-        ("nousresearch/hermes-4-70b", "local", "local", 32_000),
+        pytest.param(
+            "nousresearch/hermes-4-70b",
+            "local",
+            "local",
+            32_000,
+            marks=pytest.mark.requires_local_models,
+        ),
         (None, "openai", "openai", 75_000),
         ("claude-opus-4-8", "anthropic", "anthropic", 75_000),
         # Remote OpenAI-compatible providers share the local wire class but

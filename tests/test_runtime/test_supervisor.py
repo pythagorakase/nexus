@@ -1613,7 +1613,9 @@ def test_failed_start_keeps_the_record_when_the_writer_probe_cannot_run(
         # successful start to roll back or retry the failed writer probe.
         assert not getattr(raised.value, "__notes__", [])
         deadline = time.monotonic() + 10
-        while not log_path.read_text(encoding="utf-8").endswith("\n"):
+        while not log_path.exists() or not log_path.read_text(
+            encoding="utf-8"
+        ).endswith("\n"):
             assert time.monotonic() < deadline, "the holding child never printed"
             time.sleep(0.05)
         grandchild = int(log_path.read_text(encoding="utf-8").split()[0])

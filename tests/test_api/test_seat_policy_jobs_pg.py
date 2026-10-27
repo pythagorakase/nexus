@@ -24,7 +24,7 @@ from tests.scheduler_helpers import gateway_lane, route_slot, run_cli
 from tests.scheduler_helpers import test_provider_config as configure_test
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
-pytestmark = pytest.mark.requires_postgres
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_local_models]
 TABLES = (
     "character_experience_jobs",
     "orrery_maturation_jobs",

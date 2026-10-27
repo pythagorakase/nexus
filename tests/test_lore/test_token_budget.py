@@ -79,6 +79,7 @@ class TestTokenBudgetManager:
         assert budget["total_available"] == 20_000
         assert budget["reasoning_reserve"] == 0
 
+    @pytest.mark.requires_local_models
     def test_real_local_model_produces_positive_allocations(self, settings):
         """Hermes uses the local window without inheriting frontier reasoning."""
         manager = TokenBudgetManager(settings)

@@ -31,7 +31,7 @@ from tests.pg_fixtures import (
     seed_played_story,
 )
 
-pytestmark = pytest.mark.requires_postgres
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_local_models]
 
 # Accepted turns seeded ahead of the pending draft.
 STORY_TURNS = 3

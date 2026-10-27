@@ -124,6 +124,7 @@ def test_scheduler_drains_starved_corpus(monkeypatch, tmp_path, mock_openai_serv
             scheduler.stop()
 
 
+@pytest.mark.requires_local_models
 def test_scheduler_live_turn_starts_before_queued_render(
     monkeypatch, tmp_path, mock_openai_server
 ):

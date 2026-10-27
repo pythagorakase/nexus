@@ -342,6 +342,7 @@ def test_sync_generation_rejects_mid_turn_route_drift(
     assert logon.provider is None
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.requires_postgres
 def test_lore_keeps_logon_lazy(
     patched_provider: Dict[str, int], monkeypatch: pytest.MonkeyPatch

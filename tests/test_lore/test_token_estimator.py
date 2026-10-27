@@ -32,7 +32,11 @@ TINY_REPOSITORY = "nexus-test/tiny-tokenizer"
 @pytest.mark.parametrize(
     "model",
     [
-        entry.id
+        (
+            pytest.param(entry.id, marks=pytest.mark.requires_local_models)
+            if entry.tokenizer_repository
+            else entry.id
+        )
         for provider in load_settings().global_.model.api_models.values()
         for entry in provider.models
     ],

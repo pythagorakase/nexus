@@ -292,6 +292,7 @@ def seed_experiences(dbname):
     return ids
 
 
+@pytest.mark.requires_local_models
 def test_scheduler_embeds_rendered_experiences_and_skips_the_rest(offline_gate_db):
     """One default pass embeds and stamps only the rendered valid recollection (#754).
 

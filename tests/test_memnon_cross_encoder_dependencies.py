@@ -25,6 +25,7 @@ def test_sentencepiece_runtime_dependency_available() -> None:
     importlib.import_module("sentencepiece")
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.skipif(
     not LOCAL_CROSS_ENCODER_MODEL.exists(),
     reason="Local DeBERTa cross-encoder model is not available",

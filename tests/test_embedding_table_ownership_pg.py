@@ -471,6 +471,7 @@ def test_constructor_refuses_missing_vector_extension(ownership_db: str) -> None
         DatabaseManager(database_url(ownership_db))
 
 
+@pytest.mark.requires_local_models
 def test_embedding_job_source_path_propagates_ensure_failure(ownership_db: str) -> None:
     """The job's real source upsert propagates drift and rolls back prior writes."""
     settings = load_memnon_settings()

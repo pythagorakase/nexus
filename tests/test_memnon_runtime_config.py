@@ -55,6 +55,7 @@ def _import_memnon(
     )
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.requires_postgres
 def test_memnon_uses_runtime_config_instead_of_legacy_settings_path(
     tmp_path: Path,

@@ -1088,6 +1088,7 @@ def _same_utc_day_reads(
     return payload, cli_observation
 
 
+@pytest.mark.requires_local_models
 def test_economics_matches_inspect_turn_for_a_test_turn(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request: pytest.FixtureRequest
 ) -> None:

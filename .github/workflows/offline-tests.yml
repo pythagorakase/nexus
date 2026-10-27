@@ -1,0 +1,103 @@
+name: Offline tests
+
+# The offline test tier (issue #816, Decision 816-D1). The `offline-tests` job
+# runs both offline suites with NEXUS_RUN_POSTGRES unset and deselects the
+# tests that load a production local model artifact (the embedder or reranker
+# from nexus.toml's local_path or model_path, or a registry model's pinned
+# Hugging Face tokenizer; `requires_local_models`, pytest.ini) until #812's
+# artifact contract supports CI, and fails unless each run ends with the
+# secret-store guard line. The `ui-tests` job runs the IRIS client tests and
+# reports without blocking. Run the same thing from a checkout with:
+#
+#   poetry run pytest -q -m 'not requires_local_models' tests --ignore=tests/test_api --ignore=tests/test_orrery
+#   poetry run pytest -q -m 'not requires_local_models' tests/test_api tests/test_orrery
+#   npm --prefix ui ci && npm --prefix ui test
+#
+# PostgreSQL-backed tests run only locally (docs/agent_workflow.md).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      # tests/test_doc_front_matter.py diffs against origin/main and refuses a
+      # shallow clone.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch origin/main
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      - name: Install Poetry
+        run: pipx install poetry
+      # tests/test_scripts/test_check_exception_dispositions.py runs the lint
+      # under python3.11, python3.12 and python3.13; the last version listed
+      # is the default interpreter.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.12
+            3.13
+            3.11
+          cache: poetry
+      - name: Select Python 3.11
+        run: poetry env use python3.11
+      # poetry.lock pins the versions; the dev group carries pytest-asyncio,
+      # asyncpg, flake8 and pillow.
+      - name: Install NEXUS
+        run: poetry install
+      - name: Run the offline suite
+        shell: bash
+        run: |
+          poetry run pytest -q -m 'not requires_local_models' tests --ignore=tests/test_api --ignore=tests/test_orrery 2>&1 | tee offline-1.log
+          grep -qF 'secret-store guard: active; nexus-api: denied' offline-1.log
+      - name: Run the offline API and Orrery suites
+        shell: bash
+        run: |
+          poetry run pytest -q -m 'not requires_local_models' tests/test_api tests/test_orrery 2>&1 | tee offline-2.log
+          grep -qF 'secret-store guard: active; nexus-api: denied' offline-2.log
+      - name: Save the test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-test-logs
+          path: |
+            offline-1.log
+            offline-2.log
+
+  ui-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      # ui/client/src/state-shades.test.ts reads a historical commit with
+      # `git show`, so the checkout needs full history.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # The state-surface receipt (ui/client/src/state-surfaces.resolved.json)
+      # is an LFS object; fetch only the objects under ui/ and the recorded
+      # state-surface evidence (its PNGs) that state-shades.test.ts reads.
+      - name: Fetch the UI LFS objects
+        run: git lfs pull --include="ui/**,docs/qa/777-glyph-first-states/**"
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install the UI dependencies
+        run: npm --prefix ui ci
+      - name: Run the UI tests
+        run: npm --prefix ui test
