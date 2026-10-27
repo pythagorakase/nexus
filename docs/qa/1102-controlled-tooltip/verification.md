@@ -40,7 +40,8 @@ Order: `temp/orders_2026_10_26/1102-S1.md` with the coordinator amendment of
 - `2fcd01d6` tests (a)-(e); `6a5716b4` product (`ExceedsRamTooltip`);
   `f418788c` test (d) per the amendment; `63eb4353` trace and README;
   merge of `origin/main` (`e058005f`); `25c666de` re-stamp of decision 0066
-  to the merge base.
+  to the merge base; `1d43db54` rewrap of the README passage (whitespace
+  only, `git diff --word-diff` shows no word change).
 
 ## Red: Tests on the `c7ae2988` Product File
 
@@ -179,8 +180,9 @@ No diagnostics from `check`, so there are no new or pre-existing ones.
 
 ## Python Gates
 
-All on `25c666de`, with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT`
-and `NEXUS_RUN_POSTGRES` unset. No Python file changed:
+The offline suites ran on `25c666de`, every run below with
+`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT` and `NEXUS_RUN_POSTGRES`
+unset. No Python file changed:
 
 ```
 $ git diff --name-only origin/main...HEAD -- '*.py'
@@ -195,12 +197,24 @@ $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 1910 passed, 1547 skipped, 7 warnings in 45.85s
+```
+
+Rerun on `1d43db54` (the README rewrap) with full logs kept under the
+scratchpad's `1102-S1-r2/` (`reachability.log`, `front-matter.log`,
+`dispositions.log`):
+
+```
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
 60 passed, 5 warnings in 8.66s
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py
-89 passed, 5 warnings in 6.71s
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+89 passed, 5 warnings in 6.78s
 $ PYTHONPATH=$PWD $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
 OK: exception disposition coverage and shrink-only baseline verified.
+EXIT 0
 ```
 
 The skips are the PostgreSQL-backed tests (`NEXUS_RUN_POSTGRES` unset). No
