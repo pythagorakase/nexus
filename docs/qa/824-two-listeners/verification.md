@@ -9,6 +9,16 @@ comparisons. A second merge brought in `e058005f` (845-S1S2, no conflicts,
 no file this order touches), and the canonical documents were re-stamped to
 that merge base; the doc, reachability and CLI-reference checks and the
 launcher, CORS and supervisor unit files were rerun after it (last section).
+The review fixes are `4c4031e4`; a third merge `688e90e9` brought in
+`d295eef0` (1102-S1, #1170, UI only, no conflicts, no file this order
+touches). The canonical stamps stay at `e058005f`, an ancestor of the new
+merge base, which `test_declared_sources_carry_a_fresh_verified_commit`
+accepts; the one source the fixes touch again, `docs/runtime.md` (0061,
+0079), only moved its `/health` paragraph back above the new subsection, so
+no record's claim changed. The supervisor sites the fixes edit were located
+on the branch head `5dee9e73` (which contains `9a0714d7`), not by the
+order's `c7ae2988` line numbers: the refusal at `supervisor.py:955-973`, the
+plane check at `:865`, `_health_answer` at `:889`.
 
 ## What Main Does Today (Cited Lines at `b0e9cb77`)
 
@@ -49,7 +59,8 @@ launcher, CORS and supervisor unit files were rerun after it (last section).
 
 ### Static Record of Main's Direct-Launch Default
 
-`nexus/api/narrative.py:1779-1784` at `b0e9cb77`:
+`nexus/api/narrative.py:1780-1785` at `b0e9cb77` (`:1783` is the
+`NARRATIVE_API_PORT` default of `"8002"`):
 
 ```python
     uvicorn.run(
@@ -73,54 +84,197 @@ never run on main (it would bind 8002).
 | 19:53 CDT, before the red runs | (none) | 1 |
 | 19:54 CDT, after the red runs | (none) | 1 |
 | 20:06 CDT, after every proof | (none) | 1 |
+| 20:25 CDT, before the review-fix runs | (none) | 1 |
+| 20:31 CDT, before and after the behavioral red runs | (none) | 1 |
+| 20:32 CDT, before and after the offline red reruns | (none) | 1 |
+| 20:35 CDT, after the review-fix proofs | (none) | 1 |
 
 Every listener a test started took an OS-assigned port; nothing bound 8002
 or 8003, on the branch or on main.
 
 ## Red Runs on Main (`b0e9cb77`, Branch Test Files Overlaid)
 
-Offline (`NEXUS_SLOT`, `NEXUS_GATEWAY_PORT`, `NEXUS_PLAYER_PORT`,
-`NEXUS_API_URL`, `NARRATIVE_API_PORT` unset):
+The red runs that replace the first pass's were made after the review, on a
+fresh export of the merge base:
 
 ```
-FAILED tests/test_api/test_serve.py::test_launcher_serves_both_planes_and_stops_on_sigterm
-  AssertionError: /Users/pythagor/nexus/.venv/bin/python: No module named nexus.api.serve
-FAILED tests/test_api/test_serve.py::test_direct_launch_serves_the_operator_projection
-  AssertionError: assert 'https://nexus.pythagora.net' is None
-FAILED tests/test_api/test_serve.py::test_gateway_lifespan_excludes_projections
-  Failed: DID NOT RAISE <class 'nexus.api.route_capabilities.RouteCapabilityError'>
-FAILED tests/test_cli_contract.py::test_remote_profile_refuses_operator_route_commands[argv0..argv4]
-  clear: exit 1 api_error (the stand-in got the request); lock, unlock,
-  model --set, model --clear: exit 0, "Slot 5 locked" / "Model changed to None"
+git archive b0e9cb77 | tar -x -C /private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/824-S2ab/red_b0e9cb77
+```
+
+The export is a plain directory, not a git worktree. Each run used
+`cd /private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/824-S2ab/red_b0e9cb77` and `PYTHONPATH=` that directory (`nexus.__file__`
+resolved inside it), with `NEXUS_GATEWAY_PORT`, `NEXUS_PLAYER_PORT`,
+`NEXUS_API_URL`, `NEXUS_SLOT` and `NARRATIVE_API_PORT` unset. Overlaid files,
+each byte-identical to the branch at `4c4031e4` except the one marked:
+
+- `tests/test_api/test_serve.py`
+- `tests/test_cli_contract.py`
+- `tests/test_api/test_cors.py`
+- `tests/test_runtime/test_supervisor_live.py`, with a red-only overlay so
+  that its temporary config is one main accepts (every port stays
+  OS-assigned):
+
+  ```
+  73c73
+  < ROUTED_LAUNCHER = "tests.slot_routed_serve"
+  ---
+  > ROUTED_LAUNCHER = "tests.slot_routed_uvicorn"  # RED OVERLAY: main's launcher
+  78c78
+  < GATEWAY_ARGV_TEMPLATE = [
+  ---
+  > GATEWAY_ARGV_TEMPLATE = [  # RED OVERLAY: main's single-listener argv
+  81c81,82
+  <     "nexus.api.serve",
+  ---
+  >     "uvicorn",
+  >     "nexus.api.narrative:app",
+  86,87d86
+  <     "--operator-port",
+  <     "{operator_port}",
+  191c190
+  <     doc["runtime"]["gateway"]["operator_port"] = OPERATOR_PORT
+  ---
+  >     # RED OVERLAY: main's [runtime.gateway] forbids operator_port.
+  ```
+
+### Offline
+
+```
+nice -n 15 $PY -m pytest -q \
+  tests/test_api/test_serve.py::test_launcher_serves_both_planes_and_stops_on_sigterm \
+  tests/test_api/test_serve.py::test_direct_launch_serves_the_operator_projection \
+  tests/test_api/test_serve.py::test_gateway_lifespan_excludes_projections \
+  tests/test_cli_contract.py::test_remote_profile_refuses_operator_route_commands
+```
+
+Failure lines, verbatim:
+
+```
+E           AssertionError: /Users/pythagor/nexus/.venv/bin/python: No module named nexus.api.serve
+tests/test_api/test_serve.py:123: AssertionError
+E       AssertionError: assert 'https://nexus.pythagora.net' is None
+tests/test_api/test_serve.py:299: AssertionError
+>           with pytest.raises(RouteCapabilityError, match="already running"):
+E           Failed: DID NOT RAISE <class 'nexus.api.route_capabilities.RouteCapabilityError'>
+>           with pytest.raises(RouteCapabilityError, match="already running"):
+E           Failed: DID NOT RAISE <class 'nexus.api.route_capabilities.RouteCapabilityError'>
+E       assert 1 == <ExitCode.TRANSPORT_REFUSED: 3>
+E        +  where 1 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'clear', '--slot', '5', '--json'],...ror": "API error: {\\"detail\\": \\"Not Found\\"}",\n  "ok": false,\n  "partial": {\n    "status_code": 404\n  }\n}\n').returncode
+E       assert 0 == <ExitCode.TRANSPORT_REFUSED: 3>
+E        +  where 0 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'lock', '--slot', '5', '--json'], returncode=0, stdout='{\n  "message": "Slot 5 locked",\n  "success": true\n}\n', stderr='').returncode
+E       assert 0 == <ExitCode.TRANSPORT_REFUSED: 3>
+E        +  where 0 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'unlock', '--slot', '5', '--json'], returncode=0, stdout='{\n  "message": "Slot 5 unlocked",\n  "success": true\n}\n', stderr='').returncode
+E       assert 0 == <ExitCode.TRANSPORT_REFUSED: 3>
+E        +  where 0 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'model', '--slot', '5', '--set', '..., returncode=0, stdout='{\n  "message": "Model changed to None",\n  "model": null,\n  "success": true\n}\n', stderr='').returncode
+E       assert 0 == <ExitCode.TRANSPORT_REFUSED: 3>
+E        +  where 0 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'model', '--slot', '5', '--clear',..., returncode=0, stdout='{\n  "message": "Model changed to None",\n  "model": null,\n  "success": true\n}\n', stderr='').returncode
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
-8 failed, 7 warnings in 7.94s
+=========================== short test summary info ============================
+FAILED tests/test_api/test_serve.py::test_launcher_serves_both_planes_and_stops_on_sigterm
+FAILED tests/test_api/test_serve.py::test_direct_launch_serves_the_operator_projection
+FAILED tests/test_api/test_serve.py::test_gateway_lifespan_excludes_projections[gateway]
+FAILED tests/test_api/test_serve.py::test_gateway_lifespan_excludes_projections[projection]
+FAILED tests/test_cli_contract.py::test_remote_profile_refuses_operator_route_commands[argv0]
+FAILED tests/test_cli_contract.py::test_remote_profile_refuses_operator_route_commands[argv1]
+FAILED tests/test_cli_contract.py::test_remote_profile_refuses_operator_route_commands[argv2]
+FAILED tests/test_cli_contract.py::test_remote_profile_refuses_operator_route_commands[argv3]
+FAILED tests/test_cli_contract.py::test_remote_profile_refuses_operator_route_commands[argv4]
+9 failed, 7 warnings in 8.06s
 ```
 
+The lifespan-exclusion test now runs each order as its own case: `[gateway]`
+starts `narrative.app` and then a player projection, `[projection]` starts
+an operator projection and then `narrative.app`. Main lets both pairs start.
+
 ```
-tests/test_api/test_cors.py
+nice -n 15 $PY -m pytest -q tests/test_api/test_cors.py
+tests/test_api/test_cors.py:12: in <module>
+    from nexus.api.serve import build_plane_app
 E   ModuleNotFoundError: No module named 'nexus.api.serve'
-!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
-7 warnings, 1 error in 0.67s
-```
-
-PostgreSQL (`NEXUS_RUN_POSTGRES=1 ... -p tests.dbname_audit`): each fails
-before any process starts, at the temporary config's argv check, because
-main ships the single-listener uvicorn argv:
-
-```
->       assert command == GATEWAY_ARGV_TEMPLATE, command
-E       AssertionError: ['{python}', '-m', 'uvicorn', 'nexus.api.narrative:app', '--host', '{host}', ...]
-E         At index 2 diff: 'uvicorn' != 'nexus.api.serve'
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+ERROR tests/test_api/test_cors.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+7 warnings, 1 error in 0.65s
+```
+
+`test_direct_launch_defaults_to_the_configured_operator_port` was not run on
+main (with `NARRATIVE_API_PORT` unset it would bind 8002).
+
+### PostgreSQL: Behavior, Not the Argv Check
+
+The first pass's four PostgreSQL reds stopped at `_write_config`'s
+`assert command == GATEWAY_ARGV_TEMPLATE`. With the overlay above, main's
+supervisor starts real processes and each test fails on the behavior the
+order names (load average 9.51 before the run):
+
+```
+NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit \
+  tests/test_runtime/test_supervisor_live.py::test_local_profile_full_lifecycle \
+  tests/test_runtime/test_supervisor_live.py::test_gateway_port_override_coexists_with_default_instance \
+  tests/test_runtime/test_supervisor_live.py::test_dual_plane_lane_opens_both_listeners \
+  tests/test_runtime/test_supervisor_live.py::test_player_port_override_requires_gateway_port
+            assert _port_open("127.0.0.1", GATEWAY_PORT)
+>           assert _port_open("127.0.0.1", OPERATOR_PORT)
+E           AssertionError: assert False
+E            +  where False = _port_open('127.0.0.1', 59923)
+tests/test_runtime/test_supervisor_live.py:276: AssertionError
+>           assert lane["port"] is None
+E           assert 59955 is None
+tests/test_runtime/test_supervisor_live.py:518: AssertionError
+>           assert gateway["port"] == PLAYER_OVERRIDE_PORT
+E           assert 59999 == 60000
+tests/test_runtime/test_supervisor_live.py:583: AssertionError
+>           assert result["_returncode"] != 0, result
+E           AssertionError: {'_returncode': 0, 'profile': 'local', 'services': {'gateway': {'command': ['/Users/pythagor/nexus/.venv/bin/python', ...-pythagor/pytest-635/test_player_port_override_requ0/state/mock_openai.log', 'log_writer_pid': 93760, ...}}, 'slot': 5}
+E           assert 0 != 0
+tests/test_runtime/test_supervisor_live.py:610: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
 dbname audit: 2 targets: postgres, qa885_supervisor_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
 FAILED tests/test_runtime/test_supervisor_live.py::test_local_profile_full_lifecycle
 FAILED tests/test_runtime/test_supervisor_live.py::test_gateway_port_override_coexists_with_default_instance
 FAILED tests/test_runtime/test_supervisor_live.py::test_dual_plane_lane_opens_both_listeners
 FAILED tests/test_runtime/test_supervisor_live.py::test_player_port_override_requires_gateway_port
-4 failed in 2.85s
+4 failed in 18.49s
 ```
+
+Main opens only the player port (no operator listener), runs a
+`NEXUS_GATEWAY_PORT` lane as one listener with `port` equal to the lane,
+ignores `NEXUS_PLAYER_PORT` beside a lane, and ignores it alone, so `up`
+exits 0 and the test's `finally` runs `down`.
+
+### Supervisor Plane Refusal (Branch, Check Disabled)
+
+`test_up_refuses_a_gateway_that_serves_the_wrong_plane` configures the
+pre-#824 argv (`tests.slot_routed_uvicorn nexus.api.narrative:app --host
+{host} --port {port} --log-config {log_config}`). Its red run is on the
+branch at `4c4031e4` with `supervisor.py:865` changed from
+`if not plane or answer.get("plane") == plane:` to `if True:` in the working
+tree, then restored with `git checkout -- nexus/runtime/supervisor.py`:
+
+```
+NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit \
+  tests/test_runtime/test_supervisor_live.py::test_up_refuses_a_gateway_that_serves_the_wrong_plane
+>           assert "as plane 'operator', not 'player'" in result["error"]
+E           assert "as plane 'operator', not 'player'" in "Service 'gateway' failed to become healthy at http://127.0.0.1:59538/health within 30.0s. Last log lines:\n2026-10-26...NFO - Application shutdown complete.\n2026-10-26 20:30:28,632 - uvicorn.error - INFO - Finished server process [89545]"
+tests/test_runtime/test_supervisor_live.py:498: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 2 targets: postgres, qa885_supervisor_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+FAILED tests/test_runtime/test_supervisor_live.py::test_up_refuses_a_gateway_that_serves_the_wrong_plane
+1 failed in 33.97s
+```
+
+Without the check the supervisor accepts the operator answer on the player
+port and waits out the deadline for an operator listener that never opens.
 
 ## Green Runs on the Branch
 
@@ -220,8 +374,22 @@ The Rust change is four string literals (`lib.rs:17`, `:720`, `:731`,
 `:737`) from `8002` to `8003`;
 `tests/test_runtime/test_desktop_config.py::test_shipped_shell_targets_the_operator_listener`
 reads `DEFAULT_RUNTIME_ORIGIN` from `lib.rs` and checks it against the
-shipped config and `operator_url`. The `cargo test` gate stays open until
-the license is accepted.
+shipped config and `operator_url`; it does not compile or run the test
+literals at `:720`, `:731` and `:737`.
+
+Rechecked at 20:33 CDT for the review fixes, still blocked:
+
+```
+$ cc lic.c -o lic        # a one-line C program in the scratch directory
+You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' from within a Terminal window to review and agree to the Xcode and Apple SDKs license.
+cc exit 69
+```
+
+**Open gate, owed before merge:** after the owner accepts the license
+(`sudo xcodebuild -license`), run
+`CARGO_TARGET_DIR=<scratch>/824-S2ab/cargo nice -n 15 cargo test --manifest-path ui/src-tauri/Cargo.toml --lib`
+on the PR head and paste its tail, with the commit id, here and in the PR;
+or the coordinator records a waiver on #824.
 
 ## Static Checks (Branch vs `b0e9cb77`, the 35 Changed or Added Python Files)
 
@@ -236,13 +404,91 @@ the license is accepted.
 - `$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
   `OK: exception disposition coverage and shrink-only baseline verified.` The
   `Supervisor._await_healthy` baseline entry is removed: its health probe
-  moved to `Supervisor._health_answer` with a `retry` marker.
+  moved to `Supervisor._health_answer` with a `retry` marker. Its JSON
+  handler carries `fail` (see "After the Review Fixes").
 - `scripts/check_reachability.py`: exit 0; `nexus/api/serve.py` is added to
   `production_reachable` in `config/reachability_baseline.json`.
 
-## After the Second Merge (`e058005f`)
+## After the Review Fixes (`4c4031e4`)
 
-The re-stamp commit's tails are recorded in the PR body: the doc front
-matter, CLI reference and reachability tests, the exception-disposition
-lint, and `tests/test_api/test_serve.py`, `tests/test_api/test_cors.py` and
-`tests/test_runtime/test_supervisor.py` offline.
+The first pass's reachability/doc/CLI-reference run (160 passed) and the
+post-merge run (252 passed, recorded only in the PR body) were saved without
+their guard lines. Both are superseded by the runs below, at `4c4031e4`,
+whose tails are pasted whole.
+
+PostgreSQL run 1 (load average 17.52 before the run):
+
+```
+NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit \
+  tests/test_runtime/test_supervisor_live.py tests/test_slot_routed_entrypoints.py \
+  tests/test_live_gate_clones_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 9 targets: postgres, qa640_test_golden_path_staging_*, qa640_test_issue_600_staging_c_*, qa640_test_issue_601_staging_p_*, qa640_test_live_cycle_seed_rou_*, qa640_test_maturation_enqueue__*, qa640_test_retrograde_wizard_s_*, qa885_entrypoints_*, qa885_supervisor_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+60 passed, 2 warnings in 102.17s (0:01:42)
+```
+
+Supervisor files together (load average 17.32):
+
+```
+NEXUS_RUN_POSTGRES=1 nice -n 15 $PY -m pytest -q -p tests.dbname_audit \
+  tests/test_runtime/test_supervisor_live.py tests/test_runtime/test_supervisor.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 2 targets: postgres, qa885_supervisor_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+92 passed in 90.46s (0:01:30)
+```
+
+Offline, the files the fixes touch plus the doc, CLI-reference and
+reachability checks:
+
+```
+nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py tests/test_cli_reference_doc.py \
+  tests/test_reachability.py tests/test_api/test_serve.py tests/test_api/test_cors.py \
+  tests/test_runtime/test_supervisor.py tests/test_fable_probe_parsing.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+259 passed, 7 warnings in 62.64s (0:01:02)
+```
+
+After the merge of `d295eef0` (`688e90e9`):
+
+```
+$PY -m pytest -q tests/test_doc_front_matter.py
+89 passed, 5 warnings in 7.43s
+```
+
+Static checks on the files the fixes change: Black leaves all five
+unchanged; flake8 reports nothing on `nexus/runtime/supervisor.py` and the
+four test files; mypy `--explicit-package-bases nexus/runtime/supervisor.py`
+reports the same eight pre-existing diagnostics as the PR head `5dee9e73`
+(Windows-only `subprocess` constants, Optional `external`/`remote`);
+`$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`
+prints `OK: exception disposition coverage and shrink-only baseline verified.`
+
+What the fixes change:
+
+- `Supervisor._start_service`'s unmanaged-port refusal names the key that
+  sets the held listener: `[runtime.gateway].operator_port` (or
+  `NEXUS_GATEWAY_PORT` in a lane) for the operator listener,
+  `NEXUS_PLAYER_PORT` for a lane's player listener, otherwise
+  `[runtime.services.<name>] port`. `test_up_refuses_port_held_by_unmanaged_process`
+  asserts the key for each held port.
+- `Supervisor._health_answer(url, plane)` parses JSON only for a gateway
+  listener, so its `ValueError` handler runs only where the plane check then
+  refuses the answer, and the `fail` marker is accurate. A service with no
+  plane keeps the 200-is-healthy contract without parsing.
+- `tests/test_api/test_serve.py::test_launcher_exits_nonzero_when_the_operator_port_is_held`:
+  the operator port held, the launcher exits 1, the player port never opens
+  and no player banner is logged.
+- `tests/test_fable_structured_output_live.py::probe_lane` refuses 8002 and
+  8003 (`OWNER_GATEWAY_PORTS`); `test_probe_lane_refuses_unset_and_play_port`
+  covers both.
+- `docs/runtime.md`: the `/health` paragraph stays in the planes section and
+  "Listeners and the Tunnel" follows it, before "Profiles".
