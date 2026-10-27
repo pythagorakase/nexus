@@ -59,6 +59,7 @@ jobs:
           poetry run pytest -q -m 'not requires_local_models' tests --ignore=tests/test_api --ignore=tests/test_orrery 2>&1 | tee offline-1.log
           grep -qF 'secret-store guard: active; nexus-api: denied' offline-1.log
       - name: Run the offline API and Orrery suites
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           poetry run pytest -q -m 'not requires_local_models' tests/test_api tests/test_orrery 2>&1 | tee offline-2.log
