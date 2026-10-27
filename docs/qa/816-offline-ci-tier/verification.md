@@ -1450,3 +1450,138 @@ Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-st
 
 The commit that records this run starts one more run; the PR body records
 that run.
+
+## Fourth Fix Round: Coordinator Ruling 2 of 2026-10-27
+
+Ruling 2 (posted on the PR, 2026-10-27) amends the order; ruling 1 stands.
+Scratch logs for this round are in
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/816-fix2/`
+(called `<fix2>`). `origin/main` is still `925f2591`, the merge base; no
+merge this round.
+
+Commit `ab71c203`:
+
+- Item (1): `.github/workflows/offline-tests.yml` loses the three tokenizer
+  steps (`List the pinned tokenizers`, the `actions/cache@v4` step `Cache the
+  pinned tokenizers`, `Fetch the pinned tokenizers`), their four-line comment
+  and the header line `nexus models fetch   # or fill only the pinned
+  tokenizers, as the steps below do`. The offline tier makes no Hugging Face
+  Hub request. `tests/test_offline_ci_workflow.py` loses
+  `test_offline_tests_fill_only_the_pinned_tokenizers_before_the_suites`; the
+  four ordered tests read none of the removed text and are unchanged.
+- Item (2): `tests/test_lore/test_token_estimator.py` drops the whole-function
+  `@pytest.mark.requires_local_models` on `test_registry_token_estimator`; in
+  the `parametrize` list each registry entry that declares
+  `tokenizer_repository` becomes `pytest.param(entry.id,
+  marks=pytest.mark.requires_local_models)` and every other entry stays the
+  bare id, so the ids are unchanged. The five marked parameters are
+  `nousresearch/hermes-4-70b`, `nousresearch/hermes-4.3-36b`,
+  `deepseek/deepseek-v4-pro`, `nousresearch/hermes-4-405b` and
+  `minimax/minimax-m3` (exactly the registry entries
+  `registry_tokenizer_specs` covers); the twelve others (`o3`,
+  `gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra`, `claude-sonnet-5`,
+  `claude-opus-4-8`, `claude-opus-5`, `claude-fable-5-1`, `TEST`,
+  `moonshotai/kimi-k2.5`, `moonshotai/kimi-k3`, `z-ai/glm-5`) run in CI again.
+- Item (3): the marker definition now reads "tests that load a production
+  local model artifact (the embedder or reranker from nexus.toml's local_path
+  or model_path, or a registry model's pinned Hugging Face tokenizer); CI
+  deselects them with -m 'not requires_local_models' until #812's artifact
+  contract supports CI" in `pytest.ini:12`, the `AGENTS.md:53` sentence, the
+  `docs/agent_workflow.md` bullet (`:28-34`, at most 78 columns) and the
+  workflow header (`:3-10`). `AGENTS.md` `verified_commit` already names the
+  merge base `925f259182be535614882157c6b5d082e0cfaacc` (re-stamped in
+  `dfa302f4`), so it does not move; the freshness test passes. Decision
+  0076 quotes Decision 816-D10 as recorded and does not change.
+- Item (4): no test body changed; `tests/conftest.py` unchanged.
+
+Collection on `ab71c203` (`git diff --exit-code nexus.toml` passes; load
+average 3.65 before the runs):
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest --collect-only -q -m requires_local_models tests/test_lore/test_token_budget.py tests/test_lore/test_token_estimator.py tests/test_lore/test_turn_cycle.py
+tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations
+tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b]
+tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4.3-36b]
+tests/test_lore/test_token_estimator.py::test_registry_token_estimator[deepseek/deepseek-v4-pro]
+tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b]
+tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3]
+tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000]
+7/82 tests collected (75 deselected) in 0.32s
+```
+
+Workflow and freshness tests on `ab71c203`:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_offline_ci_workflow.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+93 passed, 5 warnings in 6.96s
+```
+
+The three marked offline files on `ab71c203` (owner's filled Hugging Face
+cache), without `-m` (the marked tests run and pass) and with `-m`:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_lore/test_token_budget.py tests/test_lore/test_token_estimator.py tests/test_lore/test_turn_cycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+79 passed, 3 skipped, 5 warnings in 19.06s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' <the same three files>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+72 passed, 3 skipped, 7 deselected, 5 warnings in 18.39s
+```
+
+The parameter proof on `ab71c203`, with `HF_HOME=<fix2>/hf-empty` (an empty
+directory, the Linux CI condition; it held no file afterwards). Without `-m`
+exactly the five pinned parameters fail; with `-m` exactly those five are
+deselected:
+
+```
+$ HF_HOME=<fix2>/hf-empty PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_lore/test_token_estimator.py
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4.3-36b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[deepseek/deepseek-v4-pro]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3]
+5 failed, 34 passed, 3 skipped, 5 warnings in 17.43s
+
+$ HF_HOME=<fix2>/hf-empty PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' tests/test_lore/test_token_estimator.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+34 passed, 3 skipped, 5 deselected, 5 warnings in 16.98s
+```
+
+The three files under the same empty `HF_HOME`: without `-m` exactly the
+seven marked tests fail; with `-m` none fails:
+
+```
+$ HF_HOME=<fix2>/hf-empty PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q <the same three files>
+FAILED tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4.3-36b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[deepseek/deepseek-v4-pro]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3]
+FAILED tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000]
+7 failed, 72 passed, 3 skipped, 5 warnings in 18.00s
+
+$ HF_HOME=<fix2>/hf-empty PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' <the same three files>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+72 passed, 3 skipped, 7 deselected, 5 warnings in 17.87s
+```
+
+Static checks on the two changed Python files: Black `2 files would be left
+unchanged`; flake8 gives no diagnostic in `tests/test_offline_ci_workflow.py`
+and the same seven E501 lines in `tests/test_lore/test_token_estimator.py`
+as the `origin/main` copy (shifted by four lines); mypy
+`--explicit-package-bases` on `tests/test_lore/test_token_estimator.py` gives
+the same eleven lines as the `origin/main` copy after normalizing line
+numbers (`diff` empty). The workflow parses with `yaml.safe_load`.
+`check_exception_dispositions.py --baseline-base-ref origin/main`: `OK:
+exception disposition coverage and shrink-only baseline verified.`
+
+No PostgreSQL file changed this round, so no PostgreSQL run is owed; the
+whole-tree PostgreSQL gate at the final commit is the coordinator's.
