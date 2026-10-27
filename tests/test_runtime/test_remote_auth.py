@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 from threading import Thread
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 import pytest
 import tomlkit
@@ -392,7 +392,7 @@ def test_cli_local_default_is_the_operator_listener(
     monkeypatch.delenv("NEXUS_GATEWAY_PORT")
 
     # The configured operator port, wherever the config sets it.
-    document = tomlkit.parse(Path("nexus.toml").read_text(encoding="utf-8"))
+    document: Any = tomlkit.parse(Path("nexus.toml").read_text(encoding="utf-8"))
     document["runtime"]["gateway"]["operator_port"] = 8044
     config = tmp_path / "nexus.toml"
     config.write_text(tomlkit.dumps(document), encoding="utf-8")

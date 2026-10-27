@@ -1146,7 +1146,8 @@ def test_local_owner_client_reads_the_operator_listener(
     assert checks["desktop.config"].status == "fail"
     assert "runtimeOrigin" in checks["desktop.config"].observed
     assert player_origin in checks["desktop.config"].observed
-    assert operator_origin in checks["desktop.config"].remediation
+    remediation = checks["desktop.config"].remediation
+    assert remediation is not None and operator_origin in remediation
 
 
 # ---------------------------------------------------------------------------
