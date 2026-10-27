@@ -1,9 +1,9 @@
 # Deterministic Retrieval Subtraction
 
-This records the code slices of issue #813 (brainstorm C077) and the guarded
-table/enum retirement in migration 143. The six legacy vector-helper functions
-remain deferred to #812; this is not completion of the entire issue.
-It also records where each remaining entry of `config/schema_docs_baseline.json` is routed.
+This records the code slices of issue #813 (brainstorm C077), the guarded
+table/enum retirement in migration 143, and the guarded vector-helper and
+legacy-column retirement in migration 154. `config/schema_docs_baseline.json` is
+now empty; its former entries were routed to the sections below.
 
 ## Removed Surface and Reachability Evidence
 
@@ -189,3 +189,9 @@ rebuilds either type. A read-only check on 2026-10-07 found no `world_events` or
 - `public.world_events.narration_chunk_id`, created by migration 023 with a foreign key to `offscreen_narrations(id)`. No code writes it. `orrery_resolutions.narration_chunk_id` is a different column with its own comment.
 
 Read-only counts on 2026-10-07, with `NEXUS_template` and `save_01` to `save_05` at migration 143: every one of these columns is NULL in every row, except `orrery_narration_jobs.provider` and `model_ref`, which are set on all 9 rows of `save_03`.
+
+## Vector-Helper and Legacy-Column Retirement (Migration 154)
+
+Migration 154 drops the six functions under Deferred Vector-Helper Function Manifest and seven of the nine columns under Legacy Columns Without Evidence: the five `assets.new_story_creator` seed and zone columns, `public.entity_tags.clear_on_override`, and `public.world_events.narration_chunk_id` with its foreign key to `offscreen_narrations(id)`. 813-Q1 made the functions wait for #812's legacy inventory, which landed in PR #1050. Every drop is `RESTRICT` behind one guard: catalog identities (signature, language and body hash of each function; type, default and nullability of each column; the foreign key's columns), refusal on any non-NULL value in a dropped column, refusal on any catalog dependency other than the foreign key's own triggers, and refusal on any stored definition that names a target as a whole word. `nexus/api/new_story_cache.py` no longer clears the five dropped columns. `public.orrery_narration_jobs.provider` and `model_ref` stay, now commented as provenance of the retired provider-era narration path: the current job insert writes neither, and a read-only check on 2026-10-26 found them set on all 9 rows of `save_03` and on no other row. `config/schema_docs_baseline.json` is empty, and decision records 0025 to 0029 are historical.
+
+`MEMNON.get_schema_summary` is deleted with its four baselined handlers. It had no caller, its comment queries ran on a closed connection, and bare `except` handlers discarded the error. Read PostgreSQL comments with `psql -d save_NN -c '\d+ <table>'`.
