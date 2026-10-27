@@ -25,10 +25,12 @@ more specific instructions.
   `secret-store guard: active; nexus-api: denied`. Its `ui-tests` job runs
   `npm --prefix ui test` and reports without blocking. CI does not replace the
   gate above: PostgreSQL-backed tests run only locally.
-  `requires_local_models` (`pytest.ini`) marks tests that load the production
-  embedder or reranker from `nexus.toml`'s absolute `local_path` or
-  `model_path`; it adds no local skip, and only CI `-m` expressions deselect
-  it. A test that fails only on Linux is made portable; it is skipped only
+  `requires_local_models` (`pytest.ini`) marks tests that load a production
+  local model artifact (the embedder or reranker from `nexus.toml`'s
+  `local_path` or `model_path`, or a registry model's pinned Hugging Face
+  tokenizer); it adds no local skip, and only CI deselects it, with
+  `-m 'not requires_local_models'`, until #812's artifact contract supports
+  CI. A test that fails only on Linux is made portable; it is skipped only
   where the behavior under test exists only on macOS.
 - The gate includes the document freshness check in
   `tests/test_doc_front_matter.py`: a branch that changes a source declared by
