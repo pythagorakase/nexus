@@ -3,10 +3,11 @@
 Issue #816; Decisions 816-D1, 816-D5 and 816-D10 (coordinator comment
 "Decisions Recorded From the 2026-10-26 Coordinator Review"). Branch
 `claude/816-offline-ci-tier`, cut from `origin/main` at `c7ae2988`, merged with
-`origin/main` at `9a0714d7` and `b0e9cb77` before the first push, and at
-`e058005f` and `d295eef0` while CI ran. `AGENTS.md` and
+`origin/main` at `9a0714d7` and `b0e9cb77` before the first push, at
+`e058005f` and `d295eef0` while CI ran, and at `571f982b` in the review fix
+round (merge commit `16117132`). `AGENTS.md` and
 `docs/decisions/0076-the-offline-merge-gate.md` are re-stamped to the last
-merge base, `d295eef0`. No migration, no file under `nexus/`, `scripts/` or `ui/`, and no
+merge base, `571f982b`. No migration, no file under `nexus/`, `scripts/` or `ui/`, and no
 committed `nexus.toml` change. No paid call; no gateway lane started by hand.
 
 Scratch directory for every log below (called `<scratch>`):
@@ -199,8 +200,10 @@ failure message):
   (`tests/test_api/test_narrative_jobs_pg.py:77-82` calls
   `get_or_load_sentence_transformer(config["local_path"])` for the active
   `[memnon.models]` entry), so the error is sentence-transformers' own, not R.
-  It passes in the clean run. Item 2 says such a failure is not marked; it is
-  left unmarked and raised for the coordinator (see Open Questions in the PR).
+  It passes in the clean run. Item 2 says such a failure is not marked; it was
+  left unmarked and raised for the coordinator. The review fix round marks it
+  under Decision 816-D10, which covers any test that loads the production
+  embedder (see "Review Fix Round" below).
 - Other failures: none.
 
 ### Offline Confirm
@@ -265,7 +268,7 @@ FAILED tests/test_api/test_narrative_jobs_pg.py::test_scheduler_accepts_summary_
 
 - Artifact failures: none. Matching passes: none.
 - Audit-method failures: the two `test_narrative_jobs_pg.py` parameters, as in
-  the find run.
+  the find run (marked in the review fix round).
 
 ## Marked Tests
 
@@ -297,6 +300,9 @@ decorator):
 - `tests/test_orrery/test_experiences.py::test_embedding_upsert_binds_each_correct_experience_id`
 - `tests/test_memnon_cross_encoder_dependencies.py::test_local_deberta_cross_encoder_reranks_minimal_pair`
   (above its existing `skipif`; from the path reading, not an audit run).
+- `tests/test_api/test_narrative_jobs_pg.py::test_scheduler_accepts_summary_and_embeds_once_in_process`
+  (parametrized, marked whole; review fix round, Decision 816-D10: its body
+  loads the production embedder from `[memnon.models].local_path`).
 
 Module markers (every collected test of the module failed; the single marker
 became a list that keeps `requires_postgres`):
@@ -371,7 +377,8 @@ over the PostgreSQL set plus `tests/scheduler_helpers.py`,
   only tests that load the artifact by a path the edit does not reach; the
   edit reaches this one, and the live tier belongs to 816-S5).
 - `tests/test_api/test_narrative_jobs_pg.py:78`: reads `local_path` from the
-  worktree's settings; carries the edit (the audit-method failure above).
+  worktree's settings; carries the edit (the audit-method failure above,
+  marked in the review fix round).
 - `tests/test_api/test_summary_budget_usage.py:61`,
   `tests/test_lore/test_runtime_config.py:23,171,201`,
   `tests/test_memnon/test_source_embeddings.py:185`,
@@ -386,6 +393,11 @@ over the PostgreSQL set plus `tests/scheduler_helpers.py`,
 - `tests/test_model_artifact_lock_committed.py:30-81` (added by the merge):
   reads the committed `nexus.toml` as TOML and the committed lock; loads no
   model. No action.
+- `tests/test_ir_eval_v2/test_ensemble_parity_pg.py:102,150` (added by the
+  `b0e9cb77` merge): `_write_config` parses the worktree's `nexus.toml` and
+  writes a copy whose production embedder `local_path` is a tiny fixture
+  folder under `tmp_path` (`:103-104`); `:150` exports that copy as
+  `NEXUS_RUNTIME_CONFIG`. It loads no production artifact. No action.
 
 ## Red Runs
 
@@ -617,7 +629,7 @@ errors in 10 files (`<scratch>/mypy-base.txt`).
 
 Every run is on PR #1167 (`pull_request`, so the checkout is the PR merge
 ref). Logs: `<scratch>/ci1-*.log`, `<scratch>/ci2-*.log`,
-`<scratch>/ci3-*.log`.
+`<scratch>/ci3-*.log`, `<scratch>/ci4-*.log`, `<scratch>/ci5-*.log`.
 
 ### Run 1: https://github.com/pythagorakase/nexus/actions/runs/40429661948
 
@@ -699,7 +711,38 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 `ui-tests`: failure, the same `state-shades.test.ts:51` tail
 (`Test Files 1 failed | 43 passed (44)`, `Tests 672 passed (672)`).
 
-### Left Red and Reported
+### Run 4: https://github.com/pythagorakase/nexus/actions/runs/40435734916
+
+Head `fe2b0fa7`. Conclusion: failure. `offline-tests`: failure (first suite;
+second suite skipped). `ui-tests`: failure.
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations - ValueError: Model 'nousresearch/hermes-4-70b': tokenizer_repository 'NousResearch/Hermes-4-70B' at tokenizer_revision 'd5dec2bd6b3930a09ddefd0b7fc6523fe0720d09' is not in the local Hugging Face cache. Run `nexus models fetch` to download it.
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b] - ValueError: (same, Hermes-4-70B)
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4.3-36b] - ValueError: ... 'NousResearch/Hermes-4.3-36B' ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[deepseek/deepseek-v4-pro] - ValueError: ... 'deepseek-ai/DeepSeek-V4-Pro' ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b] - ValueError: ... 'NousResearch/Hermes-4-405B' ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3] - ValueError: ... 'MiniMaxAI/Minimax-M3' ...
+FAILED tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000] - ValueError: (same, Hermes-4-70B)
+7 failed, 3279 passed, 683 skipped, 22 deselected, 8 warnings in 1138.31s (0:18:58)
+```
+
+`ui-tests`:
+
+```
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Command failed: git show 8ccd3008a48bdf8115232667399868e2bdf66f93:ui/client/src/index.css
+fatal: path 'ui/client/src/index.css' exists on disk, but not in '8ccd3008a48bdf8115232667399868e2bdf66f93'
+ Test Files  1 failed | 43 passed (44)
+      Tests  672 passed (672)
+```
+
+### Left Red and Reported (Through Run 4)
+
+Both causes below are addressed in the review fix round: the workflow now
+fills the pinned tokenizers before the first suite, and the `ui-tests`
+checkout has full history.
 
 The seven tokenizer tests fail only on Linux CI and pass locally, where the
 owner's Hugging Face cache holds the pinned tokenizers:
@@ -718,3 +761,215 @@ cache. The fix is not in the failing test files (it needs the cache filled on
 the runner, a workflow or `nexus/` change, or a marker decision), so under
 the order's Sequencing they are left red.
 
+
+## Review Fix Round
+
+Every tail in this section ran on the tree of the fix commit that adds this
+section (parent `16117132`, the merge of `origin/main` at `571f982b`); only
+this evidence file changed after the runs. Logs: `<scratch>/fix-*.log`.
+
+### Merge and Re-Stamp
+
+`git merge origin/main` (no rebase) conflicted only on the two
+`verified_commit` lines (`AGENTS.md:38`,
+`docs/decisions/0076-the-offline-merge-gate.md:7`: branch `d295eef0`, main
+`b75f6241`). Both are resolved to the new merge base:
+
+```
+$ git merge-base HEAD origin/main
+571f982b2fa375acd4b52c51c76c29f4663f7242
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_offline_ci_workflow.py tests/test_reachability.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+154 passed, 5 warnings in 19.81s
+```
+
+`CLAUDE.md` is not changed by this branch (`git diff origin/main -- CLAUDE.md`
+is empty), so main's edit stands as it is.
+
+### Marker on `test_scheduler_accepts_summary_and_embeds_once_in_process`
+
+Decision 816-D10 covers every test that loads the production embedder; this
+test's body loads it from `[memnon.models].local_path`
+(`tests/test_api/test_narrative_jobs_pg.py:77-82`). It now carries
+`@pytest.mark.requires_local_models` as its topmost decorator (parametrized,
+marked whole); nothing else in the file changed.
+
+Clean run (`nexus.toml clean`; `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`,
+`NEXUS_SLOT`, `NEXUS_RUNTIME_CONFIG` and `NEXUS_HOME` unset; no `-m`) over
+this file and the six files of the `b0e9cb77` merge (the five changed set
+files plus `tests/test_ir_eval_v2/test_ensemble_parity_pg.py`):
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rA \
+    tests/test_ir_eval_v2/test_ensemble_parity_pg.py tests/test_memnon_embedding_cache.py \
+    tests/test_lore/test_runtime_config.py tests/test_memnon/test_source_embeddings.py \
+    tests/test_presence_boost_pg.py tests/test_memnon_embedding_contract.py \
+    tests/test_api/test_narrative_jobs_pg.py
+PASSED tests/test_api/test_narrative_jobs_pg.py::test_scheduler_accepts_summary_and_embeds_once_in_process[new_episode]
+PASSED tests/test_api/test_narrative_jobs_pg.py::test_scheduler_accepts_summary_and_embeds_once_in_process[new_season]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+58 passed, 13 warnings in 112.90s (0:01:52)
+```
+
+Per file: `test_narrative_jobs_pg.py` 13, `test_ensemble_parity_pg.py` 4,
+`test_runtime_config.py` 5, `test_memnon_embedding_cache.py` 13,
+`test_memnon_embedding_contract.py` 9, `test_source_embeddings.py` 12,
+`test_presence_boost_pg.py` 2 passed. The marked tests of the merged files
+ran and passed (no local skip).
+
+Audit run with the edit of item 2 applied and the marker deselected (load
+`21:34 up 10:12, load averages: 12.13 10.96 10.54`):
+
+```
+toplevel ok
+load_settings check exit 0
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -m 'not requires_local_models' \
+    tests/test_api/test_narrative_jobs_pg.py --junitxml=<scratch>/fix-nj-audit.xml -o junit_logging=all --basetemp=<scratch>/fix-nj-audit-tmp
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+11 passed, 2 deselected, 7 warnings in 44.42s
+pytest exit 0
+restore exit 0
+git diff --exit-code nexus.toml: 0
+```
+
+### Guard Check Tied to Each Suite's Log
+
+`test_offline_tests_run_both_suites_without_local_models` now reads the
+`tee` target of each `poetry run pytest` line and requires a later line of
+the same step to be exactly `grep -qF '...' <that log>`, and the two logs to
+differ. Red plant (second step's grep reads `offline-1.log`; file restored
+with `cp` from a scratch copy, `cmp` clean):
+
+```
+E           assert "grep -qF 'secret-store guard: active; nexus-api: denied' offline-2.log" in ["grep -qF 'secret-store guard: active; nexus-api: denied' offline-1.log"]
+FAILED tests/test_offline_ci_workflow.py::test_offline_tests_run_both_suites_without_local_models
+1 failed, 4 passed, 5 warnings in 0.33s
+```
+
+### Full History for `ui-tests`
+
+`ui/client/src/state-shades.test.ts` runs `git show 8ccd3008...:ui/client/src/index.css`.
+`8ccd3008` is on `main` (`git merge-base --is-ancestor` exits 0) and its
+`index.css` reads locally; a depth-1 clone of this branch fails the same way
+CI did (`fatal: path 'ui/client/src/index.css' does not exist in
+'8ccd3008a48bdf8115232667399868e2bdf66f93'`). The `ui-tests` checkout now
+has `fetch-depth: 0`, still no `lfs` key; `git lfs pull --include="ui/**"`
+is unchanged; nothing under `ui/` changed.
+`test_ui_tests_job_fetches_only_ui_lfs_and_runs_vitest` asserts the depth.
+Red plant (the `with:` block removed):
+
+```
+E       KeyError: 'with'
+FAILED tests/test_offline_ci_workflow.py::test_ui_tests_job_fetches_only_ui_lfs_and_runs_vitest
+1 failed, 4 passed, 5 warnings in 0.32s
+```
+
+### Pinned Tokenizers Filled Before the Suites
+
+The seven tests left red through Run 4 load the registry's pinned tokenizers
+from the Hugging Face cache only (`nexus/telemetry/prompt_window.py:353-376`).
+The workflow now runs, after `poetry install` and before the first suite:
+a step (`id: tokenizers`) that lists `registry_tokenizer_specs(load_settings())`
+as `repo@revision` lines and writes their SHA-256 as the cache key; an
+`actions/cache@v4` step on `~/.cache/huggingface/hub` with that key; and a
+step that calls `fetch_tokenizer(repo, revision)`
+(`nexus/agents/memnon/utils/artifact_manifest.py:251`) for each spec. It
+never runs `nexus models fetch`, which would also download the embedder.
+`test_offline_tests_fill_only_the_pinned_tokenizers_before_the_suites` pins
+the order (pins, cache, fetch, first suite), the cache path and key, and the
+absence of `models fetch`. Red plant (fetch step removed):
+
+```
+E       ValueError: not enough values to unpack (expected 1, got 0)
+FAILED tests/test_offline_ci_workflow.py::test_offline_tests_fill_only_the_pinned_tokenizers_before_the_suites
+1 failed, 4 passed, 5 warnings in 0.31s
+```
+
+The two step scripts, run locally as written (with `$PY` for
+`poetry run python`) against an empty scratch `HF_HOME` and no Hugging Face
+token, download all five pins (about 60 MB) without authentication:
+
+```
+MiniMaxAI/Minimax-M3@f0e1c1e04d40177e4673a22097036854f536e9c0
+NousResearch/Hermes-4-405B@88e3dce03c4a5535e2f4a2bcc08e939a2b302f82
+NousResearch/Hermes-4-70B@d5dec2bd6b3930a09ddefd0b7fc6523fe0720d09
+NousResearch/Hermes-4.3-36B@3899db2b6c4b35f16bde3b570bb7dd2775d56161
+deepseek-ai/DeepSeek-V4-Pro@b5968e9190ef611bbf34a7229255be88a0e937c1
+exit=0
+key=hf-tokenizers-92e7bfa13ec24356b64ae7c30c11d96d9af39d0acc55cde72e7087e28009d1fd
+```
+
+The three failing files, with `HF_HOME` pointed at that filled cache, then at
+an empty one (the Linux CI failure reproduced locally):
+
+```
+$ HF_HOME=<scratch>/hf-probe PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' \
+    tests/test_lore/test_token_budget.py tests/test_lore/test_token_estimator.py tests/test_lore/test_turn_cycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+79 passed, 3 skipped, 5 warnings in 22.66s
+
+$ HF_HOME=<scratch>/hf-empty PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' (same files)
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3]
+FAILED tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000]
+7 failed, 72 passed, 3 skipped, 5 warnings in 22.26s
+```
+
+### Offline Suites, as CI Runs Them
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3290 passed, 680 skipped, 22 deselected, 8 warnings in 701.92s (0:11:41)
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1910 passed, 1562 skipped, 8 deselected, 7 warnings in 49.09s
+```
+
+The second suite deselects 8 (6 before; the two parameters of the newly
+marked test).
+
+### Static Checks for the Files This Round and `2d38d73d` Changed
+
+`tests/test_runtime/test_supervisor.py` (changed by `2d38d73d` after the
+Static Checks section was written), `tests/test_api/test_narrative_jobs_pg.py`
+and `tests/test_offline_ci_workflow.py`. The `origin/main` versions of the two
+pre-existing files were written in place, checked, and restored by `cp` from
+a scratch copy:
+
+```
+$ black --check <3 files>
+3 files would be left unchanged.
+$ flake8 <3 files>: 12 diagnostics, none in tests/test_offline_ci_workflow.py
+$ flake8 <2 origin/main versions>: 12 diagnostics; identical after removing line numbers
+$ $PY -m mypy --explicit-package-bases <3 files>
+tests/test_api/test_narrative_jobs_pg.py:380: error: Library stubs not installed for "requests"  [import-untyped]
+Found 1 error in 1 file (checked 3 source files)
+$ $PY -m mypy --explicit-package-bases <2 origin/main versions>
+tests/test_api/test_narrative_jobs_pg.py:379: error: Library stubs not installed for "requests"  [import-untyped]
+Found 1 error in 1 file (checked 2 source files)
+$ $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+No new diagnostics. `test_supervisor.py` itself has none on either side; the
+flake8 diagnostics are the pre-existing F401/F811/E501 of
+`test_narrative_jobs_pg.py`, and the mypy error is its pre-existing
+`requests` import (one line lower after the marker). The "73 passed" claim
+for the supervisor file:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_runtime/test_supervisor.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+73 passed, 5 warnings in 29.94s
+```
