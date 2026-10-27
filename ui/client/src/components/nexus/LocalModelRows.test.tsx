@@ -526,7 +526,20 @@ describe("exceeds-RAM tooltip", () => {
     await user.click(trash);
     expect(trash).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("tooltip")).toBeNull();
-    await user.hover(row);
+    // Coordinator amendment (2026-10-26): move the pointer from the trash to
+    // the row the way Chromium does. user.hover(row) sends pointerout with a
+    // null relatedTarget, so React fires the row's onPointerLeave and Radix
+    // re-opens inside the provider's skip-delay window; fireEvent.pointerOut
+    // cannot express the move either, because jsdom drops relatedTarget.
+    act(() => {
+      trash.dispatchEvent(
+        new MouseEvent("pointerout", { bubbles: true, relatedTarget: row }),
+      );
+      row.dispatchEvent(
+        new MouseEvent("pointerover", { bubbles: true, relatedTarget: trash }),
+      );
+      row.dispatchEvent(new MouseEvent("pointermove", { bubbles: true }));
+    });
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
