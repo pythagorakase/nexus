@@ -151,20 +151,23 @@ no samples were dropped.
 
 The old receipt (smudged from `925f2591`) was compared structurally with the new one:
 
-- **Inputs.** The fingerprint moved from `c7df4f2c…` to `eb1ab6e7…`, and the module graph from
-  2,099 to 2,108 inputs. The changed files are the client sources listed under Premise, plus
-  `vite.config.ts`. The added files are the eight Radix Popover-family modules that #1171 brought
-  into the bundle.
+- **Inputs.** The fingerprint moved from `c7df4f2c…` to `eb1ab6e7…`. The module graph gained nine
+  inputs, from 2,099 to 2,108: the shadcn `client/src/components/ui/popover.tsx` wrapper and the
+  eight Radix Popover-family modules that #1171 brought into the bundle. Only the eight Radix
+  modules are new entries in `inputs.files` (2,286 to 2,294); `popover.tsx` was already hashed
+  there as a client source, with an unchanged hash. The changed `inputs.files` entries are the
+  client sources listed under Premise, plus `vite.config.ts`.
 - **Media.** The 33 condition variants are identical. The only change is
   `declarationGuards.declarationsScanned`, which moved from 4,745 to 4,757 because the emitted CSS
   gained 12 declarations.
 - **Painted fields.** No differences. `meanLinear`, `controlMeanLinear`, `maskSize` and `coreSize`
-  are identical in every sample of every condition and theme.
+  are identical in every sample of every condition and theme, and in every calibration sample.
 - **Interaction metadata.** For the exceeds-RAM delete focus-visible contexts, the action text
   changed from "tooltip already dismissed" to "keyboard Escape dismisses tooltip", and
   `escapePressed` changed from false to true, in 1,972 samples (one field each). The DOM
   signatures in the same `delete/ready-exceeds/focus-visible` context also changed: 6,732
-  `signature` fields in 3,366 samples, and no signature outside that context. Both changes are
+  `signature` fields in 3,366 samples under `conditions`, and no signature outside that context,
+  under `conditions` or in `proof.calibration`. Both changes are
   expected after #1102: keyboard focus inside the row now holds the tooltip open, so the oracle
   presses Escape before it measures, as the README states.
 - **Layout boxes.** In 102 samples (34 per band) the `box.y` value moved. Each group of 34 is the
@@ -176,28 +179,44 @@ The old receipt (smudged from `925f2591`) was compared structurally with the new
   | 34 | `w1281-1535/pointer=fine/motion/trough` | Veil | `delete/ready-exceeds/rest` | -35 px |
   | 34 | `w1101-1279/pointer=fine/motion/start` | Gilded | `delete/ready/button-hover` | +36 px |
 
-  These are scroll or row offsets of the measured row. No painted field moved: `meanLinear`,
-  `controlMeanLinear`, `maskSize` and `coreSize` are unchanged in all 102 samples, as in every
-  other sample.
+  Only `box.y` changed in these samples: `box.x`, width and height are identical in every sample
+  of the receipt. The cause is run-to-run layout position and was not isolated; box geometry is
+  not an asserted field. No painted field moved: `meanLinear`, `controlMeanLinear`, `maskSize`
+  and `coreSize` are unchanged in all 102 samples, as in every other sample.
 - **Settle times.** `settleWaitMs` timing values differ in 370,972 fields across 124,078 of the
-  receipt's 124,080 samples. These values are timings and are expected to vary from run to run.
+  124,080 samples under `conditions`. These values are timings and are expected to vary from run
+  to run.
+- **Calibration.** `proof.calibration` changed in the same way. Its 222 per-theme calibration
+  samples keep every painted field. The six exceeds-RAM delete focus-visible samples
+  (`delete/ready-exceeds/focus-visible`, armed and unarmed, in each of Veil, Gilded and Vector)
+  changed `escapePressed` from false to true (6 fields), the action text to "keyboard Escape
+  dismisses tooltip" (6 fields) and the DOM `signature` (12 fields). `settleWaitMs` differs in
+  659 fields across all 222 samples.
+- **Shards.** `proof.shards` lists the same 33 conditions in nine shards with the same per-shard
+  render counts, but it now follows this run's batch order: the first three shards group the
+  conditions differently from the previous run. The per-shard `wallSeconds` and
+  `proof.wallSeconds` (3,485.98 s to 3,472.15 s) are this run's timings.
 
 The per-sample counts and the box breakdown come from a structural diff that walks every sample
-(a dict that carries `meanLinear`) and lists every moved `box.y` with no cap. The old receipt is
-the LFS object `2e73d14392…` smudged from `925f2591`; the new one is `6973376496…`:
+under the receipt's `conditions` block (a dict that carries `meanLinear`) and lists every moved
+`box.y` with no cap. It does not read `proof`; the calibration samples and the shards are
+covered by the separate pass below. The old receipt is the LFS object `2e73d14392…` smudged from
+`925f2591`; the new one is `6973376496…`. The tool's only change from the first-round run is
+its count label (`samples under conditions`, previously `samples in receipt`); its counts and its
+box listing are unchanged:
 
 ```
-nice -n 15 $PY -I <scratch>/UI-UNION-REGEN/tools/sample-diff.py \
+nice -n 15 $PY -I <scratch>/UI-UNION-REGEN/fix-r2/sample-diff.py \
   <scratch>/UI-UNION-REGEN/old-receipt.json ui/client/src/state-surfaces.resolved.json
 ```
 
 ```
-samples in receipt: 124080
+samples under conditions: 124080
 changed leaf key: distinct samples / changed fields
   settleWaitMs: 124078 samples / 370972 fields
   signature: 3366 samples / 6732 fields
-  escapePressed: 1972 samples / 1972 fields
   action: 1972 samples / 1972 fields
+  escapePressed: 1972 samples / 1972 fields
   y: 102 samples / 102 fields
 box.y moves grouped by condition, theme, context and delta:
    34  w1101-1279/pointer=fine/motion/start | Gilded | delete/ready/button-hover | +36 px
@@ -212,6 +231,43 @@ context:
 escapePressed	delete/ready-exceeds/focus-visible	1972
 signature	delete/ready-exceeds/focus-visible	3366
 ```
+
+A second pass (`calibration-diff.py`) walks every sample under `proof.calibration` with the same
+leaf diff, lists every painted-field change, and compares `proof.shards`; `shards-diff.py`
+compares the shard partitions. Both read the same two files:
+
+```
+nice -n 15 $PY -I <scratch>/UI-UNION-REGEN/fix-r2/calibration-diff.py \
+  <scratch>/UI-UNION-REGEN/old-receipt.json ui/client/src/state-surfaces.resolved.json
+nice -n 15 $PY -I <scratch>/UI-UNION-REGEN/fix-r2/shards-diff.py \
+  <scratch>/UI-UNION-REGEN/old-receipt.json ui/client/src/state-surfaces.resolved.json
+```
+
+```
+top-level block differs: inputs
+top-level block differs: media
+top-level block differs: proof
+proof block differs: calibration
+proof block differs: shards
+proof block differs: wallSeconds
+calibration samples: 222
+changed leaf key: distinct samples / changed fields
+  settleWaitMs: 222 samples / 659 fields
+  signature: 6 samples / 12 fields
+  escapePressed: 6 samples / 6 fields
+  action: 6 samples / 6 fields
+painted-field changes: 0
+non-timing changes by sample path (one sample each, for action, escapePressed and signature):
+  {Veil,Gilded,Vector}/samples/delete/ready-exceeds/focus-visible/{armed,unarmed}
+conditions old/new: 33 33 same set: True
+same flattened order: False
+same partition: False
+field renders old: [15262, 15262, 15262, 15262, 15262, 15262, 15262, 15262, 3982] new: [15262, 15262, 15262, 15262, 15262, 15262, 15262, 15262, 3982]
+```
+
+The non-timing listing above is condensed from 18 lines, one per key and sample path; the two
+outputs are otherwise verbatim apart from the shard listings and per-shard timings, which are
+omitted.
 
 <details>
 <summary>All 102 moved <code>box.y</code> samples (condition | theme | sample path | move)</summary>
@@ -325,13 +381,18 @@ w761-767/pointer=fine/motion/trough | Gilded | shipped/delete/ready-exceeds/rest
 
 ## Inventory Counts per Theme
 
-| Theme | Shipped samples | Before samples | Candidate samples | Measured joint rows | Exceptions (< 15 ΔE) | Changed tokens |
+| Theme | Shipped samples | Before samples | Candidate samples | Measured joint rows | Exceptions (< 15 ΔE) | Tokens off the pre-777 baseline (unchanged by this run) |
 | --- | --- | --- | --- | --- | --- | --- |
 | Veil | 2,442 | 2,442 | 38,907 | 2,673 | 275 | 7 |
 | Gilded | 2,442 | 2,442 | 40,293 | 2,673 | 792 | 10 |
 | Vector | 2,442 | 2,442 | 30,228 | 2,673 | 1,266 | 7 |
 
-The sample counts match the previous receipt exactly.
+The sample counts match the previous receipt exactly. The last column is the joint search's
+`changes` count: the token roots whose shipped value differs from `baselineValue`, which reads
+`index.css` at the pre-777 start commit `8ccd3008` (with the Veil anchor for Veil's brass
+roots; `state-shades.test.ts:50`, `:240-243` and `:589`). It
+is identical to the `changes` field of the committed `veil-`, `gilded-` and `vector-joint.json`
+tables. This run changed no token.
 
 ## Joint Tables, Exceptions and State Tokens
 
@@ -380,8 +441,9 @@ against the current sources. `LocalModelRows.tsx:99-103` computes
 `open = radixOpen || (keyboardFocusWithin && !escapeDismissed)`. `SettingsPane.tsx:574-591` opens
 the seat list in a shadcn `Popover`, with `requiredByTitle` as the content source. Both records
 are re-stamped at the merge base with `origin/main`, `925f259182be535614882157c6b5d082e0cfaacc`.
-The two checks below also ran before the first push, with the same results. The tails here are from
-the rerun on the tree of the review-fix commit that adds them (parent `0148024b`), with
+The two checks below also ran before the first push and on the first review-fix commit
+`4468d9b5`, with the same results. The tails here are from the rerun on the tree of the
+second review-fix commit (parent `4468d9b5`), which changes only this file, with
 `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset.
 
 `PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_doc_front_matter.py`:
