@@ -12,7 +12,7 @@ sources:
   - scripts/rebuild_memory_idf.py
   - scripts/replay_state.py
   - tests/test_schema_ownership.py
-verified_commit: "b0e9cb77af52a22673113b4910d027cd189cf281"
+verified_commit: "e058005f8df04e4c5807f695eded4a68657e9f05"
 ---
 
 # 0083: Retiring Old Scripts and Retired-Tag Gates

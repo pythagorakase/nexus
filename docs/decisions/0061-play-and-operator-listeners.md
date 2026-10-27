@@ -3,7 +3,7 @@ status: canonical
 sources:
   - nexus/api/narrative.py
   - docs/runtime.md
-verified_commit: "b0e9cb77af52a22673113b4910d027cd189cf281"
+verified_commit: "e058005f8df04e4c5807f695eded4a68657e9f05"
 ---
 
 # 0061: Play and Operator Listeners

@@ -5,7 +5,10 @@ Branch `claude/824-two-listeners`. Commits: 824-S2a `b36e92c4`, 824-S2b
 canonical re-stamps `35486cf2`, mypy typing of two new tests `29a691e8`.
 "Main" below is the merge base `b0e9cb77`, exported with `git archive` to a
 scratch directory (not a git worktree) for the red runs and the static
-comparisons.
+comparisons. A second merge brought in `e058005f` (845-S1S2, no conflicts,
+no file this order touches), and the canonical documents were re-stamped to
+that merge base; the doc, reachability and CLI-reference checks and the
+launcher, CORS and supervisor unit files were rerun after it (last section).
 
 ## What Main Does Today (Cited Lines at `b0e9cb77`)
 
@@ -236,3 +239,10 @@ the license is accepted.
   moved to `Supervisor._health_answer` with a `retry` marker.
 - `scripts/check_reachability.py`: exit 0; `nexus/api/serve.py` is added to
   `production_reachable` in `config/reachability_baseline.json`.
+
+## After the Second Merge (`e058005f`)
+
+The re-stamp commit's tails are recorded in the PR body: the doc front
+matter, CLI reference and reachability tests, the exception-disposition
+lint, and `tests/test_api/test_serve.py`, `tests/test_api/test_cors.py` and
+`tests/test_runtime/test_supervisor.py` offline.
