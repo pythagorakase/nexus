@@ -158,13 +158,11 @@ def populate_wizard_cache(conn, cache: dict):
                 -- Seed phase
                 seed_type, seed_title, seed_situation, seed_hook,
                 seed_immediate_goal, seed_stakes, seed_tension_source,
-                seed_starting_location, seed_weather, seed_key_npcs,
-                seed_initial_mystery, seed_potential_allies,
-                seed_potential_obstacles, seed_secrets,
+                seed_weather, seed_key_npcs,
+                seed_potential_allies, seed_secrets,
                 -- Layer/Zone
                 layer_name, layer_type, layer_description,
-                zone_name, zone_summary, zone_boundary_description,
-                zone_approximate_area,
+                zone_name, zone_summary,
                 -- Location
                 initial_location,
                 -- Temporal
@@ -176,9 +174,9 @@ def populate_wizard_cache(conn, cache: dict):
                 -- Character
                 %s, %s, %s, %s, TRUE,
                 -- Seed (with cast for seed_type enum)
-                %s::seed_type, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s::seed_type, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 -- Layer/Zone (with cast for layer_type)
-                %s, %s::layer_type, %s, %s, %s, %s, %s,
+                %s, %s::layer_type, %s, %s, %s,
                 -- Location
                 %s,
                 -- Temporal
@@ -217,12 +215,9 @@ def populate_wizard_cache(conn, cache: dict):
                 seed.get("immediate_goal"),
                 seed.get("stakes"),
                 seed.get("tension_source"),
-                seed.get("starting_location"),
                 seed.get("weather"),
                 seed.get("key_npcs"),
-                seed.get("initial_mystery"),
                 seed.get("potential_allies"),
-                seed.get("potential_obstacles"),
                 seed.get("secrets"),
                 # Layer/Zone (cache uses "type" not "layer_type")
                 layer.get("name"),
@@ -230,8 +225,6 @@ def populate_wizard_cache(conn, cache: dict):
                 layer.get("description"),
                 zone.get("name"),
                 zone.get("summary"),
-                zone.get("boundary_description"),
-                zone.get("approximate_area"),
                 # Location
                 Json(location) if location else None,
                 # Temporal

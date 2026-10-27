@@ -3,7 +3,7 @@ status: canonical
 sources:
   - tests/test_memnon/test_results.py
   - scripts/qa_shift/mission_prompt.md
-verified_commit: "55ab85a4468f0a46b5cbe7b0daacf66d8a890709"
+verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
 ---
 
 # 0080: Closing the Embedding Orchestration Work
