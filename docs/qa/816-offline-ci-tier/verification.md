@@ -1586,15 +1586,20 @@ exception disposition coverage and shrink-only baseline verified.`
 No PostgreSQL file changed this round, so no PostgreSQL run is owed; the
 whole-tree PostgreSQL gate at the final commit is the coordinator's.
 
-### Run 11: https://github.com/pythagorakase/nexus/actions/runs/40458880266
+### Run 12: https://github.com/pythagorakase/nexus/actions/runs/40458880266
+
+Run 11 (https://github.com/pythagorakase/nexus/actions/runs/40455803678,
+head `3592c3b4`, the evidence commit for run 10) is recorded in the PR body:
+`offline-tests` success, `ui-tests` failure on the stale receipt. Commit
+`1ac128da` titled this run "run 11"; it is run 12.
 
 Head `bb36e74a` (`ab71c203`, ruling 2, plus the evidence). Conclusion:
 failure, from `ui-tests` alone. `offline-tests`: **success**, with no
 tokenizer step and no Hugging Face cache (the only cache the job restores is
 setup-python's Poetry cache), so the suites are green on an empty Hugging
-Face cache. The first suite deselects 32 tests (44 in run 10, less the twelve
-registry parameters that run again); it passes 3,299 (run 10's 3,288, plus
-those twelve, less the removed workflow test):
+Face cache. The first suite deselects 32 tests (44 in runs 10 and 11, less
+the twelve registry parameters that run again); it passes 3,299 (run 10's
+3,288, plus those twelve, less the removed workflow test):
 
 ```
 Cache restored from key: setup-python-Linux-x64-python-3.11.17-poetry-v2-c40aa03296cca4894c6dd39beec173aff41ffdd4f0cc9e5ce0dc72154be29b39
