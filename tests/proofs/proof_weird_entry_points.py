@@ -11,11 +11,14 @@ against a real gateway, a real PostgreSQL clone, and the real built client:
 
 The gateway is ``narrative.app`` behind ``StrangenessRequestRecorder``, which
 records the strangeness save and transition requests and responses without
-changing a byte. The lane is ``NEXUS_GATEWAY_PORT`` (required; never 8002 or
-8003): the 8012 nightly-QA lane when the QA kit is idle, otherwise the first
-free port from 8014 upward that is not a suite lane (8015, then 8020 and up). Each
-story is a disposable ``qa640_838_`` template clone routed as slot 4; no owner
-slot is read or written. Every model call goes to the TEST provider through a
+changing a byte. ``narrative.app`` reports the operator plane, so the built
+client posts the operator route ``/api/story/new/transition/overwrite``; the CLI
+posts the player route ``/api/story/new/transition``. Both are recorded. The
+lane is ``NEXUS_GATEWAY_PORT`` (required; never 8002 or 8003): the 8012
+nightly-QA lane when the QA kit is idle, otherwise the first free port from 8014
+upward that is not a suite lane (8015, then 8020 and up). Each story is a
+disposable ``qa640_838_`` template clone routed as slot 4; no owner slot is read
+or written. Every model call goes to the TEST provider through a
 private mock server, so the proof makes no paid call. Evidence files are
 written to the test's temporary directory; set ``NEXUS_PROOF_EXPORT_EVIDENCE=1``
 to write them into the tracked ``docs/qa/838-entry-points`` instead.
@@ -69,8 +72,14 @@ SKIPPED_RETROGRADE = {
     "skip_reason": "mock_wizard_model",
     "reused_stages": [],
 }
+# The built client posts the operator transition when /health reports the
+# operator plane, as the unprojected narrative.app does (#824, Decision 824-Q4).
 RECORDED_ROUTES = frozenset(
-    {("PUT", "/api/story/new/weird"), ("POST", "/api/story/new/transition")}
+    {
+        ("PUT", "/api/story/new/weird"),
+        ("POST", "/api/story/new/transition"),
+        ("POST", "/api/story/new/transition/overwrite"),
+    }
 )
 
 
@@ -123,11 +132,13 @@ def _decoded_body(raw: bytes) -> Any:
 class StrangenessRequestRecorder:
     """An ASGI wrapper that records the strangeness requests it passes through.
 
-    For ``PUT /api/story/new/weird`` and ``POST /api/story/new/transition`` it
-    reads the whole request body, hands the same messages to the app, passes
-    every response message through unchanged, and then appends ``{"method",
-    "path", "request", "status", "response"}`` with both bodies parsed as
-    JSON. It appends the record even when the app raises (a 500 is sent, then
+    For ``PUT /api/story/new/weird`` and both transition routes, ``POST
+    /api/story/new/transition`` and ``POST /api/story/new/transition/overwrite``
+    (the one the built client posts on the operator plane), it reads the whole
+    request body, hands the same messages to the app, passes every response
+    message through unchanged, and then appends ``{"method", "path",
+    "request", "status", "response"}`` with both bodies parsed as JSON. It
+    appends the record even when the app raises (a 500 is sent, then
     re-raised), keeps a body that is not JSON as text, and records no status
     when no response started; the app's exception still propagates. Every
     other scope, lifespan included, reaches the app untouched.
@@ -302,8 +313,8 @@ def assert_saves(
     return saves
 
 
-def assert_one_transition(records: list[dict[str, Any]], level: str) -> None:
-    """Assert one transition, after the last save, carried ``level``."""
+def assert_one_transition(records: list[dict[str, Any]], level: str, path: str) -> None:
+    """Assert one transition on ``path``, after the last save, carried ``level``."""
     transitions = [
         index for index, record in enumerate(records) if record["method"] == "POST"
     ]
@@ -314,6 +325,7 @@ def assert_one_transition(records: list[dict[str, Any]], level: str) -> None:
     )
     assert index > last_save, records
     transition = records[index]
+    assert transition["path"] == path, transition
     assert transition["request"] == {"slot": SLOT, "weird_level": level}, transition
     assert transition["status"] == 200, transition
     assert transition["response"]["retrograde"] == SKIPPED_RETROGRADE, transition
@@ -386,7 +398,7 @@ def test_cli_weird_high_walks_the_wizard_to_the_transition(
                     )
                 records = list(recorder.records)
                 assert_saves(records, ["high"] * calls)
-                assert_one_transition(records, "high")
+                assert_one_transition(records, "high", "/api/story/new/transition")
                 assert_transitioned_clone(dbname, "after transition", reads)
             finally:
                 (evidence / "cli-transcript.txt").write_text("\n".join(transcript))
@@ -545,7 +557,9 @@ def test_browser_glyphs_hold_confirm_and_ride_the_transition(
                     ):
                         page.wait_for_timeout(200)
                     records = list(recorder.records)
-                    assert_one_transition(records, "low")
+                    assert_one_transition(
+                        records, "low", "/api/story/new/transition/overwrite"
+                    )
                     assert_saves(records, ["low", "medium", "high", "low"])
                     assert_transitioned_clone(dbname, "after transition", reads)
                     browser.close()

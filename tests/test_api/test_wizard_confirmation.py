@@ -27,7 +27,7 @@ from nexus.api.new_story_cache import (
     _row_to_cache,
 )
 from nexus.api.new_story_schemas import WizardResponse, CharacterCreationState
-from nexus.api.slot_state import _get_wizard_state_from_row
+from nexus.api.slot_state import SlotState, _get_wizard_state_from_row
 from tests.pg_fixtures import connect
 from tests.test_cli_wizard_confirmation import Response, arguments
 from tests.test_wizard_agent import sample_concept_submission, DummyRunContext
@@ -223,6 +223,20 @@ async def test_final_transition_cannot_bypass_artifact_acceptance(
     setattr(cache, unconfirmed, False)
     monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
     monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
+    # The slot holds the wizard, so the player transition's story-slot
+    # refusal (#824) passes without opening a slot database.
+    monkeypatch.setattr(
+        wizard_chat,
+        "get_slot_state",
+        lambda slot: SlotState(
+            slot=slot,
+            is_empty=False,
+            is_wizard_mode=True,
+            wizard_state=None,
+            narrative_state=None,
+            model=None,
+        ),
+    )
     # The genesis claim and ledger live in the slot database; only the route's
     # own prepare() guards are under test here, so no database is opened.
     monkeypatch.setattr(

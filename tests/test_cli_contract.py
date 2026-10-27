@@ -995,6 +995,68 @@ def test_own_wording_step_keeps_its_text_for_a_redirect(
     ]
 
 
+_WIZARD_START = (
+    200,
+    {
+        "thread_id": "t",
+        "model": "TEST",
+        "welcome_message": "Welcome.",
+        "welcome_choices": [],
+    },
+)
+
+
+@pytest.mark.parametrize(
+    ("runtime", "model", "route", "body"),
+    [
+        (
+            "local",
+            "TEST",
+            "/api/story/new/setup/overwrite",
+            {"slot": 5, "model": "TEST"},
+        ),
+        ("remote", "TEST", "/api/story/new/setup/start", {"slot": 5, "model": "TEST"}),
+        ("local", None, "/api/story/new/setup/start", {"slot": 5}),
+    ],
+    ids=["local", "remote", "local-without-model"],
+)
+def test_continue_model_override_takes_the_operator_start_only_on_this_machine(
+    tmp_path: Path,
+    runtime: str,
+    model: Optional[str],
+    route: str,
+    body: dict[str, Any],
+) -> None:
+    """``continue --model`` repins through the operator route only locally.
+
+    On this machine an explicit override starts the wizard through
+    ``setup/overwrite``, which may replace the slot's model pin; a remote
+    runtime's player route ``setup/start`` refuses a repin (Decision 824-Q4).
+    Without ``--model`` the CLI posts the player route everywhere.
+    """
+    gateway = Gateway(
+        routes={
+            ("GET", "/api/slot/5/state"): (200, {"is_empty": True}),
+            ("POST", "/api/story/new/setup/start"): _WIZARD_START,
+            ("POST", "/api/story/new/setup/overwrite"): _WIZARD_START,
+        }
+    )
+    argv = ["continue", "--slot", "5", "--json"]
+    if model is not None:
+        argv += ["--model", model]
+    with _serve(gateway) as base_url:
+        if runtime == "local":
+            env = {"NEXUS_API_URL": base_url}
+        else:
+            config = _config(tmp_path, profile="remote", base_url=base_url)
+            env = {"NEXUS_RUNTIME_CONFIG": str(config)}
+        completed = _run(*argv, env=env)
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    posts = [request for request in gateway.requests if request[0] == "POST"]
+    assert posts == [("POST", route, body)]
+
+
 def test_followed_redirect_loop_is_a_domain_failure() -> None:
     """A request that gets no usable answer is a domain failure, not a traceback.
 

@@ -62,6 +62,7 @@ from nexus.api.pydantic_ai_utils import (
     build_pydantic_ai_model_with_provider,
 )
 from nexus.api.slot_mutations import require_writable_slot
+from nexus.api.slot_state import get_slot_state
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_confirmation import WizardStateConflict
 from nexus.api.wizard_agent import (
@@ -820,8 +821,9 @@ def record_weird_level_endpoint(request: WeirdLevelRequest) -> Dict[str, Any]:
     }
 
 
-@router.post("/transition", response_model=TransitionResponse)
-async def transition_to_narrative_endpoint(request: TransitionRequest):
+async def _run_transition(
+    request: TransitionRequest, *, overwrite: bool
+) -> TransitionResponse:
     """
     Transition from wizard setup to narrative mode.
 
@@ -838,6 +840,8 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
     dbname = slot_dbname(request.slot)
 
     def prepare() -> tuple[TransitionData, Optional[WeirdLevel]]:
+        if not overwrite:
+            _refuse_story_slot(request.slot)
         # Read the setup cache
         cache = read_cache(dbname)
         if not cache:
@@ -954,6 +958,51 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
     except Exception as e:
         logger.error(f"Transition failed: {e}")
         raise HTTPException(status_code=500, detail=f"Transition failed: {str(e)}")
+
+
+@router.post("/transition", response_model=TransitionResponse)
+async def transition_to_narrative_endpoint(
+    request: TransitionRequest,
+) -> TransitionResponse:
+    """
+    Transition from wizard setup to narrative mode.
+
+    Reads from assets.new_story_creator cache, validates completeness,
+    and calls perform_transition() to populate public schema atomically.
+
+    This is the final step that:
+    1. Moves all wizard data to the game database
+    2. Creates the character, location hierarchy
+    3. Sets new_story=false to enable narrative mode
+    4. Clears the setup cache
+
+    On a slot that holds a story it answers 409; the operator route replaces the story.
+    """
+    return await _run_transition(request, overwrite=False)
+
+
+@router.post("/transition/overwrite", response_model=TransitionResponse)
+async def overwrite_transition_endpoint(
+    request: TransitionRequest,
+) -> TransitionResponse:
+    """Transition a wizard that replaces the slot's story (operator plane)."""
+    return await _run_transition(request, overwrite=True)
+
+
+def _refuse_story_slot(slot: int) -> None:
+    """Refuse a player-plane transition over a slot that holds a story.
+
+    A slot holds a story when it has narrative chunks, a pending turn, or a
+    committed story marker (``get_slot_state`` reports it non-empty outside
+    wizard mode). No record of which route started the wizard is kept, so the
+    refusal reads only the slot (Decision D-824-TRANSITION).
+    """
+    state = get_slot_state(slot)
+    if not state.is_empty and not state.is_wizard_mode:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Slot {slot} holds a story; only the operator plane can replace it",
+        )
 
 
 @router.get("/retrograde/status")

@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HEALTH_QUERY_KEY, type HealthPayload, type Plane } from "@/hooks/usePlane";
+import { queryClient } from "@/lib/queryClient";
 import { InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
 
 vi.mock("./ArtifactSidePanel", () => ({ ArtifactSidePanel: () => null }));
@@ -80,6 +82,37 @@ describe("wizard initialization", () => {
         expect(localStorage.getItem("activeSlot")).toBe("5");
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(screen.queryByText("Wrong slot")).toBeNull();
+    });
+});
+
+describe("wizard start route by plane", () => {
+    afterEach(() => {
+        queryClient.clear();
+    });
+
+    it.each<[Plane | undefined, string]>([
+        ["operator", "/api/story/new/setup/overwrite"],
+        ["player", "/api/story/new/setup/start"],
+        [undefined, "/api/story/new/setup/start"],
+    ])("starts on plane %s through %s", async (plane, route) => {
+        if (plane !== undefined) {
+            queryClient.setQueryData<HealthPayload>([...HEALTH_QUERY_KEY], {
+                status: "healthy",
+                service: "nexus",
+                plane,
+            });
+        }
+        const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+            thread_id: "conv_new",
+            welcome_message: "Where does your story begin?",
+            welcome_choices: ["A moonlit harbor"],
+        })));
+        vi.stubGlobal("fetch", fetch);
+        render(<InteractiveWizard {...props} />);
+
+        expect(await screen.findByText("Where does your story begin?")).toBeInTheDocument();
+        expect(fetch.mock.calls[0][0]).toBe(route);
+        expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ slot: 5 });
     });
 });
 
