@@ -665,6 +665,33 @@ def _clone_story_pins(dbname: str) -> tuple[Any, Any]:
     return row[0], row[1]
 
 
+def _clear_queued_experience_jobs(dbname: str) -> int:
+    """Delete the clone's inherited queued experience jobs; return the count.
+
+    The data clone copies save_04's queued ``character_experience_jobs``. The
+    gateway's drain would run them as paid OpenAI calls outside ``CALL_CAP``,
+    so 845-S3 removes them from the clone (never from save_04) before the
+    gateway starts.
+    """
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM character_experience_jobs WHERE state = 'queued'")
+        return int(cur.rowcount)
+
+
+def _clear_pending_incubator(dbname: str) -> int:
+    """Delete the clone's inherited pending incubator draft; return the count.
+
+    save_04 holds one provisional draft whose applied tags include a tag the
+    registry has since deprecated (#811); the gateway auto-approves and
+    commits that draft on the next ``continue`` and the commit refuses it
+    with a 500 before any model call. The probe measures fresh Fable turns
+    from the committed story, so 845-S3 drops the draft on the clone only.
+    """
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM incubator")
+        return int(cur.rowcount)
+
+
 def _run_turn(
     index: int,
     turn_input: dict[str, Any],
@@ -757,6 +784,12 @@ def test_fable_two_pass_production_probe(
         model, gaia_model = _clone_story_pins(dbname)
         assert model == MODEL_UNDER_TEST, f"{evidence}: clone pins {model!r}"
         assert gaia_model is None, f"{evidence}: clone pins Gaia {gaia_model!r}"
+        cleared_jobs = _clear_queued_experience_jobs(dbname)
+        print(f"845 probe: cleared {cleared_jobs} queued experience job(s) on {dbname}")
+        cleared_drafts = _clear_pending_incubator(dbname)
+        print(
+            f"845 probe: cleared {cleared_drafts} pending incubator draft(s) on {dbname}"
+        )
 
         started_at = datetime.now(timezone.utc)
         log_path = evidence / "gateway.log"

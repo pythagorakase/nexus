@@ -1067,6 +1067,8 @@ def _relationship(dbname: str) -> None:
 
 
 def _deferred(dbname: str) -> None:
+    # Migration 154 drops the six from every clone _clone builds; restore them.
+    _sql(dbname, ";\n".join(f[3] for f in MANIFEST["deferred_functions"]))
     _sql(
         dbname,
         (

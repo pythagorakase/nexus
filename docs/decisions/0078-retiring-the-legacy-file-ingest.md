@@ -3,7 +3,7 @@ status: canonical
 sources:
   - config/exception_disposition_baseline.json
   - scripts/extract_scene_numbers.py
-verified_commit: "d295eef0928706cda3a9f7c5a8b4dc103929e1ed"
+verified_commit: "571f982b2fa375acd4b52c51c76c29f4663f7242"
 ---
 
 # 0078: Retiring the Legacy File Ingest

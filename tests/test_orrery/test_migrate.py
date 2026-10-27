@@ -2035,6 +2035,12 @@ def test_canonical_grieving_migration_executes_against_slot_db() -> None:
             dbname, world_time=datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
         )
         with closing(connect(dbname)) as conn:
+            # Migration 154 drops entity_tags.clear_on_override, which 046 copies.
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "ALTER TABLE public.entity_tags "
+                    "ADD COLUMN IF NOT EXISTS clear_on_override jsonb"
+                )
             _exercise_canonical_grieving_migration(conn, migration)
 
 

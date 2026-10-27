@@ -4,7 +4,7 @@ sources:
   - tests/test_doc_front_matter.py
   - README.md
   - tests/generated_docs.py
-verified_commit: "d295eef0928706cda3a9f7c5a8b4dc103929e1ed"
+verified_commit: "571f982b2fa375acd4b52c51c76c29f4663f7242"
 ---
 
 # Document Status and the Decision Ledger

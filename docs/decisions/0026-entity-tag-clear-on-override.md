@@ -1,10 +1,10 @@
 ---
-status: canonical
+status: historical
 sources:
   - config/schema_docs_baseline.json
   - migrations/023_orrery_schema.py
   - docs/dead_retrieval_subtraction.md
-verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
+verified_commit: "e058005f8df04e4c5807f695eded4a68657e9f05"
 ---
 
 # 0026: Entity Tag Clear-on-Override Column
@@ -13,6 +13,8 @@ verified_commit: "d70a1991210ce16aef5d6f9b57b0ec563ee1d164"
 **Links:** #819, #813
 
 ## Ruling
+
+Closed: migration 154 (#813) drops these objects, which meets this record's reopening criterion; their baseline entries leave config/schema_docs_baseline.json with the drop.
 
 Parked. These objects stay uncommented and listed in config/schema_docs_baseline.json.
 
