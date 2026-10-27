@@ -240,9 +240,50 @@ receipt isolation: checkout and user receipts untouched
 1910 passed, 1547 skipped, 7 warnings in 48.54s
 ```
 
+## Post-Merge Runs (at `3b37ad35`, After Merging `origin/main` at `b0e9cb77`)
+
+`nice -n 15 $PY -m pytest -q tests/test_native_structured_output.py tests/test_fable_probe_parsing.py tests/test_owner_target_guard.py`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+221 passed, 5 warnings in 6.74s
+```
+
+`nice -n 15 $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tests/test_runtime/test_log_redaction.py`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+153 passed, 1 skipped, 5 warnings in 18.18s
+```
+
+(The skip is `tests/test_runtime/test_log_redaction.py:282`, its PostgreSQL
+case.)
+
+`nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3285 passed, 702 skipped, 8 warnings in 655.94s (0:10:55)
+```
+
+`nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1910 passed, 1547 skipped, 7 warnings in 44.63s
+```
+
+`$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
+`OK: exception disposition coverage and shrink-only baseline verified.`
+`$PY scripts/check_model_drift.py`: `OK: no model-ID drift detected.`
+
 ## Static Checks
 
-- Black: `4 files would be left unchanged.`
+- Black: `4 files would be left unchanged.` (rerun at `b3660b68`: same)
 - `$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
   `OK: exception disposition coverage and shrink-only baseline verified.`
 - `$PY scripts/check_model_drift.py`: `OK: no model-ID drift detected.`
