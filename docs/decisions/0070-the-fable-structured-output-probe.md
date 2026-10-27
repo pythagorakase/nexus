@@ -3,7 +3,7 @@ status: canonical
 sources:
   - nexus.toml
   - scripts/api_anthropic.py
-verified_commit: "b0e9cb77af52a22673113b4910d027cd189cf281"
+verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
 ---
 
 # 0070: The Fable Structured-Output Probe
