@@ -350,9 +350,11 @@ class LORE:
         """
         if not isinstance(attempt_id, str) or str(UUID(attempt_id)) != attempt_id:
             raise ValueError("LORE requires a caller-supplied canonical attempt UUID")
-        logger.info(f"Starting turn cycle with input: {user_input[:100]}...")
+        logger.info("Starting turn cycle (input %d chars)", len(user_input))
+        logger.debug(f"Starting turn cycle with input: {user_input[:100]}...")
         if note:
-            logger.info(f"Author's note: {note[:200]}")
+            logger.info("Author's note: %d chars", len(note))
+            logger.debug(f"Author's note: {note[:200]}")
 
         # Initialize turn context
         self.turn_context = TurnContext(
@@ -543,7 +545,8 @@ class LORE:
             Dict with retrieved_context, sources, queries, deterministic reasoning,
             and direct MEMNON search metadata for this directive.
         """
-        qa_logger.info(f"Processing directive: {directive[:50]}...")
+        qa_logger.info("Processing directive (%d chars)", len(directive))
+        qa_logger.debug(f"Processing directive: {directive[:50]}...")
         max_query_text_chars = 500
 
         def sanitize_query(q: str) -> str:

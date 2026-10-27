@@ -237,7 +237,10 @@ def hybrid_alias_search(
     if alias_lookup is None:
         alias_lookup = load_aliases_from_db(conn)
     terms = alias_terms(query_text, alias_lookup)
-    logger.info(f"Query '{query_text}' contains character references: {terms}")
+    logger.info(
+        "Query of %d chars contains character references: %s", len(query_text), terms
+    )
+    logger.debug(f"Query '{query_text}' contains character references: {terms}")
 
     table_name = table_name_for_dimensions(dimensions)
     if not embedding_table_exists(conn, table_name):

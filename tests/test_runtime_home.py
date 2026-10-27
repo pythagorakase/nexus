@@ -499,16 +499,16 @@ def test_relative_model_paths_anchor_once_at_load(
 def test_shipped_model_paths_are_unchanged_by_anchoring(
     tmp_path: Path,
 ) -> None:
-    """The shipped 14 paths and absolute symlink spelling are preserved."""
+    """The shipped 13 paths and absolute symlink spelling are preserved."""
     settings = load_settings()
     fields = model_path_fields(settings)
-    assert len(fields) == 14
+    assert len(fields) == 13
     assert set(settings.configured_model_paths) == {key for key, _, _ in fields}
     for key, model, attr in fields:
         assert getattr(model, attr) == settings.configured_model_paths[key]
     copied = settings.configured_model_paths
     copied.clear()
-    assert len(settings.configured_model_paths) == 14
+    assert len(settings.configured_model_paths) == 13
     (tmp_path / "real").mkdir()
     (tmp_path / "link").symlink_to(tmp_path / "real", target_is_directory=True)
     configured = str(tmp_path / "link" / "m")

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from nexus.agents.orrery import templates as template_module
@@ -23,6 +21,7 @@ from nexus.agents.orrery.substrate import (
     drive_band_priority_warnings,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+from tests.generated_docs import ORRERY_CATALOG, REPO_ROOT
 
 
 def test_catalog_marks_attention_and_deviation() -> None:
@@ -388,16 +387,11 @@ def test_orrery_packages_md_is_up_to_date() -> None:
     --write` run. Keeps the doc in lockstep with the source-of-truth.
     """
 
-    # tests/test_orrery/test_catalog.py → repo_root/docs/orrery_packages.md
-    doc_path = Path(__file__).resolve().parents[2] / "docs" / "orrery_packages.md"
-    assert doc_path.exists(), (
-        f"{doc_path} does not exist. "
-        f"Run: python -m nexus.agents.orrery.catalog --write"
-    )
+    doc_path = REPO_ROOT / ORRERY_CATALOG.path
+    assert (
+        doc_path.exists()
+    ), f"{doc_path} does not exist. Run: {ORRERY_CATALOG.regenerate}"
     expected = render_catalog(BUILTIN_TEMPLATES)
     actual = doc_path.read_text()
     if actual != expected:
-        raise AssertionError(
-            f"{doc_path} is stale.\n"
-            f"Run: python -m nexus.agents.orrery.catalog --write"
-        )
+        raise AssertionError(f"{doc_path} is stale.\nRun: {ORRERY_CATALOG.regenerate}")

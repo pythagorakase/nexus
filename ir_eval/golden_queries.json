@@ -152,29 +152,25 @@
                 "is_active": true,
                 "local_path": "/Users/pythagor/nexus/models/bge-large-en",
                 "remote_path": "BAAI/bge-large-en",
-                "dimensions": 1024,
-                "weight": 0.2
+                "dimensions": 1024
             },
             "e5-large": {
                 "is_active": true,
                 "local_path": "/Users/pythagor/nexus/models/e5-large-v2",
                 "remote_path": "intfloat/e5-large-v2",
-                "dimensions": 1024,
-                "weight": 0.3
+                "dimensions": 1024
             },
             "bge-small-custom": {
                 "is_active": false,
                 "local_path": "/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654",
                 "remote_path": null,
-                "dimensions": 384,
-                "weight": 0.0
+                "dimensions": 384
             },
             "inf-retriever-v1-1.5b": {
                 "is_active": true,
                 "local_path": "/Users/pythagor/nexus/models/inf-retriever-v1-1.5b",
                 "remote_path": "infly/inf-retriever-v1-1.5b",
-                "dimensions": 1536,
-                "weight": 0.5
+                "dimensions": 1536
             }
         }
     }

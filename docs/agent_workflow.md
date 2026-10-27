@@ -22,6 +22,11 @@ more specific instructions.
   `docs/decisions/README.md`). It needs `origin/main` and full history; fetch
   before you run the gate. Before a branch merges, it merges `origin/main` and
   passes the check again.
+- When the coordinator relays a loom ruling verbatim to an issue, the pull
+  request that lands work under that ruling, or a follow-up pull request,
+  appends a record to `docs/decisions/` in the format its README defines. The
+  record quotes the relay comment and names the files the ruling governs as its
+  `sources`.
 - The secret-store guard is a mandatory part of the gate. `tests/conftest.py`
   installs `tests/secret_store_guard.py` before collection and stops the
   session (exit 4) if collection removes it or if CPython's private

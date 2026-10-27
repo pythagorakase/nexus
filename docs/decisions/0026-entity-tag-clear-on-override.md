@@ -4,7 +4,7 @@ sources:
   - config/schema_docs_baseline.json
   - migrations/023_orrery_schema.py
   - docs/dead_retrieval_subtraction.md
-verified_commit: "cf98364c44d074cdd58887ac5752bfe180bb3035"
+verified_commit: "b0e9cb77af52a22673113b4910d027cd189cf281"
 ---
 
 # 0026: Entity Tag Clear-on-Override Column

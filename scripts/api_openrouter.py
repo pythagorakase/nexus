@@ -480,6 +480,10 @@ class OpenRouterProvider(LLMProvider):
                 data = response.json()
             except json.JSONDecodeError as e:
                 logger.error(
+                    "Failed to parse JSON response from OpenRouter (%d chars)",
+                    len(response.text),
+                )
+                logger.debug(
                     f"Failed to parse JSON response from OpenRouter. Raw response: {response.text[:500]}"
                 )
                 raise
@@ -493,7 +497,9 @@ class OpenRouterProvider(LLMProvider):
                 model=self.model,
             )
 
-        except requests.exceptions.HTTPError as e:
+        except (
+            requests.exceptions.HTTPError
+        ) as e:  # nexus-exception-disposition: retry; reason=HTTP 429; safety=raises
             if e.response.status_code == 429:
                 retry_after = e.response.headers.get(
                     "retry-after", COOLDOWNS["rate_limit"]
@@ -503,6 +509,11 @@ class OpenRouterProvider(LLMProvider):
                 return self._get_completion_http(prompt, messages, enable_cache)
 
             logger.error(
+                "OpenRouter HTTP error: %s (%d-char body)",
+                e.response.status_code,
+                len(e.response.text),
+            )
+            logger.debug(
                 f"OpenRouter HTTP error: {e.response.status_code} - {e.response.text[:500]}"
             )
             raise
