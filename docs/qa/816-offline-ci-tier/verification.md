@@ -1648,12 +1648,11 @@ body only. Scratch logs are under `<fix2>`.
   (`docs/decisions/0066-*.md`, `0067-*.md`) and two files under `docs/qa/`
   (`git diff --name-only 925f2591 36abe1b0`); none is an `AGENTS.md` source,
   and `git merge-tree --write-tree HEAD origin/main` reports no conflict.
-  The branch still holds main at `925f2591` (no merge this round), so
-  `ui-tests` stays
-  red on this branch only until the branch carries `36abe1b0`. Whether to
-  `git merge origin/main` is the coordinator's call; a merge moves the merge
-  base, so the `AGENTS.md` `verified_commit` (`925f2591`) must then be
-  re-checked against the new merge base.
+  The branch still holds main at `925f2591` (no merge this round).
+  Whether to `git merge origin/main` is the coordinator's call; a merge
+  moves the merge base, so the `AGENTS.md` `verified_commit` (`925f2591`)
+  must then be re-checked against the new merge base. Run 15 (below) shows
+  that carrying `36abe1b0` does not turn `ui-tests` green.
 - The fourth round's line above now dates its "`origin/main` is still
   `925f2591`" claim, and the run 12 section names runs 13 and 14.
 - The PR body: the fourth-round bullet, the `ui-tests` sentence, the
@@ -1699,3 +1698,57 @@ receipt isolation: checkout and user receipts untouched
 
 `<fix2>/hf-empty-p3` held no file afterwards. No PostgreSQL file changed, so
 no PostgreSQL run is owed.
+
+### Run 15: https://github.com/pythagorakase/nexus/actions/runs/40464060638
+
+Head `8025bdb2` (the fifth round's first evidence commit). Every run on this
+branch is a `pull_request` run (`gh run list ... --json event`), so it tests
+`refs/pull/1167/merge`, the branch merged into the current `main`. Run 15 is
+the first run whose merge ref carries `36abe1b0` (#1179). Conclusion:
+failure, from `ui-tests` alone. `offline-tests`: **success**:
+
+```
+Cache restored from key: setup-python-Linux-x64-python-3.11.17-poetry-v2-c40aa03296cca4894c6dd39beec173aff41ffdd4f0cc9e5ce0dc72154be29b39
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3299 passed, 687 skipped, 32 deselected, 8 warnings in 1093.69s (0:18:13)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1941 passed, 1571 skipped, 8 deselected, 7 warnings in 113.83s (0:01:53)
+```
+
+`ui-tests` is no longer red on the stale receipt. With #1179's receipt the
+module-level freshness check (`state-shades.test.ts:183`) passes, so the
+eleven tests behind it run for the first time in CI, and two fail on Linux
+(log saved as `<fix2>/run15-ui-tests.log`):
+
+```
+ ❯ src/state-shades.test.ts (11 tests | 2 failed) 168423ms
+   × 777-S2 state shades > tooltip_gradient_uses_the_90_percent_core_in_linear_light_without_a_mode_floor 20ms
+   × 777-S2 state shades > browser_measurements_match_recorded_tables 873ms
+ FAIL  src/state-shades.test.ts > 777-S2 state shades > tooltip_gradient_uses_the_90_percent_core_in_linear_light_without_a_mode_floor
+Error: Invalid PNG signature
+ ❯ src/state-shades.test.ts:354:20
+ FAIL  src/state-shades.test.ts > 777-S2 state shades > browser_measurements_match_recorded_tables
+AssertionError: expected [ { theme: 'Veil', …(7) }, …(2672) ] to deeply equal [ { theme: 'Veil', …(7) }, …(2672) ]
+-     "delta": 0.3440110244880334,
++     "delta": 0.3440110244880333,
+ ❯ src/state-shades.test.ts:557:48
+ Test Files  1 failed | 43 passed (44)
+```
+
+- `tooltip_gradient_...` reads
+  `docs/qa/777-glyph-first-states/after-review-r4/absolute-floor/tooltip-repeat-1-{painted,control}.png`
+  (`state-shades.test.ts:352-353`). Those PNGs are LFS objects
+  (`.gitattributes`: `*.png filter=lfs`), and the job's
+  `git lfs pull --include="ui/**"` leaves them as pointer files, so the PNG
+  decoder sees no signature. This is the branch's own workflow scope.
+- `browser_measurements_match_recorded_tables` differs from
+  `docs/qa/777-glyph-first-states/amendment-2/*-joint.json` (not LFS) in the
+  last digit of one `delta`; the test compares floats with `toEqual`, so a
+  one-ulp Linux difference fails it. The fix would be under `ui/` or the
+  recorded tables, which the order forbids.
+
+Neither failure is in this round's findings, so neither is fixed here; both
+are reported to the coordinator.
+
+The commit that carries this note starts a further run, which the PR body
+records.
