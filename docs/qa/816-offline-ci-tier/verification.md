@@ -613,6 +613,106 @@ errors in 10 files (`<scratch>/mypy-base.txt`).
 
 ## CI Runs
 
-Recorded in the follow-up commit after the first workflow run on the pull
-request.
+Every run is on PR #1167 (`pull_request`, so the checkout is the PR merge
+ref). Logs: `<scratch>/ci1-*.log`, `<scratch>/ci2-*.log`,
+`<scratch>/ci3-*.log`.
+
+### Run 1: https://github.com/pythagorakase/nexus/actions/runs/40429661948
+
+Head `0ff505db`. Conclusion: failure. `offline-tests`: failure (first suite
+red; the second suite step was skipped). `ui-tests`: failure.
+
+```
+FAILED tests/test_doc_front_matter.py::test_declared_sources_carry_a_fresh_verified_commit - AssertionError: assert ['AGENTS.md: ...ified_commit'] == []
+  Left contains one more item: 'AGENTS.md: docs/agent_workflow.md, pytest.ini changed since the merge base e058005f8df0 without a re-stamped verified_commit'
+FAILED tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations - ValueError: Model 'nousresearch/hermes-4-70b': tokenizer_repository 'NousResearch/Hermes-4-70B' at tokenizer_revision 'd5dec2bd6b3930a09ddefd0b7fc6523fe0720d09' is not in the local Hugging Face cache. Run `nexus models fetch` to download it.
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b] - ValueError: (same, Hermes-4-70B)
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4.3-36b] - ValueError: ... 'NousResearch/Hermes-4.3-36B' at tokenizer_revision '3899db2b6c4b35f16bde3b570bb7dd2775d56161' is not in the local Hugging Face cache.
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[deepseek/deepseek-v4-pro] - ValueError: ... 'deepseek-ai/DeepSeek-V4-Pro' ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b] - ValueError: ... 'NousResearch/Hermes-4-405B' ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3] - ValueError: ... 'MiniMaxAI/Minimax-M3' ...
+FAILED tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000] - ValueError: (same, Hermes-4-70B)
+FAILED tests/test_runtime/test_supervisor.py::test_failed_start_keeps_the_record_when_the_writer_probe_cannot_run - FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pytest-of-runner/pytest-0/test_failed_start_keeps_the_re0/state/echo.log'
+9 failed, 3277 passed, 683 skipped, 22 deselected, 8 warnings in 1117.85s (0:18:37)
+```
+
+- Freshness check: `origin/main` moved to `e058005f` (#1166) after the push,
+  and a pull-request run diffs the merge ref against the newest `main`. Fixed
+  by merging `origin/main` again and re-stamping `AGENTS.md` and decision 0076
+  to `e058005f` (merge commit `19a2a363`).
+- `test_failed_start_keeps_the_record_when_the_writer_probe_cannot_run`: on
+  Linux the log writer had not yet created `echo.log` when the wait loop
+  first read it (`tests/test_runtime/test_supervisor.py:1478`). Made portable
+  in the test file (commit `2d38d73d`): the loop treats a missing file as not
+  yet printed, under the same ten-second deadline, as the loop at `:813` of
+  the same file already does. The test passes locally (73 passed for the
+  file) and on runs 2 and 3.
+- The seven tokenizer tests: reported, left red (see below).
+- `ui-tests`: `src/state-shades.test.ts` fails at `:51`:
+
+```
+FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Command failed: git show 8ccd3008a48bdf8115232667399868e2bdf66f93:ui/client/src/index.css
+fatal: path 'ui/client/src/index.css' exists on disk, but not in '8ccd3008a48bdf8115232667399868e2bdf66f93'
+ ❯ src/state-shades.test.ts:51:17
+ Test Files  1 failed | 43 passed (44)
+      Tests  667 passed (667)
+```
+
+  `8ccd3008` is #1093's commit on `main`; the order's `ui-tests` checkout is
+  depth 1, so the object is absent. Nothing under `ui/` was changed for it.
+
+### Run 2: https://github.com/pythagorakase/nexus/actions/runs/40431989474
+
+Head `19a2a363`. Conclusion: failure. `offline-tests`: failure (first suite;
+second suite skipped). `ui-tests`: failure (same `state-shades.test.ts`
+tail).
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations - ValueError: Model 'nousresearch/hermes-4-70b': tokenizer_repository 'NousResearch/Hermes-4-70B' at tokenizer_revision 'd5dec2bd6b393...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b] - ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4.3-36b] - ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[deepseek/deepseek-v4-pro] - ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b] - ...
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3] - ...
+FAILED tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000] - ...
+7 failed, 3279 passed, 683 skipped, 22 deselected, 8 warnings in 786.44s (0:13:06)
+```
+
+### Run 3: https://github.com/pythagorakase/nexus/actions/runs/40433497563
+
+Head `db84d6fc`, a scratch commit that added `if: ${{ !cancelled() }}` to the
+second suite step so that the second suite would run on Linux despite the
+red first suite; the next commit reverts it, so the committed workflow is
+the ordered one. Conclusion: failure. `offline-tests`: first suite failure
+(the same seven tokenizer tests, `7 failed, 3279 passed, 683 skipped, 22
+deselected in 1081.70s`), second suite success:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1910 passed, 1541 skipped, 6 deselected, 7 warnings in 89.60s (0:01:29)
+```
+
+`ui-tests`: failure, the same `state-shades.test.ts:51` tail
+(`Test Files 1 failed | 43 passed (44)`, `Tests 672 passed (672)`).
+
+### Left Red and Reported
+
+The seven tokenizer tests fail only on Linux CI and pass locally, where the
+owner's Hugging Face cache holds the pinned tokenizers:
+
+- `tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations`
+- `tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b]`,
+  `[nousresearch/hermes-4.3-36b]`, `[deepseek/deepseek-v4-pro]`,
+  `[nousresearch/hermes-4-405b]`, `[minimax/minimax-m3]`
+- `tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000]`
+
+The raise is in `nexus/telemetry/prompt_window.py:368` and `:386`
+(`TokenizerNotCachedError`, then a `ValueError` that says the tokenizer is
+not in the local Hugging Face cache and to run `nexus models fetch`): the pinned tokenizers of #1126
+(landed in `a8c6e3f5` after the order was written) load only from the local
+cache. The fix is not in the failing test files (it needs the cache filled on
+the runner, a workflow or `nexus/` change, or a marker decision), so under
+the order's Sequencing they are left red.
 
