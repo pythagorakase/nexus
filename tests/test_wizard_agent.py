@@ -17,6 +17,7 @@ from nexus.api import new_story_flow
 from nexus.api import wizard_agent as wizard_module
 from nexus.api import wizard_chat
 from nexus.api.narrative_schemas import TransitionRequest
+from nexus.api.slot_state import SlotState
 from nexus.api.new_story_cache import WizardCache, _row_to_cache
 from nexus.api.new_story_schemas import (
     CharacterConceptSubmission,
@@ -549,6 +550,20 @@ async def test_transition_rejects_missing_diegetic_timestamp(monkeypatch) -> Non
         wizard_chat,
         "read_cache",
         lambda _dbname: CompleteCacheWithoutTimestamp(),
+    )
+    # The slot holds the wizard, so the player transition's story-slot
+    # refusal (#824) passes without opening a slot database.
+    monkeypatch.setattr(
+        wizard_chat,
+        "get_slot_state",
+        lambda slot: SlotState(
+            slot=slot,
+            is_empty=False,
+            is_wizard_mode=True,
+            wizard_state=None,
+            narrative_state=None,
+            model=None,
+        ),
     )
     # The genesis claim and ledger live in the slot database; only the route's
     # own prepare() guards are under test here, so no database is opened.
