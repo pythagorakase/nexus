@@ -4,9 +4,12 @@ The observation serves decisions about a turn's token economics: which seat and
 attempt spend the prompt window and the provider's tokens, what the background
 work the turn enqueued spends, what retries and repairs cost, and where the
 wall time goes (a seat's budget, retry policy or model choice). It is read
-through ``nexus inspect-turn --json`` or ``--summary``, states its freshness in
-``read_at`` and ``ledger_days_read``, and is proven by
-``tests/test_turn_observation.py``.
+through ``nexus inspect-turn --json`` or ``--summary`` and through Backstage's
+economics section (``read_backstage_economics`` in
+``nexus/agents/orrery/backstage.py``, served at
+``GET /api/dev/backstage/{slot}/turn``). It states its freshness in ``read_at``
+and ``ledger_days_read``, and it is proven by ``tests/test_turn_observation.py``
+and, on real providers, by stage 9 of ``tests/test_golden_path_live.py``.
 
 The observation joins one generation session's durable records on read and is
 never stored; a replacement session (``replaced_by_session_id``) is observed on
