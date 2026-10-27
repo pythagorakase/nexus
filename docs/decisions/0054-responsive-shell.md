@@ -4,7 +4,7 @@ sources:
   - ui/client/src/components/nexus/NexusLayout.tsx
   - ui/client/src/components/nexus/nexus-layout.css
   - ui/client/src/hooks/useNarrowShell.ts
-verified_commit: "f073b3711a3bd0273943c9defad85913452fd00b"
+verified_commit: "d295eef0928706cda3a9f7c5a8b4dc103929e1ed"
 ---
 
 # 0054: Responsive Shell
