@@ -8,7 +8,7 @@ This module handles the setup phase of story creation including:
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import frontmatter
 import psycopg2
@@ -38,6 +38,7 @@ from nexus.api.new_story_flow import (
 )
 from nexus.api.save_slots import get_slot_model
 from nexus.api.slot_mutations import require_writable_slot
+from nexus.api.slot_state import get_slot_state
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_transcript import visible_wizard_messages
 from nexus.prompts.registry import PromptId, load
@@ -47,10 +48,8 @@ logger = logging.getLogger("nexus.api.setup_endpoints")
 router = APIRouter(prefix="/api/story/new", tags=["setup"])
 
 
-@router.post("/setup/start")
-async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
+async def _start_wizard(request: StartSetupRequest) -> Dict[str, Any]:
     """Start a new setup conversation"""
-    require_writable_slot(request.slot)
     try:
         # The core resolves and persists the setup model. Passing the raw
         # request keeps omitted client values distinct from explicit
@@ -90,6 +89,49 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error starting setup: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/setup/start")
+async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
+    """Start a new story on an empty slot (player plane)."""
+    require_writable_slot(request.slot)
+    _require_empty_unpinned_slot(request.slot, request.model)
+    return await _start_wizard(request)
+
+
+@router.post("/setup/overwrite")
+async def overwrite_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
+    """Start a new story on any unlocked slot, replacing its wizard and model pin
+    (operator plane)."""
+    require_writable_slot(request.slot)
+    return await _start_wizard(request)
+
+
+def _require_empty_unpinned_slot(slot: int, model: Optional[str]) -> None:
+    """Refuse a player-plane start that would overwrite or repin ``slot``.
+
+    The slot must be empty as the slot list reports it (no story and no
+    new-story wizard), and an explicit ``model`` must match the slot's model
+    pin when it has one. Both refusals answer 409 (Decision 824-Q4). Database
+    errors propagate, so a slot whose database does not exist fails here.
+    """
+    state = get_slot_state(slot)
+    if not state.is_empty:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Slot {slot} holds a story or a new-story wizard; only the "
+                "operator plane can overwrite it"
+            ),
+        )
+    if model is not None and state.model is not None and model != state.model:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Slot {slot} is pinned to {state.model}; only the operator "
+                "plane can change its model"
+            ),
+        )
 
 
 @router.get("/setup/resume", response_model=ResumeSetupResponse)

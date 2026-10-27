@@ -77,9 +77,7 @@ def test_setup_endpoint_passes_omitted_model_to_core(
     previous_thread = new_story_flow.start_setup(4, model="TEST")
     app = FastAPI()
     app.include_router(setup_endpoints.router)
-    response = TestClient(app).post(
-        "/api/story/new/setup/overwrite", json={"slot": 4}
-    )
+    response = TestClient(app).post("/api/story/new/setup/overwrite", json={"slot": 4})
 
     assert response.status_code == 200, response.text
     assert starts == [(4, None)]
