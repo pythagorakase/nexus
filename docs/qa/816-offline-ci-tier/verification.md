@@ -1048,3 +1048,23 @@ averages: 6.04 7.57 7.41`). `test_attempt_manifest_pg.py` holds a marked test,
 and the merge changed that file. `test_supervisor.py` was changed on both
 sides and merged cleanly; it passes. The first offline suite on this tree is
 the CI run that the push of this commit starts.
+
+### Run 6: https://github.com/pythagorakase/nexus/actions/runs/40443245585
+
+Head `8d01171f` (the `5ba97c05` merge plus the evidence). Conclusion:
+failure, from `ui-tests` alone. `offline-tests`: success. The tokenizer
+cache was hit on the primary key, so nothing was downloaded:
+
+```
+Cache hit for: hf-tokenizers-92e7bfa13ec24356b64ae7c30c11d96d9af39d0acc55cde72e7087e28009d1fd
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3304 passed, 690 skipped, 22 deselected, 8 warnings in 1078.81s (0:17:58)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1926 passed, 1562 skipped, 8 deselected, 7 warnings in 113.31s (0:01:53)
+Cache hit occurred on the primary key hf-tokenizers-92e7bfa13ec24356b64ae7c30c11d96d9af39d0acc55cde72e7087e28009d1fd, not saving cache.
+```
+
+`ui-tests`: failure, with the same stale-receipt tail as Run 5
+(`state-shades.test.ts:183`, `Test Files 1 failed | 43 passed (44)`,
+`Tests 673 passed (673)`). The commit that records this run starts one more
+run; the PR body records that run.
