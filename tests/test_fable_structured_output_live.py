@@ -495,7 +495,7 @@ def write_evidence(
 
     done = completed_turns(turns)
     result = verdict(attempts, done)
-    fable_by_ts = sorted(fable_events(events_all), key=lambda event: event.ts)
+    fable_by_ts = sorted(fable_events(events_all), key=_parse_ts)
     fable_count = len(fable_by_ts)
     rejected = [a for a in attempts if a["outcome"] == "rejected_validation"]
 
@@ -739,7 +739,9 @@ def test_fable_two_pass_production_probe(
 
     turns: list[dict[str, Any]] = []
     windows: list[TurnWindow] = []
-    stop_reason = "completed"
+    # Only a turn loop that runs to its end without a break completes the
+    # run; a setup failure or an exception leaves an aborted label.
+    stop_reason = "aborted"
     with disposable_slot_database(
         "qa640_845",
         source_db="save_04",
@@ -804,6 +806,11 @@ def test_fable_two_pass_production_probe(
                 if record["exit_code"] != 0 or record["success"] is not True:
                     stop_reason = "turn_failed"
                     break
+            else:
+                stop_reason = "completed"
+        except BaseException as exc:
+            stop_reason = f"aborted:{type(exc).__name__}"
+            raise
         finally:
             if server is not None:
                 server.terminate()

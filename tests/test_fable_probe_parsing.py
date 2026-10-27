@@ -328,6 +328,53 @@ def test_join_and_verdict(tmp_path: Path) -> None:
         (None, "summaries", "empty_native")
     ]
 
+    # Rejections on two seats, Gaia twice: each seat pairs its k-th rejected
+    # event with its own k-th line, whatever the global line order.
+    events = _accepted_turns(TURN_COUNT)
+    events.append(
+        _event("gaia", "rejected_validation", _BASE + timedelta(minutes=30, seconds=60))
+    )
+    events.append(
+        _event(
+            "skald_writer",
+            "rejected_validation",
+            _BASE + timedelta(minutes=40, seconds=60),
+        )
+    )
+    events.append(
+        _event("gaia", "rejected_validation", _BASE + timedelta(minutes=50, seconds=60))
+    )
+    writer_validation = _line(
+        transport="native",
+        seat="skald_writer",
+        stop_reason="end_turn",
+        block_types="thinking,text",
+        error="narrative: Field required (missing)",
+    )
+    gaia_validation = _line(
+        transport="prompted",
+        seat="gaia",
+        stop_reason="end_turn",
+        block_types="text",
+        error="letter: Field required (missing)",
+    )
+    result, attempts = _verdict(
+        tmp_path,
+        events,
+        [writer_validation, empty_prompted, gaia_validation],
+        name="two_seats",
+    )
+    assert result == "reproduced"
+    rejected = [a for a in attempts if a["outcome"] == "rejected_validation"]
+    assert [
+        (a["turn"], a["seat"], a["transport"], a["block_types"], a["error_class"])
+        for a in rejected
+    ] == [
+        (3, "gaia", "prompted", "thinking", "empty_prompted"),
+        (4, "skald_writer", "native", "thinking,text", "validation"),
+        (5, "gaia", "prompted", "text", "validation"),
+    ]
+
     # Eleven completed turns: incomplete.
     result, _ = _verdict(
         tmp_path, _accepted_turns(TURN_COUNT - 1), [], turns=11, name="eleven"
@@ -444,6 +491,25 @@ def test_write_evidence_writes_every_file(tmp_path: Path) -> None:
         "| correspondence_compaction | 1 |",
         "| summaries | 2 |",
     ]
+
+    # A run that aborts before its first turn records the aborted label and
+    # no completed turn, never "completed".
+    evidence_aborted = tmp_path / "evidence_aborted"
+    evidence_aborted.mkdir()
+    aborted = write_evidence(
+        evidence_aborted,
+        events_all=[],
+        rejections=[],
+        turns=[],
+        turn_windows=[],
+        stop_reason="aborted:RuntimeError",
+        worst=8,
+    )
+    assert aborted == "incomplete"
+    summary_aborted = (evidence_aborted / "summary.md").read_text()
+    assert "- Stop reason: `aborted:RuntimeError`" in summary_aborted
+    assert f"- Turns completed: 0 of {TURN_COUNT}" in summary_aborted
+    assert "`completed`" not in summary_aborted
 
 
 def test_turn_outcome_reads_the_failure_envelope_on_stderr() -> None:
