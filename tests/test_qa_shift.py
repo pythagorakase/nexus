@@ -39,6 +39,7 @@ from tests.pg_fixtures import (
 
 NOW = datetime(2026, 7, 30, 4, 30, tzinfo=timezone.utc)
 FIXTURES = Path(__file__).parent / "fixtures"
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _event(
@@ -80,7 +81,6 @@ def _usage(
     day: str = "2026-07-30",
 ) -> dict[str, object]:
     return {
-        "success": True,
         "usage": {
             "day": day,
             "events": events or [],
@@ -280,6 +280,53 @@ def test_tracked_config_declares_boundary_catchup_skips() -> None:
         )
 
 
+def test_seed_alignment_repairs_retrograde_vectors_before_the_gateway_starts() -> None:
+    """Pin the kit's seed-alignment order for the Retrograde embedding repair.
+
+    A seed promoted before PR #671 carries Retrograde summaries stamped without
+    a vector (#665, #848). The kit repairs them after the seed's migrations and
+    before the isolated gateway starts, and requires ``nexus jobs`` to report no
+    ``stamped_without_vectors`` line.
+    """
+
+    def _normalized(name: str) -> str:
+        text = Path(qa_shift.__file__).with_name(name).read_text(encoding="utf-8")
+        return " ".join(text.split())
+
+    prompt = _normalized("mission_prompt.md")
+    start = prompt.index("7. Stop only the isolated QA lane")
+    end = prompt.index("If any preflight step fails", start)
+    section = prompt[start:end]
+    ordered = [
+        "`scripts/migrate.py --slot N`",
+        "`nexus retrograde-embed-history --slot N`",
+        "`nexus retrograde-embed-history --slot N --execute`",
+        "`nexus jobs --slot N`",
+        "`nexus logs gateway --mark`",
+    ]
+    for phrase in ordered:
+        assert phrase in section, phrase
+    positions = [section.index(phrase) for phrase in ordered]
+    assert all(
+        earlier < later for earlier, later in zip(positions, positions[1:])
+    ), dict(zip(ordered, positions))
+    assert "print no `stamped_without_vectors` line" in section
+    assert "is a preflight failure" in section
+
+    readme = _normalized("README.md")
+    seeds_start = readme.index("## Seeds")
+    seeds = readme[seeds_start : readme.index("## Usage Guard", seeds_start)]
+    for phrase in (
+        "`nexus retrograde-embed-history --slot N`",
+        "`--execute`",
+        "`nexus jobs --slot N`",
+    ):
+        assert phrase in seeds, phrase
+
+    template = _normalized("mission_report_template.md")
+    assert "- Seed alignment and Retrograde embedding repair:" in template
+
+
 def test_begin_creates_archive_and_pins_every_remote_model(
     tmp_path: Path,
 ) -> None:
@@ -431,6 +478,33 @@ def test_every_tracked_model_route_is_pinned(tmp_path: Path) -> None:
     for route, model in routes.items():
         if route not in NON_REMOTE_ROUTES:
             assert model == config.target_model, f"{route} escaped the QA model pin"
+
+
+def test_read_usage_parses_the_cli_success_envelope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The kit reads ``data`` from the real ``nexus usage --json`` envelope."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    launcher = bin_dir / "nexus"
+    launcher.write_text(f'#!/bin/sh\nexec {sys.executable} -m nexus.cli "$@"\n')
+    launcher.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "nexus.toml").write_text(
+        (ROOT / "nexus.toml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PYTHONPATH", str(ROOT))
+    monkeypatch.setenv(HOME_ENV, str(home))
+    monkeypatch.setenv("NEXUS_KEYRING_DISABLE", "1")
+    monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
+
+    payload = qa_shift._read_usage(ROOT, "2000-01-01")
+
+    assert "success" not in payload and "ok" not in payload
+    assert payload["usage"]["day"] == "2000-01-01"
+    assert payload["usage"]["events"] == []
 
 
 def test_begin_refuses_untrustworthy_or_exhausted_usage(tmp_path: Path) -> None:
@@ -1666,7 +1740,6 @@ def _clock_contract_chunk(
         world_layer=layer,
         time_delta=delta,
         generation_date=NOW,
-        slug=f"S01E01_{scene:03d}",
         generation_model="TEST",
         scene_weather=None,
     )
@@ -1975,7 +2048,6 @@ def cooldown_db() -> Any:
                         timedelta(minutes=minutes) if minutes is not None else None
                     ),
                     generation_date=NOW,
-                    slug=f"S01E01_{scene:03d}",
                     generation_model=None,
                     scene_weather=None,
                 )

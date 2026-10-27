@@ -6,7 +6,6 @@ import argparse
 import re
 import sys
 import typing
-from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
 import pytest
@@ -21,9 +20,10 @@ from nexus.cli_contract import (
     iter_command_paths,
 )
 from scripts.render_cli_reference import render_cli_reference
+from tests.generated_docs import CLI_REFERENCE, REPO_ROOT
 
-DOC_PATH = Path(__file__).resolve().parents[1] / "docs" / "cli_reference.md"
-REGENERATE = "python -m scripts.render_cli_reference --write"
+DOC_PATH = REPO_ROOT / CLI_REFERENCE.path
+REGENERATE = CLI_REFERENCE.regenerate
 
 
 def _committed() -> str:

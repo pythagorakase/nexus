@@ -19,7 +19,7 @@ from nexus.agents.orrery.experiences import (
 from nexus.api import db_pool
 from nexus.config import load_settings
 from nexus.maintenance import new_story_setup
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, slug_bounded_episode_scene
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -123,13 +123,14 @@ def _insert_chunk(
         (label, label),
     )
     chunk_id = int(cur.fetchone()[0])
+    episode, scene = slug_bounded_episode_scene(chunk_id)
     cur.execute(
         """
         INSERT INTO chunk_metadata (
             chunk_id, season, episode, scene, world_layer, world_time
-        ) VALUES (%s, 1, 1, %s, %s::world_layer_type, %s)
+        ) VALUES (%s, 1, %s, %s, %s::world_layer_type, %s)
         """,
-        (chunk_id, chunk_id, world_layer, world_time),
+        (chunk_id, episode, scene, world_layer, world_time),
     )
     cur.execute(
         "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",

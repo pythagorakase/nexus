@@ -91,6 +91,53 @@ from nexus.prompts.registry import PromptId, load
 # (the managed gateway through [runtime.logs]; see nexus/runtime/logging_config).
 logger = logging.getLogger("nexus.metadata")
 
+
+def anthropic_response_diagnostics(response: Any) -> str:
+    """Render an Anthropic response's stop reason, block types and output tokens.
+
+    Returns ``stop_reason=<s> block_types=<b> output_tokens=<o>``, where ``b``
+    lists the content block types in order, comma-joined; an absent value and
+    an empty block list render as ``none``. Only the stop reason, each block's
+    ``type`` and ``usage.output_tokens`` are read: block text, thinking, tool
+    input and every other piece of content stay out of the result, so it is
+    safe in exception text and log lines (the privacy contract of
+    ``structured_output_error_text``).
+    """
+
+    stop_reason = getattr(response, "stop_reason", None)
+    block_types = ",".join(
+        getattr(block, "type", "unknown")
+        for block in getattr(response, "content", None) or []
+    )
+    output_tokens = getattr(getattr(response, "usage", None), "output_tokens", None)
+    return (
+        f"stop_reason={'none' if stop_reason is None else stop_reason} "
+        f"block_types={block_types or 'none'} "
+        f"output_tokens={'none' if output_tokens is None else output_tokens}"
+    )
+
+
+def _raise_for_stop_reason(response: Any, exc: BaseException) -> None:
+    """Re-raise an extraction failure under a stop reason that explains it.
+
+    A ``max_tokens`` or ``refusal`` stop gets its own ValueError, chained to
+    ``exc``; every other stop reason returns and the caller re-raises ``exc``.
+    """
+
+    stop_reason = getattr(response, "stop_reason", None)
+    if stop_reason == "max_tokens":
+        raise ValueError(
+            "Anthropic structured response stopped at the output-token limit "
+            "before complete structured output; "
+            f"{anthropic_response_diagnostics(response)}"
+        ) from exc
+    if stop_reason == "refusal":
+        raise ValueError(
+            "Anthropic structured response was a refusal; "
+            f"{anthropic_response_diagnostics(response)}"
+        ) from exc
+
+
 # Default TPM limits if settings file is not available
 DEFAULT_TPM_LIMITS = {"anthropic": 30000}
 
@@ -621,20 +668,27 @@ class AnthropicProvider(LLMProvider):
         transport: Literal["native", "prompted", "tool_envelope"],
         attempt: int,
         exc: BaseException,
+        response: Any,
     ) -> None:
-        """Log one validation rejection and any terminal retry exhaustion."""
+        """Log one validation rejection and any terminal retry exhaustion.
+
+        The rejection line carries the response's stop reason, content block
+        types and output tokens (``anthropic_response_diagnostics``); a
+        response that never arrived renders them as ``none``.
+        """
 
         attempt_number = attempt + 1
         error_text = structured_output_error_text(exc)
         exception_name = type(exc).__name__
         logger.warning(
             "structured-output rejected transport=%s model=%s seat=%s "
-            "attempt=%d exception=%s error=%s",
+            "attempt=%d exception=%s %s error=%s",
             transport,
             self.model,
             self.usage_seat,
             attempt_number,
             exception_name,
+            anthropic_response_diagnostics(response),
             error_text,
         )
         if attempt >= self.structured_output_retries:
@@ -740,27 +794,38 @@ class AnthropicProvider(LLMProvider):
             except WireContractViolation as exc:
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
-                    transport="native", attempt=attempt, exc=exc
+                    transport="native",
+                    attempt=attempt,
+                    exc=exc,
+                    response=response,
                 )
                 raise
-            except ModelRetry as exc:
+            except (
+                ModelRetry
+            ) as exc:  # nexus-exception-disposition: retry; reason=repair; safety=cap
                 last_error = exc
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
                     transport="native",
                     attempt=attempt,
                     exc=exc,
+                    response=response,
                 )
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
-            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+            except (
+                ValidationError,
+                json.JSONDecodeError,
+                ValueError,
+            ) as exc:  # nexus-exception-disposition: retry; reason=repair; safety=cap
                 last_error = exc
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
                     transport="native",
                     attempt=attempt,
                     exc=exc,
+                    response=response,
                 )
                 if attempt >= self.structured_output_retries:
                     raise
@@ -840,27 +905,38 @@ class AnthropicProvider(LLMProvider):
             except WireContractViolation as exc:
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
-                    transport="tool_envelope", attempt=attempt, exc=exc
+                    transport="tool_envelope",
+                    attempt=attempt,
+                    exc=exc,
+                    response=response,
                 )
                 raise
-            except ModelRetry as exc:
+            except (
+                ModelRetry
+            ) as exc:  # nexus-exception-disposition: retry; reason=repair; safety=cap
                 last_error = exc
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
                     transport="tool_envelope",
                     attempt=attempt,
                     exc=exc,
+                    response=response,
                 )
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
-            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+            except (
+                ValidationError,
+                json.JSONDecodeError,
+                ValueError,
+            ) as exc:  # nexus-exception-disposition: retry; reason=repair; safety=cap
                 last_error = exc
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
                     transport="tool_envelope",
                     attempt=attempt,
                     exc=exc,
+                    response=response,
                 )
                 if attempt >= self.structured_output_retries:
                     raise
@@ -936,27 +1012,38 @@ class AnthropicProvider(LLMProvider):
             except WireContractViolation as exc:
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
-                    transport="prompted", attempt=attempt, exc=exc
+                    transport="prompted",
+                    attempt=attempt,
+                    exc=exc,
+                    response=response,
                 )
                 raise
-            except ModelRetry as exc:
+            except (
+                ModelRetry
+            ) as exc:  # nexus-exception-disposition: retry; reason=repair; safety=cap
                 last_error = exc
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
                     transport="prompted",
                     attempt=attempt,
                     exc=exc,
+                    response=response,
                 )
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
-            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+            except (
+                ValidationError,
+                json.JSONDecodeError,
+                ValueError,
+            ) as exc:  # nexus-exception-disposition: retry; reason=repair; safety=cap
                 last_error = exc
                 usage_outcome = "rejected_validation"
                 self._log_structured_output_rejection(
                     transport="prompted",
                     attempt=attempt,
                     exc=exc,
+                    response=response,
                 )
                 if attempt >= self.structured_output_retries:
                     raise
@@ -1077,80 +1164,110 @@ class AnthropicProvider(LLMProvider):
 
     @staticmethod
     def _extract_native_parsed_output(response: Any, schema_model: Type) -> Any:
-        """Extract and validate Anthropic native JSON output."""
+        """Extract and validate Anthropic native JSON output.
 
-        text_parts: List[str] = []
-        for block in getattr(response, "content", []) or []:
-            block_type = getattr(block, "type", None)
-            if block_type == "tool_use" and getattr(block, "input", None):
-                return schema_model.model_validate(block.input)
-            text = getattr(block, "text", None)
-            if block_type == "text" and text:
-                text_parts.append(text)
+        A failure under a ``max_tokens`` or ``refusal`` stop raises that stop's
+        own ValueError (``_raise_for_stop_reason``); every failure message
+        carries the response diagnostics, never its content.
+        """
 
-        output_text = "".join(text_parts).strip()
-        if output_text:
-            return schema_model.model_validate_json(output_text)
+        try:
+            text_parts: List[str] = []
+            for block in getattr(response, "content", []) or []:
+                block_type = getattr(block, "type", None)
+                if block_type == "tool_use" and getattr(block, "input", None):
+                    return schema_model.model_validate(block.input)
+                text = getattr(block, "text", None)
+                if block_type == "text" and text:
+                    text_parts.append(text)
 
-        raise ValueError("Anthropic structured response did not include JSON output")
+            output_text = "".join(text_parts).strip()
+            if output_text:
+                return schema_model.model_validate_json(output_text)
+
+            raise ValueError(
+                "Anthropic structured response did not include JSON output; "
+                + anthropic_response_diagnostics(response)
+            )
+        except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+            _raise_for_stop_reason(response, exc)
+            raise
 
     @staticmethod
     def _extract_tool_envelope_parsed_output(
         response: Any,
         schema_model: Type,
     ) -> Any:
-        """Validate the parsed input from the one forced structured tool."""
+        """Validate the parsed input from the one forced structured tool.
 
-        for block in getattr(response, "content", []) or []:
-            if (
-                getattr(block, "type", None) != "tool_use"
-                or getattr(block, "name", None) != "submit_structured_response"
-            ):
-                continue
-            tool_input = getattr(block, "input", None)
-            if not isinstance(tool_input, dict):
-                raise ValueError(
-                    "Anthropic tool-envelope response input must be a dict"
-                )
-            return schema_model.model_validate(tool_input)
+        A failure under a ``max_tokens`` or ``refusal`` stop raises that stop's
+        own ValueError (``_raise_for_stop_reason``).
+        """
 
-        raise ValueError(
-            "Anthropic tool-envelope response did not include the "
-            "submit_structured_response tool_use block"
-        )
+        try:
+            for block in getattr(response, "content", []) or []:
+                if (
+                    getattr(block, "type", None) != "tool_use"
+                    or getattr(block, "name", None) != "submit_structured_response"
+                ):
+                    continue
+                tool_input = getattr(block, "input", None)
+                if not isinstance(tool_input, dict):
+                    raise ValueError(
+                        "Anthropic tool-envelope response input must be a dict"
+                    )
+                return schema_model.model_validate(tool_input)
+
+            raise ValueError(
+                "Anthropic tool-envelope response did not include the "
+                "submit_structured_response tool_use block; "
+                + anthropic_response_diagnostics(response)
+            )
+        except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+            _raise_for_stop_reason(response, exc)
+            raise
 
     @staticmethod
     def _extract_prompted_parsed_output(response: Any, schema_model: Type) -> Any:
-        """Validate one text JSON value, tolerating one outer Markdown fence."""
+        """Validate one text JSON value, tolerating one outer Markdown fence.
 
-        text_parts: List[str] = []
-        for block in getattr(response, "content", []) or []:
-            if getattr(block, "type", None) != "text":
-                continue
-            text = getattr(block, "text", None)
-            if text:
-                text_parts.append(text)
-
-        output_text = "".join(text_parts)
-        if not output_text:
-            raise ValueError(
-                "Anthropic prompted structured response did not include text output"
-            )
+        A failure under a ``max_tokens`` or ``refusal`` stop raises that stop's
+        own ValueError (``_raise_for_stop_reason``).
+        """
 
         try:
-            return schema_model.model_validate_json(output_text)
-        except (ValidationError, json.JSONDecodeError, ValueError):
-            fenced_text = output_text.strip()
-            if not fenced_text.endswith("```"):
-                raise
-            if fenced_text.startswith("```json"):
-                opening_fence = "```json"
-            elif fenced_text.startswith("```"):
-                opening_fence = "```"
-            else:
-                raise
-            unfenced_text = fenced_text[len(opening_fence) : -3].strip()
-            return schema_model.model_validate_json(unfenced_text)
+            text_parts: List[str] = []
+            for block in getattr(response, "content", []) or []:
+                if getattr(block, "type", None) != "text":
+                    continue
+                text = getattr(block, "text", None)
+                if text:
+                    text_parts.append(text)
+
+            output_text = "".join(text_parts)
+            if not output_text:
+                raise ValueError(
+                    "Anthropic prompted structured response did not include text "
+                    "output; " + anthropic_response_diagnostics(response)
+                )
+
+            try:
+                return schema_model.model_validate_json(output_text)
+            except (ValidationError, json.JSONDecodeError, ValueError):
+                fenced_text = output_text.strip()
+                if not fenced_text.endswith("```"):
+                    raise
+                if fenced_text.startswith("```json"):
+                    opening_fence = "```json"
+                elif fenced_text.startswith("```"):
+                    opening_fence = "```"
+                else:
+                    raise
+                unfenced_text = fenced_text[len(opening_fence) : -3].strip()
+                return schema_model.model_validate_json(unfenced_text)
+        except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+            _raise_for_stop_reason(response, exc)
+            raise
 
     def _native_response_to_llm_response(
         self, parsed_output: Any, response: Any
