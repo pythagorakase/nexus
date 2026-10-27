@@ -60,7 +60,10 @@ def test_setup_endpoint_passes_omitted_model_to_core(
     monkeypatch: pytest.MonkeyPatch,
     offline_gate_db: str,
 ) -> None:
-    """Pass omission unchanged to real setup and preserve its persisted stamp."""
+    """Pass omission unchanged to real setup and preserve its persisted stamp.
+
+    The operator route restarts the wizard the test just started.
+    """
     starts: list[tuple[int, str | None]] = []
     original_start_setup = setup_endpoints.start_setup
 
@@ -74,7 +77,9 @@ def test_setup_endpoint_passes_omitted_model_to_core(
     previous_thread = new_story_flow.start_setup(4, model="TEST")
     app = FastAPI()
     app.include_router(setup_endpoints.router)
-    response = TestClient(app).post("/api/story/new/setup/start", json={"slot": 4})
+    response = TestClient(app).post(
+        "/api/story/new/setup/overwrite", json={"slot": 4}
+    )
 
     assert response.status_code == 200, response.text
     assert starts == [(4, None)]
