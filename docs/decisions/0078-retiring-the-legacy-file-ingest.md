@@ -1,7 +1,6 @@
 ---
 status: canonical
 sources:
-  - scripts/import_narratives.py
   - config/exception_disposition_baseline.json
   - scripts/extract_scene_numbers.py
 verified_commit: "55ab85a4468f0a46b5cbe7b0daacf66d8a890709"
