@@ -6,8 +6,11 @@ Issue #816; Decisions 816-D1, 816-D5 and 816-D10 (coordinator comment
 `origin/main` at `9a0714d7` and `b0e9cb77` before the first push, at
 `e058005f` and `d295eef0` while CI ran, and at `571f982b` (merge commit
 `16117132`) and `5ba97c05` (merge commit `cc568cfd`) in the review fix
-round. `AGENTS.md` and `docs/decisions/0076-the-offline-merge-gate.md` are
-re-stamped to the last merge base, `5ba97c05`. No migration, no file under `nexus/`, `scripts/` or `ui/`, and no
+round, and at `925f2591` (merge commit `dfa302f4`) in the third fix round.
+`AGENTS.md` is re-stamped to the last merge base, `925f2591`;
+`docs/decisions/0076-the-offline-merge-gate.md` keeps `5ba97c05`, which the
+freshness test still accepts (it names only `AGENTS.md` after the last
+merge). No migration, no file under `nexus/`, `scripts/` or `ui/`, and no
 committed `nexus.toml` change. No paid call; no gateway lane started by hand.
 
 Scratch directory for every log below (called `<scratch>`):
@@ -1272,3 +1275,148 @@ success
 `ui-tests`: the same stale receipt (`state-shades.test.ts:183`,
 `Test Files  1 failed | 43 passed (44)`). The commit that records this run
 starts one more run; the PR body records that run.
+
+### Run 9: https://github.com/pythagorakase/nexus/actions/runs/40451355455
+
+Head `11d24d3d` (evidence-only). Conclusion: failure, from `ui-tests` alone.
+`offline-tests`: success (`3304 passed, 687 skipped, 25 deselected, 8
+warnings in 784.12s`, then `1926 passed, 1562 skipped, 8 deselected, 7
+warnings in 73.56s`, both with `secret-store guard: active; nexus-api:
+denied`; tokenizer cache hit). `ui-tests`: the same stale receipt
+(`state-shades.test.ts:183`).
+
+## Third Fix Round: The Coordinator Ruling of 2026-10-27
+
+The ruling posted on the PR (2026-10-27) amends the order. Scratch logs for
+this round are in
+`/private/tmp/claude-501/-Users-pythagor-nexus/9dcd8ba0-5aed-4efa-8d64-38cffa54a15d/scratchpad/816-fix1/`
+(called `<fix1>`).
+
+- Merge `dfa302f4`: `origin/main` at `925f2591` (#1176), no conflict. The
+  freshness test then named one record,
+  `AGENTS.md: docs/agent_workflow.md, pytest.ini changed since the merge base
+  925f259182be without a re-stamped verified_commit`; `AGENTS.md:38` is
+  re-stamped to `925f259182be535614882157c6b5d082e0cfaacc` in the merge
+  commit. Decision 0076 is not named and keeps `5ba97c05`.
+- Item (1), commit `26067762`: `requires_local_models` on the seven tests
+  that load #1126's pinned tokenizers from the local Hugging Face cache (the
+  seven red through CI run 4, "Left Red and Reported (Through Run 4)"):
+  - `tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations`
+    (method marker).
+  - `tests/test_lore/test_token_estimator.py::test_registry_token_estimator`
+    (function marker above the `parametrize`; the file has no
+    parameter-level marks, so the function is marked whole as the ruling
+    says). This deselects all 17 registry parameters, not only the five
+    that need the cache: the twelve others (`o3`, `gpt-6-astra`,
+    `gpt-5.6-sol`, `gpt-5.6-terra`, `claude-sonnet-5`, `claude-opus-4-8`,
+    `claude-opus-5`, `claude-fable-5-1`, `TEST`, `moonshotai/kimi-k2.5`,
+    `moonshotai/kimi-k3`, `z-ai/glm-5`) no longer run in CI.
+  - `tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000]`
+    (parameter-level: that tuple becomes `pytest.param(...,
+    marks=pytest.mark.requires_local_models)`; the parameter id is
+    unchanged). The mark does not need to cover the whole test; the other
+    three parameters stay selected.
+- Item (2): already on the branch (`1851aba3`). Item (3): the two
+  `requires_bge_large` tests in `tests/test_memnon_embedding_cache.py` stay
+  marked (`:229`, `:261`). Item (4): the `ui-tests` checkout already has
+  `fetch-depth: 0` (`7d70fdcc`), so the workflow does not change, and
+  `tests/test_offline_ci_workflow.py` does not change.
+- Item (5): no test body changed; `tests/conftest.py` unchanged.
+
+Collection on `26067762`:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest --collect-only -q -m requires_local_models tests/test_lore/test_token_budget.py tests/test_lore/test_token_estimator.py tests/test_lore/test_turn_cycle.py
+tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations
+tests/test_lore/test_token_estimator.py::test_registry_token_estimator[o3]
+... (all 17 registry parameters)
+tests/test_lore/test_token_estimator.py::test_registry_token_estimator[z-ai/glm-5]
+tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000]
+19/82 tests collected (63 deselected) in 0.42s
+```
+
+The three marked files on `26067762` (owner's filled Hugging Face cache),
+without `-m` (the marked tests run and pass), with `-m`, and with `-m`
+against an empty scratch `HF_HOME` (the Linux CI condition):
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_lore/test_token_budget.py tests/test_lore/test_token_estimator.py tests/test_lore/test_turn_cycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+79 passed, 3 skipped, 5 warnings in 20.56s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' <the same three files>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+60 passed, 3 skipped, 19 deselected, 5 warnings in 18.99s
+
+$ HF_HOME=<fix1>/hf-empty PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' <the same three files>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+60 passed, 3 skipped, 19 deselected, 5 warnings in 18.17s
+```
+
+Against the same empty `HF_HOME` without `-m`, exactly the seven fail (the
+marks cover every cache failure; `<fix1>/hf-empty` held no file afterwards):
+
+```
+FAILED tests/test_lore/test_token_budget.py::TestTokenBudgetManager::test_real_local_model_produces_positive_allocations
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-70b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4.3-36b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[deepseek/deepseek-v4-pro]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[nousresearch/hermes-4-405b]
+FAILED tests/test_lore/test_token_estimator.py::test_registry_token_estimator[minimax/minimax-m3]
+FAILED tests/test_lore/test_turn_cycle.py::test_process_user_input_uses_provider_profile_budget[nousresearch/hermes-4-70b-local-local-32000]
+7 failed, 72 passed, 3 skipped, 5 warnings in 19.06s
+```
+
+The files of items (2) and (3), PostgreSQL, clean (`git diff --exit-code
+nexus.toml` passes), with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT`
+and `NEXUS_RUNTIME_CONFIG` unset; load average 4.4 before the first run,
+10.9 before the second. Both files are byte-identical at `dfa302f4` and
+`26067762`:
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rA tests/test_api/test_narrative_jobs_pg.py tests/test_memnon_embedding_cache.py
+PASSED tests/test_api/test_narrative_jobs_pg.py::test_scheduler_accepts_summary_and_embeds_once_in_process[new_episode]
+PASSED tests/test_api/test_narrative_jobs_pg.py::test_scheduler_accepts_summary_and_embeds_once_in_process[new_season]
+PASSED tests/test_memnon_embedding_cache.py::test_memnon_close_disposes_engine
+PASSED tests/test_memnon_embedding_cache.py::test_per_turn_lore_stacks_share_embedder_and_close
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 16 targets: postgres, qa640_acceptance_* x3, qa640_offline_gate_* x10, qa_model_cache_* x2
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+26 passed, 11 warnings in 69.57s (0:01:09)
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -m 'not requires_local_models' <the same two files>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_acceptance_*, qa640_offline_gate_* x10
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+22 passed, 4 deselected, 7 warnings in 41.76s
+```
+
+Workflow and freshness tests on `26067762`:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_offline_ci_workflow.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+94 passed, 5 warnings in 6.40s
+```
+
+Static checks on the three changed files: Black `3 files would be left
+unchanged`; flake8 (repository `.flake8`) gives the same seven E501 lines in
+`tests/test_lore/test_token_estimator.py` on the branch and on the
+`origin/main` copies (line numbers normalized), none in the other two
+files; mypy `--explicit-package-bases` gives `Found 11 errors in 2 files
+(checked 3 source files)` on both, identical after normalizing line numbers.
+`check_exception_dispositions.py --baseline-base-ref origin/main`: `OK:
+exception disposition coverage and shrink-only baseline verified.`
+
+The tokenizer cache steps (`7d70fdcc`) stay in the workflow: the ruling does
+not remove them. With the seven tests deselected they fill a cache that no
+selected test reads (the empty-`HF_HOME` run above), so the coordinator may
+drop them; see the PR's open questions.
