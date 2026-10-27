@@ -284,19 +284,12 @@ def build_search_manager(db_url: str, *, top_k: int) -> SearchManager:
     embedding_manager = CachingEmbeddingManager(EmbeddingManager(memnon_settings))
     idf_dictionary = ReadOnlyIDFDictionary(db_url)
     idf_dictionary.build_dictionary(force_rebuild=True)
-    model_weights = {
-        model_name: float(model_config["weight"])
-        for model_name, model_config in memnon_settings["models"].items()
-    }
     return SearchManager(
         db_url=db_url,
         embedding_manager=embedding_manager,
         idf_dictionary=idf_dictionary,
         settings=memnon_settings,
-        retrieval_settings={
-            "default_top_k": top_k,
-            "model_weights": model_weights,
-        },
+        retrieval_settings={"default_top_k": top_k},
     )
 
 

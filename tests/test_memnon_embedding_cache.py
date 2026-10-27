@@ -97,7 +97,6 @@ def model_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     entry["is_active"] = True
     for key, value in candidate.items():
         entry[key] = value
-    entry["weight"] = 1.0
     models = tomlkit.table()
     models["bge-large"] = entry
     document["memnon"]["models"] = models

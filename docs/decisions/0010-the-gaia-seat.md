@@ -3,7 +3,7 @@ status: canonical
 sources:
   - nexus/config/story_model.py
   - nexus.toml
-verified_commit: "cf98364c44d074cdd58887ac5752bfe180bb3035"
+verified_commit: "9a0714d7671457d47f91bfbd76749fee4444c686"
 ---
 
 # 0010: The Gaia Seat
