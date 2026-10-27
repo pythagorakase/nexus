@@ -45,6 +45,83 @@ is 48 files. After the merge of `origin/main`, the union holds 49: the new
 matches `tokenizer_repository`. The confirm and clean PostgreSQL runs use the
 49-file set.
 
+### The Item 3 PostgreSQL Set (50 Files at the Final Merge Base `5ba97c05`)
+
+Generated at `5ba97c05` with the two greps of item 3, each run as `git grep
+-l` over `tests/` at that commit: (a) is the model-loader grep (30 files),
+(b) is the `scheduler_helpers` grep over `test_*.py` (21 files), and one file
+is in both. No file in the list is a helper module that collects no test.
+Coverage: the PostgreSQL find ran the 48 files that the union held at
+`c7ae2988` (every file below except the two that the merges added); the
+PostgreSQL confirm and clean runs ran 49 (adding
+`tests/test_model_artifact_lock_committed.py`); the second merge added
+`tests/test_ir_eval_v2/test_ensemble_parity_pg.py`, audited separately (see
+"Second Merge of `origin/main`").
+
+- `tests/test_api/test_acceptance_staging_pg.py` (b)
+- `tests/test_api/test_attempt_manifest_pg.py` (b)
+- `tests/test_api/test_backstage_endpoints_pg.py` (b)
+- `tests/test_api/test_import_side_effects.py` (a)
+- `tests/test_api/test_narrative_jobs_pg.py` (b)
+- `tests/test_api/test_provider_guard_consumers.py` (b)
+- `tests/test_api/test_reader_chunk_range_pg.py` (b)
+- `tests/test_api/test_scheduler_corpus_pg.py` (b)
+- `tests/test_api/test_scheduler_pg.py` (b)
+- `tests/test_api/test_scheduler_recovery_pg.py` (b)
+- `tests/test_api/test_seat_policy_jobs_pg.py` (b)
+- `tests/test_api/test_session_truth_pg.py` (b)
+- `tests/test_api/test_set_designer_failure.py` (b)
+- `tests/test_api/test_summary_budget_usage.py` (b)
+- `tests/test_cli_inspect_pg.py` (b)
+- `tests/test_cli_review_pg.py` (b)
+- `tests/test_commit_handler_sync.py` (b)
+- `tests/test_embedding_artifacts.py` (a)
+- `tests/test_embedding_table_ownership_pg.py` (a)
+- `tests/test_golden_path_live.py` (a)
+- `tests/test_ir_eval_v2/test_ensemble_parity_pg.py` (a); added by the second merge (#1165): audited separately
+- `tests/test_lore/test_baseline_fingerprint_refresh_pg.py` (a)
+- `tests/test_lore/test_logon_lazy_init.py` (a)
+- `tests/test_lore/test_pass2_baseline_pg.py` (a)
+- `tests/test_lore/test_pass2_chunk1369.py` (a)
+- `tests/test_lore/test_runtime_config.py` (a)
+- `tests/test_lore/test_scene_order_render.py` (a)
+- `tests/test_lore/test_token_estimator.py` (a)
+- `tests/test_lore/test_window_coverage_pg.py` (a) and (b)
+- `tests/test_memnon_cross_encoder_artifact.py` (a)
+- `tests/test_memnon_cross_encoder_dependencies.py` (a)
+- `tests/test_memnon_embedding_cache.py` (a)
+- `tests/test_memnon_embedding_contract.py` (a)
+- `tests/test_memnon_model_failures_pg.py` (a)
+- `tests/test_memnon_runtime_config.py` (a)
+- `tests/test_memnon_script_model_loaders.py` (a)
+- `tests/test_memnon/test_source_embeddings.py` (a)
+- `tests/test_model_artifact_lock_committed.py` (a); added by the first merge (`a8c6e3f5`): confirm and clean runs
+- `tests/test_orrery/test_experiences.py` (a)
+- `tests/test_orrery/test_narration_job_fencing_pg.py` (b)
+- `tests/test_orrery/test_retrograde_maturation_live.py` (a)
+- `tests/test_orrery/test_retrograde_retrieval_live.py` (a)
+- `tests/test_orrery/test_retrograde_wizard_live.py` (a)
+- `tests/test_owner_target_guard.py` (b)
+- `tests/test_presence_boost_pg.py` (a)
+- `tests/test_prompt_lint.py` (a)
+- `tests/test_regenerate_embeddings_truncate_pg.py` (a)
+- `tests/test_scheduler_helpers_basetemp.py` (b)
+- `tests/test_scheduler_helpers_routing.py` (b)
+- `tests/test_schema_ownership.py` (a)
+
+Tests in this set that no audit run exercised, because each skips without an
+opt-in variable (the clean run's skip reasons): the two `requires_corpus`
+tests `tests/test_lore/test_pass2_chunk1369.py::test_pass2_handles_karaoke_divergence`
+and `tests/test_lore/test_window_coverage_pg.py::test_configured_k_bounds_the_deep_query_pool`
+(`NEXUS_RUN_CORPUS`), now marked by reading under Decision 816-D10 (Second
+Review Fix Round); the eight stages of `tests/test_golden_path_live.py`
+(`NEXUS_GOLDEN_PATH_E2E`) and the three `tests/test_orrery/test_retrograde_*_live.py`
+tests (`NEXUS_RUN_LIVE_LLM`, `NEXUS_RETROGRADE_RETRIEVAL_TEST_DB_URL`,
+`NEXUS_RETROGRADE_WIZARD_E2E`), live-tier tests that no run here could
+reach, so they are not audited for `requires_local_models` and stay owed
+with the files outside this set; and the DeBERTa test, marked by
+its path reading (Tests That Escape the Edit).
+
 ## The Audit Edit
 
 `<scratch>/absent_models_config.py`, run as
@@ -583,7 +660,7 @@ The eight failures are all already-marked tests (artifact failures, R in the
 failure message); the new `test_ensemble_parity_pg.py` passes under the edit
 and is not marked.
 
-Offline on the final merged tree, as CI runs it:
+Offline on the b0e9cb77 merged tree, as CI runs it:
 
 ```
 $ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' tests --ignore=tests/test_api --ignore=tests/test_orrery
@@ -1068,3 +1145,104 @@ Cache hit occurred on the primary key hf-tokenizers-92e7bfa13ec24356b64ae7c30c11
 (`state-shades.test.ts:183`, `Test Files 1 failed | 43 passed (44)`,
 `Tests 673 passed (673)`). The commit that records this run starts one more
 run; the PR body records that run.
+
+### Run 7: https://github.com/pythagorakase/nexus/actions/runs/40445296574
+
+Head `1b35be05` (evidence only). Conclusion: failure, from `ui-tests` alone.
+`offline-tests`: success, on the final `5ba97c05` merge tree:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3304 passed, 690 skipped, 22 deselected, 8 warnings in 1200.57s (0:20:00)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1926 passed, 1562 skipped, 8 deselected, 7 warnings in 124.15s (0:02:04)
+```
+
+`ui-tests`: the same stale receipt (`state-shades.test.ts:183`,
+`Test Files  1 failed | 43 passed (44)`, `Tests  673 passed (673)`).
+
+## Second Review Fix Round
+
+Commit `bc340089` (on `1b35be05`; `origin/main` had not moved past
+`5ba97c05`, so no merge and no re-stamp: no declared source of a canonical
+document changed). Every tail below ran on `bc340089`.
+
+- `tests/test_offline_ci_workflow.py`: `test_offline_tests_run_both_suites_without_local_models`
+  now requires `shell: bash` on every `offline-tests` step whose `run` holds
+  `poetry run pytest`. With it GitHub runs `bash -eo pipefail`; GitHub's
+  default `bash -e` takes `tee`'s status, and the guard grep still passes on
+  a failed run (`tests/conftest.py:297-303` prints the guard line on every
+  run), so without it a pytest failure would pass the required check.
+- `.github/workflows/offline-tests.yml`: the header's local-equivalent
+  commands now start with
+  `nexus models fetch   # or fill only the pinned tokenizers, as the steps below do`
+  (an empty Hugging Face cache gave the seven `TokenizerNotCachedError`
+  failures recorded in "Pinned Tokenizers Filled Before the Suites"). No step
+  changed.
+- `requires_local_models` on two `requires_corpus` tests that no audit run
+  reached (they skip without `NEXUS_RUN_CORPUS`), marked by reading their
+  bodies under Decision 816-D10, the basis used for
+  `test_scheduler_accepts_summary_and_embeds_once_in_process`:
+  `tests/test_lore/test_window_coverage_pg.py::test_configured_k_bounds_the_deep_query_pool`
+  (topmost decorator; it builds `LORE(settings_path=<a copy of the
+  checkout's nexus.toml>, ...)` at `:513` and calls `query_memory`, so MEMNON
+  loads the production embedder from `[memnon.models]`) and
+  `tests/test_lore/test_pass2_chunk1369.py` (its `pytestmark` list gains the
+  marker; its module fixture builds `LORE(debug=True, enable_logon=False,
+  dbname=...)` from the checkout's `nexus.toml`). No test body changed.
+
+Red plant: `shell: bash` removed from the second suite step:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p no:warnings --tb=short tests/test_offline_ci_workflow.py
+___________ test_offline_tests_run_both_suites_without_local_models ____________
+tests/test_offline_ci_workflow.py:98: in test_offline_tests_run_both_suites_without_local_models
+    assert step.get("shell") == "bash"
+E   assert None == 'bash'
+E    +  where None = <built-in method get of dict object at 0x10e105400>('shell')
+E    +    where <built-in method get of dict object at 0x10e105400> = {'name': 'Run the offline API and Orrery suites', 'run': "poetry run pytest -q -m 'not requires_local_models' tests/te... tests/test_orrery 2>&1 | tee offline-2.log\ngrep -qF 'secret-store guard: active; nexus-api: denied' offline-2.log\n"}.get
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_offline_ci_workflow.py::test_offline_tests_run_both_suites_without_local_models
+1 failed, 4 passed in 0.26s
+```
+
+Restored (`git diff --stat .github` empty against the commit), then:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_offline_ci_workflow.py tests/test_reachability.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+155 passed, 5 warnings in 14.73s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest --collect-only -q -m 'requires_local_models' tests/test_lore/test_pass2_chunk1369.py tests/test_lore/test_window_coverage_pg.py::test_configured_k_bounds_the_deep_query_pool
+tests/test_lore/test_pass2_chunk1369.py::test_pass2_handles_karaoke_divergence
+tests/test_lore/test_window_coverage_pg.py::test_configured_k_bounds_the_deep_query_pool[3]
+tests/test_lore/test_window_coverage_pg.py::test_configured_k_bounds_the_deep_query_pool[15]
+3 tests collected in 0.36s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest --collect-only -q -m 'not requires_local_models' <the same two targets>
+no tests collected (3 deselected) in 0.27s
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3307 passed, 684 skipped, 25 deselected, 8 warnings in 622.49s (0:10:22)
+```
+
+The first suite deselects three more tests than before (22 to 25): the two
+new marks are PostgreSQL tests that the offline suite skipped; the second
+suite contains neither file. The PostgreSQL clean run is unchanged: both
+tests skip there without `NEXUS_RUN_CORPUS`, and the marker adds no skip.
+
+Static checks on the three changed Python files: Black `3 files would be left
+unchanged`; flake8 shows the same six E501 lines in
+`tests/test_window_coverage_pg.py` on `bc340089` and on `1b35be05`
+(`:54,63,72,99,118,214`; the same six at `origin/main` `:53,62,71,98,117,212`),
+none on a changed line and none in the other two files; mypy
+`--explicit-package-bases` gives `Found 15 errors in 2 files (checked 3
+source files)` on both `1b35be05` and `bc340089`, identical after
+normalizing line numbers. `check_exception_dispositions.py
+--baseline-base-ref origin/main`: `OK: exception disposition coverage and
+shrink-only baseline verified.`
