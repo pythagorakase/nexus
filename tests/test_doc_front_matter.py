@@ -5,13 +5,16 @@ with a YAML block declaring ``status``, ``verified_commit``, and, for canonical
 documents, the ``sources`` they describe. README.md must not reference a
 superseded document and must label every historical one it references. A
 branch that changes a source declared by a canonical document must re-stamp
-that document's ``verified_commit``.
+that document's ``verified_commit``. An in-scope document without front matter
+must be listed in a shrink-only baseline, and the generated documents the
+ratchet exempts are the ones registered in ``tests/generated_docs.py``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
+import json
 import os
 from pathlib import Path, PurePosixPath
 import posixpath
@@ -23,6 +26,7 @@ import pytest
 import yaml  # type: ignore[import-untyped]
 
 from scripts.check_reachability import repository_files
+from tests.generated_docs import GENERATED_DOCUMENTS, GeneratedDocument
 
 ROOT = Path(__file__).resolve().parents[1]
 # Every worktree is cut from this branch; the freshness check diffs against it.
@@ -61,9 +65,9 @@ RECORDS_HEADING = "## Records"
 RECORD_LINK_TARGET = re.compile(r"\]\(([^)]*)\)$")
 FIRST_ISSUE = re.compile(r"#(\d+)")
 
-# The #817 backfill (817-S3): number -> (kind, first linked issue, status).
-# Losing, renumbering, re-kinding or re-statusing a record is a deliberate
-# edit here.
+# The #817 ledger (817-S3 backfill 0001-0055; 817-S5 records 0056 and up):
+# number -> (kind, first linked issue, status). Losing, renumbering,
+# re-kinding or re-statusing a record is a deliberate edit here.
 DECISION_LEDGER: dict[str, tuple[str, int, str]] = {
     "0001": ("decision", 850, "canonical"),
     "0002": ("decision", 851, "canonical"),
@@ -120,6 +124,34 @@ DECISION_LEDGER: dict[str, tuple[str, int, str]] = {
     "0053": ("decision", 776, "canonical"),
     "0054": ("decision", 777, "canonical"),
     "0055": ("decision", 838, "canonical"),
+    "0056": ("decision", 784, "canonical"),
+    "0057": ("decision", 788, "canonical"),
+    "0058": ("decision", 840, "canonical"),
+    "0059": ("decision", 823, "canonical"),
+    "0060": ("decision", 820, "canonical"),
+    "0061": ("decision", 824, "canonical"),
+    "0062": ("decision", 816, "canonical"),
+    "0063": ("decision", 815, "canonical"),
+    "0064": ("decision", 842, "canonical"),
+    "0065": ("decision", 813, "canonical"),
+    "0066": ("decision", 1102, "canonical"),
+    "0067": ("decision", 821, "canonical"),
+    "0068": ("decision", 1106, "canonical"),
+    "0069": ("decision", 842, "canonical"),
+    "0070": ("decision", 845, "canonical"),
+    "0071": ("decision", 812, "canonical"),
+    "0072": ("decision", 817, "canonical"),
+    "0073": ("decision", 815, "canonical"),
+    "0074": ("decision", 1126, "canonical"),
+    "0075": ("decision", 1129, "canonical"),
+    "0076": ("decision", 816, "canonical"),
+    "0077": ("decision", 1069, "canonical"),
+    "0078": ("decision", 1091, "canonical"),
+    "0079": ("decision", 824, "canonical"),
+    "0080": ("decision", 848, "canonical"),
+    "0081": ("decision", 802, "canonical"),
+    "0082": ("decision", 810, "canonical"),
+    "0083": ("decision", 811, "canonical"),
 }
 
 
@@ -542,6 +574,150 @@ def ledger_errors(
     return read_ledger(root, paths, documents)[1]
 
 
+# The classification ratchet (817-Q3): every in-scope document without front
+# matter is listed in a baseline that may only shrink.
+CLASSIFICATION_BASELINE = "config/doc_classification_baseline.json"
+QA_PREFIX = "docs/qa/"
+RATCHET_EXEMPT = frozenset({"README.md", "CLAUDE.md"})
+GENERATED_HEADER = "<!-- AUTO-GENERATED"
+
+
+class ClassificationBaselineError(ValueError):
+    """The classification baseline file breaks its schema."""
+
+
+def _unique_baseline_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a JSON object, failing on a key that would silently overwrite."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ClassificationBaselineError(
+                f"unclassified baseline repeats the JSON key {key!r}"
+            )
+        result[key] = value
+    return result
+
+
+def load_classification_baseline(text: str) -> list[str]:
+    """Read the baseline's sorted, unique list of unclassified documents."""
+    data = json.loads(text, object_pairs_hook=_unique_baseline_keys)
+    if not isinstance(data, dict) or set(data) != {"schema_version", "unclassified"}:
+        raise ClassificationBaselineError(
+            "baseline must be an object with exactly schema_version and unclassified"
+        )
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise ClassificationBaselineError("unsupported baseline schema_version")
+    entries = data["unclassified"]
+    if not _string_list(entries):
+        raise ClassificationBaselineError("unclassified must be a list of paths")
+    for path in entries:
+        if entries.count(path) > 1:
+            raise ClassificationBaselineError(
+                f"unclassified lists {path!r} more than once"
+            )
+    if entries != sorted(entries):
+        raise ClassificationBaselineError("unclassified is not sorted")
+    return list(entries)
+
+
+def ratchet_scope(
+    paths: frozenset[str],
+    registry: tuple[GeneratedDocument, ...] = GENERATED_DOCUMENTS,
+) -> list[str]:
+    """The classified scope minus ``docs/qa/``, the exemptions and the registry."""
+    generated = {document.path for document in registry}
+    return [
+        path
+        for path in classified_scope(paths)
+        if not path.startswith(QA_PREFIX)
+        and path not in RATCHET_EXEMPT
+        and path not in generated
+    ]
+
+
+def classification_ratchet_errors(
+    paths: frozenset[str],
+    documents: dict[str, dict[str, Any]],
+    baseline: list[str],
+    prior: list[str] | None,
+    registry: tuple[GeneratedDocument, ...] = GENERATED_DOCUMENTS,
+) -> list[str]:
+    """Every unbaselined unclassified document and every stale or new entry.
+
+    ``prior`` is the merge base's copy of the baseline, or None when the merge
+    base has none; an entry absent from it is growth.
+    """
+    scope = ratchet_scope(paths, registry)
+    listed = set(baseline)
+    errors = [
+        f"{path}: unclassified and not in {CLASSIFICATION_BASELINE}; add front "
+        "matter (docs/decisions/README.md)"
+        for path in scope
+        if path not in documents and path not in listed
+    ]
+    in_scope = set(scope)
+    for path in baseline:
+        if path not in paths:
+            errors.append(
+                f"{CLASSIFICATION_BASELINE}: {path} does not exist; remove it"
+            )
+        elif path not in in_scope:
+            errors.append(
+                f"{CLASSIFICATION_BASELINE}: {path} is exempt or outside the "
+                "classified scope; remove it"
+            )
+        elif path in documents:
+            errors.append(f"{CLASSIFICATION_BASELINE}: {path} is classified; remove it")
+        if prior is not None and path not in prior:
+            errors.append(
+                f"{CLASSIFICATION_BASELINE}: baseline growth forbidden: {path} is "
+                "not in the merge base's copy"
+            )
+    return errors
+
+
+def _prior_classification_baseline(root: Path, merge_base: str) -> list[str] | None:
+    """The merge base's baseline, or None when the merge base has no such file."""
+    spec = f"{merge_base}:{CLASSIFICATION_BASELINE}"
+    if _history_git(root, "cat-file", "-e", spec).returncode != 0:
+        return None
+    return load_classification_baseline(_history_output(root, "show", spec))
+
+
+def generated_document_errors(
+    root: Path,
+    paths: frozenset[str],
+    registry: tuple[GeneratedDocument, ...] = GENERATED_DOCUMENTS,
+) -> list[str]:
+    """Generated documents are registered, exist, and keep their header."""
+    errors: list[str] = []
+    registered = {document.path for document in registry}
+    for path in classified_scope(paths):
+        if path.startswith(QA_PREFIX) or path in registered:
+            continue
+        lines = (root / path).read_text(encoding="utf-8").splitlines()
+        if lines and lines[0].startswith(GENERATED_HEADER):
+            errors.append(
+                f"{path}: generated document is not registered in "
+                "tests/generated_docs.py"
+            )
+    for document in registry:
+        if document.path not in paths:
+            errors.append(
+                f"{document.path}: registered generated document does not exist"
+            )
+            continue
+        lines = (root / document.path).read_text(encoding="utf-8").splitlines()
+        if lines and lines[0].rstrip() == "---":
+            errors.append(
+                f"{document.path}: a generated document carries no front matter"
+            )
+        expected = f"<!-- Regenerate via: {document.regenerate} -->"
+        if len(lines) < 2 or lines[1] != expected:
+            errors.append(f"{document.path}: line 2 must be '{expected}'")
+    return errors
+
+
 class FreshnessHistoryError(RuntimeError):
     """The history the freshness check compares against is missing."""
 
@@ -820,6 +996,33 @@ def test_decision_ledger_backfill_holds(
         for record in records
     }
     assert declared == DECISION_LEDGER
+
+
+def test_unclassified_documents_are_baselined(
+    repository: tuple[frozenset[str], Classification],
+) -> None:
+    """Every unclassified in-scope document is baselined; the baseline shrinks."""
+    paths, classification = repository
+    baseline = load_classification_baseline(
+        (ROOT / CLASSIFICATION_BASELINE).read_text(encoding="utf-8")
+    )
+    prior = _prior_classification_baseline(ROOT, _merge_base(ROOT, BASE_REF))
+    assert (
+        classification_ratchet_errors(paths, classification.documents, baseline, prior)
+        == []
+    )
+
+
+def test_generated_documents_are_registered(
+    repository: tuple[frozenset[str], Classification],
+) -> None:
+    """The registry names both generated documents, and each keeps its header."""
+    paths, _ = repository
+    assert generated_document_errors(ROOT, paths) == []
+    assert sorted(document.path for document in GENERATED_DOCUMENTS) == [
+        "docs/cli_reference.md",
+        "docs/orrery_packages.md",
+    ]
 
 
 def _write(root: Path, path: str, text: str) -> None:
@@ -1588,3 +1791,250 @@ def test_inherited_git_environment_is_ignored(
 
     monkeypatch.setenv("GIT_WORK_TREE", str(other))
     assert freshness_errors(root, base_ref="main") == expected
+
+
+HISTORICAL = _document('status: historical\nverified_commit: "abc1234"\n')
+UNCLASSIFIED = "# Notes\n"
+EMPTY_BASELINE = '{\n  "schema_version": 1,\n  "unclassified": []\n}\n'
+
+
+def _baseline_text(entries: list[str]) -> str:
+    """Render a classification baseline file listing ``entries``."""
+    return json.dumps({"schema_version": 1, "unclassified": entries}, indent=2) + "\n"
+
+
+def _ratchet_errors_in(
+    root: Path, baseline: list[str], prior: list[str] | None = None
+) -> list[str]:
+    """Run the classification ratchet on a synthetic tree."""
+    paths = repository_paths(root)
+    documents = classify(root, paths).documents
+    return classification_ratchet_errors(paths, documents, baseline, prior)
+
+
+@pytest.mark.parametrize(
+    ("files", "baseline", "prior", "message"),
+    [
+        (
+            {"docs/new.md": UNCLASSIFIED},
+            [],
+            None,
+            "docs/new.md: unclassified and not in "
+            "config/doc_classification_baseline.json; add front matter",
+        ),
+        (
+            {"docs/a.md": "# Title\n"},
+            [],
+            None,
+            "docs/a.md: unclassified and not in "
+            "config/doc_classification_baseline.json",
+        ),
+        (
+            {},
+            ["docs/a.md"],
+            None,
+            "config/doc_classification_baseline.json: docs/a.md is classified; "
+            "remove it",
+        ),
+        (
+            {},
+            ["docs/gone.md"],
+            None,
+            "config/doc_classification_baseline.json: docs/gone.md does not exist; "
+            "remove it",
+        ),
+        (
+            {"docs/qa/a.md": UNCLASSIFIED},
+            ["docs/qa/a.md"],
+            None,
+            "docs/qa/a.md is exempt or outside the classified scope; remove it",
+        ),
+        (
+            {"README.md": UNCLASSIFIED},
+            ["README.md"],
+            None,
+            "README.md is exempt or outside the classified scope; remove it",
+        ),
+        (
+            {"CLAUDE.md": UNCLASSIFIED},
+            ["CLAUDE.md"],
+            None,
+            "CLAUDE.md is exempt or outside the classified scope; remove it",
+        ),
+        (
+            {"docs/cli_reference.md": UNCLASSIFIED},
+            ["docs/cli_reference.md"],
+            None,
+            "docs/cli_reference.md is exempt or outside the classified scope; "
+            "remove it",
+        ),
+        (
+            {"docs/b.md": UNCLASSIFIED},
+            ["docs/b.md"],
+            [],
+            "config/doc_classification_baseline.json: baseline growth forbidden: "
+            "docs/b.md is not in the merge base's copy",
+        ),
+    ],
+)
+def test_ratchet_rejects_violations(
+    tmp_path: Path,
+    files: dict[str, str],
+    baseline: list[str],
+    prior: list[str] | None,
+    message: str,
+) -> None:
+    """Each ratchet violation fails alone, with a message naming the path."""
+    _write(tmp_path, "src/app.py", "")
+    _write(tmp_path, "docs/a.md", _document(VALID))
+    for path, text in files.items():
+        _write(tmp_path, path, text)
+    errors = _ratchet_errors_in(tmp_path, baseline, prior)
+    assert len(errors) == 1, errors
+    assert message in errors[0], errors
+
+
+def test_ratchet_exempts_qa_readme_claude_and_generated(tmp_path: Path) -> None:
+    """``docs/qa/``, README.md, CLAUDE.md and generated documents need no entry."""
+    for path in ("docs/qa/a.md", "README.md", "CLAUDE.md", "docs/cli_reference.md"):
+        _write(tmp_path, path, UNCLASSIFIED)
+    assert _ratchet_errors_in(tmp_path, []) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        (
+            '{"schema_version": 1, "unclassified": [], "reason": "x"}',
+            "baseline must be an object with exactly schema_version and "
+            "unclassified",
+        ),
+        (
+            '{"schema_version": 2, "unclassified": []}',
+            "unsupported baseline schema_version",
+        ),
+        (
+            '{"schema_version": 1, "unclassified": "docs/a.md"}',
+            "unclassified must be a list of paths",
+        ),
+        (
+            '{"schema_version": 1, "unclassified": ["docs/a.md", "docs/a.md"]}',
+            "unclassified lists 'docs/a.md' more than once",
+        ),
+        (
+            '{"schema_version": 1, "unclassified": ["docs/b.md", "docs/a.md"]}',
+            "unclassified is not sorted",
+        ),
+        (
+            '{"schema_version": 1, "unclassified": [], "unclassified": []}',
+            "unclassified baseline repeats the JSON key 'unclassified'",
+        ),
+    ],
+)
+def test_baseline_loader_rejects_malformed_files(text: str, message: str) -> None:
+    """Each malformed baseline file fails to load with its own message."""
+    with pytest.raises(ClassificationBaselineError) as raised:
+        load_classification_baseline(text)
+    assert str(raised.value) == message
+
+
+def test_baseline_growth_is_checked_against_the_merge_base(tmp_path: Path) -> None:
+    """A new entry fails against the merge base's copy; shrinking passes."""
+    root = tmp_path / "grown"
+    root.mkdir()
+    _write(root, "docs/b.md", UNCLASSIFIED)
+    _write(root, CLASSIFICATION_BASELINE, _baseline_text(["docs/b.md"]))
+    _git(root, "init", "-q")
+    _commit(root, "main")
+    merge_base = _branch(root)
+    _write(root, "docs/c.md", UNCLASSIFIED)
+    _write(root, CLASSIFICATION_BASELINE, _baseline_text(["docs/b.md", "docs/c.md"]))
+    _commit(root, "baseline a new unclassified document")
+    prior = _prior_classification_baseline(root, merge_base)
+    assert prior == ["docs/b.md"]
+    baseline = load_classification_baseline(
+        (root / CLASSIFICATION_BASELINE).read_text(encoding="utf-8")
+    )
+    assert _ratchet_errors_in(root, baseline, prior) == [
+        "config/doc_classification_baseline.json: baseline growth forbidden: "
+        "docs/c.md is not in the merge base's copy"
+    ]
+
+    _git(root, "checkout", "-q", "-b", "shrink", "main")
+    _write(root, "docs/b.md", HISTORICAL)
+    _write(root, CLASSIFICATION_BASELINE, EMPTY_BASELINE)
+    _commit(root, "classify docs/b.md and drop its entry")
+    assert _git(root, "merge-base", "main", "HEAD") == merge_base
+    baseline = load_classification_baseline(
+        (root / CLASSIFICATION_BASELINE).read_text(encoding="utf-8")
+    )
+    assert baseline == []
+    prior = _prior_classification_baseline(root, merge_base)
+    assert _ratchet_errors_in(root, baseline, prior) == []
+
+    bootstrap = tmp_path / "bootstrap"
+    bootstrap.mkdir()
+    _write(bootstrap, "docs/b.md", UNCLASSIFIED)
+    _git(bootstrap, "init", "-q")
+    _commit(bootstrap, "main without a baseline")
+    merge_base = _branch(bootstrap)
+    _write(bootstrap, CLASSIFICATION_BASELINE, _baseline_text(["docs/b.md"]))
+    _commit(bootstrap, "add the baseline")
+    prior = _prior_classification_baseline(bootstrap, merge_base)
+    assert prior is None
+    assert _ratchet_errors_in(bootstrap, ["docs/b.md"], prior) == []
+
+
+GENERATED = "docs/gen.md"
+GENERATED_REGISTRY = (GeneratedDocument(GENERATED, "python -m gen --write"),)
+GENERATED_TEXT = (
+    "<!-- AUTO-GENERATED by gen — do not edit by hand. -->\n"
+    "<!-- Regenerate via: python -m gen --write -->\n\n# Generated\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("files", "message"),
+    [
+        (
+            {"docs/other.md": GENERATED_TEXT},
+            "docs/other.md: generated document is not registered in "
+            "tests/generated_docs.py",
+        ),
+        (
+            {GENERATED: None},
+            "docs/gen.md: registered generated document does not exist",
+        ),
+        (
+            {GENERATED: _document('status: historical\nverified_commit: "abc1234"\n')},
+            "docs/gen.md: a generated document carries no front matter",
+        ),
+        (
+            {GENERATED: GENERATED_TEXT.replace(" --write -->", " -->")},
+            "docs/gen.md: line 2 must be '<!-- Regenerate via: python -m gen --write "
+            "-->'",
+        ),
+    ],
+)
+def test_generated_document_registry_rejects_drift(
+    tmp_path: Path, files: dict[str, str | None], message: str
+) -> None:
+    """An unregistered, missing, classified or mislabeled generated doc fails."""
+    _write(tmp_path, GENERATED, GENERATED_TEXT)
+    # docs/qa/ records may quote a generated header; they are out of scope.
+    _write(tmp_path, "docs/qa/run/copy.md", GENERATED_TEXT)
+    assert (
+        generated_document_errors(
+            tmp_path, repository_paths(tmp_path), GENERATED_REGISTRY
+        )
+        == []
+    )
+    for path, text in files.items():
+        if text is None:
+            (tmp_path / path).unlink()
+        else:
+            _write(tmp_path, path, text)
+    errors = generated_document_errors(
+        tmp_path, repository_paths(tmp_path), GENERATED_REGISTRY
+    )
+    assert any(message in error for error in errors), errors
