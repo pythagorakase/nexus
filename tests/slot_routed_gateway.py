@@ -7,13 +7,16 @@ Before any gateway module loads, ``route_child_process`` (through
 clone and refuses every other slot, and raises when either variable is
 missing or names an owner database; then
 ``nexus.api.narrative`` runs as ``__main__``, exactly as
-``python -m nexus.api.narrative`` does (``NARRATIVE_API_PORT`` selects the
-port). ``NEXUS_SLOT`` keeps its production meaning: when it names the routed
-slot the gateway's scheduler owns the clone's deferred work, when it is unset
-no scheduler starts, and any other slot fails at startup. A live gate
-therefore drives the production HTTP surface in a child process without
-reaching an owner database. ``tests.slot_routed_uvicorn`` is the same gateway
-behind the supervisor's uvicorn argv instead of ``NARRATIVE_API_PORT``.
+``python -m nexus.api.narrative`` does: it serves the operator projection on
+``NARRATIVE_API_PORT``, else ``[runtime.gateway].operator_port``.
+``NEXUS_SLOT`` keeps its production meaning: when it names the routed slot
+the gateway's scheduler owns the clone's deferred work, when it is unset no
+scheduler starts, and any other slot fails at startup. A live gate therefore
+drives the production HTTP surface in a child process without reaching an
+owner database. ``tests.slot_routed_serve`` is the same gateway behind the
+supervisor's ``nexus.api.serve`` argv, and ``tests.slot_routed_uvicorn``
+serves the unprojected app for the external-profile fixture and
+genesis-resume.
 """
 
 from __future__ import annotations

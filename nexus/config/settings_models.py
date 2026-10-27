@@ -531,9 +531,11 @@ class RuntimeServiceSettings(BaseModel):
         min_length=1,
         description=(
             "argv template for spawning the service. Placeholders: {python} "
-            "(current interpreter), {host}, {port}, {log_config} (the "
-            "dictConfig JSON the supervisor writes from [runtime.logs]). No "
-            "shell is involved."
+            "(current interpreter), {host}, {port} (the gateway's player "
+            "listener, rendered 'off' in an operator-only lane), "
+            "{operator_port} ([runtime.gateway].operator_port or the "
+            "NEXUS_GATEWAY_PORT lane), {log_config} (the dictConfig JSON the "
+            "supervisor writes from [runtime.logs]). No shell is involved."
         ),
     )
     host: str = Field(default="127.0.0.1", description="Bind host (loopback TCP)")
@@ -956,43 +958,64 @@ class RuntimeGatewaySettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    cors_allowed_origins: List[str] = Field(
+    operator_port: int = Field(
+        default=8003,
+        ge=1,
+        le=65535,
+        description="Loopback port of the gateway's operator listener",
+    )
+    player_cors_allowed_origins: List[str] = Field(
         ...,
         min_length=1,
-        description="Exact HTTP origins allowed to make credentialed CORS requests",
+        description=(
+            "Exact HTTP origins allowed to make credentialed CORS requests to "
+            "the player listener"
+        ),
+    )
+    operator_cors_allowed_origins: List[str] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Exact HTTP origins allowed to make credentialed CORS requests to "
+            "the operator listener"
+        ),
     )
 
     @model_validator(mode="after")
     def _validate_cors_allowed_origins(self) -> "RuntimeGatewaySettings":
         """Require exact HTTP(S) origins rather than wildcard or URL patterns."""
-        from urllib.parse import urlsplit
-
-        if len(self.cors_allowed_origins) != len(set(self.cors_allowed_origins)):
-            raise ValueError("cors_allowed_origins must not contain duplicates")
-
-        for origin in self.cors_allowed_origins:
-            parsed = urlsplit(origin)
-            if (
-                origin == "*"
-                or parsed.scheme not in {"http", "https"}
-                or not parsed.hostname
-                or parsed.username is not None
-                or parsed.password is not None
-                or parsed.path
-                or parsed.query
-                or parsed.fragment
-            ):
-                raise ValueError(
-                    "cors_allowed_origins entries must be exact HTTP(S) origins "
-                    f"without credentials, paths, queries, or fragments: {origin!r}"
-                )
-            try:
-                parsed.port
-            except ValueError as exc:
-                raise ValueError(
-                    f"cors_allowed_origins entry has an invalid port: {origin!r}"
-                ) from exc
+        for key in ("player_cors_allowed_origins", "operator_cors_allowed_origins"):
+            _validate_exact_origins(key, getattr(self, key))
         return self
+
+
+def _validate_exact_origins(key: str, origins: List[str]) -> None:
+    """Raise unless every entry of one CORS list is an exact HTTP(S) origin."""
+    from urllib.parse import urlsplit
+
+    if len(origins) != len(set(origins)):
+        raise ValueError(f"{key} must not contain duplicates")
+
+    for origin in origins:
+        parsed = urlsplit(origin)
+        if (
+            origin == "*"
+            or parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                f"{key} entries must be exact HTTP(S) origins "
+                f"without credentials, paths, queries, or fragments: {origin!r}"
+            )
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError(f"{key} entry has an invalid port: {origin!r}") from exc
 
 
 class UsageSettings(BaseModel):
@@ -1151,6 +1174,18 @@ class RuntimeSettings(BaseModel):
                 "[runtime] profile 'remote' requires a [runtime.remote] section "
                 "with base_url"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_operator_port(self) -> "RuntimeSettings":
+        """Keep the gateway's operator listener off every service port."""
+        for name, service in self.services.items():
+            if service.port == self.gateway.operator_port:
+                raise ValueError(
+                    f"[runtime.gateway].operator_port {self.gateway.operator_port} "
+                    f"equals [runtime.services.{name}].port; the operator "
+                    "listener needs a port of its own"
+                )
         return self
 
 

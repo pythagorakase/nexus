@@ -51,7 +51,13 @@ class StandIns:
 @pytest.fixture(autouse=True)
 def developer_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     """Use the checkout config, never an inherited owner-home locator."""
-    for name in (HOME_ENV, RUNTIME_CONFIG_ENV, "NEXUS_API_URL", "NEXUS_GATEWAY_PORT"):
+    for name in (
+        HOME_ENV,
+        RUNTIME_CONFIG_ENV,
+        "NEXUS_API_URL",
+        "NEXUS_GATEWAY_PORT",
+        "NEXUS_PLAYER_PORT",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 

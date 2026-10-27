@@ -42,6 +42,7 @@ from tests.scheduler_helpers import (
     test_provider_config as configure_test,
 )
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
+from tests.turn_observation_contract import TWO_PASS_SEATS, assert_critical_path
 
 pytestmark = pytest.mark.requires_postgres
 FIXTURE_CAST = ("Mara Quill", "Oren Vale")
@@ -294,6 +295,12 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                     "--json",
                 )
             )["observation"]
+            assert_critical_path(
+                observed,
+                session=session,
+                terminal_outcome="accepted",
+                seats=TWO_PASS_SEATS,
+            )
             assert observed["schema_version"] == 3
             assert observed["generation_session"] == session
             assert observed["ledger_days_read"]

@@ -2,7 +2,7 @@
 status: canonical
 sources:
   - scripts/check_reachability.py
-verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
+verified_commit: "571f982b2fa375acd4b52c51c76c29f4663f7242"
 ---
 
 # 0075: A Behavior-Preserving Reachability Index

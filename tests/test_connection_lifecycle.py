@@ -242,8 +242,13 @@ def lifecycle_runtime(
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         gateway_port = sock.getsockname()[1]
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        player_port = sock.getsockname()[1]
     doc["runtime"]["state_dir"] = str(tmp_path / "runtime")
-    doc["runtime"]["services"]["gateway"]["port"] = gateway_port
+    # The lane (NEXUS_GATEWAY_PORT below) is an operator-only listener and may
+    # not take a configured listener port; this player port is never bound.
+    doc["runtime"]["services"]["gateway"]["port"] = player_port
     doc["runtime"]["services"]["mock_openai"]["port"] = mock_port
     doc["runtime"]["services"]["mock_openai"]["enabled"] = "never"
     providers = doc["global"]["model"]["api_models"]

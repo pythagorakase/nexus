@@ -61,7 +61,7 @@ def slot_model_database() -> Iterator[str]:
 # Ports the application and the agent test lane own; a kernel-assigned
 # ephemeral port never lands on a live listener, but a free one of these must
 # not be occupied by the mock either (Sol review on PR #741).
-_PROTECTED_PORTS = frozenset({5102, 5133, 8002, 8012, 8032, 8034, 8036})
+_PROTECTED_PORTS = frozenset({5102, 5133, 8002, 8003, 8012, 8032, 8034, 8036})
 
 
 def _bound_listener() -> socket.socket:
@@ -94,6 +94,7 @@ def mock_openai_server(tmp_path: Path) -> Iterator[str]:
     log_path = tmp_path / "mock_openai.log"
     env = dict(os.environ)
     env.pop("NEXUS_GATEWAY_PORT", None)
+    env.pop("NEXUS_PLAYER_PORT", None)
     env.pop("NEXUS_API_URL", None)
     env["PYTHONPATH"] = str(REPO_ROOT)
     with log_path.open("wb") as log:

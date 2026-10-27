@@ -98,9 +98,9 @@ def test_defaults_strictness_and_origin(
         "pollIntervalMilliseconds": 500,
         "commandTimeoutSeconds": 120,
     }
-    _write(path, runtimeOrigin="http://127.0.0.1:8002/x?y#z", unknown="ignored")
+    _write(path, runtimeOrigin="http://127.0.0.1:8003/x?y#z", unknown="ignored")
     assert load_effective_desktop_config(tmp_path).runtime_origin == (
-        "http://127.0.0.1:8002"
+        "http://127.0.0.1:8003"
     )
     monkeypatch.setenv("NEXUS_DESKTOP_RUNTIME_ORIGIN", "https://example.com:443/x")
     assert (
@@ -108,7 +108,7 @@ def test_defaults_strictness_and_origin(
     )
     monkeypatch.setenv("NEXUS_DESKTOP_RUNTIME_ORIGIN", "  ")
     assert load_effective_desktop_config(tmp_path).runtime_origin == (
-        "http://127.0.0.1:8002"
+        "http://127.0.0.1:8003"
     )
     _write(path, workingDirectory="relative")
     assert load_effective_desktop_config(tmp_path).working_directory == (
@@ -173,6 +173,26 @@ def test_fields_match_the_shell_struct() -> None:
     assert aliases == {field.alias for field in DesktopConfig.model_fields.values()}
     assert len(aliases) == len(rust_fields)
     DesktopConfig.model_validate_json((ROOT / RELATIVE_CONFIG).read_text())
+
+
+def test_shipped_shell_targets_the_operator_listener(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bundled config, the shell default and the CLI's operator URL agree."""
+    from nexus.config import load_settings
+    from nexus.runtime.contract import operator_url
+
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
+    shipped = DesktopConfig.model_validate_json((ROOT / RELATIVE_CONFIG).read_text())
+    runtime = load_settings(ROOT / "nexus.toml").runtime
+    assert runtime is not None
+    expected = operator_url(runtime)
+    assert expected == f"http://127.0.0.1:{runtime.gateway.operator_port}"
+    assert shipped.runtime_origin == expected
+    assert DesktopConfig().runtime_origin == expected
+    source = (ROOT / "ui/src-tauri/src/lib.rs").read_text(encoding="utf-8")
+    assert f'const DEFAULT_RUNTIME_ORIGIN: &str = "{expected}";' in source
 
 
 def test_runtime_program_resolution(

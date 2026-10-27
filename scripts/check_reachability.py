@@ -266,6 +266,17 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
                 module_target=True,
             )
             asgi.append({"service": name, "entrypoint": target})
+        elif command[0] == "{python}" and len(command) >= 3 and command[1] == "-m":
+            # A launcher module (`{python} -m nexus.api.serve ...`) runs its
+            # main() as __main__: that exact symbol is the production root.
+            target = f"{command[2]}:main"
+            entry(
+                target,
+                "production",
+                f"runtime.services.{name}.command",
+                module_target=True,
+            )
+            asgi.append({"service": name, "entrypoint": target})
         elif command[0] == "{python}":
             raise ValueError(f"Unregistered Python service command: {name}")
         else:

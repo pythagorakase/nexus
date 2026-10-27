@@ -85,7 +85,9 @@ pytestmark = [
 MODEL_UNDER_TEST = "claude-fable-5-1"  # pin: #845 Decision 845-D3 probes this snapshot
 TURN_COUNT = 12
 CALL_CAP = 30
-PLAY_PORT = 8002
+# The owner's runtime: the player listener 8002 and the operator listener 8003
+# (#824); NEXUS_GATEWAY_PORT names a lane's operator listener.
+OWNER_GATEWAY_PORTS = frozenset({8002, 8003})
 TURN_INPUTS: list[dict[str, Any]] = [
     {"choice": 1},
     {
@@ -173,8 +175,8 @@ class TurnWindow:
 def probe_lane() -> int:
     """Return the gateway lane from ``NEXUS_GATEWAY_PORT``; never a default.
 
-    Raises ``RuntimeError`` when the variable is unset, not an integer, or the
-    play port 8002 (ruling 43 on #824 keeps it for play).
+    Raises ``RuntimeError`` when the variable is unset, not an integer, or one
+    of the owner's runtime ports, 8002 (player) and 8003 (operator).
     """
 
     raw = os.environ.get("NEXUS_GATEWAY_PORT")
@@ -189,10 +191,10 @@ def probe_lane() -> int:
         raise RuntimeError(
             f"NEXUS_GATEWAY_PORT={raw!r} is not an integer port"
         ) from exc
-    if lane == PLAY_PORT:
+    if lane in OWNER_GATEWAY_PORTS:
         raise RuntimeError(
-            f"NEXUS_GATEWAY_PORT={lane} is the play port; the #845 probe never "
-            "binds it"
+            f"NEXUS_GATEWAY_PORT={lane} is the owner's runtime port; the #845 "
+            "probe never binds it"
         )
     return lane
 

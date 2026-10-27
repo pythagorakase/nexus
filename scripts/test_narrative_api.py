@@ -5,11 +5,16 @@ Test script for the narrative API endpoints
 
 import requests
 import json
+import os
 import time
 import argparse
 from typing import Dict, Any
 
-API_BASE = "http://localhost:8002"
+from nexus.config import load_settings
+from nexus.runtime.contract import operator_url
+
+# The operator listener serves every route this script calls (#824).
+API_BASE = os.environ.get("NEXUS_API_URL") or operator_url(load_settings().runtime)
 
 
 def test_health():

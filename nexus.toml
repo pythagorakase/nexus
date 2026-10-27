@@ -1382,14 +1382,20 @@ state_dir = ".nexus/runtime"  # relative paths resolve against the runtime home 
 default_slot = 1              # NEXUS_SLOT for spawned services (--slot/env override)
 
 [runtime.gateway]
-# Same-origin app origins plus the Vite dev server. `*` was retired in #458:
-# with credentials it let any site ride the Cloudflare Access cookie.
-cors_allowed_origins = [
+operator_port = 8003  # operator listener on 127.0.0.1: the CLI, the desktop shell and NEXUS_GATEWAY_PORT lanes
+# Credentialed CORS origins per listener (D-824-CORS); each plane's own
+# origins. `*` was retired in #458: with credentials it let any site ride the
+# Cloudflare Access cookie. The desktop shell's origin is the runtime origin
+# http://127.0.0.1:8003; the Vite dev server proxies the API same-origin.
+player_cors_allowed_origins = [
     "http://localhost:8002",
     "http://127.0.0.1:8002",
     "https://nexus.pythagora.net",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+]
+operator_cors_allowed_origins = [
+    "http://localhost:8003",
+    "http://127.0.0.1:8003",
+    "https://nexus-admin.pythagora.net",
 ]
 
 [runtime.scheduler]
@@ -1466,9 +1472,9 @@ slots = [1, 2, 3, 4, 5]               # slot databases the slots.* checks read
 [runtime.services.gateway]
 # argv template — {python} is the current interpreter; no shell in the path
 # {log_config} is the dictConfig JSON the supervisor writes from [runtime.logs].
-command = ["{python}", "-m", "uvicorn", "nexus.api.narrative:app", "--host", "{host}", "--port", "{port}", "--log-config", "{log_config}"]
+command = ["{python}", "-m", "nexus.api.serve", "--host", "{host}", "--port", "{port}", "--operator-port", "{operator_port}", "--log-config", "{log_config}"]
 host = "127.0.0.1"
-port = 8002 # the desktop shell's runtimeOrigin pins this; agent/test shells export NEXUS_GATEWAY_PORT for an isolated-state instance on another port
+port = 8002 # player listener: the Cloudflare tunnel's address; NEXUS_PLAYER_PORT replaces it in a dual-plane lane
 health_path = "/health"
 autorestart = "on-failure"  # honored by the foreground supervisor only
 
@@ -1512,7 +1518,7 @@ enabled = "never"
 
 # Attach targets for profile = "external" (uncomment to use):
 # [runtime.external]
-# gateway_url = "http://127.0.0.1:8002"
+# gateway_url = "http://127.0.0.1:8003"  # the gateway's operator listener
 # mock_openai_url = "http://127.0.0.1:5102"
 
 # Hosted runtime for profile = "remote". The Access values are secret-store

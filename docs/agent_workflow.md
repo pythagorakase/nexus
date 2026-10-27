@@ -13,9 +13,9 @@ more specific instructions.
 - Open a ready-for-review PR autonomously when the branch is validated. Use a
   draft PR only when the user explicitly asks for one.
 - Validate against the full gate before opening or merging a PR:
-  `NEXUS_RUN_POSTGRES=1 poetry run pytest` with `NEXUS_GATEWAY_PORT` and
-  `NEXUS_API_URL` unset. The PostgreSQL-gated tests are where fixture debt
-  accumulates; a run that skips them is not the gate.
+  `NEXUS_RUN_POSTGRES=1 poetry run pytest` with `NEXUS_GATEWAY_PORT`,
+  `NEXUS_PLAYER_PORT` and `NEXUS_API_URL` unset. The PostgreSQL-gated tests
+  are where fixture debt accumulates; a run that skips them is not the gate.
 - CI runs the offline tier on every push to `main` and every pull request into
   `main`: the `offline-tests` job in `.github/workflows/offline-tests.yml`
   runs `poetry run pytest -q -m 'not requires_local_models'` on

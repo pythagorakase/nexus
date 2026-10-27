@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 from threading import Thread
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 import pytest
 import tomlkit
@@ -368,5 +368,34 @@ def test_cli_outside_checkout_preserves_local_default(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
     monkeypatch.delenv("NEXUS_API_URL", raising=False)
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
 
-    assert cli.get_api_url() == cli.DEFAULT_API_URL
+    assert cli.get_api_url() == "http://127.0.0.1:8003"
+
+
+def test_cli_local_default_is_the_operator_listener(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-824-CLI-DEFAULT: local HTTP commands target the operator listener."""
+    monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
+    monkeypatch.delenv("NEXUS_API_URL", raising=False)
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
+
+    # The checkout's config: [runtime.gateway].operator_port, never 8002.
+    assert cli.get_api_url() == "http://127.0.0.1:8003"
+
+    # A lane's NEXUS_GATEWAY_PORT names its operator listener.
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8019")
+    assert cli.get_api_url() == "http://127.0.0.1:8019"
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT")
+
+    # The configured operator port, wherever the config sets it.
+    document: Any = tomlkit.parse(Path("nexus.toml").read_text(encoding="utf-8"))
+    document["runtime"]["gateway"]["operator_port"] = 8044
+    config = tmp_path / "nexus.toml"
+    config.write_text(tomlkit.dumps(document), encoding="utf-8")
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+    assert cli.get_api_url() == "http://127.0.0.1:8044"

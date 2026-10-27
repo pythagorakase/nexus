@@ -11,9 +11,9 @@ against a real gateway, a real PostgreSQL clone, and the real built client:
 
 The gateway is ``narrative.app`` behind ``StrangenessRequestRecorder``, which
 records the strangeness save and transition requests and responses without
-changing a byte. The lane is ``NEXUS_GATEWAY_PORT`` (required; never 8002):
-the 8012 nightly-QA lane when the QA kit is idle, otherwise the first free
-port from 8014 upward that is not a suite lane (8015, then 8020 and up). Each
+changing a byte. The lane is ``NEXUS_GATEWAY_PORT`` (required; never 8002 or
+8003): the 8012 nightly-QA lane when the QA kit is idle, otherwise the first
+free port from 8014 upward that is not a suite lane (8015, then 8020 and up). Each
 story is a disposable ``qa640_838_`` template clone routed as slot 4; no owner
 slot is read or written. Every model call goes to the TEST provider through a
 private mock server, so the proof makes no paid call. Evidence files are
@@ -50,7 +50,7 @@ from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 pytestmark = pytest.mark.requires_postgres
 
 LANE_ENV = "NEXUS_GATEWAY_PORT"
-OWNER_GATEWAY_PORT = 8002
+OWNER_GATEWAY_PORTS = frozenset({8002, 8003})
 EXPORT_ENV = "NEXUS_PROOF_EXPORT_EVIDENCE"
 _REPO = Path(__file__).resolve().parents[2]
 TRACKED_EVIDENCE = _REPO / "docs/qa/838-entry-points"
@@ -85,7 +85,7 @@ def require_zero_spend_lane() -> int:
     if not raw:
         raise RuntimeError(f"{LANE_ENV} is unset; the order assigns the lane")
     lane = int(raw)
-    if lane == OWNER_GATEWAY_PORT:
+    if lane in OWNER_GATEWAY_PORTS:
         raise RuntimeError(f"{LANE_ENV}={lane} is the owner's gateway")
     if os.environ.get("NEXUS_TEST_PROVIDER_ONLY") != "1":
         raise RuntimeError("NEXUS_TEST_PROVIDER_ONLY must be 1: no paid call")
