@@ -90,14 +90,16 @@ def test_offline_tests_run_both_suites_without_local_models() -> None:
         if "poetry run pytest" in line
     ]
     assert len(invocations) == 2
+    logs = []
     for (run, line), suite in zip(invocations, SUITES, strict=True):
         assert suite in line
         assert DESELECT in line
+        # Each suite's guard check reads the log that same suite tee'd into.
+        log = line.rsplit("tee", 1)[1].strip()
+        logs.append(log)
         lines = [text.strip() for text in run.splitlines()]
-        guard = [
-            index for index, text in enumerate(lines) if text.startswith(GUARD_CHECK)
-        ]
-        assert guard and guard[0] > lines.index(line)
+        assert f"{GUARD_CHECK} {log}" in lines[lines.index(line) + 1 :]
+    assert len(set(logs)) == 2
 
     document = _workflow()
     job = document["jobs"]["offline-tests"]
@@ -119,11 +121,41 @@ def test_offline_tests_run_both_suites_without_local_models() -> None:
     assert _checkout("offline-tests")["with"]["fetch-depth"] == 0
 
 
+def test_offline_tests_fill_only_the_pinned_tokenizers_before_the_suites() -> None:
+    """The registry's pinned tokenizers are cached before either suite runs."""
+
+    steps = _steps("offline-tests")
+    runs = [str(step.get("run", "")) for step in steps]
+    (fetch,) = [index for index, run in enumerate(runs) if "fetch_tokenizer(" in run]
+    assert "registry_tokenizer_specs" in runs[fetch]
+    first_suite = min(
+        index for index, run in enumerate(runs) if "poetry run pytest" in run
+    )
+    assert fetch < first_suite
+    (cache,) = [
+        index
+        for index, step in enumerate(steps)
+        if str(step.get("uses", "")).startswith("actions/cache@")
+    ]
+    assert cache < fetch
+    assert steps[cache]["with"]["path"] == "~/.cache/huggingface/hub"
+    assert steps[cache]["with"]["key"] == "${{ steps.tokenizers.outputs.key }}"
+    (pins,) = [
+        index for index, step in enumerate(steps) if step.get("id") == "tokenizers"
+    ]
+    assert pins < cache
+    assert "registry_tokenizer_specs" in runs[pins]
+    # `nexus models fetch` would also download the multi-gigabyte embedder.
+    assert not any("models fetch" in run for run in runs)
+
+
 def test_ui_tests_job_fetches_only_ui_lfs_and_runs_vitest() -> None:
     """The UI job pulls only the LFS objects under ui/ and runs vitest."""
 
     checkout = _checkout("ui-tests")
     assert not (checkout.get("with") or {}).get("lfs", False)
+    # state-shades.test.ts reads a historical commit with `git show`.
+    assert checkout["with"]["fetch-depth"] == 0
     runs = _runs("ui-tests")
     lfs_commands = [
         line.strip() for run in runs for line in run.splitlines() if "git lfs" in line

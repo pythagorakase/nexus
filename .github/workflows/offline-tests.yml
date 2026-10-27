@@ -53,6 +53,23 @@ jobs:
       # asyncpg, flake8 and pillow.
       - name: Install NEXUS
         run: poetry install
+      # Token-counting tests load each registry model's pinned tokenizer from
+      # the Hugging Face cache and never download it. Fill the cache with only
+      # those tokenizers (not `nexus models fetch`, which also downloads the
+      # embedder), keyed on the pins.
+      - name: List the pinned tokenizers
+        id: tokenizers
+        run: |
+          poetry run python -c 'from nexus.config import load_settings; from nexus.agents.memnon.utils.artifact_manifest import registry_tokenizer_specs as specs; print("\n".join(f"{s.repo_id}@{s.revision}" for s in specs(load_settings())))' > "$RUNNER_TEMP/tokenizer-pins.txt"
+          cat "$RUNNER_TEMP/tokenizer-pins.txt"
+          echo "key=hf-tokenizers-$(sha256sum "$RUNNER_TEMP/tokenizer-pins.txt" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Cache the pinned tokenizers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: ${{ steps.tokenizers.outputs.key }}
+      - name: Fetch the pinned tokenizers
+        run: poetry run python -c 'from nexus.config import load_settings; from nexus.agents.memnon.utils.artifact_manifest import fetch_tokenizer, registry_tokenizer_specs as specs; [fetch_tokenizer(s.repo_id, s.revision) for s in specs(load_settings())]'
       - name: Run the offline suite
         shell: bash
         run: |
@@ -78,8 +95,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      # ui/client/src/state-shades.test.ts reads a historical commit with
+      # `git show`, so the checkout needs full history.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       # The state-surface receipt (ui/client/src/state-surfaces.resolved.json)
       # is an LFS object; fetch only the objects under ui/.
       - name: Fetch the UI LFS objects
