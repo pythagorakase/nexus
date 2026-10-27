@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FontProvider, KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
@@ -239,27 +240,85 @@ describe("SettingsPane API keys", () => {
       "key-row-openai",
     ]);
 
-    // Required and missing: the warning state, named seats on hover.
+    // Required and missing: the warning state, named seats behind the name.
     expect(screen.getByTestId("key-row-anthropic")).toHaveClass("required", "missing");
     expect(screen.getByTestId("key-row-anthropic")).not.toHaveClass("optional");
-    expect(screen.getByText("anthropic")).toHaveAttribute("title", "Skald · Summaries");
+    const anthropic = within(screen.getByTestId("key-row-anthropic"))
+      .getByRole("button", { name: "anthropic" });
+    expect(anthropic).not.toHaveAttribute("title");
+    expect(anthropic).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByTestId("key-status-anthropic")).toHaveClass("absent");
 
     // Required and present: full weight, no warning.
     expect(screen.getByTestId("key-row-openrouter")).toHaveClass("required");
     expect(screen.getByTestId("key-row-openrouter")).not.toHaveClass("missing");
     expect(screen.getByTestId("key-row-openrouter")).not.toHaveClass("optional");
-    expect(screen.getByText("openrouter")).toHaveAttribute("title", "World State");
+    const openrouter = within(screen.getByTestId("key-row-openrouter"))
+      .getByRole("button", { name: "openrouter" });
+    expect(openrouter).not.toHaveAttribute("title");
+    expect(openrouter).toHaveAttribute("aria-expanded", "false");
 
-    // Needed by no seat: dimmed, with no hover title.
+    // Needed by no seat: dimmed, with no seat disclosure.
     expect(screen.getByTestId("key-row-openai")).toHaveClass("optional");
     expect(screen.getByTestId("key-row-openai")).not.toHaveClass("required");
+    expect(
+      within(screen.getByTestId("key-row-openai")).queryByRole("button", { name: "openai" }),
+    ).toBeNull();
     expect(screen.getByText("openai")).not.toHaveAttribute("title");
 
     // The state is visual only: no status words and no internal seat names.
     const card = document.getElementById("set-keys")!;
     expect(card.textContent).not.toMatch(/required|missing|optional|needed/i);
     expect(card.innerHTML).not.toMatch(/gaia|summaries\.model|orrery/i);
+  });
+
+  it("lists the needing seats in a popover on a tap, a click or Enter, only for needed keys", async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      if (isStatusGet(input, init)) return statusResponse(SEAT_STATUSES);
+      throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${String(input)}`);
+    });
+    const user = userEvent.setup();
+    const queryClient = renderPane(SETTINGS, false, undefined, SEAT_STATUSES);
+    await statusSettled(queryClient, calls);
+
+    const card = document.getElementById("set-keys")!;
+    const seatNames = /Skald|Summaries|World State/;
+    const trigger = (provider: string) =>
+      within(screen.getByTestId(`key-row-${provider}`)).getByRole("button", { name: provider });
+
+    // Nothing is disclosed before an interaction, and the card never holds seat names.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(card.textContent).not.toMatch(seatNames);
+
+    // A tap opens one popover, named by the provider and portaled outside the card.
+    const anthropic = trigger("anthropic");
+    await user.pointer({ keys: "[TouchA]", target: anthropic });
+    const dialog = await screen.findByRole("dialog");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(dialog.textContent).toBe("Skald · Summaries");
+    expect(dialog).toHaveAccessibleName("anthropic");
+    expect(card.contains(dialog)).toBe(false);
+    expect(anthropic).toHaveAttribute("aria-expanded", "true");
+    expect(card.textContent).not.toMatch(seatNames);
+
+    // Escape closes it and returns focus to the provider name.
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(anthropic).toHaveFocus();
+    expect(anthropic).toHaveAttribute("aria-expanded", "false");
+
+    // Enter on a focused provider name opens its list; a click closes it again.
+    const openrouter = trigger("openrouter");
+    act(() => openrouter.focus());
+    await user.keyboard("{Enter}");
+    expect((await screen.findByRole("dialog")).textContent).toBe("World State");
+    expect(openrouter).toHaveAttribute("aria-expanded", "true");
+    await user.click(openrouter);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(openrouter).toHaveAttribute("aria-expanded", "false");
+    expect(card.textContent).not.toMatch(seatNames);
   });
 
   it("clears a verified mark when the key is replaced", async () => {
@@ -673,14 +732,21 @@ describe("SettingsPane model IDs", () => {
     expect(screen.getByTestId("key-row-openrouter")).toHaveClass("optional");
     await statusSettled(queryClient, calls);
     expect(screen.getByTestId("key-row-openrouter")).toHaveClass("optional");
+    expect(
+      within(screen.getByTestId("key-row-openrouter"))
+        .queryByRole("button", { name: "openrouter" }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Model Next" }));
 
     await waitFor(() =>
       expect(screen.getByTestId("key-row-openrouter")).toHaveClass("required", "missing"),
     );
-    expect(within(screen.getByTestId("key-row-openrouter")).getByText("openrouter"))
-      .toHaveAttribute("title", "Skald · World State");
+    await userEvent.click(
+      within(screen.getByTestId("key-row-openrouter"))
+        .getByRole("button", { name: "openrouter" }),
+    );
+    expect((await screen.findByRole("dialog")).textContent).toBe("Skald · World State");
     expect(screen.getByTestId("key-row-openai")).toHaveClass("optional");
     expect(calls).toEqual([
       "GET /api/secrets/status?slot=4",
