@@ -446,4 +446,101 @@ describe("exceeds-RAM tooltip", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(row).toHaveAttribute("data-state", "closed");
   });
+
+  async function tabTo(
+    user: ReturnType<typeof userEvent.setup>,
+    element: HTMLElement,
+  ) {
+    for (let step = 0; step < 30 && document.activeElement !== element; step++) {
+      await user.tab();
+    }
+    expect(element).toHaveFocus();
+  }
+
+  it("stays open through an ancestor scroll while keyboard focus is in the row", async () => {
+    const user = userEvent.setup();
+    renderRows({ status: { ...WITH_Q6_INSTALLED, system_ram_gb: 36 } });
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
+    await tabTo(user, row);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.scroll(document);
+    fireEvent.scroll(row.closest('[role="radiogroup"]')!);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(row).not.toHaveAttribute("data-state", "closed");
+    await tabTo(user, trash);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(row).not.toHaveAttribute("data-state", "closed");
+  });
+
+  it("Escape dismisses it until focus leaves the row", async () => {
+    const user = userEvent.setup();
+    renderRows({ status: { ...WITH_Q6_INSTALLED, system_ram_gb: 36 } });
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
+    await tabTo(user, row);
+    await tabTo(user, trash);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(row).toHaveAttribute("data-state", "closed");
+    await user.tab({ shift: true });
+    expect(row).toHaveFocus();
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(row).toHaveAttribute("data-state", "closed");
+    await user.tab();
+    await user.tab();
+    expect(row.contains(document.activeElement)).toBe(false);
+    await user.tab({ shift: true });
+    expect(trash).toHaveFocus();
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(row).not.toHaveAttribute("data-state", "closed");
+  });
+
+  it("closes when keyboard focus leaves the row after a held scroll", async () => {
+    const user = userEvent.setup();
+    renderRows({ status: { ...WITH_Q6_INSTALLED, system_ram_gb: 36 } });
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    await tabTo(user, row);
+    fireEvent.scroll(document);
+    await user.tab();
+    await user.tab();
+    expect(row.contains(document.activeElement)).toBe(false);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(row).toHaveAttribute("data-state", "closed");
+  });
+
+  it("a pointer click on the trash does not hold it open", async () => {
+    const user = userEvent.setup();
+    renderRows({ status: { ...WITH_Q6_INSTALLED, system_ram_gb: 36 } });
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
+    await user.hover(trash);
+    expect(
+      await screen.findByRole("tooltip", undefined, { timeout: 2000 }),
+    ).toBeInTheDocument();
+    await user.click(trash);
+    expect(trash).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.hover(row);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("the hold re-engages on keyboard focus after an earlier pointer click", async () => {
+    const user = userEvent.setup();
+    renderRows({ status: { ...WITH_Q6_INSTALLED, system_ram_gb: 36 } });
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
+    await user.click(trash);
+    await user.click(document.body);
+    await tabTo(user, row);
+    fireEvent.scroll(document);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(row).not.toHaveAttribute("data-state", "closed");
+  });
 });
