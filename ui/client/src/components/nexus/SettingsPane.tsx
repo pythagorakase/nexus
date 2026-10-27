@@ -9,6 +9,7 @@ import {
   Save,
   ShieldCheck,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useDeveloperMode } from "@/contexts/DeveloperModeContext";
 import { KEEPERS, useFonts } from "@/contexts/FontContext";
@@ -439,10 +440,11 @@ function ModelSection({
 // 5. API keys - masked status only; plaintext lives in local draft state and
 // goes directly to the writer, never through React Query state. Keys the
 // model seats need (resolved against the active slot's story pins) sort first
-// and warn while missing; keys no seat needs are dimmed. The provider name's
-// hover title lists the needing seats (Skald and World State as the Model
-// card names them). A status failure, such as a seat whose model left the
-// roster, shows in this card so the Model card above stays usable to repair it.
+// and warn while missing; keys no seat needs are dimmed. A tap, click, Enter
+// or Space on a needed key's provider name opens a popover that lists the
+// needing seats (Skald and World State as the Model card names them). A status
+// failure, such as a seat whose model left the roster, shows in this card so
+// the Model card above stays usable to repair it.
 // ──────────────────────────────────────────────────────────────────────────
 
 const SEAT_LABELS: Record<SecretSeat, string> = {
@@ -560,6 +562,7 @@ function KeysSection({ slot }: { slot: number | null }) {
           const isVerified = verified.has(row.provider);
           const status = isVerified ? "verified" : row.present ? "present" : "absent";
           const need = !row.required ? "optional" : row.present ? "required" : "required missing";
+          const seats = requiredByTitle(row);
 
           return (
             <li
@@ -567,9 +570,29 @@ function KeysSection({ slot }: { slot: number | null }) {
               key={row.provider}
               data-testid={`key-row-${row.provider}`}
             >
-              <span className="key-provider-name" title={requiredByTitle(row)}>
-                {row.provider}
-              </span>
+              {seats ? (
+                <Popover>
+                  <PopoverTrigger
+                    id={`key-seats-trigger-${row.provider}`}
+                    className="key-provider-name key-seats-trigger"
+                    data-testid={`key-seats-trigger-${row.provider}`}
+                  >
+                    {row.provider}
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="key-seats"
+                    side="bottom"
+                    align="start"
+                    collisionPadding={16}
+                    aria-labelledby={`key-seats-trigger-${row.provider}`}
+                    data-testid={`key-seats-${row.provider}`}
+                  >
+                    {seats}
+                  </PopoverContent>
+                </Popover>
+              ) : (
+                <span className="key-provider-name">{row.provider}</span>
+              )}
               <span className={`key-status ${status}`} data-testid={`key-status-${row.provider}`}>
                 <KeyStatusGlyph
                   required={row.required}
