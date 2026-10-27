@@ -3,7 +3,7 @@ status: canonical
 sources:
   - ui/client/src/state-shades.test.ts
   - ui/client/src/components/nexus/LocalModelRows.tsx
-verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
+verified_commit: "925f259182be535614882157c6b5d082e0cfaacc"
 ---
 
 # 0066: The Keyboard-Held Tooltip
