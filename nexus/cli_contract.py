@@ -8,11 +8,13 @@ Every command ``nexus.cli.build_parser()`` registers declares, in
 - ``http``: the handler reaches story state only through the NEXUS API at
   ``get_api_url()`` (the remote profile's base URL, ``NEXUS_API_URL``, or the
   local gateway). Reading the active ``nexus.toml`` does not count.
-- ``operator_api``: the handler reads operator-plane routes
-  (``nexus/api/route_capabilities.py``) of the NEXUS API at ``get_api_url()``.
-  The ``http`` commands that already call operator routes (``clear``,
-  ``lock``, ``unlock``, ``model --set``/``--clear``) stay ``http`` until issue
-  #824 splits the listeners.
+- ``operator_api``: the handler calls operator-plane routes
+  (``nexus/api/route_capabilities.py``) of the NEXUS API at ``get_api_url()``:
+  the operator reads (``inspect settings``, ``inspect secrets``) and, since
+  issue #824 split the listeners (D-824-CLI-CLASS), ``clear``, ``lock``,
+  ``unlock`` and ``model --set``/``--clear``. Locally they call the operator
+  listener; a remote runtime refuses them until 824-S3 adds
+  ``[runtime.remote].operator_base_url``.
 - ``database``: the handler connects to a slot database itself
   (``psycopg2``, ``nexus.api.db_pool``, or a reader built on them, such as the
   wizard cache and story-settings readers), whatever else it also does.
@@ -129,9 +131,6 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "accept": "http",
         "undo": "http",
         "regenerate": "http",
-        "clear": "http",
-        "lock": "http",
-        "unlock": "http",
         "inspect slot": "http",
         "inspect chunks": "http",
         "inspect chunk": "http",
@@ -139,7 +138,11 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "inspect characters": "http",
         "inspect places": "http",
         "inspect factions": "http",
-        # Operator-plane reads; refused while the runtime is remote (815-Q3).
+        # Operator-plane routes; refused while the runtime is remote (815-Q3,
+        # D-824-CLI-CLASS).
+        "clear": "operator_api",
+        "lock": "operator_api",
+        "unlock": "operator_api",
         "inspect settings": "operator_api",
         "inspect secrets": "operator_api",
         # Reading seat identities opens the slot database; see FLAG_TRANSPORTS.
@@ -173,7 +176,11 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
 # The first listed flag that is set (not None or False) selects the transport.
 FLAG_TRANSPORTS: Mapping[str, Tuple[Tuple[str, Transport], ...]] = MappingProxyType(
     {
-        "model": (("list", "local_operator"), ("set", "http"), ("clear", "http")),
+        "model": (
+            ("list", "local_operator"),
+            ("set", "operator_api"),
+            ("clear", "operator_api"),
+        ),
         "retrograde-seed-candidates": (("slot", "database"),),
     }
 )

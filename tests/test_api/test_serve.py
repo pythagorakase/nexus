@@ -241,6 +241,40 @@ def test_launcher_exits_nonzero_when_the_player_port_is_held(
     assert output.count("Application shutdown complete.") == 1, output
 
 
+def test_direct_launch_serves_the_operator_projection(
+    tmp_path: Path, spawn: Any
+) -> None:
+    """``python -m nexus.api.narrative`` answers CORS for operator origins only."""
+    config = _private_config(tmp_path)
+    port = _free_port()
+    process, log_path = spawn(
+        ["-m", "nexus.api.narrative"],
+        _child_env(config, NARRATIVE_API_PORT=str(port)),
+        name="direct-cors",
+    )
+    deadline = time.monotonic() + STARTUP_DEADLINE_SECONDS
+    while True:
+        assert process.poll() is None, log_path.read_text()
+        try:
+            if requests.get(f"http://127.0.0.1:{port}/health", timeout=1).ok:
+                break
+        except requests.RequestException:
+            pass
+        assert time.monotonic() < deadline, log_path.read_text()
+        time.sleep(0.2)
+
+    def grant(origin: str) -> str | None:
+        response = requests.options(
+            f"http://127.0.0.1:{port}/health",
+            headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
+            timeout=5,
+        )
+        return response.headers.get("access-control-allow-origin")
+
+    assert grant("https://nexus.pythagora.net") is None
+    assert grant("http://127.0.0.1:8003") == "http://127.0.0.1:8003"
+
+
 def test_direct_launch_defaults_to_the_configured_operator_port(
     tmp_path: Path, spawn: Any
 ) -> None:

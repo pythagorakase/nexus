@@ -13,7 +13,8 @@ npm --prefix ui run desktop:dev
 
 The dev command builds the PWA first because the desktop shell points at the
 gateway origin, not at Vite. Once the runtime is ready, the Tauri loading page
-replaces itself with `http://127.0.0.1:8002` by default.
+replaces itself with the gateway's operator listener, `http://127.0.0.1:8003`
+by default.
 
 This is intentionally not a hot-reload path. Use the browser workflow below for
 Vite HMR, Playwright, Safari/Chrome comparison, and agent-driven UI debugging.
@@ -36,7 +37,7 @@ It defines the runtime origin, status path, auth header, and CLI command:
 
 ```json
 {
-  "runtimeOrigin": "http://127.0.0.1:8002",
+  "runtimeOrigin": "http://127.0.0.1:8003",
   "statusPath": "/runtime/status",
   "authHeader": "X-Nexus-Auth",
   "authTokenEnv": "NEXUS_AUTH",

@@ -1095,6 +1095,60 @@ def test_doctor_owner_client_reports_an_unreachable_runtime(
     assert checks["desktop.runtime_command"]["status"] == "pass"
 
 
+def test_local_owner_client_reads_the_operator_listener(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The local profile's client checks name the operator listener (#824)."""
+    import socket
+
+    def free_port() -> int:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
+
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
+    player, operator = free_port(), free_port()
+
+    def ported(document: Any) -> None:
+        document["runtime"]["state_dir"] = str(tmp_path / "state")
+        document["runtime"]["services"]["gateway"]["port"] = player
+        document["runtime"]["gateway"]["operator_port"] = operator
+
+    config = _write_config(tmp_path, ported)
+    operator_origin = f"http://127.0.0.1:{operator}"
+    player_origin = f"http://127.0.0.1:{player}"
+    registry = [
+        spec
+        for spec in REGISTRY
+        if spec.id in {"config.valid", "gateway.reachable", "desktop.config"}
+    ]
+
+    # Nothing listens: the failure names the operator listener's status URL.
+    _desktop_config(tmp_path, monkeypatch, operator_origin)
+    checks = _by_id(
+        run_readiness(
+            "owner-client", ReadinessContext(config_path=config), registry=registry
+        )
+    )
+    assert checks["gateway.reachable"].status == "fail"
+    assert checks["gateway.reachable"].observed.startswith(
+        f"{operator_origin}{RUNTIME_STATUS_PATH}: "
+    )
+    assert checks["desktop.config"].status == "pass"
+
+    # A shell pinned to the player listener is the wrong origin.
+    _desktop_config(tmp_path, monkeypatch, player_origin)
+    checks = _by_id(
+        run_readiness(
+            "owner-client", ReadinessContext(config_path=config), registry=registry
+        )
+    )
+    assert checks["desktop.config"].status == "fail"
+    assert "runtimeOrigin" in checks["desktop.config"].observed
+    assert player_origin in checks["desktop.config"].observed
+    assert operator_origin in checks["desktop.config"].remediation
+
+
 # ---------------------------------------------------------------------------
 # CI runner through the real entry point
 # ---------------------------------------------------------------------------

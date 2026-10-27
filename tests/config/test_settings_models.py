@@ -896,19 +896,35 @@ def test_cli_turn_request_timeout_must_be_finite_and_positive(
 
 
 def test_gateway_cors_origins_parse_and_accessor_returns_default() -> None:
-    """The shipped gateway allowlist is typed and exposed by its accessor."""
-    expected = [
+    """The shipped per-plane allowlists and operator port parse and are exposed."""
+    player = [
         "http://localhost:8002",
         "http://127.0.0.1:8002",
         "https://nexus.pythagora.net",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+    ]
+    operator = [
+        "http://localhost:8003",
+        "http://127.0.0.1:8003",
+        "https://nexus-admin.pythagora.net",
     ]
 
     settings = load_settings("nexus.toml")
     assert settings.runtime is not None
-    assert settings.runtime.gateway.cors_allowed_origins == expected
-    assert get_gateway_cors_allowed_origins() == expected
+    gateway = settings.runtime.gateway
+    assert gateway.operator_port == 8003
+    assert gateway.player_cors_allowed_origins == player
+    assert gateway.operator_cors_allowed_origins == operator
+    assert get_gateway_cors_allowed_origins("player") == player
+    assert get_gateway_cors_allowed_origins("operator") == operator
+
+
+def test_gateway_single_cors_list_is_retired() -> None:
+    """The pre-#824 one-list key is rejected, not silently ignored."""
+    raw = _nexus_toml_dict()
+    raw["runtime"]["gateway"]["cors_allowed_origins"] = ["http://127.0.0.1:8002"]
+
+    with pytest.raises(ValidationError, match="cors_allowed_origins"):
+        Settings(**raw)
 
 
 def test_remote_cloudflare_access_references_parse_from_shipped_config() -> None:
@@ -982,12 +998,15 @@ def test_remote_cloudflare_access_remains_optional() -> None:
     assert remote.cloudflare_access is None
 
 
-def test_gateway_cors_origins_reject_wildcard() -> None:
+@pytest.mark.parametrize(
+    "key", ["player_cors_allowed_origins", "operator_cors_allowed_origins"]
+)
+def test_gateway_cors_origins_reject_wildcard(key: str) -> None:
     """Credentialed CORS configuration fails loudly for a wildcard origin."""
     raw = _nexus_toml_dict()
-    raw["runtime"]["gateway"]["cors_allowed_origins"] = ["*"]
+    raw["runtime"]["gateway"][key] = ["*"]
 
-    with pytest.raises(ValidationError, match="exact HTTP\\(S\\) origins"):
+    with pytest.raises(ValidationError, match=f"{key} entries must be exact HTTP"):
         Settings(**raw)
 
 

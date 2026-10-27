@@ -9,7 +9,7 @@
 #   ./iris --slot 3   == nexus up --foreground --slot 3
 #
 # For HMR development, run the Vite dev server alongside the gateway:
-#   npm --prefix ui run dev    # proxies /api, /ws, and uploads to :8002
+#   npm --prefix ui run dev    # proxies /api, /ws, and uploads to :8003 (operator)
 
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

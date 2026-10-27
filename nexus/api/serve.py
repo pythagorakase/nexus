@@ -29,8 +29,10 @@ import asyncio
 from typing import TYPE_CHECKING, List, Optional
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from nexus.api.route_capabilities import Plane, build_operator_app, build_player_app
+from nexus.config import get_gateway_cors_allowed_origins
 from nexus.runtime.contract import OPERATOR_HOST
 
 if TYPE_CHECKING:
@@ -41,12 +43,26 @@ _START_POLL_SECONDS = 0.05
 
 
 def build_plane_app(source: FastAPI, plane: Plane) -> FastAPI:
-    """Project ``plane`` of the gateway app ``source`` for one listener."""
+    """Project ``plane`` of the gateway app ``source`` for one listener.
+
+    The projection gets that plane's credentialed CORS list
+    (``[runtime.gateway].<plane>_cors_allowed_origins``, D-824-CORS); the
+    gateway app carries no middleware of its own, so nothing else is copied.
+    """
     if plane == "player":
-        return build_player_app(source)
-    if plane == "operator":
-        return build_operator_app(source)
-    raise ValueError(f"Unknown plane {plane!r}; expected 'player' or 'operator'")
+        projection = build_player_app(source)
+    elif plane == "operator":
+        projection = build_operator_app(source)
+    else:
+        raise ValueError(f"Unknown plane {plane!r}; expected 'player' or 'operator'")
+    projection.add_middleware(
+        CORSMiddleware,
+        allow_origins=get_gateway_cors_allowed_origins(plane),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    return projection
 
 
 def _port(raw: str) -> int:

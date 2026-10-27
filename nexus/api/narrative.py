@@ -25,7 +25,6 @@ from fastapi import (
     BackgroundTasks,
 )
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import psycopg2
@@ -98,7 +97,6 @@ from nexus.api.route_capabilities import (
 from nexus.api.runtime_status import register_runtime_status
 from nexus.api.static_ui import mount_ui
 from nexus.api.wizard_chat import router as wizard_chat_router
-from nexus.config import get_gateway_cors_allowed_origins
 
 logger = logging.getLogger("nexus.api.narrative")
 
@@ -174,16 +172,6 @@ def wake_scheduler(slot: Optional[int]) -> None:
     scheduler = getattr(app.state, "scheduler", None)
     if scheduler is not None and scheduler.slot == (slot or get_active_slot()):
         scheduler.wakeup.set()
-
-
-# Configure credentialed CORS from the validated gateway allowlist.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_gateway_cors_allowed_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 @app.exception_handler(RequestValidationError)

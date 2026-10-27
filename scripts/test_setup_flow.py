@@ -5,7 +5,11 @@ import time
 
 import os
 
-BASE_URL = os.environ.get("NEXUS_API_URL", "http://localhost:8002")
+from nexus.config import load_settings
+from nexus.runtime.contract import operator_url
+
+# The operator listener serves every route the flow calls (#824).
+BASE_URL = os.environ.get("NEXUS_API_URL") or operator_url(load_settings().runtime)
 
 
 def test_setup_flow(slot_number):
