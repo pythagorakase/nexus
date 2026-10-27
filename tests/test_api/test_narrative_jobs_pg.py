@@ -33,6 +33,7 @@ from tests.test_logon_mock_integration import mock_openai_server
 pytestmark = pytest.mark.requires_postgres
 
 
+@pytest.mark.requires_local_models
 @pytest.mark.parametrize("transition", ["new_episode", "new_season"])
 def test_scheduler_accepts_summary_and_embeds_once_in_process(
     acceptance_slot, monkeypatch, tmp_path, mock_openai_server, transition
