@@ -1585,3 +1585,33 @@ exception disposition coverage and shrink-only baseline verified.`
 
 No PostgreSQL file changed this round, so no PostgreSQL run is owed; the
 whole-tree PostgreSQL gate at the final commit is the coordinator's.
+
+### Run 11: https://github.com/pythagorakase/nexus/actions/runs/40458880266
+
+Head `bb36e74a` (`ab71c203`, ruling 2, plus the evidence). Conclusion:
+failure, from `ui-tests` alone. `offline-tests`: **success**, with no
+tokenizer step and no Hugging Face cache (the only cache the job restores is
+setup-python's Poetry cache), so the suites are green on an empty Hugging
+Face cache. The first suite deselects 32 tests (44 in run 10, less the twelve
+registry parameters that run again); it passes 3,299 (run 10's 3,288, plus
+those twelve, less the removed workflow test):
+
+```
+Cache restored from key: setup-python-Linux-x64-python-3.11.17-poetry-v2-c40aa03296cca4894c6dd39beec173aff41ffdd4f0cc9e5ce0dc72154be29b39
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3299 passed, 687 skipped, 32 deselected, 8 warnings in 1088.02s (0:18:08)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1941 passed, 1571 skipped, 8 deselected, 7 warnings in 110.27s (0:01:50)
+```
+
+`ui-tests`: the same stale receipt, which stays red until the wave's
+state-surface union regeneration lands on `main`:
+
+```
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ ❯ src/state-shades.test.ts:183:9
+ Test Files  1 failed | 43 passed (44)
+```
+
+The commit that records this run starts one more run; the PR body records
+that run.
