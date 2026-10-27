@@ -3,8 +3,10 @@
 Issue #816; Decisions 816-D1, 816-D5 and 816-D10 (coordinator comment
 "Decisions Recorded From the 2026-10-26 Coordinator Review"). Branch
 `claude/816-offline-ci-tier`, cut from `origin/main` at `c7ae2988`, merged with
-`origin/main` at `9a0714d7` before the push. `AGENTS.md` is re-stamped to that
-merge base. No migration, no file under `nexus/`, `scripts/` or `ui/`, and no
+`origin/main` at `9a0714d7` and `b0e9cb77` before the first push, and at
+`e058005f` and `d295eef0` while CI ran. `AGENTS.md` and
+`docs/decisions/0076-the-offline-merge-gate.md` are re-stamped to the last
+merge base, `d295eef0`. No migration, no file under `nexus/`, `scripts/` or `ui/`, and no
 committed `nexus.toml` change. No paid call; no gateway lane started by hand.
 
 Scratch directory for every log below (called `<scratch>`):
