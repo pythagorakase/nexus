@@ -74,6 +74,18 @@ this branch's own work, no `nexus.toml` change, no `ui/` change.
   sources `nexus.toml` and `scripts/api_anthropic.py`): re-verified against
   this branch's `scripts/api_anthropic.py` and stamped
   `b0e9cb77af52a22673113b4910d027cd189cf281`. Its rulings still hold.
+- Three more #1162 records whose declared sources this branch changes,
+  re-verified and stamped `b0e9cb77af52a22673113b4910d027cd189cf281`:
+  `0069-log-redaction-at-the-call-site.md` (source
+  `scripts/api_anthropic.py`: the rejection line stays at WARNING and carries
+  only ids, counts, block types and the exception, the structured-output
+  privacy-contract site 842-D2 leaves as it is;
+  `tests/test_runtime/test_log_redaction.py` passes),
+  `0078-retiring-the-legacy-file-ingest.md` (source
+  `config/exception_disposition_baseline.json`: this branch only shrinks it,
+  as 1119-Q3 allows) and `0083-retiring-old-scripts-and-retired-tag-gates.md`
+  (source `scripts/api_anthropic.py`: the provider shim has not moved yet;
+  811-Q15 still holds).
 
 ## Red Run (S1 Tests Against Unchanged Product Code)
 
