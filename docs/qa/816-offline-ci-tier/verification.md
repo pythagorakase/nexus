@@ -1420,3 +1420,33 @@ The tokenizer cache steps (`7d70fdcc`) stay in the workflow: the ruling does
 not remove them. With the seven tests deselected they fill a cache that no
 selected test reads (the empty-`HF_HOME` run above), so the coordinator may
 drop them; see the PR's open questions.
+
+### Run 10: https://github.com/pythagorakase/nexus/actions/runs/40454024360
+
+Head `28db2e60` (`26067762`, the seven tokenizer marks, plus the evidence).
+Conclusion: failure, from `ui-tests` alone. `offline-tests`: **success**. The
+first suite deselects 19 more tests (25 to 44: the 17 registry parameters of
+`test_registry_token_estimator`, the token-budget method and the one
+turn-cycle parameter); the tokenizer cache was restored, so this run alone
+does not show the suites green on an empty cache (the local empty-`HF_HOME`
+run above does):
+
+```
+Cache restored from key: hf-tokenizers-92e7bfa13ec24356b64ae7c30c11d96d9af39d0acc55cde72e7087e28009d1fd
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3288 passed, 687 skipped, 44 deselected, 8 warnings in 894.79s (0:14:54)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1941 passed, 1571 skipped, 8 deselected, 7 warnings in 90.33s (0:01:30)
+```
+
+`ui-tests`: the same stale receipt, which stays red until the wave's
+state-surface union regeneration lands on `main`:
+
+```
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ ❯ src/state-shades.test.ts:183:9
+ Test Files  1 failed | 43 passed (44)
+```
+
+The commit that records this run starts one more run; the PR body records
+that run.
