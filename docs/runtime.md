@@ -152,15 +152,21 @@ model.
 | Plane | Serves |
 |---|---|
 | Player | Liveness (`/health`, `/status`), reading routes, narrative turns (continue, retry, regenerate, approve, select-choice, undo, discarding the pending turn), the new-story wizard, preferences, `/ws/narrative`, the upload mounts, and the app shell |
-| Operator | The player plane plus secrets, `/api/settings`, local models, diagnostics (`/runtime/status`, `/api/dev/*`, the OpenAPI schema and docs), slot lock, unlock, and model pins, `setup/reset`, and asset uploads, main-image changes, and deletes |
+| Operator | The player plane plus secrets, `/api/settings`, local models, diagnostics (`/runtime/status`, `/api/dev/*`, the OpenAPI schema and docs), slot lock, unlock, and model pins, the wizard's `setup/overwrite` and `transition/overwrite`, `setup/reset`, and asset uploads, main-image changes, and deletes |
 
-The player plane can overwrite any unlocked slot through the wizard, occupied
-or not; the slot lock is the only guard. `setup/start` discards the slot's
-in-progress wizard and trait selections and persists the resolved wizard model
-as the slot's Skald pin, so its `model` override replaces the pin that
-`PATCH /api/slot/{slot}/settings` otherwise sets only on the operator plane.
-`transition` deletes the slot's existing world. The registry marks both routes
-destructive.
+The new-story wizard's start and transition each have a player route and an
+operator route (Decision 824-Q4). `POST /api/story/new/setup/start` starts only
+a slot that the slot list reports empty, and it refuses a `model` that differs
+from the slot's model pin. `POST /api/story/new/transition` refuses a slot that
+holds narrative chunks, a pending turn or a committed story marker. Both answer
+409 when they refuse. The operator routes, `POST /api/story/new/setup/overwrite`
+and `POST /api/story/new/transition/overwrite`, take the same bodies, restart an
+occupied slot's wizard, replace its pin and delete its existing world. The slot
+lock guards all four routes, and no record of which route started a wizard is
+kept. The registry marks only the operator routes destructive. The client posts
+to the operator routes when `/health` reports the operator plane and to the
+player routes otherwise. `nexus continue --model` on an empty slot uses the
+operator route on this machine and the player route of a remote runtime.
 
 `build_player_app(app)` and `build_operator_app(app)` project new FastAPI
 apps from the gateway. Each reuses the gateway's route objects in

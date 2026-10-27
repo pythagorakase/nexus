@@ -4,7 +4,7 @@ sources:
   - nexus/telemetry/usage.py
   - nexus.toml
   - nexus/cli.py
-verified_commit: "9a0714d7671457d47f91bfbd76749fee4444c686"
+verified_commit: "d295eef0928706cda3a9f7c5a8b4dc103929e1ed"
 ---
 
 # 0009: Dollars in the Ledger
