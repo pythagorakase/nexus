@@ -4,10 +4,10 @@ Issue #816; Decisions 816-D1, 816-D5 and 816-D10 (coordinator comment
 "Decisions Recorded From the 2026-10-26 Coordinator Review"). Branch
 `claude/816-offline-ci-tier`, cut from `origin/main` at `c7ae2988`, merged with
 `origin/main` at `9a0714d7` and `b0e9cb77` before the first push, at
-`e058005f` and `d295eef0` while CI ran, and at `571f982b` in the review fix
-round (merge commit `16117132`). `AGENTS.md` and
-`docs/decisions/0076-the-offline-merge-gate.md` are re-stamped to the last
-merge base, `571f982b`. No migration, no file under `nexus/`, `scripts/` or `ui/`, and no
+`e058005f` and `d295eef0` while CI ran, and at `571f982b` (merge commit
+`16117132`) and `5ba97c05` (merge commit `cc568cfd`) in the review fix
+round. `AGENTS.md` and `docs/decisions/0076-the-offline-merge-gate.md` are
+re-stamped to the last merge base, `5ba97c05`. No migration, no file under `nexus/`, `scripts/` or `ui/`, and no
 committed `nexus.toml` change. No paid call; no gateway lane started by hand.
 
 Scratch directory for every log below (called `<scratch>`):
@@ -973,3 +973,78 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 receipt isolation: checkout and user receipts untouched
 73 passed, 5 warnings in 29.94s
 ```
+
+### Run 5: https://github.com/pythagorakase/nexus/actions/runs/40440805486
+
+Head `caef8922` (the fix commits on the `571f982b` merge). Conclusion:
+failure. `offline-tests`: success, for the first time on Linux. The
+tokenizer cache missed on the first run, the fetch step filled it, and the
+post step saved it:
+
+```
+Cache not found for input keys: hf-tokenizers-92e7bfa13ec24356b64ae7c30c11d96d9af39d0acc55cde72e7087e28009d1fd
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3287 passed, 683 skipped, 22 deselected, 8 warnings in 1109.21s (0:18:29)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1910 passed, 1562 skipped, 8 deselected, 7 warnings in 92.85s (0:01:32)
+Cache saved with key: hf-tokenizers-92e7bfa13ec24356b64ae7c30c11d96d9af39d0acc55cde72e7087e28009d1fd
+```
+
+The key is the one the local probe printed. `ui-tests`: failure. With full
+history the `git show` now succeeds, and `state-shades.test.ts` stops one
+check later, at its receipt-freshness check:
+
+```
+ FAIL  src/state-shades.test.ts [ src/state-shades.test.ts ]
+Error: Stale browser-resolved state surfaces: run npm --prefix ui run resolve-state-surfaces (see ui/scripts/state-surfaces/README.md).
+ ❯ src/state-shades.test.ts:183:9
+ Test Files  1 failed | 43 passed (44)
+      Tests  673 passed (673)
+```
+
+This is a staleness on `main`, not on this branch: `git diff --stat
+origin/main...HEAD -- ui` is empty. Hashing every file that the committed
+receipt `ui/client/src/state-surfaces.resolved.json` lists (last regenerated
+by #1150, `a01c162f`) against the tree shows five changed inputs:
+`client/src/components/nexus/LocalModelRows.tsx`, `LocalModelRows.test.tsx`,
+`SettingsPane.tsx`, `SettingsPane.test.tsx` and `nexus-layout.css`. These
+were changed on `main` by #1170 (`d295eef0`) and #1171 (`571f982b`) without
+a receipt regeneration. The order forbids any change under `ui/`, so this is
+reported and left red; `ui-tests` is not a required check.
+
+### Second Merge in the Fix Round (`5ba97c05`)
+
+`origin/main` moved to `5ba97c05` (#1169, #1175) during the round. `git merge
+origin/main` conflicted only in `docs/agent_workflow.md`. The resolution keeps
+main's gate sentence (now naming `NEXUS_PLAYER_PORT`), followed by this
+branch's CI bullet, unchanged. `AGENTS.md` and decision 0076 are re-stamped
+to `5ba97c05` (merge commit `cc568cfd`). Tails on that tree:
+
+```
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q tests/test_offline_ci_workflow.py tests/test_reachability.py tests/test_doc_front_matter.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+155 passed, 5 warnings in 18.61s
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit -rA \
+    tests/test_api/test_attempt_manifest_pg.py tests/test_api/test_narrative_jobs_pg.py
+PASSED tests/test_api/test_attempt_manifest_pg.py::test_manifest_real_test_turn_and_child_job_correlation
+PASSED tests/test_api/test_narrative_jobs_pg.py::test_scheduler_accepts_summary_and_embeds_once_in_process[new_episode]
+PASSED tests/test_api/test_narrative_jobs_pg.py::test_scheduler_accepts_summary_and_embeds_once_in_process[new_season]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+18 passed, 9 warnings in 71.85s (0:01:11)
+
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -m 'not requires_local_models' tests/test_api tests/test_orrery tests/test_runtime/test_supervisor.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+2001 passed, 1562 skipped, 8 deselected, 7 warnings in 96.83s (0:01:36)
+```
+
+The PostgreSQL run is clean: no audit edit and no `-m`, with
+`NEXUS_GATEWAY_PORT`, `NEXUS_PLAYER_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT`,
+`NEXUS_RUNTIME_CONFIG` and `NEXUS_HOME` unset (load `22:12 up 10:50, load
+averages: 6.04 7.57 7.41`). `test_attempt_manifest_pg.py` holds a marked test,
+and the merge changed that file. `test_supervisor.py` was changed on both
+sides and merged cleanly; it passes. The first offline suite on this tree is
+the CI run that the push of this commit starts.
