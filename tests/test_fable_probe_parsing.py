@@ -549,14 +549,15 @@ def test_turn_outcome_reads_the_failure_envelope_on_stderr() -> None:
 def test_probe_lane_refuses_unset_and_play_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The probe never defaults its lane and never binds the play port."""
+    """The probe never defaults its lane and never binds an owner runtime port."""
 
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
     with pytest.raises(RuntimeError, match="unset"):
         probe_lane()
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8002")
-    with pytest.raises(RuntimeError, match="play port"):
-        probe_lane()
+    for owner_port in ("8002", "8003"):
+        monkeypatch.setenv("NEXUS_GATEWAY_PORT", owner_port)
+        with pytest.raises(RuntimeError, match="owner's runtime port"):
+            probe_lane()
     monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8031")
     assert probe_lane() == 8031
     monkeypatch.delenv("NEXUS_GATEWAY_PORT")

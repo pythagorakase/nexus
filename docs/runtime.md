@@ -191,6 +191,15 @@ runs none. A local browser on `http://127.0.0.1:8002` therefore shows the
 player plane: no settings, keys or models. Local administration uses the
 desktop shell or `http://127.0.0.1:8003` (Decision D-824-LOCAL-BROWSER).
 
+`GET /health` reports the plane of the app that served it (`"plane": "player"`
+or `"operator"`); the unprojected gateway reports `operator`, because it serves
+every route. The client's connectivity probe reads `/health` and keeps the
+plane. On the player plane the client sends no operator request and renders no
+operator-backed control (API keys, model and context-length settings, the
+memory meter, developer mode, slot clearing, overwriting an occupied slot,
+portrait upload); theme and fonts come from `GET /api/preferences`. The
+client's plane only shapes the interface; the projections enforce the planes.
+
 ### Listeners and the Tunnel
 
 `nexus.pythagora.net` reaches the player listener through the Cloudflare
@@ -201,14 +210,6 @@ hostname until 824-S3 (Decision D-824-ADMIN-HOST names
 `nexus-admin.pythagora.net`). Each listener answers credentialed CORS only
 for its own origins: `[runtime.gateway].player_cors_allowed_origins` and
 `operator_cors_allowed_origins` (D-824-CORS).
-`GET /health` reports the plane of the app that served it (`"plane": "player"`
-or `"operator"`); the unprojected gateway reports `operator`, because it serves
-every route. The client's connectivity probe reads `/health` and keeps the
-plane. On the player plane the client sends no operator request and renders no
-operator-backed control (API keys, model and context-length settings, the
-memory meter, developer mode, slot clearing, overwriting an occupied slot,
-portrait upload); theme and fonts come from `GET /api/preferences`. The
-client's plane only shapes the interface; the projections enforce the planes.
 
 ## Profiles
 

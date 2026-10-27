@@ -241,6 +241,31 @@ def test_launcher_exits_nonzero_when_the_player_port_is_held(
     assert output.count("Application shutdown complete.") == 1, output
 
 
+def test_launcher_exits_nonzero_when_the_operator_port_is_held(
+    tmp_path: Path, spawn: Any
+) -> None:
+    """An operator listener that cannot bind never opens the player listener."""
+    config = _private_config(tmp_path)
+    player, operator = _free_port(), _free_port()
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", operator))
+        holder.listen()
+        process, log_path = spawn(
+            _launcher_argv(str(player), operator, _log_config(tmp_path, config)),
+            _child_env(config),
+            name="serve-operator-held",
+        )
+        deadline = time.monotonic() + STARTUP_DEADLINE_SECONDS
+        while process.poll() is None:
+            assert not _port_open(player), log_path.read_text()
+            assert time.monotonic() < deadline, log_path.read_text()
+            time.sleep(0.1)
+    output = log_path.read_text()
+    assert process.returncode == 1, output
+    assert not _port_open(player)
+    assert f"Uvicorn running on http://127.0.0.1:{player}" not in output
+
+
 def test_direct_launch_serves_the_operator_projection(
     tmp_path: Path, spawn: Any
 ) -> None:
@@ -288,18 +313,21 @@ def test_direct_launch_defaults_to_the_configured_operator_port(
     assert f"Uvicorn running on http://127.0.0.1:{operator}" in log_path.read_text()
 
 
-def test_gateway_lifespan_excludes_projections() -> None:
+@pytest.mark.parametrize("first", ["gateway", "projection"])
+def test_gateway_lifespan_excludes_projections(first: str) -> None:
     """The gateway app and a projection never run the one lifespan together."""
     from nexus.api import narrative
 
     gateway = narrative.app
-    with TestClient(gateway):
+    projection = build_player_app if first == "gateway" else build_operator_app
+    outer, inner = (
+        (gateway, projection(gateway))
+        if first == "gateway"
+        else (projection(gateway), gateway)
+    )
+    with TestClient(outer):
         with pytest.raises(RouteCapabilityError, match="already running"):
-            with TestClient(build_player_app(gateway)):
-                pass
-    with TestClient(build_operator_app(gateway)):
-        with pytest.raises(RouteCapabilityError, match="already running"):
-            with TestClient(gateway):
+            with TestClient(inner):
                 pass
     # Each exit released the lifespan: either side starts again alone.
     with TestClient(gateway) as client:

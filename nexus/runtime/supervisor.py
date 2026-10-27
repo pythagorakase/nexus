@@ -662,6 +662,19 @@ class Supervisor:
             listeners.insert(0, ("player", service.host, ports.player))
         return listeners
 
+    def _listener_port_key(self, name: str, plane: str) -> str:
+        """The setting or variable that sets one listener's port.
+
+        Matches the labels of ``__init__``'s collision check: in a lane the
+        gateway's ports come from its variables, otherwise from the config.
+        """
+        lane = self._gateway_port_override is not None
+        if plane == "operator":
+            return GATEWAY_PORT_ENV if lane else "[runtime.gateway].operator_port"
+        if plane == "player" and lane:
+            return PLAYER_PORT_ENV
+        return f"[runtime.services.{name}] port"
+
     def _service_argv(self, service: RuntimeServiceSettings) -> List[str]:
         """Render a service's argv template.
 
@@ -846,7 +859,7 @@ class Supervisor:
                     f"{excerpt}"
                 )
             for url, plane in list(pending.items()):
-                answer = self._health_answer(url)
+                answer = self._health_answer(url, plane)
                 if answer is None:
                     continue
                 if not plane or answer.get("plane") == plane:
@@ -873,8 +886,13 @@ class Supervisor:
                 )
             time.sleep(health.poll_interval_seconds)
 
-    def _health_answer(self, url: str) -> Optional[Dict[str, Any]]:
-        """A listener's 200 health body, ``{}`` when not a JSON object, else None."""
+    def _health_answer(self, url: str, plane: str) -> Optional[Dict[str, Any]]:
+        """A listener's 200 health answer, else None.
+
+        A service with no plane keeps the 200-is-healthy contract (``{}``). A
+        gateway listener's body must be a JSON object naming its plane; any
+        other body is ``{}``, whose missing plane ``_await_healthy`` refuses.
+        """
         try:
             response = requests.get(url, timeout=self.runtime.health.timeout_seconds)
         except (
@@ -883,11 +901,13 @@ class Supervisor:
             return None
         if response.status_code != 200:
             return None
+        if not plane:
+            return {}
         try:
             body = response.json()
         except (
             ValueError
-        ):  # nexus-exception-disposition: fail; reason=body; safety=plane
+        ):  # nexus-exception-disposition: fail; reason=not JSON; safety=refused
             return {}
         return body if isinstance(body, dict) else {}
 
@@ -940,15 +960,16 @@ class Supervisor:
                     }
                 # Port open but not verifiably ours: fall through to the
                 # unmanaged-port refusal below.
-            for _plane, host, port in self._listeners(name, service):
+            for plane, host, port in self._listeners(name, service):
                 if not _port_open(host, port):
                     continue
                 occupant = _describe_port_occupant(port)
                 listener = f" Listener: {occupant}." if occupant else ""
                 raise RuntimeError_(
                     f"Port {port} is already in use by an unmanaged process; "
-                    f"refusing to spawn '{name}'. Adjust [runtime.services.{name}] "
-                    f"port or stop the other process.{listener} If the listener is "
+                    f"refusing to spawn '{name}'. Adjust "
+                    f"{self._listener_port_key(name, plane)} or stop the other "
+                    f"process.{listener} If the listener is "
                     "a stale NEXUS service from a dead session, kill that pid. "
                     f"Agent/test shells should export {GATEWAY_PORT_ENV} to run on "
                     "a separate port with isolated state."

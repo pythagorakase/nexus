@@ -307,7 +307,8 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert status["runtime"]["database"]["dbname"] == ROUTED_DATABASE
 
         # Captured logs are readable through nexus logs; the routed launcher
-        # runs uvicorn's own __main__, so the banner is uvicorn's.
+        # runs nexus.api.serve as __main__, whose two uvicorn servers each log
+        # a "Uvicorn running on" banner, one per listener.
         logs = _cli("logs", "gateway", "-n", "50", config=config)
         assert logs["_returncode"] == 0
         for port in (GATEWAY_PORT, OPERATOR_PORT):
@@ -458,11 +459,47 @@ def test_up_refuses_port_held_by_unmanaged_process(tmp_path, held):
         if shutil.which("lsof"):
             assert "Listener: pid=" in result["error"]
         assert "NEXUS_GATEWAY_PORT" in result["error"]
+        # The refusal names the key that sets the held listener's port.
+        key = (
+            "[runtime.services.gateway] port"
+            if held == "player"
+            else "[runtime.gateway].operator_port"
+        )
+        assert f"Adjust {key} or stop" in result["error"]
         state_dir = tmp_path / "state"
         assert not list(state_dir.glob("*.pid.json"))
         assert not _port_open("127.0.0.1", other)
     finally:
         blocker.close()
+        _down(config)
+
+
+def test_up_refuses_a_gateway_that_serves_the_wrong_plane(tmp_path):
+    """A pre-#824 single-listener argv answers 'operator' on the player port."""
+    config = _write_config(tmp_path)
+    doc: Any = tomlkit.parse(config.read_text())
+    # The old argv: the unprojected app, every route, on the service port.
+    doc["runtime"]["services"]["gateway"]["command"] = [
+        "{python}",
+        "-m",
+        ROUTED_UVICORN,
+        "nexus.api.narrative:app",
+        "--host",
+        "{host}",
+        "--port",
+        "{port}",
+        "--log-config",
+        "{log_config}",
+    ]
+    config.write_text(tomlkit.dumps(doc))
+    try:
+        result = _cli("up", config=config)
+        assert result["_returncode"] == 1, result
+        assert "as plane 'operator', not 'player'" in result["error"]
+        assert not (tmp_path / "state" / "gateway.pid.json").exists()
+        assert not _port_open("127.0.0.1", GATEWAY_PORT)
+        assert not _port_open("127.0.0.1", OPERATOR_PORT)
+    finally:
         _down(config)
 
 
