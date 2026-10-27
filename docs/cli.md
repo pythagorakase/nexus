@@ -164,8 +164,8 @@ exempt in the same way: it reads this machine's receipts when no configuration
 loads.
 
 `clear`, `lock`, `unlock` and `model --set`/`--clear` call operator routes over
-`http` and still run under a remote runtime; issue #824 decides their class
-when it splits the listeners.
+the `operator_api` transport (#824): locally they reach the operator listener,
+and a remote runtime refuses them.
 
 Only the host name decides: a LAN address, a Tailscale name, or `0.0.0.0`
 counts as remote even when it reaches this machine, so every `database`,
@@ -182,7 +182,7 @@ on stderr, argparse's rejection of the arguments included:
 {
   "ok": false,
   "code": "api_unreachable",
-  "error": "Cannot connect to API server at http://localhost:8002",
+  "error": "Cannot connect to API server at http://127.0.0.1:8003",
   "partial": {}
 }
 ```

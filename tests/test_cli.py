@@ -457,6 +457,7 @@ def test_logs_returns_requested_lines_within_retained_read_bound(
         argv.extend(["--lines", str(count)])
     monkeypatch.setattr(sys, "argv", argv)
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
 
     assert cli.main() == 0
 

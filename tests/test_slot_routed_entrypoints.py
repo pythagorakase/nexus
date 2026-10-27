@@ -1,17 +1,18 @@
 """The routed child-process entry points never reach an owner slot (issue #885).
 
-``tests.slot_routed_cli``, ``tests.slot_routed_uvicorn`` and
-``tests.slot_routed_gateway`` route one slot to a disposable clone before the
-CLI or gateway loads. The offline tests prove that each refuses to run, before
-anything else happens, when a routing variable is missing or names an owner
-database, and that importing the routing fixtures or the scripts they load
-leaves the root logger unconfigured (issue #1037). The PostgreSQL tests prove,
+``tests.slot_routed_cli``, ``tests.slot_routed_serve``,
+``tests.slot_routed_uvicorn`` and ``tests.slot_routed_gateway`` route one slot
+to a disposable clone before the CLI or gateway loads. The offline tests prove
+that each refuses to run, before anything else happens, when a routing
+variable is missing or names an owner database, and that importing the
+routing fixtures or the scripts they load leaves the root logger unconfigured
+(issue #1037). The PostgreSQL tests prove,
 on a seeded template clone, that a routed CLI ``up``/``status``/``down`` opens
 no database but the clone (and the ``postgres`` admin database), that a
 refused routed ``up`` prints its JSON envelope as the first line of stderr, and
 that the routed launcher, spawned from the supervisor's own argv and
-environment, serves the clone on the port it was given and refuses any other
-slot.
+environment, serves the clone on the two listeners it was given and refuses
+any other slot.
 """
 
 from __future__ import annotations
@@ -56,6 +57,7 @@ OWNER_DATABASES = (
 )
 ENTRY_POINTS = (
     "tests.slot_routed_cli",
+    "tests.slot_routed_serve",
     "tests.slot_routed_uvicorn",
     "tests.slot_routed_gateway",
 )
@@ -131,6 +133,7 @@ def _child_env(extra: dict[str, str]) -> dict[str, str]:
     for name in (
         "NEXUS_API_URL",
         "NEXUS_GATEWAY_PORT",
+        "NEXUS_PLAYER_PORT",
         "NEXUS_SLOT",
         RUNTIME_CONFIG_ENV,
         ROUTED_SLOT_ENV,
@@ -149,15 +152,16 @@ def _write_config(tmp_path: Path, *, routed_database: str | None) -> Path:
     owner runtime state or port is touched. ``routed_database=None`` leaves
     the routing variables out of the gateway environment.
     """
-    gateway_port, mock_port = _free_port(), _free_port()
+    gateway_port, operator_port, mock_port = _free_port(), _free_port(), _free_port()
     doc: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
     runtime = doc["runtime"]
     runtime["state_dir"] = str(tmp_path / "state")
     runtime["default_slot"] = ROUTED_SLOT
+    runtime["gateway"]["operator_port"] = operator_port
     gateway = runtime["services"]["gateway"]
     command = [str(part) for part in gateway["command"]]
-    assert command[1:3] == ["-m", "uvicorn"], command
-    command[2] = "tests.slot_routed_uvicorn"
+    assert command[1:3] == ["-m", "nexus.api.serve"], command
+    command[2] = "tests.slot_routed_serve"
     gateway["command"] = command
     gateway["port"] = gateway_port
     if routed_database is not None:
@@ -244,6 +248,16 @@ def test_entry_point_refuses_before_anything_runs(
     port = _free_port()
     argv = {
         "tests.slot_routed_cli": ["--json", "up", "--config", str(config)],
+        "tests.slot_routed_serve": [
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--operator-port",
+            str(_free_port()),
+            "--log-config",
+            str(tmp_path / "logging.json"),
+        ],
         "tests.slot_routed_uvicorn": [
             "nexus.api.narrative:app",
             "--host",
@@ -468,10 +482,21 @@ def _spawn_routed_gateway(
     supervisor.state_dir.mkdir(parents=True, exist_ok=True)
     supervisor._write_log_config()
     argv = supervisor._service_argv(service)
-    assert argv[1:4] == ["-m", "tests.slot_routed_uvicorn", "nexus.api.narrative:app"]
-    assert argv[-2:] == ["--log-config", str(supervisor.log_config_path())]
+    operator_port = supervisor.runtime.gateway.operator_port
+    assert argv[1:] == [
+        "-m",
+        "tests.slot_routed_serve",
+        "--host",
+        service.host,
+        "--port",
+        str(service.port),
+        "--operator-port",
+        str(operator_port),
+        "--log-config",
+        str(supervisor.log_config_path()),
+    ]
     env = supervisor._service_env(service, slot)
-    for name in ("NEXUS_API_URL", "NEXUS_GATEWAY_PORT"):
+    for name in ("NEXUS_API_URL", "NEXUS_GATEWAY_PORT", "NEXUS_PLAYER_PORT"):
         env.pop(name, None)
     log_path = tmp_path / "gateway.log"
     with open(log_path, "wb") as log:
@@ -500,16 +525,23 @@ def test_routed_launcher_serves_the_clone_on_its_port(
         tmp_path, entrypoint_clone, slot=ROUTED_SLOT
     )
     port = supervisor.runtime.services["gateway"].port
-    base = f"http://127.0.0.1:{port}"
+    operator_port = supervisor.runtime.gateway.operator_port
+    base = f"http://127.0.0.1:{operator_port}"
     try:
         deadline = time.monotonic() + 60
-        while True:
+        pending = {port: "player", operator_port: "operator"}
+        while pending:
             assert process.poll() is None, log_path.read_text()
-            try:
-                if requests.get(f"{base}/health", timeout=1).status_code == 200:
-                    break
-            except requests.RequestException:
-                pass
+            for listener, plane in list(pending.items()):
+                try:
+                    health = requests.get(
+                        f"http://127.0.0.1:{listener}/health", timeout=1
+                    )
+                except requests.RequestException:
+                    continue
+                if health.status_code == 200:
+                    assert health.json()["plane"] == plane, health.text
+                    del pending[listener]
             assert time.monotonic() < deadline, log_path.read_text()
             time.sleep(0.25)
         status = requests.get(f"{base}/runtime/status", timeout=10).json()
@@ -517,6 +549,7 @@ def test_routed_launcher_serves_the_clone_on_its_port(
         assert status["database"]["ok"] is True
         assert status["database"]["dbname"] == entrypoint_clone
         assert status["services"]["gateway"]["port"] == port
+        assert status["services"]["gateway"]["operator_port"] == operator_port
         # The gateway's scheduler took its lease in the clone.
         with closing(connect(entrypoint_clone)) as conn, conn.cursor() as cur:
             cur.execute("SELECT owner_id FROM deferred_work_scheduler WHERE id")
@@ -525,7 +558,8 @@ def test_routed_launcher_serves_the_clone_on_its_port(
         assert row[0].startswith(f"gateway:{process.pid}:")
     finally:
         _stop(process)
-    assert f"Uvicorn running on http://127.0.0.1:{port}" in log_path.read_text()
+    for listener in (port, operator_port):
+        assert f"Uvicorn running on http://127.0.0.1:{listener}" in log_path.read_text()
 
 
 @pytest.mark.requires_postgres
@@ -545,3 +579,4 @@ def test_routed_launcher_refuses_an_unrouted_active_slot(
     assert returncode != 0, output
     assert f"Slot {other_slot} is not routed" in output
     assert not _port_open("127.0.0.1", supervisor.runtime.services["gateway"].port)
+    assert not _port_open("127.0.0.1", supervisor.runtime.gateway.operator_port)

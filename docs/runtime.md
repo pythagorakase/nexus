@@ -9,7 +9,9 @@ PR #400 are the provenance.
 
 ## One Origin
 
-A NEXUS runtime is **one HTTP(S) origin**. That origin serves:
+A NEXUS runtime listener is **one HTTP(S) origin**. The gateway serves two
+listeners (see Player and Operator Planes); the operator origin serves every
+route below, and the player origin serves the player-plane subset:
 
 - every API route (`/api/...`),
 - the narrative websocket (`/ws/narrative`),
@@ -20,9 +22,10 @@ Single-ASGI-origin is the converged end state, achieved in PR #400: the
 FastAPI gateway (`nexus.api.narrative:app`) is the entire serving surface.
 There is no Express layer, no sidecar API process, and no UNIX socket —
 everything a client needs is loopback or remote TCP against one base URL.
-A client that works against `http://127.0.0.1:8002` works against
-`https://nexus.example.com` by changing its base URL and, when the remote
-origin is Access-protected, configuring its edge-auth secret references.
+A client that uses only player routes and works against
+`http://127.0.0.1:8002` works against the player base URL
+(`[runtime.remote].base_url`). The operator origin `http://127.0.0.1:8003`
+has no remote counterpart until #824 adds the admin hostname.
 
 The gateway is also the only application: the `nexus.api` package exports
 none. #807 retired the pre-gateway Storyteller app (`nexus/api/storyteller.py`),
@@ -44,7 +47,7 @@ were already served by the gateway.
   "slot": 5,
   "database": {"ok": true, "slot": 5, "dbname": "save_05"},
   "services": {
-    "gateway": {"ok": true, "port": 8002},
+    "gateway": {"ok": true, "port": 8002, "operator_port": 8003},
     "mock_openai": {"ok": true, "port": 5102}
   },
   "auth": {"header": "X-Nexus-Auth", "enforced": false},
@@ -166,9 +169,10 @@ destructive.
 apps from the gateway. Each reuses the gateway's route objects in
 registration order (the app-shell catch-all stays last), its middleware,
 exception handlers, metadata, and root path, and runs the gateway's lifespan
-against the gateway app itself so shared handlers see one scheduler; only one
-projection may run that lifespan at a time. Serving the gateway app itself
-beside a projection in one process is not yet detected.
+against the gateway app itself so shared handlers see one scheduler. The
+projections share the gateway's routes, handlers and lifespan, and the
+lifespan runs once per process: a second projection, or the gateway app
+served beside a projection, fails at lifespan start.
 
 The registry rule: a route enters the gateway only with an entry.
 `nexus.api.narrative` calls `require_classified(app)` at import, so an
@@ -177,10 +181,16 @@ registered after the app-shell catch-all fails the import, and the
 projections refuse the same. `tests/test_api/test_route_capabilities.py`
 also fails on entries no route uses.
 
-The gateway still serves the whole runtime on one listener. Binding the
-operator projection to loopback or a Unix socket, pointing the Cloudflare
-tunnel at the player projection, and routing the Tauri shell to the operator
-projection is the next slice, after the runtime home (#820).
+The `gateway` service is one process with two listeners
+(`nexus.api.serve`): the player projection on the service port
+(`[runtime.services.gateway].port`, 8002, the address the Cloudflare tunnel
+reaches, which ruling 43 on #824 left unchanged) and the operator projection
+on `127.0.0.1:<operator_port>` (`[runtime.gateway].operator_port`, 8003). The
+operator listener starts first and runs the one lifespan; the player listener
+runs none. A local browser on `http://127.0.0.1:8002` therefore shows the
+player plane: no settings, keys or models. Local administration uses the
+desktop shell or `http://127.0.0.1:8003` (Decision D-824-LOCAL-BROWSER).
+
 `GET /health` reports the plane of the app that served it (`"plane": "player"`
 or `"operator"`); the unprojected gateway reports `operator`, because it serves
 every route. The client's connectivity probe reads `/health` and keeps the
@@ -189,6 +199,17 @@ operator-backed control (API keys, model and context-length settings, the
 memory meter, developer mode, slot clearing, overwriting an occupied slot,
 portrait upload); theme and fonts come from `GET /api/preferences`. The
 client's plane only shapes the interface; the projections enforce the planes.
+
+### Listeners and the Tunnel
+
+`nexus.pythagora.net` reaches the player listener through the Cloudflare
+tunnel that the LaunchAgent `com.nexus.cloudflared` runs, behind Cloudflare
+Access; the CLI's service-token accounts are named in
+`[runtime.remote.cloudflare_access]`. The operator listener has no public
+hostname until 824-S3 (Decision D-824-ADMIN-HOST names
+`nexus-admin.pythagora.net`). Each listener answers credentialed CORS only
+for its own origins: `[runtime.gateway].player_cors_allowed_origins` and
+`operator_cors_allowed_origins` (D-824-CORS).
 
 ## Profiles
 
@@ -317,18 +338,23 @@ in `docs/cli.md`).
   double-start; partial startups are rolled back so `up` is all-or-nothing.
   The refusal identifies the listener (pid, age, command) when `lsof` is
   available.
-- `NEXUS_GATEWAY_PORT=<port>` runs the gateway on an alternate port with
-  fully isolated state (`state_dir/gateway-<port>/`), so an agent or test
-  session coexists with the desktop app's instance on one checkout.
-  Fixed-port siblings (the mock provider) always belong to the default
-  instance: an override instance borrows one only when the default state
-  ledger proves the listener is managed (live pidfile on that port, and
-  healthy), skips it loudly when it is not running, and never spawns its
-  own — so the default stack starts cleanly in either order. A foreign
-  listener answering the health path is still refused; overrides equal to
-  a configured sibling port are rejected at startup. `nexus down` under
-  the override stops only the override instance. The desktop shell never
-  sets this — its `runtimeOrigin` is pinned to the configured port.
+- `NEXUS_GATEWAY_PORT=<port>` runs the gateway's operator listener on an
+  alternate port with fully isolated state (`state_dir/gateway-<port>/`), so
+  an agent or test session coexists with the desktop app's instance on one
+  checkout. Such a lane is operator-only: one listener serves the whole
+  runtime and the configured player port (8002) is never bound. A
+  dual-plane lane also sets `NEXUS_PLAYER_PORT=<port>` for its player
+  listener; `NEXUS_PLAYER_PORT` without `NEXUS_GATEWAY_PORT`, or both equal,
+  is refused before anything starts. Fixed-port siblings (the mock provider)
+  always belong to the default instance: an override instance borrows one
+  only when the default state ledger proves the listener is managed (live
+  pidfile on that port, and healthy), skips it loudly when it is not
+  running, and never spawns its own — so the default stack starts cleanly
+  in either order. A foreign listener answering the health path is still
+  refused; a lane port equal to a configured sibling port is rejected at
+  startup. `nexus down` under the override stops only the override
+  instance. The desktop shell never sets either variable — the desktop
+  shell's `runtimeOrigin` is the configured operator port.
 - The gateway keeps the launch lifecycle of the app-managed local model
   and its download worker, and captures both through the same log writer
   under the same `[runtime.logs]` policy: `local-model.log` (llama-server)
@@ -749,16 +775,16 @@ click that is never stored; any status refresh, including a key replacement,
 clears the Verified mark.
 
 A host without a browser uses the same card through an SSH tunnel to its
-loopback gateway (port 8002 by default), not another entry path:
+loopback operator listener (port 8003 by default), not another entry path:
 
 ```
-ssh -N -L 8002:127.0.0.1:8002 <user>@<host>
+ssh -N -L 8003:127.0.0.1:8003 <user>@<host>
 ```
 
-Open `http://127.0.0.1:8002` locally and commit each key in Settings → API
-Keys. If your own machine already serves a gateway on 8002, forward any free
-local port instead (`-L 8012:127.0.0.1:8002`, then open
-`http://127.0.0.1:8012`); the page and its API calls share that origin. The
+Open `http://127.0.0.1:8003` locally and commit each key in Settings → API
+Keys. If your own machine already serves a gateway on 8003, forward any free
+local port instead (`-L 8013:127.0.0.1:8003`, then open
+`http://127.0.0.1:8013`); the page and its API calls share that origin. The
 gateway keeps its `127.0.0.1` bind, the key crosses only the SSH session to
 `PUT /api/secrets/{provider}`, and it lands in the host's platform store, never
 on a command line or in a file on the host.
@@ -766,7 +792,8 @@ on a command line or in a file on the host.
 ## Development Workflows (unchanged)
 
 - `npm --prefix ui run dev` — Vite dev server with HMR on :5001, proxying
-  `/api`, `/ws`, `/health`, and uploads to the gateway on :8002. Start the gateway
+  `/api`, `/ws`, `/health`, and uploads to the gateway's operator listener on
+  :8003. Start the gateway
   with `nexus up` (or point Vite at an `external`-profile stack).
 - `npm --prefix ui run build` — produces `ui/dist/public`, which the
   gateway serves statically. `nexus up` warns if the build is missing.
@@ -780,7 +807,8 @@ The entire integration surface for a macOS/Windows/Linux shell:
 
 1. Run `nexus up` (or link `nexus/runtime/` and call
    `Supervisor.from_config().up()`); the runtime owns its processes.
-2. Point a webview at the gateway origin.
+2. Point a webview at the gateway's operator origin
+   (`http://127.0.0.1:<operator_port>`, 8003 by default).
 3. Poll `GET /runtime/status`; gate the UI on `ok`.
 4. Send `X-Nexus-Auth` on every request (empty locally is fine today).
 5. For an Access-protected remote, resolve and send the configured service

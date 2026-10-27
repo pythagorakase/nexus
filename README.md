@@ -90,10 +90,11 @@ embedded history is ironman.
 Map, Characters, and Settings panes, a status bar, theming, and the
 conversational new-story wizard (setting, character traits, story seed).
 
-One origin serves everything: the FastAPI gateway
-(`nexus.api.narrative:app`, port 8002) owns every API route, the
-`/ws/narrative` websocket, `/runtime/status`, and static serving of the
-built PWA (`ui/dist/public`) plus runtime image uploads. Node is build-time
+One gateway serves everything: the FastAPI app (`nexus.api.narrative:app`)
+owns every API route, the `/ws/narrative` websocket, `/runtime/status`, and
+static serving of the built PWA (`ui/dist/public`) plus runtime image
+uploads, on two listeners from one process: the player plane on port 8002
+and the operator plane (the whole runtime) on `127.0.0.1:8003`. Node is build-time
 only — there is no Express layer. The managed runtime (`nexus up` / `down`
 / `restart` / `status` / `logs`, configured in `nexus.toml` `[runtime]`)
 starts and observes the whole system as one unit; `docs/runtime.md` is the
@@ -116,7 +117,7 @@ poetry run pre-commit install
 python scripts/migrate.py --status
 python scripts/migrate.py --all
 
-# Start the runtime: gateway (port 8002) + enabled services, detached
+# Start the runtime: gateway (player 8002, operator 8003) + enabled services, detached
 nexus up
 nexus status          # health, processes, slot, version
 nexus logs gateway -f # follow the captured gateway log

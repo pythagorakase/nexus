@@ -14,7 +14,7 @@ use std::{
 use tauri::{Manager, WebviewWindow};
 
 const BUNDLED_CONFIG: &str = include_str!("../nexus.desktop.json");
-const DEFAULT_RUNTIME_ORIGIN: &str = "http://127.0.0.1:8002";
+const DEFAULT_RUNTIME_ORIGIN: &str = "http://127.0.0.1:8003";
 const DEFAULT_STATUS_PATH: &str = "/runtime/status";
 const DEFAULT_AUTH_HEADER: &str = "X-Nexus-Auth";
 const DEFAULT_AUTH_TOKEN_ENV: &str = "NEXUS_AUTH";
@@ -717,7 +717,7 @@ mod tests {
     #[test]
     fn desktop_config_defaults_to_runtime_contract() {
         let config = DesktopConfig::default();
-        assert_eq!(config.runtime_origin, "http://127.0.0.1:8002");
+        assert_eq!(config.runtime_origin, "http://127.0.0.1:8003");
         assert_eq!(config.status_path, "/runtime/status");
         assert_eq!(config.auth_header, "X-Nexus-Auth");
         assert_eq!(config.start_args, vec!["--json", "up"]);
@@ -728,13 +728,13 @@ mod tests {
     #[test]
     fn runtime_status_url_normalizes_slashes() {
         let config = DesktopConfig {
-            runtime_origin: "http://127.0.0.1:8002/".to_string(),
+            runtime_origin: "http://127.0.0.1:8003/".to_string(),
             status_path: "runtime/status".to_string(),
             ..DesktopConfig::default()
         };
         assert_eq!(
             runtime_status_url(&config).unwrap(),
-            "http://127.0.0.1:8002/runtime/status"
+            "http://127.0.0.1:8003/runtime/status"
         );
     }
 
