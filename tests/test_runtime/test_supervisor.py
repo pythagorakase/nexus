@@ -235,6 +235,21 @@ def test_gateway_listener_ports_follow_the_lane_contract(
     monkeypatch.setenv("NEXUS_PLAYER_PORT", str(lane_player))
     assert gateway_listener_ports(runtime) == GatewayPorts(lane_player, lane)
 
+    # A lane never takes a configured listener port: the player port is the
+    # tunnel's address, the operator port the default instance's listener.
+    for variable, value, key in (
+        ("NEXUS_GATEWAY_PORT", player, r"\[runtime.services.gateway\].port"),
+        ("NEXUS_GATEWAY_PORT", operator, r"\[runtime.gateway\].operator_port"),
+        ("NEXUS_PLAYER_PORT", player, r"\[runtime.services.gateway\].port"),
+        ("NEXUS_PLAYER_PORT", operator, r"\[runtime.gateway\].operator_port"),
+    ):
+        monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(lane))
+        monkeypatch.setenv("NEXUS_PLAYER_PORT", str(lane_player))
+        monkeypatch.setenv(variable, str(value))
+        with pytest.raises(ValueError, match=f"{variable}={value} is {key}"):
+            gateway_listener_ports(runtime)
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(lane))
+
     # Equal lane ports are refused.
     monkeypatch.setenv("NEXUS_PLAYER_PORT", str(lane))
     with pytest.raises(ValueError, match=f"cannot share port {lane}"):

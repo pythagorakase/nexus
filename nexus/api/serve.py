@@ -26,6 +26,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
+import logging.config
+from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
 from fastapi import FastAPI
@@ -110,6 +113,28 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _configure_logging(log_config: str) -> None:
+    """Apply ``--log-config`` the way ``uvicorn.Config`` does, before the import.
+
+    ``uvicorn.Config`` applies the log config only when it is built, which is
+    after :func:`main` imports the gateway; records the gateway logs while it
+    imports (``nexus.api.static_ui``'s UI mount among them) would otherwise
+    be dropped or reach stderr unformatted. The dispatch mirrors uvicorn
+    0.34's ``Config.configure_logging``: ``.json`` and ``.yaml``/``.yml`` go
+    to ``dictConfig``, anything else to ``fileConfig``. uvicorn re-applies
+    the same file later; the supervisor's mapping keeps existing loggers
+    (``disable_existing_loggers`` is False), so that second pass is harmless.
+    """
+    if log_config.endswith(".json"):
+        logging.config.dictConfig(json.loads(Path(log_config).read_text()))
+    elif log_config.endswith((".yaml", ".yml")):
+        import yaml  # type: ignore[import-untyped]
+
+        logging.config.dictConfig(yaml.safe_load(Path(log_config).read_text()))
+    else:
+        logging.config.fileConfig(log_config, disable_existing_loggers=False)
+
+
 async def _run_server(server: "uvicorn.Server") -> int:
     """Serve until ``server`` stops; return its exit status (0 or nonzero).
 
@@ -163,6 +188,8 @@ def main(argv: Optional[List[str]] = None) -> None:
             f"--port and --operator-port are both {args.port}; the player and "
             "operator listeners need two ports"
         )
+
+    _configure_logging(args.log_config)
 
     import uvicorn
 

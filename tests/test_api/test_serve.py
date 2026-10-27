@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -148,10 +149,13 @@ def _launcher_argv(player: str, operator: int, log_config: Path) -> list[str]:
     ]
 
 
+@pytest.mark.parametrize(
+    "stop_signal", [signal.SIGTERM, signal.SIGINT], ids=lambda sig: sig.name
+)
 def test_launcher_serves_both_planes_and_stops_on_sigterm(
-    tmp_path: Path, spawn: Any
+    tmp_path: Path, spawn: Any, stop_signal: signal.Signals
 ) -> None:
-    """One process, two listeners; SIGTERM closes both and runs one shutdown."""
+    """One process, two listeners; SIGTERM or SIGINT closes both, one shutdown."""
     config = _private_config(tmp_path)
     player, operator = _free_port(), _free_port()
     process, log_path = spawn(
@@ -166,11 +170,22 @@ def test_launcher_serves_both_planes_and_stops_on_sigterm(
     assert settings_on_player.status_code == 404
     assert settings_on_operator.status_code == 200, settings_on_operator.text
 
-    process.send_signal(signal.SIGTERM)
+    process.send_signal(stop_signal)
     process.wait(timeout=STOP_DEADLINE_SECONDS)
+    if stop_signal == signal.SIGINT:
+        # uvicorn re-raises the captured SIGINT after its graceful shutdown;
+        # the launcher takes the KeyboardInterrupt as a clean stop.
+        assert process.returncode == 0, log_path.read_text()
     assert not _port_open(player)
     assert not _port_open(operator)
     output = log_path.read_text()
+    # --log-config applies before the gateway imports, so the UI mount's
+    # import-time record carries the [runtime.logs] format.
+    assert re.search(
+        r" - nexus\.api\.static_ui - "
+        r"(INFO - Serving built PWA from|WARNING - UI build not found)",
+        output,
+    ), output
     # The operator listener ran the gateway's one lifespan; the player ran none.
     assert output.count("Application startup complete.") == 1, output
     assert output.count("Application shutdown complete.") == 1, output

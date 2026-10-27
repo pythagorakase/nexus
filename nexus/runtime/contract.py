@@ -127,8 +127,10 @@ def gateway_listener_ports(runtime: "RuntimeSettings") -> GatewayPorts:
 
     Raises:
         ValueError: An override is malformed, ``NEXUS_PLAYER_PORT`` is set
-            without ``NEXUS_GATEWAY_PORT``, the two ports are equal, or the
-            config has no ``[runtime.services.gateway]``.
+            without ``NEXUS_GATEWAY_PORT``, a lane port equals
+            ``[runtime.services.gateway].port`` or
+            ``[runtime.gateway].operator_port``, the two ports are equal, or
+            the config has no ``[runtime.services.gateway]``.
     """
     gateway = runtime.services.get("gateway")
     if gateway is None:
@@ -149,6 +151,25 @@ def gateway_listener_ports(runtime: "RuntimeSettings") -> GatewayPorts:
             player=gateway.port, operator=runtime.gateway.operator_port
         )
     else:
+        # A lane never takes a configured listener port: the player port is the
+        # tunnel's address, and the operator port belongs to the default
+        # instance, whose state does not live under the lane's directory.
+        configured = (
+            ("[runtime.services.gateway].port", gateway.port),
+            ("[runtime.gateway].operator_port", runtime.gateway.operator_port),
+        )
+        for variable, port in (
+            (GATEWAY_PORT_ENV, lane),
+            (PLAYER_PORT_ENV, player_lane),
+        ):
+            for key, configured_port in configured:
+                if port == configured_port:
+                    raise ValueError(
+                        f"{variable}={port} is {key}, a listener of the default "
+                        f"instance; a lane takes ports that neither "
+                        "[runtime.services.gateway].port nor "
+                        "[runtime.gateway].operator_port names."
+                    )
         ports = GatewayPorts(player=player_lane, operator=lane)
     if ports.player == ports.operator:
         raise ValueError(

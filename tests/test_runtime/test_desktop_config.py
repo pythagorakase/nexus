@@ -183,6 +183,7 @@ def test_shipped_shell_targets_the_operator_listener(
     from nexus.runtime.contract import operator_url
 
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
     shipped = DesktopConfig.model_validate_json((ROOT / RELATIVE_CONFIG).read_text())
     runtime = load_settings(ROOT / "nexus.toml").runtime
     assert runtime is not None

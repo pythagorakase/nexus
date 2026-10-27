@@ -461,7 +461,7 @@ def test_up_refuses_port_held_by_unmanaged_process(tmp_path, held):
         assert "NEXUS_GATEWAY_PORT" in result["error"]
         # The refusal names the key that sets the held listener's port.
         key = (
-            "[runtime.services.gateway] port"
+            "[runtime.services.gateway].port"
             if held == "player"
             else "[runtime.gateway].operator_port"
         )
@@ -472,6 +472,34 @@ def test_up_refuses_port_held_by_unmanaged_process(tmp_path, held):
     finally:
         blocker.close()
         _down(config)
+
+
+@pytest.mark.parametrize("held", ["player", "operator"])
+def test_lane_refusal_names_the_lane_variable_of_the_held_port(tmp_path, held):
+    """In a dual-plane lane the refusal names the variable that set the port."""
+    config = _write_config(tmp_path)
+    lane_env = {
+        "NEXUS_GATEWAY_PORT": str(OVERRIDE_GATEWAY_PORT),
+        "NEXUS_PLAYER_PORT": str(PLAYER_OVERRIDE_PORT),
+    }
+    port = PLAYER_OVERRIDE_PORT if held == "player" else OVERRIDE_GATEWAY_PORT
+    other = OVERRIDE_GATEWAY_PORT if held == "player" else PLAYER_OVERRIDE_PORT
+    variable = "NEXUS_PLAYER_PORT" if held == "player" else "NEXUS_GATEWAY_PORT"
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", port))
+    blocker.listen(1)
+    try:
+        result = _cli("up", config=config, env_extra=lane_env)
+        assert result["_returncode"] == 1, result
+        assert "already in use by an unmanaged process" in result["error"]
+        assert f"Port {port} " in result["error"]
+        assert f"Adjust {variable} or stop" in result["error"]
+        assert not list((tmp_path / "state").rglob("*.pid.json"))
+        assert not _port_open("127.0.0.1", other)
+    finally:
+        blocker.close()
+        _cli("down", config=config, env_extra=lane_env)
 
 
 def test_up_refuses_a_gateway_that_serves_the_wrong_plane(tmp_path):

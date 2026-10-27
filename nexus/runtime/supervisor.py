@@ -673,7 +673,7 @@ class Supervisor:
             return GATEWAY_PORT_ENV if lane else "[runtime.gateway].operator_port"
         if plane == "player" and lane:
             return PLAYER_PORT_ENV
-        return f"[runtime.services.{name}] port"
+        return f"[runtime.services.{name}].port"
 
     def _service_argv(self, service: RuntimeServiceSettings) -> List[str]:
         """Render a service's argv template.

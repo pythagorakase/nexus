@@ -369,6 +369,7 @@ def test_cli_outside_checkout_preserves_local_default(
     monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
     monkeypatch.delenv("NEXUS_API_URL", raising=False)
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
 
     assert cli.get_api_url() == "http://127.0.0.1:8003"
 

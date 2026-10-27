@@ -38,6 +38,7 @@ def test_routing_contract_passes_under_a_basetemp_outside_the_system_temp(
             "PYTEST_DEBUG_TEMPROOT",
             "PYTEST_ADDOPTS",
             "NEXUS_GATEWAY_PORT",
+            "NEXUS_PLAYER_PORT",
             "NEXUS_API_URL",
         }
     }

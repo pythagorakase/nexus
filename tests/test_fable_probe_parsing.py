@@ -552,6 +552,7 @@ def test_probe_lane_refuses_unset_and_play_port(
     """The probe never defaults its lane and never binds an owner runtime port."""
 
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
     with pytest.raises(RuntimeError, match="unset"):
         probe_lane()
     for owner_port in ("8002", "8003"):

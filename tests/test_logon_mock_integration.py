@@ -94,6 +94,7 @@ def mock_openai_server(tmp_path: Path) -> Iterator[str]:
     log_path = tmp_path / "mock_openai.log"
     env = dict(os.environ)
     env.pop("NEXUS_GATEWAY_PORT", None)
+    env.pop("NEXUS_PLAYER_PORT", None)
     env.pop("NEXUS_API_URL", None)
     env["PYTHONPATH"] = str(REPO_ROOT)
     with log_path.open("wb") as log:
