@@ -313,8 +313,8 @@ def assert_saves(
     return saves
 
 
-def assert_one_transition(records: list[dict[str, Any]], level: str) -> None:
-    """Assert one transition, after the last save, carried ``level``."""
+def assert_one_transition(records: list[dict[str, Any]], level: str, path: str) -> None:
+    """Assert one transition on ``path``, after the last save, carried ``level``."""
     transitions = [
         index for index, record in enumerate(records) if record["method"] == "POST"
     ]
@@ -325,6 +325,7 @@ def assert_one_transition(records: list[dict[str, Any]], level: str) -> None:
     )
     assert index > last_save, records
     transition = records[index]
+    assert transition["path"] == path, transition
     assert transition["request"] == {"slot": SLOT, "weird_level": level}, transition
     assert transition["status"] == 200, transition
     assert transition["response"]["retrograde"] == SKIPPED_RETROGRADE, transition
@@ -397,7 +398,7 @@ def test_cli_weird_high_walks_the_wizard_to_the_transition(
                     )
                 records = list(recorder.records)
                 assert_saves(records, ["high"] * calls)
-                assert_one_transition(records, "high")
+                assert_one_transition(records, "high", "/api/story/new/transition")
                 assert_transitioned_clone(dbname, "after transition", reads)
             finally:
                 (evidence / "cli-transcript.txt").write_text("\n".join(transcript))
@@ -556,7 +557,9 @@ def test_browser_glyphs_hold_confirm_and_ride_the_transition(
                     ):
                         page.wait_for_timeout(200)
                     records = list(recorder.records)
-                    assert_one_transition(records, "low")
+                    assert_one_transition(
+                        records, "low", "/api/story/new/transition/overwrite"
+                    )
                     assert_saves(records, ["low", "medium", "high", "low"])
                     assert_transitioned_clone(dbname, "after transition", reads)
                     browser.close()
