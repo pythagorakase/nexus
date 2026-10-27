@@ -128,7 +128,8 @@ def test_offline_tests_run_both_suites_without_local_models() -> None:
 
 
 def test_ui_tests_job_fetches_only_ui_lfs_and_runs_vitest() -> None:
-    """The UI job pulls only the LFS objects under ui/ and runs vitest."""
+    """The UI job pulls only the LFS objects under ui/ and the recorded state-surface
+    evidence, then runs vitest."""
 
     checkout = _checkout("ui-tests")
     assert not (checkout.get("with") or {}).get("lfs", False)
@@ -138,7 +139,9 @@ def test_ui_tests_job_fetches_only_ui_lfs_and_runs_vitest() -> None:
     lfs_commands = [
         line.strip() for run in runs for line in run.splitlines() if "git lfs" in line
     ]
-    assert lfs_commands == ['git lfs pull --include="ui/**"']
+    assert lfs_commands == [
+        'git lfs pull --include="ui/**,docs/qa/777-glyph-first-states/**"'
+    ]
     assert "npm --prefix ui ci" in runs
     assert "npm --prefix ui test" in runs
 

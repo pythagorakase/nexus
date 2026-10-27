@@ -87,9 +87,10 @@ jobs:
         with:
           fetch-depth: 0
       # The state-surface receipt (ui/client/src/state-surfaces.resolved.json)
-      # is an LFS object; fetch only the objects under ui/.
+      # is an LFS object; fetch only the objects under ui/ and the recorded
+      # state-surface evidence (its PNGs) that state-shades.test.ts reads.
       - name: Fetch the UI LFS objects
-        run: git lfs pull --include="ui/**"
+        run: git lfs pull --include="ui/**,docs/qa/777-glyph-first-states/**"
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
