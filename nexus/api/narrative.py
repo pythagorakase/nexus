@@ -25,7 +25,6 @@ from fastapi import (
     BackgroundTasks,
 )
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import psycopg2
@@ -90,6 +89,7 @@ from nexus.api.ui_config_endpoints import router as ui_config_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
 from nexus.api.route_capabilities import (
+    RouteCapabilityError,
     require_classified,
     serving_plane,
     set_serving_plane,
@@ -97,7 +97,6 @@ from nexus.api.route_capabilities import (
 from nexus.api.runtime_status import register_runtime_status
 from nexus.api.static_ui import mount_ui
 from nexus.api.wizard_chat import router as wizard_chat_router
-from nexus.config import get_gateway_cors_allowed_origins
 
 logger = logging.getLogger("nexus.api.narrative")
 
@@ -111,36 +110,56 @@ async def recover_active_choice_on_startup() -> None:
         await asyncio.to_thread(recover_active_slot_choice, get_active_slot())
 
 
+# Marks app.state while gateway_lifespan runs: the gateway app and its
+# projections share one lifespan, and a second run would start a second
+# scheduler for one slot (issue #824).
+_GATEWAY_LIFESPAN_ACTIVE_ATTR = "gateway_lifespan_active"
+
+
 @asynccontextmanager
 async def gateway_lifespan(app: FastAPI):
-    """Recover the active slot and own its deferred-work loop until shutdown."""
+    """Recover the active slot and own its deferred-work loop until shutdown.
+
+    Raises:
+        RouteCapabilityError: The lifespan already runs in this process,
+            whether entered by the gateway app itself or by a projection.
+    """
     from nexus.agents.memnon.utils.artifact_manifest import check_artifacts_at_boot
     from nexus.api.slot_utils import get_active_slot
     from nexus.config.loader import load_settings
     from nexus.config.provider_guard import TEST_PROVIDER_ONLY_ENV
     from nexus.jobs.scheduler import SlotScheduler
 
-    if os.environ.get(TEST_PROVIDER_ONLY_ENV) == "1":
-        logger.info(
-            "Model artifact boot check not run: "
-            "NEXUS_TEST_PROVIDER_ONLY=1 marks a test process"
+    if getattr(app.state, _GATEWAY_LIFESPAN_ACTIVE_ATTR, False):
+        raise RouteCapabilityError(
+            "The gateway lifespan is already running in this process; serve "
+            "the gateway app or one projection, not both"
         )
-    else:
-        summary = await asyncio.to_thread(check_artifacts_at_boot, load_settings())
-        logger.info(summary)
-    scheduler = None
-    if os.environ.get("NEXUS_SLOT") is not None:
-        slot = get_active_slot()
-        await recover_active_choice_on_startup()
-        scheduler = SlotScheduler(slot)
-        await asyncio.to_thread(scheduler.start)
-    app.state.scheduler = scheduler
+    setattr(app.state, _GATEWAY_LIFESPAN_ACTIVE_ATTR, True)
     try:
-        yield
+        if os.environ.get(TEST_PROVIDER_ONLY_ENV) == "1":
+            logger.info(
+                "Model artifact boot check not run: "
+                "NEXUS_TEST_PROVIDER_ONLY=1 marks a test process"
+            )
+        else:
+            summary = await asyncio.to_thread(check_artifacts_at_boot, load_settings())
+            logger.info(summary)
+        scheduler = None
+        if os.environ.get("NEXUS_SLOT") is not None:
+            slot = get_active_slot()
+            await recover_active_choice_on_startup()
+            scheduler = SlotScheduler(slot)
+            await asyncio.to_thread(scheduler.start)
+        app.state.scheduler = scheduler
+        try:
+            yield
+        finally:
+            if scheduler is not None:
+                await asyncio.to_thread(scheduler.stop)
+            app.state.scheduler = None
     finally:
-        if scheduler is not None:
-            await asyncio.to_thread(scheduler.stop)
-        app.state.scheduler = None
+        setattr(app.state, _GATEWAY_LIFESPAN_ACTIVE_ATTR, False)
 
 
 app = FastAPI(title="NEXUS Narrative API", version="1.0.0", lifespan=gateway_lifespan)
@@ -153,16 +172,6 @@ def wake_scheduler(slot: Optional[int]) -> None:
     scheduler = getattr(app.state, "scheduler", None)
     if scheduler is not None and scheduler.slot == (slot or get_active_slot()):
         scheduler.wakeup.set()
-
-
-# Configure credentialed CORS from the validated gateway allowlist.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_gateway_cors_allowed_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 @app.exception_handler(RequestValidationError)
@@ -1764,6 +1773,7 @@ set_serving_plane(app, "operator")
 if __name__ == "__main__":
     import uvicorn
 
+    from nexus.api.serve import build_plane_app
     from nexus.config import load_settings as _load_typed_settings
     from nexus.runtime.logging_config import build_logging_config
 
@@ -1771,15 +1781,20 @@ if __name__ == "__main__":
     if _runtime is None:
         raise RuntimeError("nexus.toml has no [runtime] section for [runtime.logs]")
 
-    # NARRATIVE_API_PORT lets parallel checkouts (agent worktrees, the
-    # golden-path gate) boot the gateway without contending for 8002.
+    # The direct launch serves the operator projection (D-824-DEV-PROXY) on
+    # NARRATIVE_API_PORT, else [runtime.gateway].operator_port, never the
+    # player port 8002. NARRATIVE_API_PORT lets parallel checkouts (agent
+    # worktrees, the golden-path gate) boot the gateway without contending
+    # for the configured port.
     # #415/#458: loopback keeps the Cloudflare tunnel the sole default ingress.
     # #842: direct launches (`python -m nexus.api.narrative`: docs/cli.md and
     # the golden-path gate, whose stage 8 reads this stdout) bypass the
     # supervisor's --log-config argv, so apply the same dictConfig here.
     uvicorn.run(
-        app,
+        build_plane_app(app, "operator"),
         host=os.environ.get("NARRATIVE_API_HOST", "127.0.0.1"),
-        port=int(os.environ.get("NARRATIVE_API_PORT", "8002")),
+        port=int(
+            os.environ.get("NARRATIVE_API_PORT", str(_runtime.gateway.operator_port))
+        ),
         log_config=build_logging_config(_runtime.logs),
     )

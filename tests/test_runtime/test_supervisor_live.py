@@ -1,14 +1,15 @@
 """Real process lifecycle tests for the managed runtime (issue #396).
 
-No mocks: these spawn the actual gateway and mock_openai with uvicorn via the
-real CLI entrypoint, probe real HTTP health, and assert teardown by port and
-pid. Every port is OS-assigned (``ephemeral_ports``), so a developer stack on
-:8002/:5102 is never touched.
+No mocks: these spawn the actual gateway and mock_openai via the real CLI
+entrypoint, probe real HTTP health, and assert teardown by port and pid.
+Every port is OS-assigned (``ephemeral_ports``), so a developer stack on
+:8002, :8003 and :5102 is never touched.
 
 No owner slot is touched either (issue #885). Every gateway serves slot
 ``TEST_SLOT`` routed to one module-scoped disposable template clone: the
-supervisor spawns ``tests.slot_routed_uvicorn`` in place of ``python -m
-uvicorn`` (same argv otherwise), the CLI runs as ``tests.slot_routed_cli`` so
+supervisor spawns ``tests.slot_routed_serve`` in place of ``python -m
+nexus.api.serve`` (same argv otherwise; the external-profile fixture runs
+``tests.slot_routed_uvicorn``), the CLI runs as ``tests.slot_routed_cli`` so
 the supervisor's own ``recover_active_slot_choice`` reaches the clone, and
 ``runtime.default_slot`` in each temporary config is the routed slot, so an
 ``up`` without ``--slot`` resolves to it as well. Each gateway lifespan's
@@ -51,12 +52,16 @@ from tests.pg_fixtures import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Placeholders only: the autouse ephemeral_ports fixture replaces all four with
-# OS-assigned ports before every test.
+# Placeholders only: the autouse ephemeral_ports fixture replaces all six with
+# OS-assigned ports before every test. GATEWAY_PORT is the player listener and
+# OPERATOR_PORT the operator listener of the default instance; the override
+# ports are a lane's NEXUS_GATEWAY_PORT (operator) and NEXUS_PLAYER_PORT.
 GATEWAY_PORT = 0
+OPERATOR_PORT = 0
 MOCK_PORT = 0
 EXTERNAL_GATEWAY_PORT = 0
 OVERRIDE_GATEWAY_PORT = 0
+PLAYER_OVERRIDE_PORT = 0
 # The routed slot number: it resolves to ROUTED_DATABASE, never to an owner
 # save, in every process these tests start.
 TEST_SLOT = 5
@@ -65,18 +70,21 @@ TEST_SLOT = 5
 CONFLICTING_SLOT = 3
 # The disposable clone serving TEST_SLOT; routed_clone sets it before each test.
 ROUTED_DATABASE = ""
-ROUTED_LAUNCHER = "tests.slot_routed_uvicorn"
+ROUTED_LAUNCHER = "tests.slot_routed_serve"
+# The external-profile fixture serves the unprojected app through uvicorn.
+ROUTED_UVICORN = "tests.slot_routed_uvicorn"
 ROUTED_CLI = "tests.slot_routed_cli"
 # The supervisor's own gateway argv template, as nexus.toml ships it.
 GATEWAY_ARGV_TEMPLATE = [
     "{python}",
     "-m",
-    "uvicorn",
-    "nexus.api.narrative:app",
+    "nexus.api.serve",
     "--host",
     "{host}",
     "--port",
     "{port}",
+    "--operator-port",
+    "{operator_port}",
     "--log-config",
     "{log_config}",
 ]
@@ -119,6 +127,22 @@ def _clone_lease_owner() -> str | None:
     return None if row is None else row[0]
 
 
+def _clone_lease_count() -> int:
+    """How many deferred-work scheduler leases the clone holds."""
+    with closing(connect(ROUTED_DATABASE)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM deferred_work_scheduler")
+        row = cur.fetchone()
+    assert row is not None
+    return int(row[0])
+
+
+def _health_plane(port: int) -> str:
+    """The plane a listener's ``/health`` names."""
+    response = requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
+    assert response.status_code == 200, response.text
+    return response.json()["plane"]
+
+
 @pytest.fixture(autouse=True)
 def ephemeral_ports(monkeypatch):
     """Allocate independent ports for real supervisor processes."""
@@ -127,9 +151,11 @@ def ephemeral_ports(monkeypatch):
     with contextlib.ExitStack() as stack:
         for name in (
             "GATEWAY_PORT",
+            "OPERATOR_PORT",
             "MOCK_PORT",
             "EXTERNAL_GATEWAY_PORT",
             "OVERRIDE_GATEWAY_PORT",
+            "PLAYER_OVERRIDE_PORT",
         ):
             sock = stack.enter_context(socket.socket())
             sock.bind(("127.0.0.1", 0))
@@ -162,6 +188,7 @@ def _write_config(
     gateway["command"] = command
     gateway["env"] = _routed_env()
     gateway["port"] = gateway_port
+    doc["runtime"]["gateway"]["operator_port"] = OPERATOR_PORT
     doc["runtime"]["services"]["mock_openai"]["port"] = mock_port
     if include_test_provider:
         doc["global"]["model"]["api_models"]["test"][
@@ -191,6 +218,7 @@ def _cli(
     for name in (
         "NEXUS_API_URL",
         "NEXUS_GATEWAY_PORT",
+        "NEXUS_PLAYER_PORT",
         "NEXUS_SLOT",
         RUNTIME_CONFIG_ENV,
     ):
@@ -239,12 +267,23 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert _pid_alive(gateway_pid)
         # The supervisor spawned the routed launcher with its own argv.
         assert up["services"]["gateway"]["command"][1:3] == ["-m", ROUTED_LAUNCHER]
-        # The gateway's scheduler holds its lease in the clone, not an owner.
+        # The gateway's one scheduler holds its lease in the clone, not an owner.
+        assert _clone_lease_count() == 1
         assert (_clone_lease_owner() or "").startswith(f"gateway:{gateway_pid}:")
 
-        # The gateway answers /health and the aggregate /runtime/status.
-        base = f"http://127.0.0.1:{GATEWAY_PORT}"
-        assert requests.get(f"{base}/health", timeout=5).status_code == 200
+        # One process, two listeners: the player projection on the service
+        # port and the operator projection on the operator port (#824).
+        assert _port_open("127.0.0.1", GATEWAY_PORT)
+        assert _port_open("127.0.0.1", OPERATOR_PORT)
+        assert _health_plane(GATEWAY_PORT) == "player"
+        assert _health_plane(OPERATOR_PORT) == "operator"
+        player = f"http://127.0.0.1:{GATEWAY_PORT}"
+        base = f"http://127.0.0.1:{OPERATOR_PORT}"
+        for path in ("/api/settings", "/runtime/status"):
+            assert requests.get(f"{player}{path}", timeout=5).status_code == 404
+            assert requests.get(f"{base}{path}", timeout=10).status_code == 200
+
+        # The operator listener answers the aggregate /runtime/status.
         status_response = requests.get(f"{base}/runtime/status", timeout=5)
         assert status_response.status_code == 200
         runtime_status = status_response.json()
@@ -262,18 +301,21 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert status["processes"]["gateway"]["state"] == "running"
         assert status["processes"]["gateway"]["pid"] == gateway_pid
         assert status["processes"]["gateway"]["port"] == GATEWAY_PORT
+        assert status["processes"]["gateway"]["operator_port"] == OPERATOR_PORT
         assert status["processes"]["gateway"]["uptime_seconds"] >= 0
         assert status["runtime"]["ok"] is True
         assert status["runtime"]["database"]["dbname"] == ROUTED_DATABASE
 
         # Captured logs are readable through nexus logs; the routed launcher
-        # runs uvicorn's own __main__, so the banner is uvicorn's.
+        # runs nexus.api.serve as __main__, whose two uvicorn servers each log
+        # a "Uvicorn running on" banner, one per listener.
         logs = _cli("logs", "gateway", "-n", "50", config=config)
         assert logs["_returncode"] == 0
-        assert any(
-            f"Uvicorn running on http://127.0.0.1:{GATEWAY_PORT}" in line
-            for line in logs["lines"]
-        )
+        for port in (GATEWAY_PORT, OPERATOR_PORT):
+            assert any(
+                f"Uvicorn running on http://127.0.0.1:{port}" in line
+                for line in logs["lines"]
+            ), port
 
         # A second up refuses while services run.
         again = _cli("up", config=config)
@@ -323,6 +365,7 @@ def test_local_profile_full_lifecycle(tmp_path):
         for pid in (new_pid, mock_pid):
             assert not _pid_alive(pid)
         assert not _port_open("127.0.0.1", GATEWAY_PORT)
+        assert not _port_open("127.0.0.1", OPERATOR_PORT)
         assert not _port_open("127.0.0.1", MOCK_PORT)
         state_dir = tmp_path / "state"
         assert not list(state_dir.glob("*.pid.json"))
@@ -396,31 +439,100 @@ def test_live_gateway_rotates_and_keeps_every_line(tmp_path):
         _down(config)
 
 
-def test_up_refuses_port_held_by_unmanaged_process(tmp_path):
-    """A foreign listener on the gateway port is a hard error, not a takeover."""
+@pytest.mark.parametrize("held", ["player", "operator"])
+def test_up_refuses_port_held_by_unmanaged_process(tmp_path, held):
+    """A foreign listener on either gateway port is a hard error, not a takeover."""
     config = _write_config(tmp_path)
+    port = GATEWAY_PORT if held == "player" else OPERATOR_PORT
+    other = OPERATOR_PORT if held == "player" else GATEWAY_PORT
     blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    blocker.bind(("127.0.0.1", GATEWAY_PORT))
+    blocker.bind(("127.0.0.1", port))
     blocker.listen(1)
     try:
         result = _cli("up", config=config)
         assert result["_returncode"] == 1
         assert "already in use by an unmanaged process" in result["error"]
+        assert f"Port {port} " in result["error"]
         # The refusal identifies the squatter (this pytest process) and
         # points test shells at the isolated-port lane.
         if shutil.which("lsof"):
             assert "Listener: pid=" in result["error"]
         assert "NEXUS_GATEWAY_PORT" in result["error"]
+        # The refusal names the key that sets the held listener's port.
+        key = (
+            "[runtime.services.gateway].port"
+            if held == "player"
+            else "[runtime.gateway].operator_port"
+        )
+        assert f"Adjust {key} or stop" in result["error"]
         state_dir = tmp_path / "state"
         assert not list(state_dir.glob("*.pid.json"))
+        assert not _port_open("127.0.0.1", other)
     finally:
         blocker.close()
         _down(config)
 
 
+@pytest.mark.parametrize("held", ["player", "operator"])
+def test_lane_refusal_names_the_lane_variable_of_the_held_port(tmp_path, held):
+    """In a dual-plane lane the refusal names the variable that set the port."""
+    config = _write_config(tmp_path)
+    lane_env = {
+        "NEXUS_GATEWAY_PORT": str(OVERRIDE_GATEWAY_PORT),
+        "NEXUS_PLAYER_PORT": str(PLAYER_OVERRIDE_PORT),
+    }
+    port = PLAYER_OVERRIDE_PORT if held == "player" else OVERRIDE_GATEWAY_PORT
+    other = OVERRIDE_GATEWAY_PORT if held == "player" else PLAYER_OVERRIDE_PORT
+    variable = "NEXUS_PLAYER_PORT" if held == "player" else "NEXUS_GATEWAY_PORT"
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", port))
+    blocker.listen(1)
+    try:
+        result = _cli("up", config=config, env_extra=lane_env)
+        assert result["_returncode"] == 1, result
+        assert "already in use by an unmanaged process" in result["error"]
+        assert f"Port {port} " in result["error"]
+        assert f"Adjust {variable} or stop" in result["error"]
+        assert not list((tmp_path / "state").rglob("*.pid.json"))
+        assert not _port_open("127.0.0.1", other)
+    finally:
+        blocker.close()
+        _cli("down", config=config, env_extra=lane_env)
+
+
+def test_up_refuses_a_gateway_that_serves_the_wrong_plane(tmp_path):
+    """A pre-#824 single-listener argv answers 'operator' on the player port."""
+    config = _write_config(tmp_path)
+    doc: Any = tomlkit.parse(config.read_text())
+    # The old argv: the unprojected app, every route, on the service port.
+    doc["runtime"]["services"]["gateway"]["command"] = [
+        "{python}",
+        "-m",
+        ROUTED_UVICORN,
+        "nexus.api.narrative:app",
+        "--host",
+        "{host}",
+        "--port",
+        "{port}",
+        "--log-config",
+        "{log_config}",
+    ]
+    config.write_text(tomlkit.dumps(doc))
+    try:
+        result = _cli("up", config=config)
+        assert result["_returncode"] == 1, result
+        assert "as plane 'operator', not 'player'" in result["error"]
+        assert not (tmp_path / "state" / "gateway.pid.json").exists()
+        assert not _port_open("127.0.0.1", GATEWAY_PORT)
+        assert not _port_open("127.0.0.1", OPERATOR_PORT)
+    finally:
+        _down(config)
+
+
 def test_gateway_port_override_coexists_with_default_instance(tmp_path):
-    """NEXUS_GATEWAY_PORT runs an isolated-state gateway beside the default."""
+    """NEXUS_GATEWAY_PORT runs an operator-only, isolated-state gateway lane."""
     config = _write_config(tmp_path)
     override_env = {"NEXUS_GATEWAY_PORT": str(OVERRIDE_GATEWAY_PORT)}
     try:
@@ -428,34 +540,109 @@ def test_gateway_port_override_coexists_with_default_instance(tmp_path):
         assert base["_returncode"] == 0
 
         result = _cli("up", config=config, env_extra=override_env)
-        assert result["_returncode"] == 0
-        assert result["services"]["gateway"]["port"] == OVERRIDE_GATEWAY_PORT
+        assert result["_returncode"] == 0, result
+        # The lane opens one listener, the operator projection, on its port;
+        # its record names no player port.
+        lane = result["services"]["gateway"]
+        assert lane["port"] is None
+        assert lane["operator_port"] == OVERRIDE_GATEWAY_PORT
+        assert lane["command"][lane["command"].index("--port") + 1] == "off"
         # The fixed-port sibling is borrowed from the default instance, not
         # respawned and not refused.
         assert result["services"]["mock_openai"].get("attached") is True
         assert _port_open("127.0.0.1", OVERRIDE_GATEWAY_PORT)
+        assert _health_plane(OVERRIDE_GATEWAY_PORT) == "operator"
         assert _port_open("127.0.0.1", GATEWAY_PORT)
+        assert _port_open("127.0.0.1", OPERATOR_PORT)
 
         # Isolated state: each instance keeps its own pidfiles.
         override_state = tmp_path / "state" / f"gateway-{OVERRIDE_GATEWAY_PORT}"
-        assert (override_state / "gateway.pid.json").exists()
+        record = json.loads((override_state / "gateway.pid.json").read_text())
+        assert record["port"] is None
+        assert record["operator_port"] == OVERRIDE_GATEWAY_PORT
         assert (tmp_path / "state" / "gateway.pid.json").exists()
 
-        # The override instance reports the port actually serving requests.
+        # The supervisor's running entry carries the same ports.
+        running = _cli("status", config=config, env_extra=override_env)
+        entry = running["processes"]["gateway"]
+        assert entry["state"] == "running"
+        assert entry["port"] is None
+        assert entry["operator_port"] == OVERRIDE_GATEWAY_PORT
+        assert running["gateway_url"] == f"http://127.0.0.1:{OVERRIDE_GATEWAY_PORT}"
+
+        # The override instance reports its operator listener; its player
+        # port stays the configured service port, which it never binds.
         status = requests.get(
             f"http://127.0.0.1:{OVERRIDE_GATEWAY_PORT}/runtime/status",
             timeout=10,
         ).json()
-        assert status["services"]["gateway"]["port"] == OVERRIDE_GATEWAY_PORT
+        assert status["services"]["gateway"]["operator_port"] == OVERRIDE_GATEWAY_PORT
+        assert status["services"]["gateway"]["port"] == GATEWAY_PORT
 
         # Downing the override instance leaves the default stack running.
         down = _cli("down", config=config, env_extra=override_env)
         assert set(down["stopped"]) == {"gateway"}
         assert not _port_open("127.0.0.1", OVERRIDE_GATEWAY_PORT)
         assert _port_open("127.0.0.1", GATEWAY_PORT)
+        assert _port_open("127.0.0.1", OPERATOR_PORT)
         assert _port_open("127.0.0.1", MOCK_PORT)
+
+        # The stopped lane entry still names its ports.
+        stopped = _cli("status", config=config, env_extra=override_env)
+        entry = stopped["processes"]["gateway"]
+        assert entry["state"] == "stopped"
+        assert entry["port"] is None
+        assert entry["operator_port"] == OVERRIDE_GATEWAY_PORT
     finally:
         _cli("down", config=config, env_extra=override_env)
+        _down(config)
+
+
+def test_dual_plane_lane_opens_both_listeners(tmp_path):
+    """NEXUS_PLAYER_PORT gives a lane its player listener beside its operator."""
+    config = _write_config(tmp_path)
+    lane_env = {
+        "NEXUS_GATEWAY_PORT": str(OVERRIDE_GATEWAY_PORT),
+        "NEXUS_PLAYER_PORT": str(PLAYER_OVERRIDE_PORT),
+    }
+    try:
+        result = _cli("up", config=config, env_extra=lane_env)
+        assert result["_returncode"] == 0, result
+        gateway = result["services"]["gateway"]
+        assert gateway["port"] == PLAYER_OVERRIDE_PORT
+        assert gateway["operator_port"] == OVERRIDE_GATEWAY_PORT
+        assert _health_plane(PLAYER_OVERRIDE_PORT) == "player"
+        assert _health_plane(OVERRIDE_GATEWAY_PORT) == "operator"
+        player = f"http://127.0.0.1:{PLAYER_OVERRIDE_PORT}"
+        operator = f"http://127.0.0.1:{OVERRIDE_GATEWAY_PORT}"
+        assert requests.get(f"{player}/api/settings", timeout=5).status_code == 404
+        assert requests.get(f"{operator}/api/settings", timeout=10).status_code == 200
+        # The lane never binds the configured listeners.
+        assert not _port_open("127.0.0.1", GATEWAY_PORT)
+        assert not _port_open("127.0.0.1", OPERATOR_PORT)
+
+        down = _cli("down", config=config, env_extra=lane_env)
+        assert down["_returncode"] == 0, down
+        assert set(down["stopped"]) == {"gateway"}
+        assert not _port_open("127.0.0.1", PLAYER_OVERRIDE_PORT)
+        assert not _port_open("127.0.0.1", OVERRIDE_GATEWAY_PORT)
+    finally:
+        _cli("down", config=config, env_extra=lane_env)
+
+
+def test_player_port_override_requires_gateway_port(tmp_path):
+    """NEXUS_PLAYER_PORT alone is refused: it binds nothing and writes no state."""
+    config = _write_config(tmp_path)
+    env = {"NEXUS_PLAYER_PORT": str(PLAYER_OVERRIDE_PORT)}
+    try:
+        result = _cli("up", config=config, env_extra=env)
+        assert result["_returncode"] != 0, result
+        assert "NEXUS_PLAYER_PORT" in result["error"]
+        assert "NEXUS_GATEWAY_PORT" in result["error"]
+        for port in (PLAYER_OVERRIDE_PORT, GATEWAY_PORT, OPERATOR_PORT, MOCK_PORT):
+            assert not _port_open("127.0.0.1", port), port
+        assert not (tmp_path / "state").exists()
+    finally:
         _down(config)
 
 
@@ -559,7 +746,7 @@ def external_gateway(tmp_path_factory):
     external_dir = tmp_path_factory.mktemp("external")
     config = _write_config(external_dir, gateway_port=EXTERNAL_GATEWAY_PORT)
     env = dict(os.environ)
-    for name in ("NEXUS_API_URL", "NEXUS_GATEWAY_PORT"):
+    for name in ("NEXUS_API_URL", "NEXUS_GATEWAY_PORT", "NEXUS_PLAYER_PORT"):
         env.pop(name, None)
     env["PYTHONPATH"] = str(REPO_ROOT)
     env["NEXUS_SLOT"] = str(TEST_SLOT)
@@ -571,7 +758,7 @@ def external_gateway(tmp_path_factory):
             [
                 sys.executable,
                 "-m",
-                ROUTED_LAUNCHER,
+                ROUTED_UVICORN,
                 "nexus.api.narrative:app",
                 "--host",
                 "127.0.0.1",

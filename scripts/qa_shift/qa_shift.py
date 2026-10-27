@@ -171,8 +171,10 @@ def load_shift_config(path: Path = DEFAULT_CONFIG_PATH) -> ShiftConfig:
         raise ShiftError("slot must be one of the disposable slots 2-5")
     if not 1024 <= config.gateway_port <= 65535:
         raise ShiftError("gateway_port must be between 1024 and 65535")
-    if config.gateway_port == 8002:
-        raise ShiftError("gateway_port 8002 is the normal runtime, not a QA lane")
+    if config.gateway_port in (8002, 8003):
+        raise ShiftError(
+            f"gateway_port {config.gateway_port} is the normal runtime, not a QA lane"
+        )
     for field_name in (
         "issue_budget",
         "minimum_probe_families",

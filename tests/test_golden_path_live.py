@@ -102,9 +102,22 @@ ROUTED_SLOT = 4
 # The clone of the active run; empty outside the golden_path fixture, so a
 # query can never resolve an owner database.
 _RUN_DATABASE: List[str] = []
-# NARRATIVE_API_PORT lets the gate run beside a live dev stack on 8002
-# (agent worktrees); the spawned server subprocess inherits it via env.
-API = f"http://localhost:{os.environ.get('NARRATIVE_API_PORT', '8002')}"
+# NARRATIVE_API_PORT lets the gate run beside a live stack (agent worktrees);
+# the spawned server subprocess inherits it via env. Without it, the gate and
+# its child use the configured operator port ([runtime.gateway].operator_port).
+
+
+def _default_api_port() -> int:
+    """The configured operator port the gate's gateway child binds by default."""
+    from nexus.config import load_settings
+
+    runtime = load_settings().runtime
+    if runtime is None:
+        raise RuntimeError("nexus.toml has no [runtime] section for the gate's port")
+    return runtime.gateway.operator_port
+
+
+API = f"http://localhost:{os.environ.get('NARRATIVE_API_PORT') or _default_api_port()}"
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_path_wizard_cache.json"
 MODEL_OVERRIDE_ENV = "NEXUS_GOLDEN_MODEL_REF"
 RUNTIME_CONFIG_ENV = "NEXUS_RUNTIME_CONFIG"
@@ -531,7 +544,7 @@ def golden_path(tmp_path_factory: pytest.TempPathFactory) -> Any:
     try:
         usage_dir = _configure_run_config(tmp_path_factory)
 
-        api_port = int(os.environ.get("NARRATIVE_API_PORT", "8002"))
+        api_port = int(os.environ.get("NARRATIVE_API_PORT") or _default_api_port())
         if not _port_free(api_port):
             raise RuntimeError(
                 f"Port {api_port} is occupied; stop the running NEXUS API server "

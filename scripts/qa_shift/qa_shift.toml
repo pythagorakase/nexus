@@ -1,7 +1,7 @@
 # Available read-only clock_contract family: PYTHONPATH=$PWD "$PY" scripts/qa_shift/clock_contract.py --slot 4
 [shift]
 # Slot 4 and port 8012 are the disposable QA lane. Never point this utility at
-# the normal port-8002 runtime.
+# the normal runtime on ports 8002 and 8003.
 slot = 4
 gateway_port = 8012
 target_model = "gpt-5.6-terra" # pin: complimentary QA model group

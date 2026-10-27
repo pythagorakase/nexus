@@ -105,8 +105,9 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     // Dev-only server: HMR client served by Vite, everything else proxied
-    // to the FastAPI gateway (the single origin in production). APP_PORT
-    // and NARRATIVE_API_PORT/NARRATIVE_API_URL match the gateway launcher.
+    // to the gateway's operator listener (127.0.0.1:8003, the whole runtime;
+    // #824). APP_PORT and NARRATIVE_API_PORT/NARRATIVE_API_URL match the
+    // gateway's direct launch (`python -m nexus.api.narrative`).
     port: parseInt(process.env.APP_PORT ?? "5001", 10),
     strictPort: true,
     fs: {
@@ -116,7 +117,7 @@ export default defineConfig({
     proxy: (() => {
       const gateway =
         process.env.NARRATIVE_API_URL ??
-        `http://localhost:${process.env.NARRATIVE_API_PORT ?? "8002"}`;
+        `http://localhost:${process.env.NARRATIVE_API_PORT ?? "8003"}`;
       return {
         '/api': { target: gateway, changeOrigin: true },
         '/ws': { target: gateway, ws: true, changeOrigin: true },

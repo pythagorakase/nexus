@@ -35,9 +35,11 @@ counts so its findings appear before it is committed. The prompt-prose lint in
 `tests/test_prompt_lint.py` scans the same view. A directory without `.git` has no ignore
 rules, so every file on disk is scanned there.
 
-- **Production:** exact CLI symbols from `[project.scripts]` in `pyproject.toml`, and exact
-  ASGI symbols in the configured Python/uvicorn runtime service commands in `nexus.toml`.
-  Unknown Python service command forms fail instead of silently acquiring a broad root.
+- **Production:** exact CLI symbols from `[project.scripts]` in `pyproject.toml`, exact
+  ASGI symbols in the configured `{python} -m uvicorn` runtime service commands in
+  `nexus.toml`, and the exact `main` symbol of a `{python} -m <module>` launcher command
+  (the gateway's `nexus.api.serve:main`). Unknown Python service command forms fail
+  instead of silently acquiring a broad root.
 - **Operators:** the explicit `path:symbol` inventory in `config/reachability.toml`, each
   with a concrete supported workflow as its reason. A file named `scripts/*.py` or a
   function called `main` alone supplies no operator authority.

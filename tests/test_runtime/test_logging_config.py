@@ -362,6 +362,7 @@ def test_supervised_uvicorn_applies_log_config_and_filters_access_noise(
 ) -> None:
     """uvicorn --log-config {log_config}: one format, noise out, failures in."""
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
     lines = _serve_probe(
         tmp_path,
         "INFO",
@@ -403,6 +404,7 @@ def test_supervised_uvicorn_keeps_access_records_above_info_level(
     still honour WARNING, so their INFO records are gone.
     """
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
     lines = _serve_probe(
         tmp_path,
         "WARNING",
@@ -435,6 +437,7 @@ def test_supervised_uvicorn_websocket_upgrade_keeps_the_access_log_clean(
     ordinary access record. Either way the filter never sees another shape.
     """
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.delenv("NEXUS_PLAYER_PORT", raising=False)
     websocket_library = any(
         importlib.util.find_spec(name) is not None for name in ("websockets", "wsproto")
     )

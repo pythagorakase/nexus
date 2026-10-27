@@ -193,6 +193,7 @@
     "nexus/api/runtime_status.py",
     "nexus/api/save_slots.py",
     "nexus/api/secrets_endpoints.py",
+    "nexus/api/serve.py",
     "nexus/api/settings_endpoints.py",
     "nexus/api/setup_endpoints.py",
     "nexus/api/slot_endpoints.py",

@@ -16,8 +16,8 @@ Every command that `nexus.cli.build_parser()` registers, with its arguments and 
 
 | Transport | Opens | Commands |
 | --- | --- | --- |
-| `http` | The NEXUS API only | `inspect slot`, `inspect chunks`, `inspect chunk`, `inspect incubator`, `inspect characters`, `inspect places`, `inspect factions`, `load`, `continue`, `retry`, `accept`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `model --set`, `model --clear` |
-| `operator_api` | The NEXUS API's operator routes on this machine | `inspect settings`, `inspect secrets` |
+| `http` | The NEXUS API only | `inspect slot`, `inspect chunks`, `inspect chunk`, `inspect incubator`, `inspect characters`, `inspect places`, `inspect factions`, `load`, `continue`, `retry`, `accept`, `undo`, `regenerate` |
+| `operator_api` | The NEXUS API's operator routes on this machine | `inspect settings`, `inspect secrets`, `clear`, `lock`, `unlock`, `model --set`, `model --clear` |
 | `database` | A slot database directly | `jobs`, `inspect-turn`, `prune-manifests`, `tags audit`, `model`, `trait-audit`, `retrograde-packet`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, `faction-manifest`, `faction-apply`, `character-manifest`, `character-apply`, `place-manifest`, `place-apply`, `retrograde-seed-candidates --slot` |
 | `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `init`, `usage`, `receipts`, `window-replay`, `models lock`, `models verify`, `models plan`, `models fetch`, `retrograde-seed-candidates`, `retrograde-expand-seeds`, `backfill-review-packet`, `model --list` |
 
@@ -377,7 +377,7 @@ Transport: `http`.
 
 Get or set model for a slot.
 
-Transport: `database`. With `--list`: `local_operator`. With `--set`: `http`. With `--clear`: `http`.
+Transport: `database`. With `--list`: `local_operator`. With `--set`: `operator_api`. With `--clear`: `operator_api`.
 
 | Argument | Takes | Default | Description |
 | --- | --- | --- | --- |
@@ -438,7 +438,7 @@ Transport: `local_operator`.
 
 Clear a slot (reset wizard state).
 
-Transport: `http`.
+Transport: `operator_api`.
 
 | Argument | Takes | Default | Description |
 | --- | --- | --- | --- |
@@ -648,7 +648,7 @@ Transport: `local_operator`.
 
 Lock a slot to prevent modifications.
 
-Transport: `http`.
+Transport: `operator_api`.
 
 | Argument | Takes | Default | Description |
 | --- | --- | --- | --- |
@@ -658,7 +658,7 @@ Transport: `http`.
 
 Unlock a slot to allow modifications.
 
-Transport: `http`.
+Transport: `operator_api`.
 
 | Argument | Takes | Default | Description |
 | --- | --- | --- | --- |
