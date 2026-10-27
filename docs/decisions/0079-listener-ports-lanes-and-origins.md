@@ -4,7 +4,7 @@ sources:
   - nexus.toml
   - nexus/config/settings_models.py
   - docs/runtime.md
-verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
+verified_commit: "70a1ff95104eb89c4362993e7889021deef72723"
 ---
 
 # 0079: Listener Ports, Lanes and Origins
