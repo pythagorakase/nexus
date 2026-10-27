@@ -66,6 +66,22 @@ this branch's own work, no `nexus.toml` change, no `ui/` change.
   turn that ends the run; `summary.md` adds "Fable Calls Beyond CALL_CAP by
   Seat" (the seats of the Fable calls after the 30th, in ledger time order);
   the stop-reason sentinel check captures INFO and above on every logger.
+- Second review fixes (`35810782`): the probe's `stop_reason` starts as
+  `aborted`; a `for ... else` sets `completed` only when the turn loop ends
+  without a break, and an exception during setup or a turn records
+  `aborted:<ExceptionClass>` before it propagates, so `summary.md` never
+  reports `completed` for a run that did not finish its loop. The "Fable
+  Calls Beyond CALL_CAP by Seat" list sorts by the parsed `ts`
+  (`key=_parse_ts`), not the raw string, so a whole-second stamp
+  (`...:05Z`) sorts before the fractional stamps of that second.
+  `test_join_and_verdict` adds a two-seat case (Gaia twice, the writer
+  once; log lines in a different order from the ledger) that asserts each
+  rejected record's seat, transport, block types and error class come from
+  that seat's own lines in order; a seat-blind global pairing, tried as a
+  scratch mutation, fails it (`(3, 'gaia', 'native', 'thinking,text',
+  'validation') != (3, 'gaia', 'prompted', 'thinking', 'empty_prompted')`).
+  `test_write_evidence_writes_every_file` adds an aborted run whose
+  `summary.md` reads `aborted:RuntimeError` with 0 of 12 turns.
 - `AGENTS.md`, `docs/turn_flow_sequence.md`: `verified_commit` moved to the
   merge base `9a0714d7671457d47f91bfbd76749fee4444c686`, then, after the
   second merge, to `b0e9cb77af52a22673113b4910d027cd189cf281`; the repair
@@ -277,6 +293,54 @@ receipt isolation: checkout and user receipts untouched
 1910 passed, 1547 skipped, 7 warnings in 44.63s
 ```
 
+`$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
+`OK: exception disposition coverage and shrink-only baseline verified.`
+`$PY scripts/check_model_drift.py`: `OK: no model-ID drift detected.`
+
+## Second Review-Fix Runs (at `35810782`)
+
+`nice -n 15 $PY -m pytest -q tests/test_native_structured_output.py tests/test_fable_probe_parsing.py tests/test_owner_target_guard.py`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+221 passed, 5 warnings in 6.99s
+```
+
+`nice -n 15 $PY -m pytest -q tests/test_reachability.py tests/test_doc_front_matter.py tests/test_runtime/test_log_redaction.py`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+153 passed, 1 skipped, 5 warnings in 18.95s
+```
+
+`NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 nice -n 15 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_fable_structured_output_live.py`
+(`NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT` unset; one-minute load 11.03)
+
+```
+dbname audit: owner targets: none
+SKIPPED [1] tests/test_fable_structured_output_live.py: Set NEXUS_845_PROBE=1 to run the paid #845 Fable probe.
+1 skipped in 0.03s
+```
+
+`nice -n 15 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+3285 passed, 702 skipped, 8 warnings in 662.58s (0:11:02)
+```
+
+`nice -n 15 $PY -m pytest -q tests/test_api tests/test_orrery`
+
+```
+1910 passed, 1547 skipped, 7 warnings in 44.87s
+```
+
+Black on the two changed test files: `2 files would be left unchanged.`
+flake8 on them: no output. mypy `--explicit-package-bases` on them:
+`Success: no issues found in 2 source files`.
 `$PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`:
 `OK: exception disposition coverage and shrink-only baseline verified.`
 `$PY scripts/check_model_drift.py`: `OK: no model-ID drift detected.`
