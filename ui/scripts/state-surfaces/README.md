@@ -127,14 +127,14 @@ enter an acceptance receipt or redefine the expected state at a narrow width.
 The inventory holds reachable states only. Hovered glyphs in sidebar row-hover contexts, absent
 keys in required rows, missing keys in optional rows, and the absent/missing
 pair without a shared context are excluded and documented in the evidence.
-The focus-visible-with-tooltip-open delete variant is unmeasured. Since #1102,
-moving focus within the row keeps the tooltip open; Escape and ancestor
-scrolling retain Radix's dismissal behavior. The focus trace makes the row
-fully visible and settles scrolling while the preceding family toggle has
-focus, then uses real Tab and one reading at each focus position. It proves
-focus transitions in a stationary viewport only. Natural Tab auto-scroll is
-ancestor scrolling, so it still dismisses the tooltip. The oracle still
-measures the dismissed state.
+The focus-visible-with-tooltip-open delete variant is unmeasured.
+Since #1102, the exceeds-RAM row's tooltip is open whenever keyboard focus
+is within the row, including through natural Tab auto-scroll; Escape
+dismisses it until focus leaves the row. The focus trace uses natural Tab
+from the body, asserts that the Tab onto the row scrolled the settings
+scroller, and takes one reading each at the row, the trash and outside the
+row. The oracle presses Escape in the focus-visible delete context, so it
+still measures the dismissed state.
 Before #1102, Radix row focus/blur made that
 variant nondeterministic; across the 114 varying samples in the two
 regenerations compared at `61fb421c`, its painted-core effect was at most
