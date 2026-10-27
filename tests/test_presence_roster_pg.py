@@ -932,7 +932,11 @@ def test_identity_frontier_location_narrows_without_resolving(roster_database):
             ),
         )
     assert [c.id for c in caught.value.candidates] == [ids["Remote Friend"]]
-    assert "Hall" in caught.value.reason
+    # The summary and the frontier location (Hall) are the two evidence values;
+    # their text goes to DEBUG, not into the reason (#842).
+    assert (
+        caught.value.reason == "partial or fuzzy name match; 2 declared evidence values"
+    )
 
 
 def test_identity_batch_fuzzy_collision_blocks_before_staging(roster_database):

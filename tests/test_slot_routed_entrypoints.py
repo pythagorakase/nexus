@@ -34,6 +34,7 @@ import requests  # type: ignore[import-untyped]
 import tomlkit
 
 from nexus.api import slot_utils
+from nexus.cli_contract import RESULT_ENVELOPE_COMMANDS
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime.supervisor import _port_open
 from tests.pg_fixtures import (
@@ -325,6 +326,11 @@ def _spy_cli(*args: str, clone: str, spy_log: Path) -> dict:
         timeout=180,
     )
     payload = json.loads(completed.stdout or completed.stderr)
+    command = " ".join(args[:2]) if args[0] == "models" else args[0]
+    if completed.returncode == 0 and command in RESULT_ENVELOPE_COMMANDS:
+        # The runtime family prints {ok, data} (ruling 43 on #815).
+        assert payload.get("ok") is True, payload
+        payload = dict(payload["data"])
     payload["_returncode"] = completed.returncode
     return payload
 

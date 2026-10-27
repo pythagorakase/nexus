@@ -1020,7 +1020,8 @@ async def continue_narrative(
         else:
             logger.info("Starting narrative continuation for chunk %s", parent_chunk_id)
         logger.info("Session ID: %s", session_id)
-        logger.info("User text: %s...", resolved_user_text[:100])
+        logger.info("User text: %d chars", len(resolved_user_text))
+        logger.debug("User text: %s...", resolved_user_text[:100])
 
         await manager.send_progress(
             session_id,

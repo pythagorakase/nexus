@@ -422,11 +422,13 @@ def test_repeats_compact_to_one_group(seam: Path, tmp_path: Path) -> None:
 
     completed = _run_cli("receipts", "--json")
     assert completed.returncode == 0, completed.stderr
-    document = json.loads(completed.stdout)
-    assert document == {
-        "home_dir": str(seam / "home"),
-        "fallback_dir": str(seam / "fallback"),
-        "groups": [group.model_dump(mode="json") for group in groups],
+    assert json.loads(completed.stdout) == {
+        "ok": True,
+        "data": {
+            "home_dir": str(seam / "home"),
+            "fallback_dir": str(seam / "fallback"),
+            "groups": [group.model_dump(mode="json") for group in groups],
+        },
     }
 
     text = _run_cli("receipts")
@@ -547,7 +549,9 @@ def test_home_equal_to_user_home_reads_each_receipt_once(
     completed = _run_cli("receipts", "--json")
 
     assert completed.returncode == 0, completed.stderr
-    document = json.loads(completed.stdout)
+    envelope = json.loads(completed.stdout)
+    assert envelope["ok"] is True
+    document = envelope["data"]
     assert Path(document["home_dir"]).resolve() == receipts
     assert Path(document["fallback_dir"]).resolve() == receipts
     assert len(document["groups"]) == 1

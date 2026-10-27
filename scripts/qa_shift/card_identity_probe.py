@@ -437,6 +437,29 @@ def replay() -> None:
     )
 
 
+def serve_gateway() -> None:
+    """Serve the gateway in-process on this probe's lane (#842).
+
+    The supervisor's ``--log-config`` argv never reaches this launch, so it
+    applies the dictConfig built from ``[runtime.logs]``, as the gateway's
+    direct launch does (``nexus/api/narrative.py``).
+    """
+    import uvicorn
+
+    from nexus.config import load_settings
+    from nexus.runtime.logging_config import build_logging_config
+
+    runtime = load_settings().runtime
+    if runtime is None:
+        raise RuntimeError("nexus.toml has no [runtime] section for [runtime.logs]")
+    uvicorn.run(
+        "nexus.api.narrative:app",
+        host="127.0.0.1",
+        port=8015,
+        log_config=build_logging_config(runtime.logs),
+    )
+
+
 def main() -> None:
     """Run the fixed clone, supervisor, or gateway stage of the order."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -534,11 +557,7 @@ def main() -> None:
         print(json.dumps(supervisor.up(slot=4), default=str))
     else:
         install_capture()
-        import uvicorn
-
-        # The app import configured this inside uvicorn.run until #1037.
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-        uvicorn.run("nexus.api.narrative:app", host="127.0.0.1", port=8015)
+        serve_gateway()
 
 
 if __name__ == "__main__":

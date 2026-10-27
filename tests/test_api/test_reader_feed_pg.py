@@ -195,7 +195,8 @@ def test_feed_episode_boundaries_use_global_playable_predecessors(
             if index == 4:
                 _prologue(dbname)
             if None in pair:
-                # Helper formats integer slugs; only this nullable case needs SQL.
+                # seed_committed_chunk types season and episode as int; only this
+                # nullable case needs SQL.
                 with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
                     cur.execute(
                         "INSERT INTO narrative_chunks (raw_text) "

@@ -33,7 +33,7 @@ python -m ir_eval.runner --db-url postgresql://pythagor@localhost/NEXUS create-r
   --top-k 10
 ```
 
-`--model` names the production `[memnon.models]` entry or an `[ir_eval.embedding_candidates]` entry, and `--reranker` names an `[ir_eval.reranker_candidates]` entry (the production reranker when omitted); `create-run` resolves both before it writes the run.
+`--model` names the production `[memnon.models]` entry or an `[ir_eval.embedding_candidates]` entry, and `--reranker` names an `[ir_eval.reranker_candidates]` entry (the production reranker when omitted); `create-run` resolves both before it writes the run. The `--model NAME:WEIGHT` weights are the run's own: runtime configuration carries no ensemble weight, and only an ir_eval run combines several embedders (Decision 812-Q4a).
 
 Create a new run after the runtime/candidate registry split. Pre-split snapshots
 contain the full model registry and lack the resolved reranker identity; replay

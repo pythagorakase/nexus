@@ -45,7 +45,6 @@ def probe(local_path):
                 "local_path": local_path,
                 "remote_path": "example-org/probe-embedder",
                 "dimensions": 8,
-                "weight": 1.0,
             }
         }
     }
@@ -120,7 +119,7 @@ def test_missing_or_unloadable_local_artifact_raises_without_network(
 
 
 def _manager_settings(**model: Any) -> Dict[str, Any]:
-    return {"models": {"probe-embedder": {"weight": 1.0, "dimensions": 8, **model}}}
+    return {"models": {"probe-embedder": {"dimensions": 8, **model}}}
 
 
 def test_local_path_that_is_a_file_raises(tmp_path: Path) -> None:
@@ -181,7 +180,6 @@ def _config_with_runtime_entries(
         entry["is_active"] = True
         entry["local_path"] = str(tmp_path / name)
         entry["dimensions"] = int(production["dimensions"])
-        entry["weight"] = 1.0
         memnon["models"][name] = entry
     path = tmp_path / "nexus.toml"
     path.write_text(tomlkit.dumps(document))
@@ -193,6 +191,26 @@ def test_repository_config_declares_one_active_embedder() -> None:
 
     models = load_settings(REPO_ROOT / "nexus.toml").memnon.models
     assert sum(model.is_active for model in models.values()) == 1
+
+
+def test_runtime_embedder_rejects_weight(tmp_path: Path) -> None:
+    """Runtime config carries no ensemble weight (Decision 812-Q4a).
+
+    Only an ir_eval run combines embedders, by its own ``--model NAME:WEIGHT``
+    weights, so a ``weight`` key on the runtime entry fails at load.
+    """
+
+    document = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    memnon: Any = document["memnon"]
+    name = _production_embedder()
+    memnon["models"][name]["weight"] = 1.0
+    path = tmp_path / "nexus.toml"
+    path.write_text(tomlkit.dumps(document))
+
+    with pytest.raises(ValidationError) as raised:
+        load_settings(path)
+    errors = [(error["loc"], error["type"]) for error in raised.value.errors()]
+    assert errors == [(("memnon", "models", name, "weight"), "extra_forbidden")]
 
 
 def test_settings_reject_zero_active_embedders(tmp_path: Path) -> None:

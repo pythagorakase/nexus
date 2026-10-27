@@ -1,0 +1,33 @@
+# Round 2 red: the two changed tests against f827f8d3's artifact_manifest.py (the branch before d875e7d5), with d875e7d5's tests
+$ git show HEAD:nexus/agents/memnon/utils/artifact_manifest.py > nexus/agents/memnon/utils/artifact_manifest.py   # HEAD was f827f8d3; fixed file restored afterwards
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -p tests.dbname_audit tests/test_embedding_artifacts.py -k "absent_then_present or cannot_be_read" 2>&1 | tail -30
+        _lock(workspace)
+        metadata = (
+            workspace.embedder_dir / ".cache/huggingface/download/config.json.metadata"
+        )
+        metadata.write_text(f"{'6' * 40}\netag-config.json\n1758000000.0\n")
+        hf_home = tmp_path / "hf"
+        for command, tokenizer_line in (
+            ("plan", f"{TINY_LABEL}: absent;"),
+            ("fetch", f"{TINY_LABEL}: download failed"),
+            ("verify", f"{TINY_LABEL} is not in the Hugging Face cache"),
+        ):
+            result = _cli_offline_models(command, workspace, hf_home)
+            assert result.returncode == 1, result.stdout + result.stderr
+            assert "mixes files downloaded at several revisions" in result.stderr
+>           assert tokenizer_line in result.stderr, result.stderr
+E           AssertionError: Error: /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-283/test_tokenizers_survive_an_emb0/models/embedder mixes files downloaded at several revisions ['0123456789abcdef0123456789abcdef01234567', '6666666666666666666666666666666666666666']; re-download it at one revision before locking
+E             
+E           assert 'tokenizer nexus-test/tiny-tokenizer @ 0123456789abcdef0123456789abcdef01234567: absent;' in "Error: /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-283/test_tokenizers_survive...123456789abcdef01234567', '6666666666666666666666666666666666666666']; re-download it at one revision before locking\n"
+E            +  where "Error: /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-283/test_tokenizers_survive...123456789abcdef01234567', '6666666666666666666666666666666666666666']; re-download it at one revision before locking\n" = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-m', 'nexus.cli', 'models', 'plan', '--config', '/pr...23456789abcdef01234567', '6666666666666666666666666666666666666666']; re-download it at one revision before locking\n").stderr
+
+tests/test_embedding_artifacts.py:1376: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+dbname audit: 0 targets: none
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_embedding_artifacts.py::test_tokenizers_survive_an_embedder_folder_that_cannot_be_read
+1 failed, 1 passed, 47 deselected in 7.91s

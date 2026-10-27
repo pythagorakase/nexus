@@ -1,0 +1,90 @@
+$ git apply d9_key.patch
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rf -p no:cacheprovider tests/test_lore/test_token_estimator.py::test_window_counter_cache_keys_on_the_revision   # on cdd74bd5 plus this branch's uncommitted fix-round edits
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________ test_window_counter_cache_keys_on_the_revision ________________
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-244/test_window_counter_cache_keys0')
+
+    def test_window_counter_cache_keys_on_the_revision(tmp_path: Path) -> None:
+        """Decision 1126-D9: two pins of one repository never share a counter."""
+        from tests.test_embedding_artifacts import _plant_hub_tokenizer
+    
+        hf_home = tmp_path / "hf"
+        _plant_hub_tokenizer(hf_home, TINY_REPOSITORY, "4" * 40)
+        _plant_hub_tokenizer(hf_home, TINY_REPOSITORY, "5" * 40, split=False)
+        config = _registry_document()
+        first, second = _repository_entries(config)[:2]
+        for entry, revision in ((first, "4" * 40), (second, "5" * 40)):
+            entry["tokenizer_repository"] = TINY_REPOSITORY
+            entry["tokenizer_revision"] = revision
+        path = tmp_path / "settings.toml"
+        path.write_text(tomlkit.dumps(config))
+        code = """import json, sys
+    from pathlib import Path
+    from nexus.config import load_settings
+    from scripts.api_openai import OpenAIProvider
+    from tests.test_lore.window_helpers import window_logon
+    utility = window_logon(load_settings(Path(sys.argv[1])))
+    counts = [
+        utility._local_window_counter(
+            OpenAIProvider(model=model, api_key="unused", usage_provider_name="test")
+        )[0].text_count("hello world")
+        for model in sys.argv[2:]
+    ]
+    print(json.dumps(counts))
+    """
+        result = subprocess.run(
+            [sys.executable, "-c", code, str(path), first["id"], second["id"]],
+            env=_offline_env(hf_home),
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        counts = json.loads(result.stdout.strip().splitlines()[-1])
+>       assert counts[0] != counts[1], counts
+E       AssertionError: [2, 2]
+E       assert 2 != 2
+
+tests/test_lore/test_token_estimator.py:371: AssertionError
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_token_estimator.py::test_window_counter_cache_keys_on_the_revision
+1 failed, 5 warnings in 4.98s
+$ git apply -R d9_key.patch
+$ PYTHONPATH=$PWD nice -n 15 $PY -m pytest -q -rf -p no:cacheprovider tests/test_lore/test_token_estimator.py::test_window_counter_cache_keys_on_the_revision
+.                                                                        [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+receipt isolation: checkout and user receipts untouched
+1 passed, 5 warnings in 4.85s

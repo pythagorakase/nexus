@@ -196,8 +196,8 @@ def test_global_output_flags_are_order_independent(
             assert exit_code == 0
             assert captured.err == ""
             payload = json.loads(captured.out)
-            assert payload["success"] is True
-            assert payload["usage"]["day"] == "2099-12-31"
+            assert payload["ok"] is True
+            assert payload["data"]["usage"]["day"] == "2099-12-31"
         else:
             assert exit_code == 2
             assert captured.out == ""
@@ -296,24 +296,26 @@ def test_usage_valid_empty_day_keeps_success_output(
     assert captured.err == ""
     if as_json:
         assert json.loads(captured.out) == {
-            "success": True,
-            "usage": {
-                "allowance": {
-                    "openai": {
-                        "allowance": 2_500_000,
-                        "remaining": 2_500_000,
+            "ok": True,
+            "data": {
+                "usage": {
+                    "allowance": {
+                        "openai": {
+                            "allowance": 2_500_000,
+                            "remaining": 2_500_000,
+                            "unknown_usage_events": 0,
+                            "used": 0,
+                        }
+                    },
+                    "day": "2026-02-28",
+                    "events": [],
+                    "openai_day_total": {
+                        "total_tokens": 0,
                         "unknown_usage_events": 0,
-                        "used": 0,
-                    }
+                    },
+                    "providers": {},
+                    "seats": {},
                 },
-                "day": "2026-02-28",
-                "events": [],
-                "openai_day_total": {
-                    "total_tokens": 0,
-                    "unknown_usage_events": 0,
-                },
-                "providers": {},
-                "seats": {},
             },
         }
     else:
@@ -461,7 +463,7 @@ def test_logs_returns_requested_lines_within_retained_read_bound(
     captured = capsys.readouterr()
     assert captured.err == ""
     if as_json:
-        output_lines = json.loads(captured.out)["lines"]
+        output_lines = json.loads(captured.out)["data"]["lines"]
     else:
         output_lines = captured.out.splitlines()
     assert output_lines == log_lines[-expected_count:]

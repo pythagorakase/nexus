@@ -895,6 +895,9 @@ class ContextMemoryManager:
         is_simple = bool(re.match(pattern, cleaned))
         if is_simple:
             logger.info(
+                "Simple choice detected: '%s' - skipping Phase 2 retrieval", cleaned
+            )
+            logger.debug(
                 "Simple choice detected: '%s' -> '%s' - skipping Phase 2 retrieval",
                 user_input,
                 cleaned,
