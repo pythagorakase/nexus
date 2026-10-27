@@ -2,7 +2,7 @@
 status: canonical
 sources:
   - nexus.toml
-verified_commit: "55ab85a4468f0a46b5cbe7b0daacf66d8a890709"
+verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
 ---
 
 # 0071: Embedding Weights and Legacy Vectors

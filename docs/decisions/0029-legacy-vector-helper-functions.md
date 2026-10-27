@@ -1,10 +1,10 @@
 ---
-status: canonical
+status: historical
 sources:
   - config/schema_docs_baseline.json
   - docs/dead_retrieval_subtraction.md
   - nexus/agents/memnon/utils/db_access.py
-verified_commit: "cf98364c44d074cdd58887ac5752bfe180bb3035"
+verified_commit: "e058005f8df04e4c5807f695eded4a68657e9f05"
 ---
 
 # 0029: Legacy Vector-Helper Functions
@@ -13,6 +13,8 @@ verified_commit: "cf98364c44d074cdd58887ac5752bfe180bb3035"
 **Links:** #819, #813, #812
 
 ## Ruling
+
+Closed: migration 154 (#813) drops these objects, which meets this record's reopening criterion; their baseline entries leave config/schema_docs_baseline.json with the drop.
 
 Parked. These objects stay uncommented and listed in config/schema_docs_baseline.json.
 

@@ -3,7 +3,7 @@ status: canonical
 sources:
   - nexus/api/choice_handling.py
   - nexus/api/slot_endpoints.py
-verified_commit: "cf98364c44d074cdd58887ac5752bfe180bb3035"
+verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
 ---
 
 # 0006: Who Owns the Choice
