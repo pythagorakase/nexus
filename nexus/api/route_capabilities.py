@@ -18,8 +18,11 @@ Two planes project from the one shared app:
   wizard overwrites, and asset management.
 
 :func:`build_player_app` and :func:`build_operator_app` construct those
-projections over the same route objects, lifespan, middleware, and exception
-handlers. Binding each projection to its own listener is a later slice.
+projections; they share the gateway's route objects, lifespan, middleware,
+and exception handlers. ``nexus.api.serve`` serves them on two listeners:
+the player projection on the service port and the operator projection on
+``127.0.0.1:<operator_port>``. The gateway app carries no middleware of its
+own; ``nexus.api.serve.build_plane_app`` installs each plane's CORS list.
 ``/health`` reports the serving plane (:func:`serving_plane`).
 """
 

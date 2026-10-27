@@ -118,6 +118,37 @@ def main():
     ]
 
 
+def test_python_module_service_command_registers_its_main(static_repo) -> None:
+    """A `{python} -m <module>` launcher roots exactly `<module>:main`."""
+    root, config = static_repo
+    _write(
+        root,
+        "nexus.toml",
+        "[runtime.services.gateway]\n"
+        'command = ["{python}", "-m", "pkg.serve", "--port", "{port}"]\n',
+    )
+    _write(root, "pkg/serve.py", "def main():\n    from pkg.api import app\n")
+    report = analyze_repository(root, config)
+    assert report["route_reachability"]["asgi_entrypoints"] == [
+        {"service": "gateway", "entrypoint": "pkg.serve:main"}
+    ]
+    assert {"pkg/serve.py", "pkg/api.py"} <= set(
+        report["reachable_by_kind"]["production"]
+    )
+
+    _write(root, "pkg/serve.py", "def run():\n    pass\n")
+    with pytest.raises(ValueError, match="Missing exact production entry point"):
+        analyze_repository(root, config)
+
+    _write(
+        root,
+        "nexus.toml",
+        '[runtime.services.gateway]\ncommand = ["{python}", "pkg/serve.py"]\n',
+    )
+    with pytest.raises(ValueError, match="Unregistered Python service command"):
+        analyze_repository(root, config)
+
+
 def test_only_explicit_roots_are_executable_authority(static_repo) -> None:
     """A script having main() alone does not make it a supported operator."""
     root, config = static_repo

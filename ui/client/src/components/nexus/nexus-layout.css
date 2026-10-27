@@ -2145,7 +2145,8 @@
 .lm-staged-caption { letter-spacing: .1em; }
 .lm-alert { margin-top: 4px; }
 /* Portaled outside .nexus-shell; brand tokens resolve via html.dark. */
-.lm-tip.lm-tip {
+.lm-tip.lm-tip,
+.key-seats.key-seats {
   background: var(--bg-elev-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -2156,6 +2157,7 @@
   color: var(--fg-muted);
   box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
 }
+.key-seats.key-seats { width: auto; max-width: calc(100vw - 32px); }
 
 /* ─── 5. API keys ─── */
 .key-list {
@@ -2187,6 +2189,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A needed key's name opens its seat list. */
+.key-seats-trigger { background: none; border: 0; padding: 0; margin: 0; min-width: 0; text-align: left; line-height: inherit; cursor: pointer; }
+.key-seats-trigger:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
 .key-status { display: inline-flex; color: var(--state-key-absent); }
 .key-status.present { color: var(--state-key-present); }
 .key-status.verified {

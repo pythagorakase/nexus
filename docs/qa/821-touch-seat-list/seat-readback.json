@@ -1,0 +1,102 @@
+{
+  "productionCss": "index-CBz8DeaZ.css",
+  "readings": {
+    "viewport": {
+      "innerWidth": 390,
+      "innerHeight": 844,
+      "coarseNarrow": true
+    },
+    "before": {
+      "dialogs": 0,
+      "trigger": {
+        "x": 300,
+        "y": 231.171875,
+        "width": 90,
+        "height": 22.5,
+        "right": 390,
+        "bottom": 253.671875
+      },
+      "triggerRole": {
+        "tag": "BUTTON",
+        "type": "button",
+        "ariaExpanded": "false",
+        "title": null,
+        "text": "required-missing"
+      },
+      "scrollWidth": 390,
+      "cardText": "[ API KEYS ]required-missing COMMIT VERIFYpresent COMMIT VERIFYverified COMMIT VERIFYoptional-absent COMMIT VERIFY"
+    },
+    "open": {
+      "dialogs": 1,
+      "text": "Skald · Summaries",
+      "namedDialogs": 1,
+      "ariaSnapshot": "- dialog \"required-missing\": Skald · Summaries",
+      "insideCard": false,
+      "dialog": {
+        "x": 239,
+        "y": 258,
+        "width": 135.046875,
+        "height": 29,
+        "right": 374.046875,
+        "bottom": 287
+      },
+      "triggerExpanded": "true",
+      "scrollWidth": 390,
+      "style": {
+        "width": "135.047px",
+        "maxWidth": "358px",
+        "background": "rgb(13, 18, 28)",
+        "color": "rgb(193, 176, 139)",
+        "border": "solid 1px rgb(82, 57, 106)",
+        "font": "10px Cinzel",
+        "letterSpacing": "1.2px",
+        "padding": "6px 10px"
+      }
+    },
+    "outsideTarget": {
+      "x": 195,
+      "y": 407,
+      "tag": "UL",
+      "className": "",
+      "interactive": false
+    },
+    "closed": {
+      "dialogs": 0,
+      "triggerExpanded": "false"
+    },
+    "optional": {
+      "triggers": 0,
+      "namedButtons": 0,
+      "nameTitle": null,
+      "nameTag": "SPAN"
+    },
+    "fixtureTransport": [
+      {
+        "method": "GET",
+        "url": "/api/secrets/status?slot=4"
+      },
+      {
+        "method": "GET",
+        "url": "/api/slot/4/state"
+      },
+      {
+        "method": "GET",
+        "url": "/api/narrative/active?slot=4"
+      },
+      {
+        "method": "GET",
+        "url": "/health"
+      },
+      {
+        "method": "GET",
+        "url": "/api/slot/4/state"
+      },
+      {
+        "method": "GET",
+        "url": "/api/narrative/active?slot=4"
+      }
+    ]
+  },
+  "errors": [],
+  "requests": []
+}

@@ -37,7 +37,7 @@ class DesktopConfig(BaseModel):
 
     model_config = ConfigDict(extra="ignore", strict=True, frozen=True)
 
-    runtime_origin: str = Field(default="http://127.0.0.1:8002", alias="runtimeOrigin")
+    runtime_origin: str = Field(default="http://127.0.0.1:8003", alias="runtimeOrigin")
     status_path: str = Field(default="/runtime/status", alias="statusPath")
     auth_header: str = Field(default="X-Nexus-Auth", alias="authHeader")
     auth_token_env: str = Field(default="NEXUS_AUTH", alias="authTokenEnv")

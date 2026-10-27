@@ -24,8 +24,10 @@ A cyberpunk terminal-style interface for exploring complex narrative datasets. B
 ## Tech Stack
 
 - **Frontend**: React 18, TypeScript, Tailwind CSS, Radix UI
-- **Backend**: NEXUS FastAPI gateway (`nexus.api.narrative:app`, one origin
-  for APIs, websocket, and static PWA serving; see `../README.md`)
+- **Backend**: NEXUS FastAPI gateway (`nexus.api.narrative:app`, APIs,
+  websocket, and static PWA serving; see `../README.md`). The gateway serves
+  two listeners from one process: the player plane on 8002 and the operator
+  plane on `127.0.0.1:8003`
 - **Database**: PostgreSQL with PostGIS extensions (per-slot databases)
 - **State Management**: TanStack Query
 - **Routing**: Wouter
@@ -50,8 +52,8 @@ A cyberpunk terminal-style interface for exploring complex narrative datasets. B
 
 4. **Access the application**:
    - Dev (HMR): http://localhost:5001
-   - Production build via the gateway: http://localhost:8002
-     (after `npm run build`)
+   - Production build via the gateway: http://127.0.0.1:8003 (operator) or
+     http://127.0.0.1:8002 (player), after `npm run build`
 
 ## Database Schema
 
@@ -104,7 +106,7 @@ NEXUS IRIS uses a cyberpunk terminal aesthetic with:
 
 The project uses Vite for fast development with HMR:
 - Frontend: React + TypeScript (Vite dev server on port 5001)
-- Backend: NEXUS FastAPI gateway (port 8002)
+- Backend: NEXUS FastAPI gateway (player 8002, operator 8003)
 
 `npm run check` type-checks the app (`tsc`), then runs `npm run check:design-sync`,
 which type-checks the design-sync previews (`.design-sync/previews/`) against the

@@ -22,7 +22,7 @@ from nexus.config import load_settings
 from nexus.runtime.contract import (
     NEXUS_AUTH_HEADER,
     RUNTIME_STATUS_PATH,
-    gateway_port_override,
+    gateway_listener_ports,
 )
 from nexus.runtime.readiness import gateway_readiness, runtime_version
 
@@ -95,12 +95,15 @@ def build_runtime_status() -> Dict[str, Any]:
     if runtime and runtime.profile == "local":
         gateway = runtime.services.get("gateway")
         if gateway:
-            # A NEXUS_GATEWAY_PORT instance inherits the override in its
-            # environment; report the port actually serving this request,
-            # not the configured default.
+            # A lane instance inherits NEXUS_GATEWAY_PORT (and NEXUS_PLAYER_PORT)
+            # in its environment; report the listeners actually serving it.
+            # ``port`` stays the player port (the configured service port in an
+            # operator-only lane) and ``operator_port`` is added (#824).
+            ports = gateway_listener_ports(runtime)
             status["services"]["gateway"]["port"] = (
-                gateway_port_override() or gateway.port
+                ports.player if ports.player is not None else gateway.port
             )
+            status["services"]["gateway"]["operator_port"] = ports.operator
         mock = runtime.services.get("mock_openai")
         test_provider = settings.global_.model.api_models.get("test")
         mock_enabled = (

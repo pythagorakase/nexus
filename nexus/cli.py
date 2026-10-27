@@ -104,8 +104,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("nexus.cli")
 
-# Default API server URL (narrative API handles wizard + story endpoints)
-DEFAULT_API_URL = "http://localhost:8002"
 TERMINAL_GENERATION_STATUSES = {
     "complete",
     "completed",
@@ -165,7 +163,9 @@ def get_api_url() -> str:
         if remote is None:  # guarded by RuntimeSettings validation
             raise ValueError("Remote runtime profile has no remote configuration")
         return remote.base_url.rstrip("/")
-    return DEFAULT_API_URL
+    from nexus.runtime.contract import operator_url
+
+    return operator_url(runtime)
 
 
 def _api_request(method: str, url: str, **kwargs: Any) -> requests.Response:
@@ -1310,9 +1310,10 @@ def _api_object(response: requests.Response) -> Dict[str, Any]:
 def _runtime_cli_settings() -> RuntimeCliSettings:
     """Read the CLI's request budgets from [runtime.cli].
 
-    A bare install with no nexus.toml (where get_api_url() targets
-    DEFAULT_API_URL) and a config without [runtime] both use the
-    RuntimeCliSettings defaults, the values the checkout's nexus.toml ships.
+    A bare install with no nexus.toml (where get_api_url() targets the
+    default operator listener, http://127.0.0.1:8003) and a config without
+    [runtime] both use the RuntimeCliSettings defaults, the values the
+    checkout's nexus.toml ships.
     """
     settings = _load_cli_settings()
     if settings is None or settings.runtime is None:

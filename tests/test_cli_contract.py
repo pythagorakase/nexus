@@ -94,6 +94,7 @@ _ISOLATED_ENV = (
     "NEXUS_HOME",
     "NEXUS_RUNTIME_CONFIG",
     "NEXUS_GATEWAY_PORT",
+    "NEXUS_PLAYER_PORT",
     "CLOUDFLARE_ACCESS_CLIENT_ID_API_KEY",
     "CLOUDFLARE_ACCESS_CLIENT_SECRET_API_KEY",
     "PGHOST",
@@ -590,15 +591,10 @@ def test_http_command_malformed_api_url_is_a_config_error(
     assert envelope["error"].startswith(message)
 
 
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ("inspect", "slot", "--slot", "5"),
-        ("load", "--slot", "5"),
-        ("model", "--slot", "5", "--set", "slot-pinned-model"),
-    ],
-    ids=["inspect-slot", "load", "model-set"],
-)
+# `model --set` left this list with D-824-CLI-CLASS: it is operator_api now,
+# refused under a remote profile before any credential is read
+# (test_remote_profile_refuses_operator_route_commands).
+@_HTTP_COMMANDS
 def test_http_command_missing_access_secret_is_a_config_error(
     tmp_path: Path, argv: tuple[str, ...]
 ) -> None:
@@ -1872,36 +1868,43 @@ def test_remote_runtime_refuses_operator_inspect_before_any_request(
     assert gateway.requests == []
 
 
-def test_remote_profile_keeps_existing_operator_route_commands(tmp_path: Path) -> None:
-    """Decision 815-Q3 preserves existing remote operator-write behavior."""
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("clear", "--slot", "5"),
+        ("lock", "--slot", "5"),
+        ("unlock", "--slot", "5"),
+        ("model", "--slot", "5", "--set", "TEST"),
+        ("model", "--slot", "5", "--clear"),
+    ],
+)
+def test_remote_profile_refuses_operator_route_commands(
+    tmp_path: Path, argv: tuple[str, ...]
+) -> None:
+    """D-824-CLI-CLASS: operator-route writes are refused under a remote runtime."""
     gateway = Gateway(
         routes={
+            ("POST", "/api/slot/5/clear"): (200, {}),
             ("POST", "/api/slot/5/lock"): (200, {}),
             ("POST", "/api/slot/5/unlock"): (200, {}),
+            ("PATCH", "/api/slot/5/settings"): (200, {}),
         }
     )
     with _serve(gateway) as base_url:
         config = _config(tmp_path, profile="remote", base_url=base_url)
-        for command in ("lock", "unlock"):
-            completed = _run(
-                command,
-                "--slot",
-                "5",
-                "--json",
-                env={"NEXUS_RUNTIME_CONFIG": str(config)},
-            )
-            assert completed.returncode == ExitCode.OK, completed.stderr
-            assert completed.stderr == ""
-    assert [request[:2] for request in gateway.requests] == [
-        ("POST", "/api/slot/5/lock"),
-        ("POST", "/api/slot/5/unlock"),
-    ]
+        completed = _run(*argv, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
+    assert completed.returncode == ExitCode.TRANSPORT_REFUSED, completed.stderr
+    envelope = _failure(completed)
+    assert envelope["code"] == "transport_refused"
+    assert "uses the operator_api transport" in envelope["error"]
+    assert "[runtime] profile is 'remote'" in envelope["error"]
+    assert gateway.requests == []
     for command in ("clear", "lock", "unlock"):
-        assert COMMAND_TRANSPORTS[command] == "http"
+        assert COMMAND_TRANSPORTS[command] == "operator_api"
     assert FLAG_TRANSPORTS["model"] == (
         ("list", "local_operator"),
-        ("set", "http"),
-        ("clear", "http"),
+        ("set", "operator_api"),
+        ("clear", "operator_api"),
     )
 
 

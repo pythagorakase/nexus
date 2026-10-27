@@ -886,7 +886,12 @@ def _write_capture_config(
         runtime["health"]["timeout_seconds"] = timeout_seconds
     config = tmp_path / "nexus.toml"
     config.write_text(tomlkit.dumps(document))
-    for name in ("NEXUS_HOME", "NEXUS_GATEWAY_PORT", "NEXUS_API_URL"):
+    for name in (
+        "NEXUS_HOME",
+        "NEXUS_GATEWAY_PORT",
+        "NEXUS_PLAYER_PORT",
+        "NEXUS_API_URL",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
     (tmp_path / "state").mkdir()

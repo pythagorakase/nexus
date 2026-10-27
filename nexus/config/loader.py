@@ -16,7 +16,7 @@ from collections.abc import Iterator
 import os
 import sys
 from pathlib import Path
-from typing import Union, Dict, Any, List, Optional
+from typing import Union, Dict, Any, List, Literal, Optional
 import json
 import logging
 
@@ -80,12 +80,16 @@ def get_available_api_models() -> List[str]:
     return [m["id"] for m in get_all_api_models()]
 
 
-def get_gateway_cors_allowed_origins() -> List[str]:
-    """Return the gateway's validated credentialed-CORS origin allowlist."""
+def get_gateway_cors_allowed_origins(plane: Literal["player", "operator"]) -> List[str]:
+    """Return one listener's validated credentialed-CORS origin allowlist."""
     runtime = load_settings().runtime
     if runtime is None:
         raise ValueError("[runtime.gateway] is required to configure gateway CORS")
-    return runtime.gateway.cors_allowed_origins
+    if plane == "player":
+        return runtime.gateway.player_cors_allowed_origins
+    if plane == "operator":
+        return runtime.gateway.operator_cors_allowed_origins
+    raise ValueError(f"Unknown plane {plane!r}; expected 'player' or 'operator'")
 
 
 def get_local_models_settings() -> LocalModelsSettings:

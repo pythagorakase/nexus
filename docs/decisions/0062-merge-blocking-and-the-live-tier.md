@@ -2,7 +2,7 @@
 status: canonical
 sources:
   - tests/test_golden_path_live.py
-verified_commit: "b75f6241cf98aff251b100b776d50f3003c872cb"
+verified_commit: "9fe13a82f8c618cc87f030c68cebbddef6f54f79"
 ---
 
 # 0062: Merge Blocking and the Live Tier

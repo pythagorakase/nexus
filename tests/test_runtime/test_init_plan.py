@@ -35,7 +35,13 @@ from nexus.runtime.readiness import (
 @pytest.fixture(autouse=True)
 def private_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Isolate configuration locators and each test's failure receipts."""
-    for name in (HOME_ENV, RUNTIME_CONFIG_ENV, "NEXUS_API_URL", "NEXUS_GATEWAY_PORT"):
+    for name in (
+        HOME_ENV,
+        RUNTIME_CONFIG_ENV,
+        "NEXUS_API_URL",
+        "NEXUS_GATEWAY_PORT",
+        "NEXUS_PLAYER_PORT",
+    ):
         monkeypatch.delenv(name, raising=False)
     receipts = tmp_path / "receipts"
     monkeypatch.setenv(TEST_RECEIPTS_ENV, str(receipts))

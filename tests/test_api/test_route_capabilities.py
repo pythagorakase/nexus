@@ -335,7 +335,7 @@ def test_player_projection_serves_no_schema_or_docs(
 def test_projections_share_exception_handlers_and_middleware(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Validation errors never echo input, and CORS matches the gateway."""
+    """Validation errors never echo input; CORS matches the player plane's list."""
     gateway = _gateway(tmp_path, monkeypatch, built=False)
     player = TestClient(build_player_app(gateway))
 
@@ -347,8 +347,10 @@ def test_projections_share_exception_handlers_and_middleware(
     assert secret not in response.text
     assert all("input" not in error for error in response.json()["detail"])
 
-    origin = get_gateway_cors_allowed_origins()[0]
-    preflight = player.options(
+    from nexus.api.serve import build_plane_app
+
+    origin = get_gateway_cors_allowed_origins("player")[0]
+    preflight = TestClient(build_plane_app(gateway, "player")).options(
         "/health",
         headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
     )
