@@ -79,52 +79,30 @@ try {
       await page.locator('[data-testid="lm-toggle-fixture"]').click();
       const row = page.locator('.lm-quant.exceeds');
       const trash = row.locator('.lm-trash');
-      const toggle = page.locator('[data-testid="lm-toggle-fixture"]');
       await trash.waitFor();
       await page.locator('body').click({ position: { x: 1, y: 1 } });
       let tabs = 0;
-      let stationaryPrecondition = null;
+      let scrollBeforeRowTab = null;
+      // Natural Tab from the body; the Tab onto the row must scroll the ancestor that Radix's scroll close listens to.
       while (tabs < 100 && !await row.evaluate(node => node === document.activeElement)) {
-        if (await toggle.evaluate(node => node === document.activeElement)) {
-          // This trace isolates focus transitions from Radix's scroll dismissal.
-          // Make the row visible before Tab, while its preceding toggle has focus.
-          await row.evaluate(node => node.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' }));
-          stationaryPrecondition = await row.evaluate(async node => {
-            const scroller = node.closest('.set-scroller');
-            if (!scroller) throw new Error('Trace lost the settings scroller');
-            let previous = scroller.scrollTop, stableFrames = 0;
-            for (let frame = 0; frame < 60 && stableFrames < 2; frame++) {
-              await new Promise(resolve => requestAnimationFrame(resolve));
-              const current = scroller.scrollTop;
-              stableFrames = current === previous ? stableFrames + 1 : 0;
-              previous = current;
-            }
-            if (stableFrames < 2) throw new Error('Trace scrolling did not settle');
-            const rowBox = node.getBoundingClientRect(), scrollBox = scroller.getBoundingClientRect();
-            return { focused: document.activeElement?.getAttribute('data-testid'),
-              scrollTop: scroller.scrollTop, stableFrames,
-              rowTop: rowBox.top, rowBottom: rowBox.bottom,
-              visibleTop: Math.max(0, scrollBox.top), visibleBottom: Math.min(innerHeight, scrollBox.bottom) };
-          });
-          assert.equal(stationaryPrecondition.focused, 'lm-toggle-fixture');
-          assert(stationaryPrecondition.rowTop >= stationaryPrecondition.visibleTop, JSON.stringify(stationaryPrecondition));
-          assert(stationaryPrecondition.rowBottom <= stationaryPrecondition.visibleBottom, JSON.stringify(stationaryPrecondition));
-        }
+        scrollBeforeRowTab = await row.evaluate(node => {
+          const scroller = node.closest('.set-scroller');
+          if (!scroller) throw new Error('Trace lost the settings scroller');
+          return scroller.scrollTop;
+        });
         await page.keyboard.press('Tab');
         tabs++;
       }
       assert(await row.evaluate(node => node === document.activeElement), `run ${run}: Tab missed row`);
-      assert(stationaryPrecondition, `run ${run}: Tab missed the stationary precondition`);
       const atRow = await readOnce(page);
-      assert.equal(atRow.scrollTop, stationaryPrecondition.scrollTop, `run ${run}: row Tab scrolled`);
+      assert.notEqual(atRow.scrollTop, scrollBeforeRowTab, `run ${run}: the Tab onto the row did not auto-scroll`);
       await page.keyboard.press('Tab');
       assert(await trash.evaluate(node => node === document.activeElement), `run ${run}: Tab missed trash`);
       const atTrash = await readOnce(page);
-      assert.equal(atTrash.scrollTop, stationaryPrecondition.scrollTop, `run ${run}: trash Tab scrolled`);
       await page.keyboard.press('Tab');
       assert(!await row.evaluate(node => node.contains(document.activeElement)), `run ${run}: focus stayed inside row`);
       const outside = await readOnce(page);
-      runs.push({ run, tabs, stationaryPrecondition, atRow, atTrash, outside });
+      runs.push({ run, tabs, scrollBeforeRowTab, atRow, atTrash, outside });
       counts.rowOpen += Number(atRow.open);
       counts.trashOpen += Number(atTrash.open);
       counts.outsideClosed += Number(outside.closed);
